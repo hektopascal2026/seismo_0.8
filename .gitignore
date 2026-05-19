@@ -1,0 +1,16 @@
+# vendor/ is committed (shared-host deploys without Composer on Plesk).
+# Regenerate after lock changes: composer install --no-dev --optimize-autoloader
+.phpunit.cache/
+lex_config.json
+calendar_config.json
+config.local.php
+srf/config.local.php
+fetcher/scraper/config.php
+fetcher/mail/config.php
+fetcher/.DS_Store
+.DS_Store
+/logs/
+newsbridge/config.json
+newsbridge/config.local.php
+newsbridge/data
+newsbridge/feeds/*.xml

@@ -1,0 +1,60 @@
+{
+  "outputs": [
+    {
+      "file": "top-ch.xml",
+      "self_link": "https://www.example.org/seismo/newsbridge/feeds/top-ch.xml",
+      "channel": {
+        "title": "Switzerland — Swiss outlets (domains)",
+        "link": "https://www.example.org/seismo/",
+        "description": "Aggregated news (replace source URLs and hostnames for your site)."
+      },
+      "max_items": 100,
+      "sources": [
+        "https://www.srf.ch/news/bnf/rss/1890",
+        "https://www.politico.eu/country/switzerland/feed/"
+      ]
+    },
+    {
+      "file": "ch-en.xml",
+      "self_link": "https://www.example.org/seismo/newsbridge/feeds/ch-en.xml",
+      "channel": {
+        "title": "Switzerland — English (tight query)",
+        "link": "https://www.example.org/seismo/",
+        "description": "English-oriented sources; add language: en for a soft title/description filter, or use only English feeds."
+      },
+      "max_items": 80,
+      "language": "en",
+      "sources": [
+        "https://feeds.bbci.co.uk/news/rss.xml"
+      ]
+    },
+    {
+      "file": "ch-de.xml",
+      "self_link": "https://www.example.org/seismo/newsbridge/feeds/ch-de.xml",
+      "channel": {
+        "title": "Schweiz — Deutsch (enger)",
+        "link": "https://www.example.org/seismo/",
+        "description": "Deutsch; optional language: de heuristics on title+body."
+      },
+      "max_items": 80,
+      "language": "de",
+      "sources": [
+        "https://www.srf.ch/news/bnf/rss/1890"
+      ]
+    },
+    {
+      "file": "ch-fr.xml",
+      "self_link": "https://www.example.org/seismo/newsbridge/feeds/ch-fr.xml",
+      "channel": {
+        "title": "Suisse — français (serré)",
+        "link": "https://www.example.org/seismo/",
+        "description": "Français; optional language: fr heuristics on title+body."
+      },
+      "max_items": 80,
+      "language": "fr",
+      "sources": [
+        "https://www.rts.ch/la-1ere/programmes/le-journal-horaire?format=xml/rss"
+      ]
+    }
+  ]
+}

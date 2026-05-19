@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "remove_dirs": [
+    "tests",
+    "docs",
+    "newsbridge",
+    "src/Core/Fetcher",
+    "src/Plugin"
+  ],
+  "remove_files": [
+    "routes_mothership.inc.php",
+    "refresh_cron.php",
+    "phpunit.xml.dist",
+    "README-REORG.md",
+    "views/about.php",
+    "views/partials/diagnostics_panel.php",
+    "views/feeds.php",
+    "views/lex.php",
+    "views/leg.php",
+    "views/mail.php",
+    "views/scraper.php",
+    "views/setup.php",
+    "views/styleguide.php",
+    "views/logbook.php",
+    "views/partials/plugin_recent_runs.php",
+    "views/partials/retention_panel.php",
+    "views/partials/settings_mail.php",
+    "views/partials/settings_tab_satellites.php",
+    "src/Controller/AboutController.php",
+    "src/Controller/DiagnosticsController.php",
+    "src/Controller/ExportController.php",
+    "src/Controller/FeedController.php",
+    "src/Controller/LegController.php",
+    "src/Controller/LexController.php",
+    "src/Controller/MailController.php",
+    "src/Controller/RetentionController.php",
+    "src/Controller/SatelliteController.php",
+    "src/Controller/ScraperController.php",
+    "src/Controller/SetupController.php",
+    "src/Controller/StyleguideController.php",
+    "src/Controller/LogbookController.php",
+    "src/Service/CoreRunner.php",
+    "src/Service/RefreshAllService.php",
+    "src/Service/NewsbridgeGenerator.php",
+    "src/Service/PluginRegistry.php",
+    "src/Service/PluginRunResult.php",
+    "src/Service/SourceFetcherInterface.php",
+    "src/Repository/PluginRunLogRepository.php",
+    "satellite-prune.json"
+  ],
+  "post_verify": {
+    "must_exist": [
+      "index.php",
+      "bootstrap.php",
+      "routes_satellite.inc.php",
+      "config.local.php.example"
+    ],
+    "must_not_exist": [
+      "routes_mothership.inc.php",
+      "refresh_cron.php",
+      "newsbridge",
+      "views/lex.php",
+      "views/partials/settings_mail.php",
+      "src/Controller/FeedController.php",
+      "src/Core/Fetcher",
+      "src/Plugin/LexFedlex/LexFedlexPlugin.php",
+      "src/Service/CoreRunner.php",
+      "src/Service/RefreshAllService.php"
+    ],
+    "php_lint": [
+      "index.php",
+      "bootstrap.php",
+      "routes_satellite.inc.php"
+    ]
+  }
+}
