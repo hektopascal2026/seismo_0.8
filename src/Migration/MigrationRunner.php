@@ -17,7 +17,7 @@ use Seismo\Repository\SystemConfigRepository;
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration014EmailBodyLongtext::VERSION;
+    public const LATEST_VERSION = Migration015ParlPressSdaFeed::VERSION;
 
     private SystemConfigRepository $systemConfig;
 
