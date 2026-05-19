@@ -9,12 +9,15 @@ use DateTimeZone;
 use Seismo\Service\Http\BaseClient;
 
 /**
- * Swiss Parliament press releases (parlament.ch SharePoint search REST).
- * Uses **POST** `/_api/search/postquery` with taxonomy **RefinementFilters** (not list `$filter`).
+ * Swiss Parliament press releases (parlament.ch SharePoint REST).
+ *
+ * Primary path: **POST** `/_api/search/postquery` with taxonomy **RefinementFilters**.
+ * When Akamai returns an HTML “Request Rejected” / “Access Denied” page (common for
+ * datacenter IPs or `Seismo/*` User-Agents), falls back to **GET** the configured list
+ * `…/items` OData endpoint and filters rows client-side by slug (`parl_mm` vs `parl_sda`).
  *
  * Configuration comes from the parent `feeds` row:
- * - `url` — SharePoint **list items** URL (GET) used only to **derive** the site `…/press-releases` base and thus
- *   `…/press-releases/_api/search/postquery`. May be overridden with JSON `search_post_url`.
+ * - `url` — SharePoint **list items** URL (`…/items`) for OData fallback; also used to derive `postquery`.
  * - `description` — optional JSON:
  *   - `lookback_days`, `limit`, `language` — same as always.
  *   - `guid_prefix` — `parl_mm` (default) vs `parl_sda`; selects the built-in **PdNewsTypeDE** refinement token.
@@ -28,6 +31,8 @@ final class ParlPressFetchService
 
     private const DEFAULT_LIMIT = 50;
 
+    private readonly BaseClient $http;
+
     /** @var list<string> */
     private const LANGUAGES = ['de', 'fr', 'it', 'en', 'rm'];
 
@@ -40,9 +45,9 @@ final class ParlPressFetchService
     /** Hex of ASCII `SDA-Meldung` — agency wire. */
     private const HEX_NEWS_TYPE_SDA = '5344412d4d656c64756e67';
 
-    public function __construct(
-        private readonly BaseClient $http = new BaseClient(),
-    ) {
+    public function __construct(?BaseClient $http = null)
+    {
+        $this->http = $http ?? new BaseClient(BaseClient::DEFAULT_TIMEOUT, self::defaultBrowserUserAgent());
     }
 
     /**
@@ -92,7 +97,32 @@ final class ParlPressFetchService
         // KQL: scope to press-releases tree + freshness (SharePoint managed property LastModifiedTime).
         $querytext = 'Path:https://www.parlament.ch/press-releases/* LastModifiedTime>=' . $sinceUtc;
 
-        $cellRows = $this->executeSharePointSearch($searchPostUrl, $querytext, $limit, $refinements);
+        try {
+            $cellRows = $this->executeSharePointSearch($searchPostUrl, $querytext, $limit, $refinements);
+
+            return $this->buildRowsFromSearchCells($cellRows, $lang, $guidPrefix, $limit);
+        } catch (\RuntimeException $e) {
+            if (!$this->exceptionIndicatesEdgeWaf($e)) {
+                throw $e;
+            }
+            error_log(
+                'Seismo parl_press: SharePoint search POST blocked by edge WAF (' . $e->getMessage()
+                . '); falling back to list OData GET.'
+            );
+
+            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle);
+
+            return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $cellRows
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildRowsFromSearchCells(array $cellRows, string $lang, string $guidPrefix, int $limit): array
+    {
         $seenPath = [];
         $out = [];
         foreach ($cellRows as $cells) {
@@ -105,6 +135,37 @@ final class ParlPressFetchService
             $row = $this->tryBuildParlPressRow($item, $lang, $guidPrefix);
             if ($row !== null) {
                 $out[] = $row;
+                if (count($out) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $listItems SharePoint list `d.results` rows.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildRowsFromListItems(array $listItems, string $lang, string $guidPrefix, int $limit): array
+    {
+        $out = [];
+        foreach ($listItems as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $slug = $this->resolveParlPressSlug($item);
+            if (!$this->slugMatchesGuidPrefix($slug, $guidPrefix)) {
+                continue;
+            }
+            $row = $this->tryBuildParlPressRow($item, $lang, $guidPrefix);
+            if ($row !== null) {
+                $out[] = $row;
+                if (count($out) >= $limit) {
+                    break;
+                }
             }
         }
 
@@ -142,20 +203,18 @@ final class ParlPressFetchService
             ],
         ];
 
-        $response = $this->http->postJson($postUrl, $payload, [
-            'Content-Type' => 'application/json;odata=verbose',
-            'Accept'       => 'application/json;odata=verbose',
-        ]);
+        $response = $this->http->postJson($postUrl, $payload, $this->sharePointJsonHeaders());
 
         if ($response->status < 200 || $response->status >= 300) {
+            if ($this->responseLooksLikeEdgeWaf($response)) {
+                throw $this->edgeWafException('search POST', $response->status);
+            }
             throw new \RuntimeException(
                 'parlament.ch search POST HTTP ' . $response->status . ': ' . mb_substr($response->body, 0, 300)
             );
         }
-        if ($response->body !== '' && str_contains($response->body, 'Request Rejected')) {
-            throw new \RuntimeException(
-                'parlament.ch search POST returned a WAF/HTML “Request Rejected” page — try again from the mothership host or set `search_post_url` in the feed description JSON.'
-            );
+        if ($this->responseLooksLikeEdgeWaf($response)) {
+            throw $this->edgeWafException('search POST', $response->status);
         }
 
         $data = json_decode($response->body, true);
@@ -177,6 +236,141 @@ final class ParlPressFetchService
         }
 
         return $out;
+    }
+
+    /**
+     * Legacy SharePoint list OData (`feeds.url` …/items) when search POST is WAF-blocked.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function fetchListODataItems(
+        string $listItemsUrl,
+        int $lookbackDays,
+        int $limit,
+        string $titleNeedle,
+    ): array {
+        $since = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->modify('-' . $lookbackDays . ' days')
+            ->format('Y-m-d\TH:i:s\Z');
+        $fetchTop = min(max($limit * 4, $limit), 200);
+        $filter = "Created ge datetime'" . $since . "'";
+        if ($titleNeedle !== '') {
+            $escaped = str_replace("'", "''", $titleNeedle);
+            $filter .= " and substringof('" . $escaped . "', Title)";
+        }
+        $query = http_build_query([
+            '$top'     => (string)$fetchTop,
+            '$orderby' => 'Created desc',
+            '$filter'  => $filter,
+        ]);
+        $url = $this->listItemsBaseUrl($listItemsUrl) . '?' . $query;
+
+        $response = $this->http->get($url, $this->sharePointJsonHeaders());
+        if ($response->status < 200 || $response->status >= 300) {
+            if ($this->responseLooksLikeEdgeWaf($response)) {
+                throw $this->edgeWafException('list OData GET', $response->status);
+            }
+            throw new \RuntimeException(
+                'parlament.ch list OData GET HTTP ' . $response->status . ': ' . mb_substr($response->body, 0, 300)
+            );
+        }
+        if ($this->responseLooksLikeEdgeWaf($response)) {
+            throw $this->edgeWafException('list OData GET', $response->status);
+        }
+
+        $data = json_decode($response->body, true);
+        if (!is_array($data)) {
+            throw new \RuntimeException('parlament.ch list OData returned invalid JSON.');
+        }
+        if (isset($data['error'])) {
+            $msg = $data['error']['message']['value'] ?? $data['error']['message'] ?? json_encode($data['error']);
+            throw new \RuntimeException('parlament.ch list OData error: ' . (is_string($msg) ? $msg : json_encode($msg)));
+        }
+
+        $results = $data['d']['results'] ?? null;
+
+        return is_array($results) ? $results : [];
+    }
+
+    private function listItemsBaseUrl(string $url): string
+    {
+        $u = trim($url);
+        if (($q = strpos($u, '?')) !== false) {
+            $u = substr($u, 0, $q);
+        }
+
+        return rtrim($u, '/');
+    }
+
+    private function slugMatchesGuidPrefix(string $slug, string $guidPrefix): bool
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return false;
+        }
+        $isSda = self::slugLooksLikeSda($slug);
+
+        return $guidPrefix === 'parl_sda' ? $isSda : !$isSda;
+    }
+
+    private static function slugLooksLikeSda(string $slug): bool
+    {
+        $s = strtolower(trim($slug));
+
+        return str_starts_with($s, 'sda-')
+            || str_starts_with($s, 'mm-sda')
+            || str_contains($s, '-sda-');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sharePointJsonHeaders(): array
+    {
+        return [
+            'Content-Type'    => 'application/json;odata=verbose',
+            'Accept'          => 'application/json;odata=verbose',
+            'Accept-Language' => 'de-CH,de;q=0.9,en;q=0.8',
+            'Origin'          => 'https://www.parlament.ch',
+            'Referer'         => 'https://www.parlament.ch/de/medien/medienmitteilungen',
+        ];
+    }
+
+    private static function defaultBrowserUserAgent(): string
+    {
+        $version = defined('SEISMO_VERSION') ? SEISMO_VERSION : 'dev';
+        $contact = defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== ''
+            ? ' (+' . SEISMO_MOTHERSHIP_URL . ')'
+            : '';
+
+        return 'Mozilla/5.0 (compatible; Seismo/' . $version . $contact
+            . ') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    }
+
+    private function responseLooksLikeEdgeWaf(\Seismo\Service\Http\Response $response): bool
+    {
+        $body = $response->body;
+        if ($body === '') {
+            return false;
+        }
+
+        return str_contains($body, 'Request Rejected')
+            || str_contains($body, 'Access Denied');
+    }
+
+    private function exceptionIndicatesEdgeWaf(\RuntimeException $e): bool
+    {
+        return str_contains($e->getMessage(), 'edge WAF')
+            || str_contains($e->getMessage(), 'Request Rejected')
+            || str_contains($e->getMessage(), 'Access Denied');
+    }
+
+    private function edgeWafException(string $via, int $status): \RuntimeException
+    {
+        return new \RuntimeException(
+            'parlament.ch ' . $via . ' blocked by edge WAF (HTTP ' . $status
+            . ' HTML “Request Rejected” / “Access Denied”) — automatic list OData fallback will be attempted.'
+        );
     }
 
     /**
