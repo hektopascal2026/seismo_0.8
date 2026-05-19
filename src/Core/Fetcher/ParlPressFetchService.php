@@ -45,11 +45,8 @@ final class ParlPressFetchService
     /** Hex of ASCII `SDA-Meldung` — agency wire. */
     private const HEX_NEWS_TYPE_SDA = '5344412d4d656c64756e67';
 
-    /**
-     * SharePoint omits FileRef on list items unless requested — without it every row
-     * fails {@see tryBuildParlPressRow()}.
-     */
-    private const LIST_ODATA_SELECT = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate';
+    /** Base list columns; {@see listODataSelect()} adds per-language Title_* / Content_*. */
+    private const LIST_ODATA_SELECT_BASE = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate';
 
     public function __construct(?BaseClient $http = null)
     {
@@ -116,7 +113,7 @@ final class ParlPressFetchService
                 . '); falling back to list OData GET.'
             );
 
-            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle);
+            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle, $lang);
 
             return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
         }
@@ -254,6 +251,7 @@ final class ParlPressFetchService
         int $lookbackDays,
         int $limit,
         string $titleNeedle,
+        string $lang,
     ): array {
         $since = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->modify('-' . $lookbackDays . ' days')
@@ -268,7 +266,7 @@ final class ParlPressFetchService
             '$top'     => (string)$fetchTop,
             '$orderby' => 'Created desc',
             '$filter'  => $filter,
-            '$select'  => self::LIST_ODATA_SELECT,
+            '$select'  => $this->listODataSelect($lang),
         ]);
         $url = $this->listItemsBaseUrl($listItemsUrl) . '?' . $query;
 
@@ -307,6 +305,20 @@ final class ParlPressFetchService
         }
 
         return rtrim($u, '/');
+    }
+
+    /**
+     * SharePoint `Title` is the URL slug; headlines live in `Title_de` etc.
+     */
+    private function listODataSelect(string $lang): string
+    {
+        $fields = explode(',', self::LIST_ODATA_SELECT_BASE);
+        foreach (array_merge([$lang], self::LANGUAGES) as $l) {
+            $fields[] = 'Title_' . $l;
+            $fields[] = 'Content_' . $l;
+        }
+
+        return implode(',', array_values(array_unique($fields)));
     }
 
     private function slugMatchesGuidPrefix(string $slug, string $guidPrefix): bool
@@ -635,9 +647,16 @@ final class ParlPressFetchService
 
             return $t;
         }
+        $excerpt = $this->plainContentExcerpt($item, $preferredLang, 220);
+        if ($excerpt !== '') {
+            return $excerpt;
+        }
+
         $slugTrim = trim($slug);
 
-        return $slugTrim !== '' && !self::isMeaninglessParlPressTitle($slugTrim) ? $slugTrim : $slug;
+        return $slugTrim !== '' && !self::isMeaninglessParlPressTitle($slugTrim) && !self::looksLikeParlPressSlug($slugTrim)
+            ? $slugTrim
+            : $slug;
     }
 
     private static function isMeaninglessParlPressTitle(string $t): bool
@@ -645,6 +664,35 @@ final class ParlPressFetchService
         $n = mb_strtolower(trim($t));
 
         return $n === 'untitled' || $n === '(untitled)' || $n === '(no title)';
+    }
+
+    /** SharePoint `Title` column holds the page slug (`mm-wak-n-2026-05-19`), not the headline. */
+    private static function looksLikeParlPressSlug(string $t): bool
+    {
+        $t = strtolower(trim($t));
+
+        return preg_match('/^(mm|sda|info)-[a-z0-9][a-z0-9-]*$/', $t) === 1;
+    }
+
+    /**
+     * @param array<string, mixed> $item
+     */
+    private function plainContentExcerpt(array $item, string $preferredLang, int $maxLen): string
+    {
+        foreach (array_merge([$preferredLang], self::LANGUAGES) as $l) {
+            $raw = (string)($item['Content_' . $l] ?? '');
+            $plain = trim(preg_replace('/\s+/u', ' ', strip_tags($raw)) ?? '');
+            if ($plain === '') {
+                continue;
+            }
+            if (mb_strlen($plain) > $maxLen) {
+                $plain = mb_substr($plain, 0, $maxLen - 1) . '…';
+            }
+
+            return $plain;
+        }
+
+        return '';
     }
 
     /**
