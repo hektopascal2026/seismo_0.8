@@ -24,12 +24,21 @@ final class SetupController
 {
     public function redirectLegacySetup(): void
     {
+        if (hasDbConnection()) {
+            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
+            exit;
+        }
         header('Location: ' . getBasePath() . '/index.php?action=configuration', true, 303);
         exit;
     }
 
     public function show(): void
     {
+        if (hasDbConnection()) {
+            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
+            exit;
+        }
+
         $this->renderView([
             'formError'       => null,
             'writeNote'       => null,
@@ -42,6 +51,11 @@ final class SetupController
 
     public function handlePost(): void
     {
+        if (hasDbConnection()) {
+            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
+            exit;
+        }
+
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
             header('Location: ' . getBasePath() . '/index.php?action=configuration', true, 303);

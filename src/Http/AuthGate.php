@@ -26,7 +26,7 @@ namespace Seismo\Http;
  *   - `export_*`  (separate Bearer-token auth — read-only export key)
  *
  * `configuration` (legacy: `setup`) is allowed without a session **only** while
- * `config.local.php` is missing (first-run); see {@see AuthGate::check()}.
+ * the database is not yet reachable (first-run); see {@see AuthGate::check()}.
  */
 final class AuthGate
 {
@@ -105,8 +105,8 @@ final class AuthGate
             return;
         }
         if (($action === 'configuration' || $action === 'setup')
-            && defined('SEISMO_ROOT')
-            && !is_file(SEISMO_ROOT . '/config.local.php')) {
+            && function_exists('hasDbConnection')
+            && !hasDbConnection()) {
             return;
         }
         if (self::isLoggedIn()) {

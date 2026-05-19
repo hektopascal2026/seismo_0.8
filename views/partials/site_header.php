@@ -168,8 +168,10 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=logbook" class="nav-link<?= $activeNav === 'logbook' ? ' active' : '' ?>">Logbook</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
-            <?php if (!isSatellite()): ?>
+            <?php if (!isSatellite() && !hasDbConnection()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=configuration" class="nav-link<?= $activeNav === 'configuration' ? ' active' : '' ?>">Configuration</a>
+            <?php endif; ?>
+            <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
             <?php endif; ?>
         </nav>
