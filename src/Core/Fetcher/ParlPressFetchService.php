@@ -45,6 +45,12 @@ final class ParlPressFetchService
     /** Hex of ASCII `SDA-Meldung` — agency wire. */
     private const HEX_NEWS_TYPE_SDA = '5344412d4d656c64756e67';
 
+    /**
+     * SharePoint omits FileRef on list items unless requested — without it every row
+     * fails {@see tryBuildParlPressRow()}.
+     */
+    private const LIST_ODATA_SELECT = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate';
+
     public function __construct(?BaseClient $http = null)
     {
         $this->http = $http ?? new BaseClient(BaseClient::DEFAULT_TIMEOUT, self::defaultBrowserUserAgent());
@@ -262,6 +268,7 @@ final class ParlPressFetchService
             '$top'     => (string)$fetchTop,
             '$orderby' => 'Created desc',
             '$filter'  => $filter,
+            '$select'  => self::LIST_ODATA_SELECT,
         ]);
         $url = $this->listItemsBaseUrl($listItemsUrl) . '?' . $query;
 
@@ -513,9 +520,8 @@ final class ParlPressFetchService
 
         $title = $this->resolveParlPressTitle($item, $lang, $slug);
 
-        $fileRef = trim((string)($item['FileRef'] ?? ''));
-        $pageUrl = 'https://www.parlament.ch' . $fileRef;
-        if ($fileRef === '' || !$this->isNavigableHttpUrl($pageUrl)) {
+        $pageUrl = $this->resolveParlPressPageUrl($item, $slug);
+        if ($pageUrl === null) {
             return null;
         }
 
@@ -680,5 +686,39 @@ final class ParlPressFetchService
         }
 
         return filter_var($url, FILTER_VALIDATE_URL) !== false;
+    }
+
+    /**
+     * Public page URL from list/search row ({@see FileRef}, {@see EncodedAbsUrl}, or Pages path + slug).
+     *
+     * @param array<string, mixed> $item
+     */
+    private function resolveParlPressPageUrl(array $item, string $slug): ?string
+    {
+        $encoded = trim((string)($item['EncodedAbsUrl'] ?? ''));
+        if ($encoded !== '' && $this->isNavigableHttpUrl($encoded)) {
+            return $encoded;
+        }
+
+        $fileRef = trim((string)($item['FileRef'] ?? ''));
+        if ($fileRef !== '') {
+            $pageUrl = str_starts_with($fileRef, 'http') ? $fileRef : 'https://www.parlament.ch' . $fileRef;
+            if ($this->isNavigableHttpUrl($pageUrl)) {
+                return $pageUrl;
+            }
+        }
+
+        $slug = trim($slug);
+        if ($slug === '') {
+            return null;
+        }
+        $leaf = trim((string)($item['FileLeafRef'] ?? ''));
+        if (!str_ends_with(strtolower($slug), '.aspx') && $leaf !== '') {
+            $slug = preg_replace('/\.aspx$/i', '', $leaf) ?: $slug;
+        }
+        $path = '/press-releases/Pages/' . $slug . (str_contains($slug, '.') ? '' : '.aspx');
+        $pageUrl = 'https://www.parlament.ch' . $path;
+
+        return $this->isNavigableHttpUrl($pageUrl) ? $pageUrl : null;
     }
 }
