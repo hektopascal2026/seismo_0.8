@@ -16,6 +16,9 @@ use Seismo\Core\Mail\EmailListingBoilerplateStripper;
  */
 final class EmailIngestRepository
 {
+    /** Match {@see \Seismo\Core\Fetcher\ImapMailFetchService::MAX_BODY_BYTES}. */
+    private const MAX_BODY_BYTES = 2_097_152;
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -193,6 +196,7 @@ final class EmailIngestRepository
     {
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
+        $row = $this->syncAndCapBodies($row);
 
         $row['message_id'] = $this->truncate($row['message_id'] ?? null, 512);
         $row['subject']    = $this->truncate($row['subject'] ?? null, 500);
@@ -253,5 +257,40 @@ final class EmailIngestRepository
         }
 
         return substr($s, 0, $max);
+    }
+
+    /**
+     * Keep legacy `text_body`/`html_body` mirrors aligned with `body_*` and within DB limits.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function syncAndCapBodies(array $row): array
+    {
+        foreach (
+            [
+                ['text_body', 'body_text'],
+                ['html_body', 'body_html'],
+            ] as [$legacy, $modern]
+        ) {
+            $v = trim((string)($row[$legacy] ?? $row[$modern] ?? ''));
+            if ($v === '') {
+                continue;
+            }
+            $v = $this->capBodyBytes($v);
+            $row[$legacy] = $v;
+            $row[$modern] = $v;
+        }
+
+        return $row;
+    }
+
+    private function capBodyBytes(string $body): string
+    {
+        if (strlen($body) <= self::MAX_BODY_BYTES) {
+            return $body;
+        }
+
+        return substr($body, 0, self::MAX_BODY_BYTES) . "\n\n[truncated]";
     }
 }
