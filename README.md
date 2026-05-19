@@ -1,12 +1,20 @@
-# Seismo 0.6
+# Seismo 0.6.1
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
-Built on **PHP 8.2**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker daemons). One web app plus **`refresh_cron.php`** for production ingest.
+Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker daemons). One web app plus **`refresh_cron.php`** for production ingest.
 
 **Seismo 0.5** is frozen in the sibling repo [`seismo_0.5`](https://github.com/hektopascal2026/seismo_0.5) (tag `v0.5.3`). This tree is the active product line.
 
+### Release notes
+
+| Version | Notes |
+|---------|--------|
+| **0.6.0** | **VPS-ready baseline** — production layout on Hetzner (Nginx, PHP-FPM, MariaDB via socket), unified `emails` table, Gmail API ingest with OAuth, numbered migrations through schema v30, source-config JSON export/import, satellite bundles. |
+| **0.6.1** | **Gmail + QoL** — unknown Gmail sender domains queue in **Mail → Subscriptions → New senders** with a proposed display name and **Review** flow before they become active subscriptions; fixes for large Gmail HTML bodies and EUR-Lex refresh. |
+
 ---
+
 
 ## Quick start
 

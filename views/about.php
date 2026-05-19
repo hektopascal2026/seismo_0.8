@@ -211,7 +211,24 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.5.3 (Current)</strong> <span class="v-date">Apr 2026</span></div>
+                        <div class="v-header"><strong>v0.6.1 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Gmail sender review &amp; QoL</div>
+                        <ul>
+                            <li><strong>New senders queue:</strong> Gmail ingest proposes domain subscriptions with a display name; you review and confirm before they join the active registry (legacy IMAP ingest unchanged).</li>
+                            <li><strong>Reliability:</strong> large Gmail HTML bodies no longer break ingest; EUR-Lex refresh uses the correct SPARQL POST endpoint.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.0</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">VPS-ready product line</div>
+                        <ul>
+                            <li><strong>Production deploy:</strong> documented stack for Hetzner VPS (Nginx, PHP-FPM, MariaDB) with <code>/var/www/seismo</code> layout and cron ingest.</li>
+                            <li><strong>Gmail API:</strong> OAuth connect in Settings → Mail; unified <code>emails</code> table replaces split IMAP/Gmail storage paths.</li>
+                            <li><strong>Operations:</strong> numbered migrations through schema v30, source-config JSON export/import, satellite prune bundles.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.5.3</strong> <span class="v-date">Apr 2026</span></div>
                         <div class="v-title">Robust refresh for many sources</div>
                         <ul>
                             <li><strong>Chunked RSS &amp; scraper (default):</strong> each cron tick pulls a bounded batch and saves cursor state in <code>system_config</code>, so hundreds of feeds stay within typical PHP time limits; a full rotation still respects the usual throttle windows between completed cycles.</li>
