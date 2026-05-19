@@ -79,10 +79,18 @@ $feedOn = static function (string $cat) use ($timelineFilter): bool {
     return !in_array($cat, $timelineFilter->excludedFeedCategories, true);
 };
 $lexExcludedEffective = $timelineFilter->effectiveExcludedLexSources();
-$lexOn                = static function (string $src) use ($lexExcludedEffective): bool {
+$lexOn                = static function (string $src) use ($timelineFilter, $lexExcludedEffective): bool {
+    if ($timelineFilter->lexSources !== []) {
+        return in_array($src, $timelineFilter->lexSources, true);
+    }
+
     return !in_array($src, $lexExcludedEffective, true);
 };
 $mailOn = static function (string $tg) use ($timelineFilter): bool {
+    if ($timelineFilter->emailTags !== []) {
+        return in_array($tg, $timelineFilter->emailTags, true);
+    }
+
     return !in_array($tg, $timelineFilter->excludedEmailTags, true);
 };
 $legOn = !$timelineFilter->excludeCalendar;
