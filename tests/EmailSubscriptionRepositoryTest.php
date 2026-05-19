@@ -108,6 +108,39 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         self::assertNull(EmailSubscriptionRepository::resolveDisplayNameForFromEmail('a@example.com', $rows));
     }
 
+    public function testProposeDisplayNamePrefersFromName(): void
+    {
+        self::assertSame(
+            'News Service Bund',
+            EmailSubscriptionRepository::proposeDisplayName('News Service Bund', 'news.admin.ch')
+        );
+    }
+
+    public function testProposeDisplayNameFromDomainLabel(): void
+    {
+        self::assertSame(
+            'Test',
+            EmailSubscriptionRepository::proposeDisplayName('', 'test.ch')
+        );
+    }
+
+    public function testResolveSubscriptionUiSkipsPendingAutoDetected(): void
+    {
+        $rows = [
+            [
+                'match_type'                 => 'domain',
+                'match_value'                => 'example.com',
+                'display_name'               => 'Should not apply',
+                'disabled'                   => 0,
+                'auto_detected'              => 1,
+                'strip_listing_boilerplate'  => 1,
+            ],
+        ];
+        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail('a@example.com', $rows);
+        self::assertNull($ui['display_name']);
+        self::assertFalse($ui['strip_listing_boilerplate']);
+    }
+
     public function testResolveSubscriptionUiCarriesStripBoilerplateFromWinningRow(): void
     {
         $rows = [

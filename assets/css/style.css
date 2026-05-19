@@ -407,6 +407,40 @@ textarea.search-input.setup-code-preview {
     color: #000000;
 }
 
+.admin-new-senders-section {
+    margin-bottom: 28px;
+    padding: 16px;
+    border: 2px solid #000000;
+    background-color: #fff9e6;
+}
+
+.admin-new-senders-badge {
+    display: inline-block;
+    min-width: 1.5rem;
+    padding: 0 6px;
+    margin-left: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    border: 2px solid #000000;
+    background-color: #ffffff;
+}
+
+.section-title--compact {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+}
+
+.data-table--new-senders thead th {
+    background-color: #fff3c4;
+}
+
+.admin-form-card--review {
+    background-color: #fffef8;
+    border-color: #c9a227;
+}
+
 .admin-hint {
     margin: -4px 0 10px;
     font-size: 13px;

@@ -139,7 +139,7 @@ final class ScoringService
     {
         $rows = $this->scores->getUnscoredEmails(self::BATCH_LIMIT);
         $done   = 0;
-        $subs   = (new EmailSubscriptionRepository(\getDbConnection()))->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+        $subs   = (new EmailSubscriptionRepository(\getDbConnection()))->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         foreach ($rows as $row) {
             $body = (string)($row['text_body'] ?? '');
             if ($body === '') {

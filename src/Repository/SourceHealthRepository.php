@@ -127,7 +127,7 @@ final class SourceHealthRepository
                    )
             ) AS last_ingested_at
               FROM {$tSub} es
-             WHERE es.removed_at IS NULL
+             WHERE es.removed_at IS NULL AND es.auto_detected = 0
              ORDER BY es.id ASC";
 
         try {

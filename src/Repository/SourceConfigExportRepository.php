@@ -60,7 +60,7 @@ final class SourceConfigExportRepository
         $t = entryTable('email_subscriptions');
         $stmt = $this->pdo->query(
             "SELECT * FROM {$t}
-             WHERE removed_at IS NULL
+             WHERE removed_at IS NULL AND auto_detected = 0
              ORDER BY id ASC"
         );
 

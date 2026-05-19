@@ -1306,7 +1306,7 @@ final class EntryRepository
         }
         try {
             $subs = (new EmailSubscriptionRepository($this->pdo))
-                ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+                ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         } catch (\Throwable) {
             return;
         }

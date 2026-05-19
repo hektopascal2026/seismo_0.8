@@ -130,7 +130,7 @@ final class EmailIngestRepository
             text_body = VALUES(text_body),
             html_body = VALUES(html_body)';
 
-        return $this->executeBatch($sql, $rows, static function (array $row): ?string {
+        $n = $this->executeBatch($sql, $rows, static function (array $row): ?string {
             $id = trim((string)($row['gmail_message_id'] ?? ''));
 
             return $id !== '' ? $id : null;
@@ -155,6 +155,16 @@ final class EmailIngestRepository
                 $row['html_body'],
             ];
         });
+
+        if ($n > 0) {
+            try {
+                (new EmailSubscriptionRepository($this->pdo))->ensurePendingFromGmailIngest($rows);
+            } catch (\Throwable $e) {
+                error_log('Seismo Gmail pending senders: ' . $e->getMessage());
+            }
+        }
+
+        return $n;
     }
 
     /**
@@ -165,7 +175,7 @@ final class EmailIngestRepository
     {
         $stmt = $this->pdo->prepare($sql);
         $subs = (new EmailSubscriptionRepository($this->pdo))
-            ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
 
         $this->pdo->beginTransaction();
         try {

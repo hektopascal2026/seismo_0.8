@@ -27,9 +27,12 @@ final class MailController
 
         $allItems             = [];
         $subscriptions        = [];
+        $pendingSenders       = [];
         $subscriptionLatest   = [];
+        $pendingLatest        = [];
         $subscriptionFilter   = null;
         $editRow              = null;
+        $reviewingPending     = false;
         $pageError            = null;
         $alertThreshold       = 0.60;
 
@@ -61,7 +64,8 @@ final class MailController
                 $allItems = $entryRepo->getEmailModuleTimeline(self::LIST_LIMIT, 0);
             }
 
-            $subscriptions = $subRepo->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            $subscriptions  = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            $pendingSenders = $subRepo->listPending(EmailSubscriptionRepository::MAX_LIMIT, 0);
             if ($view === 'subscriptions') {
                 foreach ($subscriptions as $row) {
                     $sid = (int)$row['id'];
@@ -70,9 +74,19 @@ final class MailController
                         (string)$row['match_value']
                     );
                 }
+                foreach ($pendingSenders as $row) {
+                    $sid = (int)$row['id'];
+                    $pendingLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
+                        (string)$row['match_type'],
+                        (string)$row['match_value']
+                    );
+                }
             }
             if ($editId > 0) {
                 $editRow = $subRepo->findById($editId);
+                if ($editRow !== null && EmailSubscriptionRepository::isPendingRow($editRow)) {
+                    $reviewingPending = true;
+                }
             }
         } catch (\Throwable $e) {
             error_log('Seismo mail: ' . $e->getMessage());
@@ -181,8 +195,15 @@ final class MailController
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',
             ];
             if ($id > 0) {
+                $wasPending = false;
+                $existing   = $repo->findById($id);
+                if ($existing !== null && EmailSubscriptionRepository::isPendingRow($existing)) {
+                    $wasPending = true;
+                }
                 $repo->update($id, $payload);
-                $_SESSION['success'] = 'Subscription updated.';
+                $_SESSION['success'] = $wasPending
+                    ? 'Sender reviewed — subscription is now active.'
+                    : 'Subscription updated.';
             } else {
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Subscription added (#' . $newId . ').';

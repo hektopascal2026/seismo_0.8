@@ -4,9 +4,12 @@
  *
  * @var array<int, array<string, mixed>> $allItems
  * @var list<array<string, mixed>> $subscriptions
+ * @var list<array<string, mixed>> $pendingSenders
  * @var array<int, ?array{email_id: int, subject: ?string}> $subscriptionLatest
+ * @var array<int, ?array{email_id: int, subject: ?string}> $pendingLatest
  * @var ?array<string, mixed> $subscriptionFilter
  * @var ?array<string, mixed> $editRow
+ * @var bool $reviewingPending
  * @var ?string $pageError
  * @var string $csrfField
  * @var float $alertThreshold
@@ -98,9 +101,78 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
         <?php else: ?>
         <div class="latest-entries-section">
             <h2 class="section-title">Email subscriptions</h2>
-            <p class="admin-intro">Domain-first matching (e.g. <code>example.com</code> covers <code>alice@example.com</code>). Per-address overrides use match type <em>email</em>. <code>show_in_magnitu</code> is stored for future pipeline use — the Magnitu export API does not filter on it yet.</p>
+            <p class="admin-intro">Domain-first matching (e.g. <code>example.com</code> covers <code>alice@example.com</code>). Per-address overrides use match type <em>email</em>. When Gmail ingests mail from an unknown domain, it is queued under <strong>New senders</strong> for review before it appears in the table below.</p>
 
-            <?php if (!$satellite): ?>
+            <?php if ($pendingSenders !== []): ?>
+            <section class="admin-new-senders-section" aria-labelledby="new-senders-heading">
+                <h3 id="new-senders-heading" class="section-title section-title--compact">New senders <span class="admin-new-senders-badge"><?= count($pendingSenders) ?></span></h3>
+                <p class="admin-hint">Detected from Gmail ingest — confirm display name and options, then save to activate.</p>
+                <table class="data-table data-table--new-senders">
+                    <thead>
+                        <tr>
+                            <th>Match</th>
+                            <th>Proposed name</th>
+                            <th>Latest</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($pendingSenders as $row): ?>
+                        <?php
+                        $sid = (int)$row['id'];
+                        $peek = $pendingLatest[$sid] ?? null;
+                        $latestQs = 'action=mail&view=items&subscription=' . $sid;
+                        ?>
+                        <tr>
+                            <td><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
+                            <td><?= e((string)$row['display_name']) ?></td>
+                            <td>
+                                <?php if ($peek !== null): ?>
+                                    <?php
+                                    $subj = $peek['subject'] ?? null;
+                                    $linkText = 'Latest';
+                                    $trunc = false;
+                                    if ($subj !== null && $subj !== '') {
+                                        $max = 56;
+                                        if (function_exists('mb_strlen')) {
+                                            $trunc = mb_strlen($subj) > $max;
+                                            $linkText = mb_substr($subj, 0, $max);
+                                        } else {
+                                            $trunc = strlen($subj) > $max;
+                                            $linkText = substr($subj, 0, $max);
+                                        }
+                                    }
+                                    if ($trunc) {
+                                        $linkText .= '…';
+                                    }
+                                    ?>
+                                    <a href="<?= e($basePath) ?>/index.php?<?= e($latestQs) ?>" title="<?= e($subj ?? 'Open matching mail items') ?>"><?= e($linkText) ?></a>
+                                <?php else: ?>
+                                    <span class="table-cell-placeholder">No messages yet</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if (!$satellite): ?>
+                                <div class="admin-table-actions">
+                                    <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions&amp;edit=<?= $sid ?>" class="btn btn-primary btn-sm">Review</a>
+                                    <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_delete" class="admin-inline-form" onsubmit="return confirm('Dismiss this proposed sender?');">
+                                        <?= $csrfField ?>
+                                        <input type="hidden" name="id" value="<?= $sid ?>">
+                                        <button type="submit" class="btn btn-danger btn-sm">Dismiss</button>
+                                    </form>
+                                </div>
+                                <?php else: ?>
+                                <span class="table-cell-placeholder">—</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </section>
+            <?php endif; ?>
+
+            <?php if (!$satellite && ($editRow === null || !$reviewingPending)): ?>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save" class="admin-form-card">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
@@ -154,6 +226,60 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
             </form>
             <?php endif; ?>
 
+            <?php if (!$satellite && $reviewingPending && $editRow !== null): ?>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save" class="admin-form-card admin-form-card--review">
+                <?= $csrfField ?>
+                <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
+                <h3>Review sender</h3>
+                <p class="admin-hint">From Gmail: <?= e((string)$editRow['match_type']) ?>: <?= e((string)$editRow['match_value']) ?></p>
+                <div class="admin-form-field">
+                    <label>Match type
+                        <?php $mt = (string)($editRow['match_type'] ?? 'domain'); ?>
+                        <select name="match_type" class="search-input" style="width:100%; max-width:16rem;">
+                            <option value="domain" <?= $mt === 'domain' ? 'selected' : '' ?>>domain</option>
+                            <option value="email" <?= $mt === 'email' ? 'selected' : '' ?>>email</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Match value <input type="text" name="match_value" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['match_value'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Display name <input type="text" name="display_name" class="search-input" style="width:100%;" value="<?= e((string)($editRow['display_name'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="disabled" value="0">
+                    <label><input type="checkbox" name="disabled" value="1" <?= !empty($editRow['disabled']) ? 'checked' : '' ?>> Disabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="show_in_magnitu" value="0">
+                    <label><input type="checkbox" name="show_in_magnitu" value="1" <?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="strip_listing_boilerplate" value="0">
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate</label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Unsubscribe mailto <input type="text" name="unsubscribe_mailto" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_mailto'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="unsubscribe_one_click" value="0">
+                    <label><input type="checkbox" name="unsubscribe_one_click" value="1" <?= !empty($editRow['unsubscribe_one_click']) ? 'checked' : '' ?>> One-click unsubscribe</label>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Confirm subscription</button>
+                    <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+            <?php endif; ?>
+
+            <h3 class="section-title section-title--compact">Active subscriptions</h3>
             <table class="data-table">
                 <thead>
                     <tr>

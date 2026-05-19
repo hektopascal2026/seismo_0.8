@@ -385,7 +385,7 @@ final class MagnituController
         if ($body !== '') {
             if (self::$emailSubscriptionListCache === null) {
                 self::$emailSubscriptionListCache = (new EmailSubscriptionRepository(getDbConnection()))
-                    ->listAll(EmailSubscriptionRepository::MAX_LIMIT, 0);
+                    ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
             }
             $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
                 (string)($row['from_email'] ?? ''),
