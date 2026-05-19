@@ -183,6 +183,11 @@ $router->register(
     true
 );
 $router->register(
+    'import_source_configs',
+    \Seismo\Controller\SourceConfigImportController::class . '::importFeedsAndScraper',
+    false
+);
+$router->register(
     'settings_save_mail',
     \Seismo\Controller\SettingsController::class . '::saveMail',
     false

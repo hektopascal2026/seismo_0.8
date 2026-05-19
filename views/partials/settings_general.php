@@ -68,6 +68,26 @@ declare(strict_types=1);
             <p class="admin-form-actions">
                 <a class="btn btn-secondary" href="<?= e($basePath) ?>/index.php?action=export_source_configs">Download source config bundle</a>
             </p>
+
+            <h3 class="section-title" style="font-size:1rem; margin-top:1rem;">Import feeds + scraper only</h3>
+            <p class="admin-intro">
+                Imports only <code>feeds_module_sources</code> and <code>scraper_configs</code> from a JSON payload.
+                Existing rows are updated by URL; missing rows are inserted.
+            </p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=import_source_configs" class="admin-form-card" enctype="multipart/form-data">
+                <?= $csrfField ?>
+                <div class="admin-form-field">
+                    <label for="source_config_file">Upload export JSON</label>
+                    <input type="file" id="source_config_file" name="source_config_file" accept=".json,application/json" class="search-input" style="width:100%;">
+                </div>
+                <div class="admin-form-field">
+                    <label for="source_config_json">Or paste JSON</label>
+                    <textarea id="source_config_json" name="source_config_json" rows="8" class="search-input" style="width:100%;" placeholder='{"feeds_module_sources":[...],"scraper_configs":[...]}'></textarea>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Import feeds + scraper configs</button>
+                </div>
+            </form>
         </div>
         <?php endif; ?>
 
