@@ -271,7 +271,9 @@ final class TimelineFilter
         $calOn  = is_scalar($calRaw) && trim((string)$calRaw) === '1';
 
         $excludeAllFeedItems = $feedAll !== [] && $inFeeds === [];
-        $excludeAllEmails    = $emAll !== [] && $inEm === [];
+        // If no email-tag pills exist, keep emails out of native filter-page previews
+        // so "None + one feed pill" cannot leak untagged inbox rows.
+        $excludeAllEmails    = ($emAll === []) || ($inEm === []);
         $excludeAllLexItems  = $lexAll !== [] && $inLex === [];
 
         // Partial selection must be inclusion (“show only checked”), not exclusion
