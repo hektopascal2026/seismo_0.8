@@ -3,7 +3,7 @@
  * Migration 015 — seed Parlament.ch SDA-Meldungen `parl_press` feed (schema 31).
  *
  * Medienmitteilungen (parl_mm) may already exist from {@see Migration007ParlPressToFeedItems}.
- * SDA uses the same SharePoint list URL with `guid_prefix: parl_sda` in description JSON
+ * SDA uses the news site `Seiten` list URL with `guid_prefix: parl_sda` in description JSON
  * ({@see Migration008FeedsUrlNonUnique}).
  *
  * Idempotent: skips when a `parl_sda` category row or equivalent config already exists.
@@ -15,12 +15,11 @@ namespace Seismo\Migration;
 
 use PDO;
 use PDOException;
+use Seismo\Core\Fetcher\ParlPressFetchService;
 
 final class Migration015ParlPressSdaFeed
 {
     public const VERSION = 31;
-
-    private const DEFAULT_API_URL = "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items";
 
     public function apply(PDO $pdo): void
     {
@@ -28,7 +27,7 @@ final class Migration015ParlPressSdaFeed
             return;
         }
 
-        $url = $this->resolveListItemsUrl($pdo);
+        $url = ParlPressFetchService::DEFAULT_SDA_LIST_ITEMS_URL;
         $desc = json_encode(
             [
                 'lookback_days' => 365,
@@ -49,7 +48,7 @@ final class Migration015ParlPressSdaFeed
             $url,
             'Parlament.ch — SDA-Meldungen',
             $desc,
-            'https://www.parlament.ch/press-releases/',
+            'https://www.parlament.ch/de/services/news/',
             'parl_sda',
         ]);
     }
@@ -78,24 +77,4 @@ final class Migration015ParlPressSdaFeed
         return $id !== false && $id !== null && (int)$id > 0;
     }
 
-    private function resolveListItemsUrl(PDO $pdo): string
-    {
-        try {
-            $stmt = $pdo->query(
-                "SELECT url FROM feeds
-                  WHERE source_type = 'parl_press'
-                    AND TRIM(url) <> ''
-                  ORDER BY id ASC
-                  LIMIT 1"
-            );
-            $url = $stmt ? $stmt->fetchColumn() : false;
-        } catch (PDOException) {
-            return self::DEFAULT_API_URL;
-        }
-        if ($url !== false && $url !== null && trim((string)$url) !== '') {
-            return trim((string)$url);
-        }
-
-        return self::DEFAULT_API_URL;
-    }
 }

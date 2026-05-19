@@ -14,10 +14,11 @@ use Seismo\Service\Http\BaseClient;
  * Primary path: **POST** `/_api/search/postquery` with taxonomy **RefinementFilters**.
  * When Akamai returns an HTML “Request Rejected” / “Access Denied” page (common for
  * datacenter IPs or `Seismo/*` User-Agents), falls back to **GET** the configured list
- * `…/items` OData endpoint and filters rows client-side by slug (`parl_mm` vs `parl_sda`).
+ * `…/items` OData endpoint. **SDA** uses the separate news site list (`/de/services/news/…/Seiten`);
+ * **Medienmitteilungen** use `press-releases/…/Pages`. SDA rows are identified by list URL / `FileRef` path, not slug prefix.
  *
  * Configuration comes from the parent `feeds` row:
- * - `url` — SharePoint **list items** URL (`…/items`) for OData fallback; also used to derive `postquery`.
+ * - `url` — SharePoint **list items** URL (`…/items`) for OData fallback; also used to derive `postquery` (MM only).
  * - `description` — optional JSON:
  *   - `lookback_days`, `limit`, `language` — same as always.
  *   - `guid_prefix` — `parl_mm` (default) vs `parl_sda`; selects the built-in **PdNewsTypeDE** refinement token.
@@ -44,6 +45,9 @@ final class ParlPressFetchService
 
     /** Hex of ASCII `SDA-Meldung` — agency wire. */
     private const HEX_NEWS_TYPE_SDA = '5344412d4d656c64756e67';
+
+    /** SDA-Meldungen (news site `Seiten` list) — not `press-releases/Pages`. */
+    public const DEFAULT_SDA_LIST_ITEMS_URL = 'https://www.parlament.ch/de/services/news/_api/web/lists/getByTitle(\'Seiten\')/items';
 
     /** Base list columns; {@see listODataSelect()} adds per-language Title_* / Content_*. */
     private const LIST_ODATA_SELECT_BASE = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate';
@@ -92,6 +96,12 @@ final class ParlPressFetchService
         }
         if ($refinements === null || $refinements === []) {
             $refinements = $this->defaultRefinementFilters($guidPrefix);
+        }
+
+        if (self::isParlNewsListUrl($apiBase)) {
+            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle, $lang);
+
+            return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
         }
 
         $sinceUtc = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
@@ -159,8 +169,7 @@ final class ParlPressFetchService
             if (!is_array($item)) {
                 continue;
             }
-            $slug = $this->resolveParlPressSlug($item);
-            if (!$this->slugMatchesGuidPrefix($slug, $guidPrefix)) {
+            if (!$this->itemMatchesGuidPrefix($item, $guidPrefix)) {
                 continue;
             }
             $row = $this->tryBuildParlPressRow($item, $lang, $guidPrefix);
@@ -321,15 +330,36 @@ final class ParlPressFetchService
         return implode(',', array_values(array_unique($fields)));
     }
 
-    private function slugMatchesGuidPrefix(string $slug, string $guidPrefix): bool
+    /**
+     * @param array<string, mixed> $item SharePoint list row.
+     */
+    private function itemMatchesGuidPrefix(array $item, string $guidPrefix): bool
     {
-        $slug = trim($slug);
+        $ref = strtolower(trim((string)($item['FileRef'] ?? '')));
+        if ($ref !== '' && str_contains($ref, '/services/news/')) {
+            return $guidPrefix === 'parl_sda';
+        }
+        if ($ref !== '' && str_contains($ref, '/press-releases/')) {
+            $slug = $this->resolveParlPressSlug($item);
+            if ($slug === '') {
+                return false;
+            }
+            $slugSda = self::slugLooksLikeSda($slug);
+
+            return $guidPrefix === 'parl_sda' ? $slugSda : !$slugSda;
+        }
+        $slug = $this->resolveParlPressSlug($item);
         if ($slug === '') {
             return false;
         }
-        $isSda = self::slugLooksLikeSda($slug);
+        $slugSda = self::slugLooksLikeSda($slug) || self::slugLooksLikeNewsSiteSda($slug, $ref);
 
-        return $guidPrefix === 'parl_sda' ? $isSda : !$isSda;
+        return $guidPrefix === 'parl_sda' ? $slugSda : !$slugSda;
+    }
+
+    public static function isParlNewsListUrl(string $url): bool
+    {
+        return str_contains(strtolower($url), '/services/news/');
     }
 
     private static function slugLooksLikeSda(string $slug): bool
@@ -339,6 +369,17 @@ final class ParlPressFetchService
         return str_starts_with($s, 'sda-')
             || str_starts_with($s, 'mm-sda')
             || str_contains($s, '-sda-');
+    }
+
+    /** SDA wire items on the news site use timestamp ids ending in `_bsd…`, not `sda-` slugs. */
+    private static function slugLooksLikeNewsSiteSda(string $slug, string $fileRefLower): bool
+    {
+        if ($fileRefLower !== '' && !str_contains($fileRefLower, '/services/news/')) {
+            return false;
+        }
+        $s = strtolower(trim($slug));
+
+        return (bool) preg_match('/_bsd\d+$/', $s);
     }
 
     /**
@@ -609,11 +650,21 @@ final class ParlPressFetchService
      */
     private function resolveParlPressSlug(array $item): string
     {
+        $ref = trim((string)($item['FileRef'] ?? ''));
+        if ($ref !== '' && self::isParlNewsListUrl($ref)) {
+            $base = basename($ref);
+            if ($base !== '' && $base !== '.' && $base !== '..') {
+                $slug = preg_replace('/\.aspx$/i', '', $base) ?? $base;
+                $slug = trim((string)$slug);
+                if ($slug !== '') {
+                    return $slug;
+                }
+            }
+        }
         $fromTitle = trim((string)($item['Title'] ?? ''));
-        if ($fromTitle !== '' && !self::isMeaninglessParlPressTitle($fromTitle)) {
+        if ($fromTitle !== '' && !self::isMeaninglessParlPressTitle($fromTitle) && self::looksLikeParlPressSlug($fromTitle)) {
             return $fromTitle;
         }
-        $ref = trim((string)($item['FileRef'] ?? ''));
         if ($ref === '') {
             return $fromTitle;
         }
@@ -632,6 +683,14 @@ final class ParlPressFetchService
      */
     private function resolveParlPressTitle(array $item, string $preferredLang, string $slug): string
     {
+        $ref = trim((string)($item['FileRef'] ?? ''));
+        $headline = trim((string)($item['Title'] ?? ''));
+        if ($ref !== '' && self::isParlNewsListUrl($ref)
+            && $headline !== '' && !self::isMeaninglessParlPressTitle($headline)
+            && !self::looksLikeParlPressSlug($headline)) {
+            return $headline;
+        }
+
         $try = [];
         foreach (array_merge([$preferredLang], self::LANGUAGES) as $l) {
             $k = 'Title_' . $l;
