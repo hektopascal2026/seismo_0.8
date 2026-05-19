@@ -118,6 +118,7 @@ final class MigrationRunner
             Migration012PluginRunLogWarn::VERSION => new Migration012PluginRunLogWarn(),
             Migration013EmailGmail::VERSION       => new Migration013EmailGmail(),
             Migration014EmailBodyLongtext::VERSION => new Migration014EmailBodyLongtext(),
+            Migration015ParlPressSdaFeed::VERSION => new Migration015ParlPressSdaFeed(),
         ];
 
         ksort($migrations, SORT_NUMERIC);

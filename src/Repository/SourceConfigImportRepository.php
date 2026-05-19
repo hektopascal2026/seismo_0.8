@@ -48,11 +48,12 @@ final class SourceConfigImportRepository
 
                 $find = $this->pdo->prepare(
                     "SELECT id FROM {$f}
-                     WHERE url = ? AND source_type = ? AND IFNULL(category, '') <> 'scraper'
+                     WHERE url = ? AND source_type = ? AND IFNULL(category, '') = ?
+                       AND IFNULL(category, '') <> 'scraper'
                      ORDER BY id ASC
                      LIMIT 1"
                 );
-                $find->execute([$url, $sourceType]);
+                $find->execute([$url, $sourceType, $category]);
                 $existingId = $find->fetchColumn();
 
                 if ($existingId !== false && $existingId !== null) {
