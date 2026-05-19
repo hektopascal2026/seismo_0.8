@@ -1638,7 +1638,9 @@ final class EntryRepository
      *   plain: list<string>,
      *   sc_ids: list<int>,
      *   sf_ids: list<int>,
-     *   legacy_scraper_bucket: bool
+     *   legacy_scraper_bucket: bool,
+     *   parl_mm: bool,
+     *   parl_sda: bool
      * }
      */
     private static function partitionFeedCategoryTokens(array $tokens): array
@@ -1647,12 +1649,24 @@ final class EntryRepository
         $scIds   = [];
         $sfIds   = [];
         $legacyS = false;
+        $parlMm  = false;
+        $parlSda = false;
         foreach ($tokens as $raw) {
             if (!is_string($raw)) {
                 continue;
             }
             $t = trim($raw);
             if ($t === '') {
+                continue;
+            }
+            if ($t === 'parl_mm') {
+                $parlMm = true;
+
+                continue;
+            }
+            if ($t === 'parl_sda') {
+                $parlSda = true;
+
                 continue;
             }
             if ($t === 'scraper') {
@@ -1684,6 +1698,8 @@ final class EntryRepository
             'sc_ids'                => array_values(array_unique($scIds)),
             'sf_ids'                => array_values(array_unique($sfIds)),
             'legacy_scraper_bucket' => $legacyS,
+            'parl_mm'               => $parlMm,
+            'parl_sda'              => $parlSda,
         ];
     }
 
@@ -1696,6 +1712,12 @@ final class EntryRepository
         $p      = self::partitionFeedCategoryTokens($included);
         $parts  = [];
         $params = [];
+        if ($p['parl_mm']) {
+            $parts[] = "fi.guid LIKE 'parl_mm:%'";
+        }
+        if ($p['parl_sda']) {
+            $parts[] = "fi.guid LIKE 'parl_sda:%'";
+        }
         if ($p['plain'] !== []) {
             $ph     = implode(',', array_fill(0, count($p['plain']), '?'));
             $parts[] = 'f.category IN (' . $ph . ')';
@@ -1733,6 +1755,12 @@ final class EntryRepository
         $p      = self::partitionFeedCategoryTokens($excluded);
         $parts  = [];
         $params = [];
+        if ($p['parl_mm']) {
+            $parts[] = "fi.guid NOT LIKE 'parl_mm:%'";
+        }
+        if ($p['parl_sda']) {
+            $parts[] = "fi.guid NOT LIKE 'parl_sda:%'";
+        }
         if ($p['plain'] !== []) {
             $ph     = implode(',', array_fill(0, count($p['plain']), '?'));
             $parts[] = '(f.category IS NULL OR f.category NOT IN (' . $ph . '))';
@@ -1836,8 +1864,16 @@ final class EntryRepository
     private function feedItemMatchesFeedCategoryInclusions(array $data, array $included): bool
     {
         $p = self::partitionFeedCategoryTokens($included);
-        if ($p['plain'] === [] && $p['sc_ids'] === [] && $p['sf_ids'] === [] && !$p['legacy_scraper_bucket']) {
+        if ($p['plain'] === [] && $p['sc_ids'] === [] && $p['sf_ids'] === [] && !$p['legacy_scraper_bucket']
+            && !$p['parl_mm'] && !$p['parl_sda']) {
             return false;
+        }
+        $guid = (string)($data['guid'] ?? '');
+        if ($p['parl_mm'] && str_starts_with($guid, 'parl_mm:')) {
+            return true;
+        }
+        if ($p['parl_sda'] && str_starts_with($guid, 'parl_sda:')) {
+            return true;
         }
         $cat = (string)($data['feed_category'] ?? '');
         if ($p['plain'] !== [] && $cat !== '' && in_array($cat, $p['plain'], true)) {
@@ -1862,6 +1898,13 @@ final class EntryRepository
     private function feedItemExcludedByFeedCategories(array $data, array $excluded): bool
     {
         $p = self::partitionFeedCategoryTokens($excluded);
+        $guid = (string)($data['guid'] ?? '');
+        if ($p['parl_mm'] && str_starts_with($guid, 'parl_mm:')) {
+            return true;
+        }
+        if ($p['parl_sda'] && str_starts_with($guid, 'parl_sda:')) {
+            return true;
+        }
         if ($p['legacy_scraper_bucket'] && $this->feedItemIsScraperBucket($data)) {
             return true;
         }
@@ -2007,6 +2050,11 @@ final class EntryRepository
         $cats = array_values(array_filter($cats, static fn (string $c): bool => $c !== 'scraper'));
         if ($this->hasActiveParlPressFeeds() && !in_array('parl_mm', $cats, true)) {
             $cats[] = 'parl_mm';
+        }
+        if ($this->hasParlSdaFilterPill() && !in_array('parl_sda', $cats, true)) {
+            $cats[] = 'parl_sda';
+        }
+        if ($cats !== []) {
             sort($cats);
         }
 
@@ -2014,6 +2062,8 @@ final class EntryRepository
         foreach ($cats as $c) {
             $labels[$c] = $c;
         }
+        $labels['parl_mm']  = 'Parl. MM';
+        $labels['parl_sda'] = 'Parl. SDA';
         $tokens = $cats;
         foreach ($this->selectScraperConfigFilterEntries() as $row) {
             $tokens[]            = $row['token'];
@@ -2116,6 +2166,26 @@ final class EntryRepository
         $sql = 'SELECT 1 FROM ' . entryTable('feeds') . '
             WHERE disabled = 0 AND source_type = \'parl_press\'
             LIMIT 1';
+
+        return $this->selectOrEmpty($sql) !== [];
+    }
+
+    /** SDA pill when a parl_sda feed exists or SDA rows are already ingested. */
+    private function hasParlSdaFilterPill(): bool
+    {
+        if (!$this->hasActiveParlPressFeeds()) {
+            return false;
+        }
+        $sql = 'SELECT 1 FROM ' . entryTable('feed_items') . "
+            WHERE hidden = 0 AND guid LIKE 'parl_sda:%'
+            LIMIT 1";
+        if ($this->selectOrEmpty($sql) !== []) {
+            return true;
+        }
+        $sql = 'SELECT 1 FROM ' . entryTable('feeds') . "
+            WHERE disabled = 0 AND source_type = 'parl_press'
+              AND LOWER(TRIM(IFNULL(category, ''))) = 'parl_sda'
+            LIMIT 1";
 
         return $this->selectOrEmpty($sql) !== [];
     }
