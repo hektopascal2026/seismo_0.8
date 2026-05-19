@@ -6,6 +6,7 @@ namespace Seismo\Plugin\LexFedlex;
 
 use EasyRdf\Sparql\Client;
 use Seismo\Service\SourceFetcherInterface;
+use Seismo\Service\Sparql\SparqlEasyRdf;
 
 /**
  * Swiss federal legislation via Fedlex SPARQL (ported from 0.4 refreshFedlexItems).
@@ -171,7 +172,7 @@ final class LexFedlexPlugin implements SourceFetcherInterface
         LIMIT ' . $limit . '
     ';
 
-        $sparql = new Client($endpoint);
+        $sparql = SparqlEasyRdf::client($endpoint);
         $results = $sparql->query($sparqlQuery);
 
         $rows = [];
@@ -270,7 +271,7 @@ WHERE {
 ORDER BY DESC(?eff)
 ';
 
-        $sparql = new Client($endpoint);
+        $sparql = SparqlEasyRdf::client($endpoint);
         $results = $sparql->query($sparqlQuery);
 
         $fedlexHost = 'https://fedlex.data.admin.ch/';

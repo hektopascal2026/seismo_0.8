@@ -6,6 +6,7 @@ namespace Seismo\Plugin\LexEu;
 
 use EasyRdf\Sparql\Client;
 use Seismo\Service\SourceFetcherInterface;
+use Seismo\Service\Sparql\SparqlEasyRdf;
 
 /**
  * EU legislation via Publications Office SPARQL (EUR-Lex data graph).
@@ -167,7 +168,7 @@ final class LexEuPlugin implements SourceFetcherInterface
         LIMIT ' . $limit . '
     ';
 
-        $sparql = new Client($endpoint);
+        $sparql = SparqlEasyRdf::client($endpoint);
         $results = $sparql->query($sparqlQuery);
 
         $rows = [];
