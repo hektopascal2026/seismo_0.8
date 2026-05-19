@@ -238,7 +238,8 @@ final class TimelineFilter
     }
 
     /**
-     * Checkbox form: checked values are inclusions; unchecked dimensions are empty lists.
+     * Checkbox form: checked values are inclusions when the row is partially selected;
+     * all-on uses no feed/lex/email constraint; all-off in a row uses excludeAll*.
      *
      * @param array<string, mixed> $get
      * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
@@ -273,10 +274,21 @@ final class TimelineFilter
         $excludeAllEmails    = $emAll !== [] && $inEm === [];
         $excludeAllLexItems  = $lexAll !== [] && $inLex === [];
 
+        // Partial selection must be inclusion (“show only checked”), not exclusion
+        // (“hide unchecked”). Otherwise RSS rows whose category is not on the pill
+        // bar (NULL / other) still appear — e.g. only Parl. SDA checked but random
+        // newsletters remain visible.
+        $useFeedInclusion = $inFeeds !== [] && count($inFeeds) < count($feedAll);
+        $useLexInclusion  = $inLex !== [] && count($inLex) < count($lexAll);
+        $useEmInclusion   = $inEm !== [] && count($inEm) < count($emAll);
+
         return new self(
-            excludedFeedCategories: array_values(array_diff($feedAll, $inFeeds)),
-            excludedLexSources: array_values(array_diff($lexAll, $inLex)),
-            excludedEmailTags: array_values(array_diff($emAll, $inEm)),
+            feedCategories: $useFeedInclusion ? $inFeeds : [],
+            excludedFeedCategories: $useFeedInclusion ? [] : array_values(array_diff($feedAll, $inFeeds)),
+            lexSources: $useLexInclusion ? $inLex : [],
+            excludedLexSources: $useLexInclusion ? [] : array_values(array_diff($lexAll, $inLex)),
+            emailTags: $useEmInclusion ? $inEm : [],
+            excludedEmailTags: $useEmInclusion ? [] : array_values(array_diff($emAll, $inEm)),
             excludeCalendar: !$calOn,
             excludeJusLex: false,
             excludeAllFeedItems: $excludeAllFeedItems,
