@@ -72,6 +72,10 @@ if ($currentView === 'favourites') {
 $filterDropSearchQs = http_build_query($filterDropSearchParams);
 
 $feedOn = static function (string $cat) use ($timelineFilter): bool {
+    if ($timelineFilter->feedCategories !== []) {
+        return in_array($cat, $timelineFilter->feedCategories, true);
+    }
+
     return !in_array($cat, $timelineFilter->excludedFeedCategories, true);
 };
 $lexExcludedEffective = $timelineFilter->effectiveExcludedLexSources();

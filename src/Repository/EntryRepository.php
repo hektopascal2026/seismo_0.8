@@ -1716,7 +1716,9 @@ final class EntryRepository
             $parts[] = "fi.guid LIKE 'parl_mm:%'";
         }
         if ($p['parl_sda']) {
-            $parts[] = "fi.guid LIKE 'parl_sda:%'";
+            $parts[] = "(fi.guid LIKE 'parl_sda:%'
+                OR LOWER(TRIM(IFNULL(f.category, ''))) = 'parl_sda'
+                OR fi.link LIKE '%/services/news/%')";
         }
         if ($p['plain'] !== []) {
             $ph     = implode(',', array_fill(0, count($p['plain']), '?'));
@@ -1872,8 +1874,17 @@ final class EntryRepository
         if ($p['parl_mm'] && str_starts_with($guid, 'parl_mm:')) {
             return true;
         }
-        if ($p['parl_sda'] && str_starts_with($guid, 'parl_sda:')) {
-            return true;
+        if ($p['parl_sda']) {
+            if (str_starts_with($guid, 'parl_sda:')) {
+                return true;
+            }
+            if (strtolower(trim((string)($data['feed_category'] ?? ''))) === 'parl_sda') {
+                return true;
+            }
+            $link = (string)($data['link'] ?? '');
+            if ($link !== '' && str_contains($link, '/services/news/')) {
+                return true;
+            }
         }
         $cat = (string)($data['feed_category'] ?? '');
         if ($p['plain'] !== [] && $cat !== '' && in_array($cat, $p['plain'], true)) {
@@ -2033,8 +2044,10 @@ final class EntryRepository
      * Distinct values for dashboard tag pills (bounded).
      *
      * `feed_categories` lists checkbox **values**: normal `feeds.category` strings,
-     * plus `sc:<scraper_config.id>` and `sf:<feeds.id>` for scraper-backed sources
-     * (the literal category `scraper` is never returned — use per-source tokens).
+     * plus `sc:<scraper_config.id>` and `sf:<feeds.id>` for per-feed sources (scraper
+     * orphans and `parl_press` rows — label is `feeds.title` from Add feed).
+     * The literal category `scraper` is never returned; `parl_mm` / `parl_sda` category
+     * strings are omitted when those feeds have their own `sf:` pills.
      *
      * @return array{
      *   feed_categories: list<string>,
@@ -2048,12 +2061,12 @@ final class EntryRepository
     {
         $cats = $this->selectDistinctFeedCategories();
         $cats = array_values(array_filter($cats, static fn (string $c): bool => $c !== 'scraper'));
-        if ($this->hasActiveParlPressFeeds() && !in_array('parl_mm', $cats, true)) {
-            $cats[] = 'parl_mm';
-        }
-        if ($this->hasParlSdaFilterPill() && !in_array('parl_sda', $cats, true)) {
-            $cats[] = 'parl_sda';
-        }
+        $parlCategoryHide = $this->selectParlPressFeedCategories();
+        $cats = array_values(array_filter(
+            $cats,
+            static fn (string $c): bool => !in_array($c, $parlCategoryHide, true)
+                && !in_array($c, ['parl_mm', 'parl_sda'], true)
+        ));
         if ($cats !== []) {
             sort($cats);
         }
@@ -2062,15 +2075,17 @@ final class EntryRepository
         foreach ($cats as $c) {
             $labels[$c] = $c;
         }
-        $labels['parl_mm']  = 'Parl. MM';
-        $labels['parl_sda'] = 'Parl. SDA';
         $tokens = $cats;
         foreach ($this->selectScraperConfigFilterEntries() as $row) {
-            $tokens[]            = $row['token'];
+            $tokens[]              = $row['token'];
             $labels[$row['token']] = $row['label'];
         }
         foreach ($this->selectOrphanScraperFeedEntries() as $row) {
-            $tokens[]            = $row['token'];
+            $tokens[]              = $row['token'];
+            $labels[$row['token']] = $row['label'];
+        }
+        foreach ($this->selectParlPressFeedFilterEntries() as $row) {
+            $tokens[]              = $row['token'];
             $labels[$row['token']] = $row['label'];
         }
 
@@ -2161,33 +2176,63 @@ final class EntryRepository
         return $out;
     }
 
-    private function hasActiveParlPressFeeds(): bool
+    /**
+     * Dashboard pills: one `sf:<feeds.id>` per enabled `parl_press` feed ({@see feeds.title}).
+     *
+     * @return list<array{token: string, label: string}>
+     */
+    private function selectParlPressFeedFilterEntries(): array
     {
-        $sql = 'SELECT 1 FROM ' . entryTable('feeds') . '
-            WHERE disabled = 0 AND source_type = \'parl_press\'
-            LIMIT 1';
+        $f   = entryTable('feeds');
+        $sql = 'SELECT f.id,
+                       TRIM(COALESCE(NULLIF(f.title, \'\'), CONCAT(\'Feed \', f.id))) AS display_label
+                FROM ' . $f . ' f
+                WHERE f.disabled = 0
+                  AND f.source_type = \'parl_press\'
+                ORDER BY display_label ASC
+                LIMIT 50';
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $id = (int)($r['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $label = trim((string)($r['display_label'] ?? ''));
+            if ($label === '') {
+                $label = 'Feed ' . $id;
+            }
+            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
+        }
 
-        return $this->selectOrEmpty($sql) !== [];
+        return $out;
     }
 
-    /** SDA pill when a parl_sda feed exists or SDA rows are already ingested. */
-    private function hasParlSdaFilterPill(): bool
+    /**
+     * Category strings used on `parl_press` feeds — hidden from generic category pills
+     * because those feeds already have per-feed `sf:` tokens.
+     *
+     * @return list<string>
+     */
+    private function selectParlPressFeedCategories(): array
     {
-        if (!$this->hasActiveParlPressFeeds()) {
-            return false;
+        $sql = 'SELECT DISTINCT TRIM(category) AS category FROM ' . entryTable('feeds') . "
+            WHERE disabled = 0
+              AND source_type = 'parl_press'
+              AND category IS NOT NULL
+              AND TRIM(category) <> ''
+            ORDER BY category ASC
+            LIMIT 50";
+        $rows = $this->selectOrEmpty($sql);
+        $out  = [];
+        foreach ($rows as $r) {
+            $c = trim((string)($r['category'] ?? ''));
+            if ($c !== '') {
+                $out[] = $c;
+            }
         }
-        $sql = 'SELECT 1 FROM ' . entryTable('feed_items') . "
-            WHERE hidden = 0 AND guid LIKE 'parl_sda:%'
-            LIMIT 1";
-        if ($this->selectOrEmpty($sql) !== []) {
-            return true;
-        }
-        $sql = 'SELECT 1 FROM ' . entryTable('feeds') . "
-            WHERE disabled = 0 AND source_type = 'parl_press'
-              AND LOWER(TRIM(IFNULL(category, ''))) = 'parl_sda'
-            LIMIT 1";
 
-        return $this->selectOrEmpty($sql) !== [];
+        return $out;
     }
 
     /**
