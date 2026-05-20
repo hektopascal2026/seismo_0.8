@@ -46,21 +46,31 @@ final class Migration021ScraperListingUrlCanonical
     private function normalizeAndDedupeScraperFeeds(PDO $pdo): void
     {
         $feeds = 'feeds';
-        $sc    = 'scraper_configs';
         $fi    = 'feed_items';
-        $urlEq = ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url');
-        $sql   = "SELECT f.id, f.url FROM {$feeds} f
-            WHERE f.source_type = 'scraper'
-               OR IFNULL(f.category, '') = 'scraper'
-               OR EXISTS (SELECT 1 FROM {$sc} sc WHERE {$urlEq})";
-        $stmt = $pdo->query($sql);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        $configCanonical = [];
+        $cfgStmt         = $pdo->query('SELECT url FROM scraper_configs');
+        foreach ($cfgStmt->fetchAll(PDO::FETCH_COLUMN) as $rawUrl) {
+            $canonical = ScraperListingUrl::normalize((string)$rawUrl);
+            if ($canonical !== '') {
+                $configCanonical[$canonical] = true;
+            }
+        }
+
+        $feedStmt = $pdo->query(
+            "SELECT id, url, source_type, category FROM {$feeds}"
+        );
         /** @var array<string, list<int>> $groups canonical url => feed ids */
         $groups = [];
-        foreach ($rows as $row) {
+        foreach ($feedStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $url = (string)($row['url'] ?? '');
             if ($url === '' || !preg_match('#^https?://#i', $url)) {
+                continue;
+            }
+            $isScraperFeed = ($row['source_type'] ?? '') === 'scraper'
+                || (string)($row['category'] ?? '') === 'scraper'
+                || isset($configCanonical[ScraperListingUrl::normalize($url)]);
+            if (!$isScraperFeed) {
                 continue;
             }
             $canonical = ScraperListingUrl::normalize($url);
@@ -69,6 +79,12 @@ final class Migration021ScraperListingUrlCanonical
 
         $updUrl = $pdo->prepare("UPDATE {$feeds} SET url = ? WHERE id = ?");
         $disDup = $pdo->prepare("UPDATE {$feeds} SET disabled = 1 WHERE id = ?");
+        $delDup = $pdo->prepare(
+            "DELETE d FROM {$fi} d
+             INNER JOIN {$fi} k ON k.feed_id = ? AND k.guid = d.guid
+             WHERE d.feed_id = ?"
+        );
+        $moveItems = $pdo->prepare("UPDATE {$fi} SET feed_id = ? WHERE feed_id = ?");
 
         foreach ($groups as $canonical => $ids) {
             sort($ids, SORT_NUMERIC);
@@ -76,15 +92,8 @@ final class Migration021ScraperListingUrlCanonical
             $updUrl->execute([$canonical, $keeper]);
 
             foreach (array_slice($ids, 1) as $dupId) {
-                $pdo->prepare(
-                    "DELETE d FROM {$fi} d
-                     INNER JOIN {$fi} k ON k.feed_id = ? AND k.guid = d.guid
-                     WHERE d.feed_id = ?"
-                )->execute([$keeper, $dupId]);
-
-                $pdo->prepare("UPDATE {$fi} SET feed_id = ? WHERE feed_id = ?")
-                    ->execute([$keeper, $dupId]);
-
+                $delDup->execute([$keeper, $dupId]);
+                $moveItems->execute([$keeper, $dupId]);
                 $disDup->execute([$dupId]);
             }
         }

@@ -22,10 +22,13 @@ final class ScraperListingUrl
 
     /**
      * SQL boolean: column equals the bound normalized URL parameter.
+     *
+     * Only the column is TRIMmed — the bound value must already be
+     * {@see normalize()}d (MariaDB rejects TRIM(… FROM ?) on placeholders).
      */
     public static function sqlColumnEqualsParam(string $column): string
     {
-        return self::sqlColumnsEqual($column, '?');
+        return 'TRIM(TRAILING \'/\' FROM ' . $column . ') = ?';
     }
 
     public static function normalize(string $url): string
