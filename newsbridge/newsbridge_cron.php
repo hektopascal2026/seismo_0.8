@@ -1,20 +1,17 @@
 <?php
 /**
- * Newsbridge — CLI: same News API → SQLite → RSS files as v0.4 / gaia `cron.php`
- * (without HTTP or token).
+ * Newsbridge — CLI: News API → SQLite → RSS files (feeds/*.xml).
  *
  * Requirements: curl, pdo_sqlite, dom. Copy `config.example.php` to `config.local.php`
- * and set `newsapi_key` + `site_base_url` (and optional `cron_token` if you also use `cron.php`).
+ * and set `newsapi_key` + `site_base_url`.
  *
  *   php /path/to/seismo/newsbridge/newsbridge_cron.php
- *
- * Plesk can run this path with PHP CLI, or use `cron.php?token=...` in the browser cron.
  */
 declare(strict_types=1);
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
-    echo "newsbridge_cron.php is CLI-only. For HTTP cron use newsbridge/cron.php?token=…\n";
+    echo "newsbridge_cron.php is CLI-only. Register it in the system crontab.\n";
     exit(1);
 }
 

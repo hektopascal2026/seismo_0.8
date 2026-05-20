@@ -6,8 +6,6 @@
  */
 return [
     'newsapi_key'   => 'YOUR_NEWSAPI_ORG_KEY',
-    /** Plesk “URL cron” must append ?token=... — use a long random string */
-    'cron_token'     => 'CHANGE_ME_TO_A_LONG_RANDOM_SECRET',
     /**
      * Public base URL of this newsbridge folder (no trailing slash), e.g.
      * https://www.example.org/seismo/newsbridge

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-// Not a public page: browser requests would be blank because this file only `return`s data for cron.php.
+// Not a public page: browser requests would be blank because this file only `return`s data for newsbridge_cron.php.
 if (PHP_SAPI !== 'cli'
     && isset($_SERVER['SCRIPT_FILENAME'])
     && basename((string) $_SERVER['SCRIPT_FILENAME']) === basename(__FILE__)) {
     header('Content-Type: text/plain; charset=UTF-8');
     http_response_code(403);
-    echo "streams.php is configuration only. It is loaded by cron.php — edit it over FTP/SFTP, not in the browser.\n";
+    echo "streams.php is configuration only. It is loaded by newsbridge_cron.php — edit on the server, not in the browser.\n";
     echo "RSS output: feeds/*.xml\n";
     exit;
 }
@@ -16,7 +16,7 @@ if (PHP_SAPI !== 'cli'
 /**
  * One block = one RSS file at feeds/{id}.xml
  *
- * Broad OR queries pull huge noise. top-ch uses Swiss publisher domains; cron.php also filters
+ * Broad OR queries pull huge noise. top-ch uses Swiss publisher domains; newsbridge_cron.php also filters
  * article URLs so only those hosts are kept (News API's domains= param alone is unreliable).
  *
  * RSS: feeds/top-ch.xml, feeds/ch-en.xml, feeds/ch-de.xml, feeds/ch-fr.xml

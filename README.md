@@ -114,9 +114,8 @@ Each satellite desk has its own `api_key` and training labels in `seismo_<slug>`
 
 ## Deploy notes
 
-- **Apache:** `.htaccess` forwards `Authorization` for Bearer APIs on CGI/FastCGI.
-- **Nginx:** pass `Authorization` and set `fastcgi_param HTTPS` / `X-Forwarded-Proto` when TLS terminates in front of PHP. One server block for the app root; no extra vhost per desk.
-- **Cron:** mothership only — `refresh_cron.php`; overlapping runs skipped via MySQL advisory lock.
+- **Nginx:** pass `Authorization` to PHP-FPM (`fastcgi_param HTTP_AUTHORIZATION $http_authorization;`) so Magnitu/export Bearer APIs work; set `fastcgi_param HTTPS` / `X-Forwarded-Proto` when TLS terminates in front of PHP. One server block for the app root; no extra vhost per desk.
+- **Cron:** mothership — `php /var/www/seismo/refresh_cron.php` (CLI only); newsbridge — `php …/newsbridge/newsbridge_cron.php`. Overlapping mothership runs skipped via MySQL advisory lock.
 - **Migrations:** `php migrate.php` on `seismo`; `php migrate.php --scores-db=seismo_<slug>` for each desk (provision script runs this).
 
 ---

@@ -10,28 +10,18 @@ Output files: **`feeds/top-ch.xml`**, **`feeds/ch-en.xml`**, **`feeds/ch-de.xml`
 
 2. **Copy** `config.example.php` → **`config.local.php`** (gitignored) and set at least:
    - `newsapi_key`
-   - `cron_token` — long random string for the HTTP cron URL
-   - `site_base_url` — public URL of this folder, **no trailing slash**, e.g. `https://www.hektopascal.org/seismo/newsbridge`  
+   - `site_base_url` — public URL of this folder, **no trailing slash**, e.g. `https://www.example.org/seismo/newsbridge`  
      (So feed URLs are `https://…/seismo/newsbridge/feeds/top-ch.xml`.)
 
-3. **PHP extensions** (most shared hosts have these): `curl`, `pdo_sqlite`, `dom`.
+3. **PHP extensions:** `curl`, `pdo_sqlite`, `dom`.
 
 ## Run (generate XML)
 
-- **CLI** (no token):
-  ```bash
-  php /path/to/seismo/newsbridge/newsbridge_cron.php
-  ```
+Register a system crontab entry (CLI only — no HTTP endpoint):
 
-- **HTTP** (same as old staging — Plesk “URL cron”):
-  ```text
-  https://<host>/seismo/newsbridge/cron.php?token=YOUR_CRON_TOKEN
-  ```
-
-- **Diagnose** News API from the server:
-  ```text
-  https://<host>/seismo/newsbridge/cron.php?token=…&diagnose=1
-  ```
+```bash
+*/30 * * * * /usr/bin/php /var/www/seismo/newsbridge/newsbridge_cron.php
+```
 
 SQLite cache and logs: `newsbridge/data/` (auto-created).
 
