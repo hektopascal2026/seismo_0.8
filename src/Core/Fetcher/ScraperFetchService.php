@@ -311,9 +311,10 @@ final class ScraperFetchService
     }
 
     /**
-     * Listing pages match the link pattern too (e.g. `/worte/magazin/`). Require at
-     * least one path segment after the listing directory so we ingest articles, not
-     * the index (which yields title "SPRIND | Magazin" and year-filter chrome).
+     * Listing pages match the link pattern too (e.g. `/worte/magazin/`). Require a
+     * path strictly below the listing URL so we skip the index itself. Single-segment
+     * slugs cover magazine-style URLs; multi-segment suffixes cover dated news paths
+     * such as INTERPOL `/News-and-Events/News/2026/…`.
      */
     private function hasArticleSlugBeyondListing(string $listingUrl, string $candidateUrl): bool
     {
@@ -332,8 +333,14 @@ final class ScraperFetchService
             return false;
         }
         $suffix = substr($candPath, strlen($prefix));
+        if ($suffix === '') {
+            return false;
+        }
+        if (!str_contains($suffix, '/')) {
+            return true;
+        }
 
-        return $suffix !== '' && !str_contains($suffix, '/');
+        return count(array_filter(explode('/', $suffix))) >= 2;
     }
 
     private function resolveAgainstBase(string $base, string $ref): string

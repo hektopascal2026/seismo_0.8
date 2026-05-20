@@ -17,7 +17,7 @@ use Seismo\Repository\SystemConfigRepository;
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration017EmailBodyProcessor::VERSION;
+    public const LATEST_VERSION = Migration018InterpolNewsScraper::VERSION;
 
     private SystemConfigRepository $systemConfig;
 
@@ -122,6 +122,7 @@ final class MigrationRunner
             Migration015ParlPressSdaFeed::VERSION => new Migration015ParlPressSdaFeed(),
             Migration016ParlPressSdaNewsListUrl::VERSION => new Migration016ParlPressSdaNewsListUrl(),
             Migration017EmailBodyProcessor::VERSION => new Migration017EmailBodyProcessor(),
+            Migration018InterpolNewsScraper::VERSION => new Migration018InterpolNewsScraper(),
         ];
 
         ksort($migrations, SORT_NUMERIC);
