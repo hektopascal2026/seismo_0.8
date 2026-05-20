@@ -82,7 +82,6 @@ $__seismoDefaults = [
     'SEISMO_MOTHERSHIP_URL'    => '',
     'SEISMO_REMOTE_REFRESH_KEY' => '',
     'FEED_DIAGNOSTIC_KEY'      => '',
-    'SEISMO_MIGRATE_KEY'       => '',
     'SEISMO_ADMIN_PASSWORD_HASH' => '',
     /** Display timezone for day labels and clocks in the UI (data layer stays UTC). */
     'SEISMO_VIEW_TIMEZONE'     => 'Europe/Zurich',

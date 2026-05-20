@@ -91,7 +91,7 @@ final class DiagnosticsController
             $runHistory = $log->recentForPlugins($ids, 8);
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics: ' . $e->getMessage());
-            $loadError = 'Could not read plugin_run_log. Has the latest migration run yet? (?action=migrate&key=…)';
+            $loadError = 'Could not read plugin_run_log. Has the latest migration run yet? (php migrate.php)';
             $latest = [];
             $runHistory = [];
         }

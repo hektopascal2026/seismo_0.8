@@ -21,7 +21,6 @@ namespace Seismo\Http;
  * Public whitelist — always reachable even when auth is ON:
  *   - `health` (degraded output when not logged in; see HealthController)
  *   - `login`, `logout`
- *   - `migrate` (already protected by SEISMO_MIGRATE_KEY)
  *   - `magnitu_*` (separate Bearer-token auth — Magnitu write key)
  *   - `export_*`  (separate Bearer-token auth — read-only export key)
  *
@@ -36,7 +35,6 @@ final class AuthGate
         'health'               => true,
         'login'                => true,
         'logout'               => true,
-        'migrate'              => true,
         'magnitu_entries'      => true,
         'magnitu_scores'       => true,
         'magnitu_recipe'       => true,

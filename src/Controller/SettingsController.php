@@ -396,60 +396,6 @@ final class SettingsController
         $this->redirectGeneral();
     }
 
-    public function generateMigrateKey(): void
-    {
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectGeneralTab();
-            return;
-        }
-        if (!CsrfToken::verifyRequest()) {
-            $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectGeneralTab();
-            return;
-        }
-
-        $_SESSION['settings_pending_migrate_key'] = bin2hex(random_bytes(24));
-        $_SESSION['success'] = 'A random key was generated. Save it to config.local.php (button below), or paste the line manually.';
-        $this->redirectGeneralTab();
-    }
-
-    public function saveMigrateKey(): void
-    {
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectGeneralTab();
-            return;
-        }
-        if (!CsrfToken::verifyRequest()) {
-            $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectGeneralTab();
-            return;
-        }
-
-        $key = trim((string)($_POST['migrate_key'] ?? ''));
-        if ($key === '') {
-            $_SESSION['error'] = 'Migrate key is empty.';
-            $this->redirectGeneralTab();
-
-            return;
-        }
-
-        $path = SEISMO_ROOT . '/config.local.php';
-        $result = ConfigLocalDefinePatcher::upsertStringDefine($path, 'SEISMO_MIGRATE_KEY', $key);
-        if ($result['ok']) {
-            $_SESSION['success'] = 'SEISMO_MIGRATE_KEY saved to config.local.php. Use ?action=migrate with your key (POST body or Bearer recommended).';
-            $this->redirectGeneralTab();
-
-            return;
-        }
-
-        $line = 'define(\'SEISMO_MIGRATE_KEY\', ' . var_export($key, true) . ');';
-        $_SESSION['settings_migrate_key_paste'] = $line . "\n";
-        $_SESSION['error'] = $result['error'] === 'not_writable'
-            ? 'Could not write config.local.php — paste the line below into the file manually.'
-            : 'Could not update config.local.php: ' . (string)$result['error'];
-        $this->redirectGeneralTab();
-    }
-
     public function saveAdminPassword(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

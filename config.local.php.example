@@ -61,7 +61,3 @@ define('SEISMO_ENTRIES_DB', 'seismo');
  */
 // define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
 
-/**
- * Optional — run DB migrations from the browser (mothership only).
- */
-// define('SEISMO_MIGRATE_KEY', 'paste-a-long-random-string-here');

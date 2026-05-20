@@ -245,7 +245,7 @@ final class SetupController
             $lines[] = 'define(\'DB_PORT\', ' . var_export($old['db_port'], true) . ');';
         }
         $lines[] = '';
-        $lines[] = '// Optional: SEISMO_MIGRATE_KEY, SEISMO_ADMIN_PASSWORD_HASH — set from Settings → General after first boot.';
+        $lines[] = '// Optional: SEISMO_ADMIN_PASSWORD_HASH — set from Settings → General after first boot.';
         $lines[] = '// Optional: SEISMO_VIEW_TIMEZONE, satellite knobs, export:api_key via Settings UI after first login.';
 
         return implode("\n", $lines) . "\n";

@@ -20,7 +20,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 ## Quick start
 
 1. Copy **`config.local.php.example`** → **`config.local.php`** and set database credentials (`DB_NAME` = `seismo` on the VPS).
-2. Run migrations: **`php migrate.php`** (or **`?action=migrate`** with `SEISMO_MIGRATE_KEY` when you have no shell).
+2. Run migrations: **`php migrate.php`**.
 3. Open **`?action=health`**, then **`?action=index`**.
 4. Register cron: **`*/5 * * * * php /var/www/seismo/refresh_cron.php`**
 
@@ -72,7 +72,7 @@ tests/            PHPUnit
 
 | Location | Role |
 |----------|------|
-| **`config.local.php`** | DB credentials (`seismo`), auth hash, migrate key — never commit |
+| **`config.local.php`** | DB credentials (`seismo`), auth hash — never commit |
 | **`system_config`** (per desk) | Magnitu keys, recipe JSON, plugin blocks on mothership; mostly Magnitu + UI on satellites |
 | **`feeds` / `scraper_configs` / `email_subscriptions`** | Mothership only — exportable via `?action=export_source_configs` |
 

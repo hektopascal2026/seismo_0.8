@@ -249,7 +249,7 @@ $formAction = $basePath . '/index.php';
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
                         <p>No entries match the current filters. Use <a href="?<?= e($filterPageAllQs) ?>">All</a> to turn every source on, or adjust the pills above.</p>
                     <?php else: ?>
-                        <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
+                        <p>No entries yet. Run <code>php migrate.php</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>

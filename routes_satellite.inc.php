@@ -3,7 +3,7 @@
  * Satellite-only route table — UI nav (drawer) is Timeline, Highlights, Label, Settings;
  * the Filter view remains registered and reachable by URL but is hidden from the nav on
  * satellites. In-app: highlights, in-app Label training, settings (General + Magnitu), Magnitu
- * Bearer API, remote “refresh mothership” POST, auth, health, migrate.
+ * Bearer API, remote “refresh mothership” POST, auth, health.
  * No feeds, Lex/Leg admin, Settings → Diagnostics tab, retention, exports, or other
  * mothership-only surfaces.
  *
@@ -57,16 +57,6 @@ $router->register(
 $router->register(
     'settings_save',
     \Seismo\Controller\SettingsController::class . '::saveGeneral',
-    false
-);
-$router->register(
-    'settings_generate_migrate_key',
-    \Seismo\Controller\SettingsController::class . '::generateMigrateKey',
-    false
-);
-$router->register(
-    'settings_save_migrate_key',
-    \Seismo\Controller\SettingsController::class . '::saveMigrateKey',
     false
 );
 $router->register(

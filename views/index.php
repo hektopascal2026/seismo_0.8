@@ -118,7 +118,7 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
                         <p>No entries match the current filters. <a href="?<?= e($clearTimelineFiltersQs) ?>">Show everything on the timeline</a> or <a href="?<?= e($filterPageQs) ?>">adjust filters</a>.</p>
                     <?php else: ?>
-                        <p>No entries yet. Run <code>?action=migrate</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
+                        <p>No entries yet. Run <code>php migrate.php</code> if this is a fresh install, then come back once a fetcher has populated the database.</p>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>

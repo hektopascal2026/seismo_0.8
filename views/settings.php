@@ -30,10 +30,7 @@
  * @var list<array<string, mixed>> $diagSourceHealthMail
  * @var int $diagSourceHealthStaleDays
  * @var ?string $diagSourceHealthError
- * @var bool $migrateKeyConfigured
  * @var bool $configLocalWritable
- * @var ?string $pendingMigrateKey
- * @var ?string $migrateKeyPasteBlock
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn Settings → General: main nav / settings tab leading-edge click throttle

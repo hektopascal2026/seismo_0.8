@@ -1,15 +1,12 @@
 <?php
 /**
- * Settings → General tab: timeline, web migrations, session admin password.
+ * Settings → General tab: timeline, session admin password.
  *
  * @var string $csrfField
  * @var string $basePath
  * @var int $dashboardLimitSaved
  * @var int $dashboardLimitMax
- * @var bool $migrateKeyConfigured
  * @var bool $configLocalWritable
- * @var ?string $pendingMigrateKey
- * @var ?string $migrateKeyPasteBlock
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn
@@ -90,73 +87,6 @@ declare(strict_types=1);
             </form>
         </div>
         <?php endif; ?>
-
-        <div class="latest-entries-section module-section-spaced">
-            <h2 class="section-title">Web migrations</h2>
-            <p class="admin-intro">
-                When <code>SEISMO_MIGRATE_KEY</code> is set in <code>config.local.php</code>, you can run schema upgrades from the browser:
-                <a href="<?= e($basePath) ?>/index.php?action=migrate">?action=migrate</a>
-                (pass the key via <code>Authorization: Bearer</code>, POST body <code>key=</code>, or query — see <code>MigrateController</code>).
-                The key is a secret; it is never shown here after being saved.
-            </p>
-            <p class="admin-intro">
-                Status:
-                <?php if ($migrateKeyConfigured): ?>
-                    <strong>configured</strong> (value hidden).
-                <?php else: ?>
-                    <strong>not set</strong> — CLI <code>php migrate.php</code> still works if you have shell access.
-                <?php endif; ?>
-                <?php if (!$configLocalWritable): ?>
-                    <span class="settings-bad">config.local.php is not writable by PHP — you must edit the file manually.</span>
-                <?php endif; ?>
-            </p>
-
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_generate_migrate_key" class="admin-inline-form admin-form-field">
-                <?= $csrfField ?>
-                <button type="submit" class="btn btn-secondary">Generate random migrate key</button>
-            </form>
-
-            <?php if ($pendingMigrateKey !== null && $pendingMigrateKey !== ''): ?>
-                <div class="admin-form-card" style="margin-top:1rem;">
-                    <p class="admin-intro">Save this key to <code>config.local.php</code> (or use the button if the file is writable).</p>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_save_migrate_key" class="admin-form-card">
-                        <?= $csrfField ?>
-                        <input type="hidden" name="migrate_key" value="<?= e($pendingMigrateKey) ?>">
-                        <div class="admin-form-actions">
-                            <button type="submit" class="btn btn-success"<?= $configLocalWritable ? '' : ' disabled' ?>>Write SEISMO_MIGRATE_KEY to config.local.php</button>
-                        </div>
-                    </form>
-                </div>
-            <?php endif; ?>
-
-            <?php if ($migrateKeyPasteBlock !== null && $migrateKeyPasteBlock !== ''): ?>
-                <h3 class="section-title" style="font-size:1rem; margin-top:1rem;">Paste into config.local.php</h3>
-                <textarea id="seismo-migrate-paste" readonly rows="3" class="search-input setup-code-preview" style="width:100%; max-width:40rem;"><?= e($migrateKeyPasteBlock) ?></textarea>
-                <p class="admin-form-actions">
-                    <button type="button" class="btn btn-secondary" id="seismo-migrate-copy">Copy line</button>
-                </p>
-                <script>
-                (function() {
-                    var ta = document.getElementById('seismo-migrate-paste');
-                    var btn = document.getElementById('seismo-migrate-copy');
-                    if (!btn || !ta) return;
-                    btn.addEventListener('click', function() {
-                        var text = ta.value || '';
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(text).then(function() {
-                                btn.textContent = 'Copied';
-                                setTimeout(function() { btn.textContent = 'Copy line'; }, 2000);
-                            });
-                            return;
-                        }
-                        ta.select();
-                        try { document.execCommand('copy'); btn.textContent = 'Copied'; } catch (e) {}
-                        setTimeout(function() { btn.textContent = 'Copy line'; }, 2000);
-                    });
-                })();
-                </script>
-            <?php endif; ?>
-        </div>
 
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Session admin password</h2>
