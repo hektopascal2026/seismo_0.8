@@ -237,6 +237,7 @@ final class EntryScoreRepository
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0
+                   AND fi.hidden = 0
                    AND NOT EXISTS (
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = \'feed_item\'
@@ -314,11 +315,13 @@ final class EntryScoreRepository
         $derivedCol = $this->pickColumn($cols, ['derived_title']);
         $derivedSel = $derivedCol !== null ? ', e.`' . $derivedCol . '` AS derived_title' : '';
 
+        $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0 AND ' : '';
+
         $sql = "SELECT e.id, e.subject,
                        e.`{$textBody}` AS text_body,
                        e.`{$htmlBody}` AS html_body{$derivedSel}
                   FROM {$table} e
-                 WHERE NOT EXISTS (
+                 WHERE {$hiddenClause}NOT EXISTS (
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = 'email'
                           AND es.entry_id  = e.id

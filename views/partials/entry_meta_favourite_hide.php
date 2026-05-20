@@ -17,7 +17,7 @@ $canHide        = $showHide
     <input type="hidden" name="entry_type" value="<?= htmlspecialchars((string)$favouriteEntryType) ?>">
     <input type="hidden" name="entry_id" value="<?= (int)$favouriteEntryId ?>">
     <input type="hidden" name="return_query" value="<?= htmlspecialchars((string)$returnQuery) ?>">
-    <button type="submit" class="hide-entry-btn" title="Hide entry" aria-label="Hide entry">&#10005;</button>
+    <button type="submit" class="hide-entry-btn" title="Hide entry" aria-label="Hide entry">×</button>
 </form>
 <?php endif; ?>
 <?php if ($showFavourites): ?>
