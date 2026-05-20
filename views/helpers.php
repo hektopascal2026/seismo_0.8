@@ -251,8 +251,11 @@ if (!function_exists('seismo_calendar_event_body_text')) {
      */
     function seismo_calendar_event_body_text(array $event): string
     {
-        $description = trim(strip_tags((string)($event['description'] ?? '')));
-        $bodyText    = trim(strip_tags((string)($event['content'] ?? '')));
+        $decode = static function (string $raw): string {
+            return trim(html_entity_decode(strip_tags($raw), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        };
+        $description = $decode((string)($event['description'] ?? ''));
+        $bodyText    = $decode((string)($event['content'] ?? ''));
         if ($bodyText === $description) {
             $bodyText = '';
         }

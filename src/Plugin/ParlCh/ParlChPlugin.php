@@ -137,19 +137,22 @@ final class ParlChPlugin implements SourceFetcherInterface
             }
 
             $rawDesc = (string)($item['InitialSituation'] ?? $item['Description'] ?? '');
-            $description = trim(strip_tags($rawDesc));
+            $description = $this->plainTextFromHtml($rawDesc);
             // parlament.ch “Begründung” → ReasonText; “Eingereichter Text” → SubmittedText.
             // Prefer Begründung for card body / scoring; fall back to submitted or motion text.
-            $reasonText = trim(strip_tags((string)($item['ReasonText'] ?? '')));
-            $submittedOrMotion = trim(strip_tags(
+            $reasonText = $this->plainTextFromHtml((string)($item['ReasonText'] ?? ''));
+            $submittedOrMotion = $this->plainTextFromHtml(
                 (string)($item['SubmittedText'] ?? $item['MotionText'] ?? '')
-            ));
+            );
             $content = $reasonText !== '' ? $reasonText : $submittedOrMotion;
             if ($content === '') {
-                $content = trim(strip_tags($rawDesc));
+                $content = $description;
             }
 
-            $eventDate = $this->parseODataDate($item['SubmissionDate'] ?? null);
+            // Fetch filters on Modified; timeline/Leg cards must not use SubmissionDate
+            // (old dossiers re-enter Curia Vista with ancient filing dates).
+            $eventDate = $this->resolveBusinessEventDate($item);
+            $submissionDate = $this->parseODataDate($item['SubmissionDate'] ?? null);
             $businessTypeId = $item['BusinessType'] ?? $item['BusinessTypeId'] ?? null;
             $eventType = (string)($businessTypes[$businessTypeId] ?? ($item['BusinessTypeName'] ?? 'Geschaeft'));
 
@@ -180,6 +183,7 @@ final class ParlChPlugin implements SourceFetcherInterface
                     'status_id'              => $statusId,
                     'status_text'            => $statusText,
                     'submission_council_id'  => $councilId,
+                    'submission_date'        => $submissionDate,
                     'author'                 => $item['SubmittedBy'] ?? null,
                     'responsible_department' => $item['TagNames'] ?? null,
                 ],
@@ -287,6 +291,30 @@ final class ParlChPlugin implements SourceFetcherInterface
         }
 
         return [];
+    }
+
+    /**
+     * @param array<string, mixed> $item
+     */
+    private function resolveBusinessEventDate(array $item): ?string
+    {
+        foreach (['Modified', 'BusinessStatusDate', 'SubmissionDate'] as $field) {
+            $parsed = $this->parseODataDate($item[$field] ?? null);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private function plainTextFromHtml(string $html): string
+    {
+        if ($html === '') {
+            return '';
+        }
+
+        return trim(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
 
     private function parseODataDate(mixed $value): ?string
