@@ -77,7 +77,7 @@ final class Migration021ScraperListingUrlCanonical
             $groups[$canonical][] = (int)$row['id'];
         }
 
-        $updUrl = $pdo->prepare("UPDATE {$feeds} SET url = ? WHERE id = ?");
+        $updUrl = $pdo->prepare("UPDATE {$feeds} SET url = ?, disabled = 0 WHERE id = ?");
         $disDup = $pdo->prepare("UPDATE {$feeds} SET disabled = 1 WHERE id = ?");
         $delDup = $pdo->prepare(
             "DELETE d FROM {$fi} d
