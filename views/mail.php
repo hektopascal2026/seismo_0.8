@@ -84,7 +84,11 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 <p class="message message-info" style="margin-bottom:1rem;">
                     Mail items filtered to subscription #<?= (int)$subscriptionFilter['id'] ?> (<?= e($sfLabel) ?>).
                     <a href="<?= e($basePath) ?>/index.php?action=mail">Show all mail</a>
+                    · <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions&amp;edit=<?= (int)$subscriptionFilter['id'] ?>">Edit subscription</a>
                 </p>
+                <?php if (!$satellite): ?>
+                    <?php $subscriptionReprocessId = (int)$subscriptionFilter['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
+                <?php endif; ?>
             <?php endif; ?>
             <div class="section-title-row">
                 <h2 class="section-title">
@@ -239,11 +243,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 </div>
             </form>
             <?php if ($editRow): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_reprocess" class="admin-inline-form" style="margin-top:0.5rem;">
-                <?= $csrfField ?>
-                <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
-                <button type="submit" class="btn btn-secondary">Reprocess stored mail</button>
-            </form>
+                <?php $subscriptionReprocessId = (int)$editRow['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
             <?php endif; ?>
             <?php endif; ?>
 
@@ -308,6 +308,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>
+            <?php $subscriptionReprocessId = (int)$editRow['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
             <?php endif; ?>
 
             <h3 class="section-title section-title--compact">Active subscriptions</h3>
