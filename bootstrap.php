@@ -220,6 +220,13 @@ function seismoSatelliteSlug(): string
 
         return $resolved;
     }
+    // Cron/migrate CLI: PHP_SELF is often a filesystem path (/var/www/seismo/…),
+    // which would wrongly infer slug "var". Mothership CLI has no slug unless set above.
+    if (PHP_SAPI === 'cli') {
+        $resolved = '';
+
+        return $resolved;
+    }
     $base = getBasePath();
     if ($base === '') {
         $resolved = '';
