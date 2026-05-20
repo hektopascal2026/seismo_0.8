@@ -37,6 +37,7 @@ final class MailController
         $reviewingPending     = false;
         $pageError            = null;
         $alertThreshold       = 0.60;
+        $categorySuggestions  = [];
 
         try {
             $pdo = getDbConnection();
@@ -68,6 +69,9 @@ final class MailController
 
             $subscriptions  = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
             $pendingSenders = $subRepo->listPending(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            if (!$satellite) {
+                $categorySuggestions = $subRepo->listUsedCategories();
+            }
             if ($view === 'sources') {
                 foreach ($subscriptions as $row) {
                     $sid = (int)$row['id'];

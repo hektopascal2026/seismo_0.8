@@ -33,6 +33,7 @@ final class FeedController
         $editRow    = null;
         $pageError  = null; // set on catch
         $alertThreshold = 0.60;
+        $categorySuggestions = [];
 
         try {
             $pdo = getDbConnection();
@@ -47,6 +48,9 @@ final class FeedController
 
             $feedRepo = new FeedRepository($pdo);
             $feedsList = $feedRepo->listRssSubstackModuleSources(FeedRepository::MAX_LIMIT, 0);
+            if (!$satellite) {
+                $categorySuggestions = $feedRepo->listUsedCategories();
+            }
             if ($editId > 0) {
                 $editRow = $feedRepo->findById($editId);
             }

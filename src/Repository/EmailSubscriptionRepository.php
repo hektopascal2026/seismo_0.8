@@ -507,6 +507,35 @@ final class EmailSubscriptionRepository
         return [$matchType, $matchValue, $displayName];
     }
 
+    /**
+     * Distinct non-empty categories already assigned on subscriptions.
+     *
+     * @return list<string>
+     */
+    public function listUsedCategories(): array
+    {
+        $t = entryTable('email_subscriptions');
+        $sql = "SELECT DISTINCT TRIM(category) AS category FROM {$t}
+            WHERE removed_at IS NULL
+              AND category IS NOT NULL
+              AND TRIM(category) <> ''
+            ORDER BY category ASC
+            LIMIT 100";
+        $stmt = $this->pdo->query($sql);
+        if ($stmt === false) {
+            return [];
+        }
+        $out = [];
+        while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
+            $c = trim((string)($row['category'] ?? ''));
+            if ($c !== '') {
+                $out[] = $c;
+            }
+        }
+
+        return $out;
+    }
+
     private function assertNotSatellite(): void
     {
         if (isSatellite()) {

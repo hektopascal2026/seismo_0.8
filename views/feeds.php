@@ -12,6 +12,7 @@
  * @var bool $satellite
  * @var string $basePath
  * @var ?string $dashboardError
+ * @var list<string> $categorySuggestions
  */
 
 declare(strict_types=1);
@@ -118,9 +119,11 @@ $sourcesQs = 'action=feeds&view=sources';
                 <div class="admin-form-field">
                     <label>Site link <input type="text" name="link" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link'] ?? '')) ?>"></label>
                 </div>
-                <div class="admin-form-field">
-                    <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? '')) ?>"></label>
-                </div>
+                <?php
+                $categoryValue = (string)($editRow['category'] ?? '');
+                $datalistId = 'feed-category-suggestions';
+                require __DIR__ . '/partials/category_field.php';
+                ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="disabled" value="0">
                     <label><input type="checkbox" name="disabled" value="1" <?= !empty($editRow['disabled']) ? 'checked' : '' ?>> Disabled</label>

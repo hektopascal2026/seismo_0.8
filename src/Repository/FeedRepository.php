@@ -200,6 +200,36 @@ final class FeedRepository
         $stmt->execute([$id]);
     }
 
+    /**
+     * Distinct non-empty categories already assigned on Feeds-module sources.
+     *
+     * @return list<string>
+     */
+    public function listUsedCategories(): array
+    {
+        $t = entryTable('feeds');
+        $sql = "SELECT DISTINCT TRIM(category) AS category FROM {$t}
+            WHERE source_type IN ('rss', 'substack', 'parl_press')
+              AND category IS NOT NULL
+              AND TRIM(category) <> ''
+              AND TRIM(category) <> 'scraper'
+            ORDER BY category ASC
+            LIMIT 100";
+        $stmt = $this->pdo->query($sql);
+        if ($stmt === false) {
+            return [];
+        }
+        $out = [];
+        while (($row = $stmt->fetch(\PDO::FETCH_ASSOC)) !== false) {
+            $c = trim((string)($row['category'] ?? ''));
+            if ($c !== '') {
+                $out[] = $c;
+            }
+        }
+
+        return $out;
+    }
+
     private function assertNotSatellite(): void
     {
         if (isSatellite()) {
