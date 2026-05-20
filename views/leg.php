@@ -232,12 +232,12 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         $statusLabel = ucfirst($statusRaw);
 
                         $description = trim(strip_tags((string)($event['description'] ?? '')));
-                        $submittedText = trim(strip_tags((string)($event['content'] ?? '')));
-                        if ($submittedText === $description) { $submittedText = ''; }
+                        $bodyText = trim(strip_tags((string)($event['content'] ?? '')));
+                        if ($bodyText === $description) { $bodyText = ''; }
 
                         $combined = $description;
-                        if ($submittedText !== '') {
-                            $combined = ($description !== '' ? $description . "\n\n" : '') . $submittedText;
+                        if ($bodyText !== '') {
+                            $combined = ($description !== '' ? $description . "\n\n" : '') . $bodyText;
                         }
                         $preview = mb_substr($combined, 0, 300);
                         $hasMore = mb_strlen($combined) > 300;

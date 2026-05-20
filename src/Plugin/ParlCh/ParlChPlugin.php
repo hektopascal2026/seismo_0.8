@@ -138,8 +138,16 @@ final class ParlChPlugin implements SourceFetcherInterface
 
             $rawDesc = (string)($item['InitialSituation'] ?? $item['Description'] ?? '');
             $description = trim(strip_tags($rawDesc));
-            $rawContent = (string)($item['SubmittedText'] ?? $item['MotionText'] ?? $item['ReasonText'] ?? $rawDesc);
-            $content = trim(strip_tags($rawContent));
+            // parlament.ch “Begründung” → ReasonText; “Eingereichter Text” → SubmittedText.
+            // Prefer Begründung for card body / scoring; fall back to submitted or motion text.
+            $reasonText = trim(strip_tags((string)($item['ReasonText'] ?? '')));
+            $submittedOrMotion = trim(strip_tags(
+                (string)($item['SubmittedText'] ?? $item['MotionText'] ?? '')
+            ));
+            $content = $reasonText !== '' ? $reasonText : $submittedOrMotion;
+            if ($content === '') {
+                $content = trim(strip_tags($rawDesc));
+            }
 
             $eventDate = $this->parseODataDate($item['SubmissionDate'] ?? null);
             $businessTypeId = $item['BusinessType'] ?? $item['BusinessTypeId'] ?? null;
