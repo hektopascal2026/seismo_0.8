@@ -8,6 +8,8 @@
  * @var string $filter all|lex_item|feed_item
  * @var int $offset     Current per-family OFFSET into the export queue
  * @var int $nextOffset $offset + PER_FAMILY — used by the "fetch older" links
+ * @var int $labelSessionCount labels saved in this browser session
+ * @var int $labelTotalCount   rows in magnitu_labels on this instance
  */
 
 declare(strict_types=1);
@@ -80,6 +82,23 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
         .label-btn.active.label-btn--bg { background:#74C0FC; }
         .label-btn.active.label-btn--noise { background:#e0e0e0; }
         .label-hidden-csrf { display:none; }
+        .label-progress {
+            margin: 0 0 1rem;
+            padding: 0.55rem 0.75rem;
+            border: 2px solid #111;
+            background: #f8f8f8;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+        .label-progress strong { font-weight: 800; }
+        .label-progress.label-progress--bump strong {
+            animation: label-progress-bump 0.45s ease;
+        }
+        @keyframes label-progress-bump {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.12); color: var(--seismo-accent, #FF6B6B); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -94,6 +113,11 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
             <div class="message message-error"><?= e((string)$_SESSION['error']) ?></div>
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
+
+        <p class="label-progress" id="label-progress" aria-live="polite">
+            <strong id="label-session-count"><?= (int)($labelSessionCount ?? 0) ?></strong> labeled this session
+            &middot; <strong id="label-total-count"><?= (int)($labelTotalCount ?? 0) ?></strong> training labels total
+        </p>
 
         <nav class="label-page-toolbar" aria-label="Entry family filter">
             <a href="<?= e($filterQs('all')) ?>" class="<?= $filter === 'all' ? 'active' : '' ?>">All</a>
@@ -125,6 +149,25 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
             var dataEl = document.getElementById('label-queue-data');
             var csrfWrap = document.querySelector('.label-hidden-csrf');
             var saveUrl = <?= json_encode($bp . '?action=label_save', JSON_UNESCAPED_SLASHES) ?>;
+            var progressEl = document.getElementById('label-progress');
+            var sessionCountEl = document.getElementById('label-session-count');
+            var totalCountEl = document.getElementById('label-total-count');
+
+            function updateLabelProgress(sessionCount, total) {
+                if (sessionCountEl && typeof sessionCount === 'number') {
+                    sessionCountEl.textContent = String(sessionCount);
+                }
+                if (totalCountEl && typeof total === 'number') {
+                    totalCountEl.textContent = String(total);
+                }
+                if (!progressEl) return;
+                progressEl.classList.remove('label-progress--bump');
+                void progressEl.offsetWidth;
+                progressEl.classList.add('label-progress--bump');
+                window.setTimeout(function() {
+                    progressEl.classList.remove('label-progress--bump');
+                }, 500);
+            }
 
             function getCsrfToken() {
                 var input = csrfWrap ? csrfWrap.querySelector('input[name="_csrf"]') : null;
@@ -244,6 +287,12 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
                             return;
                         }
                         if (pack.j.csrf) setCsrfToken(pack.j.csrf);
+                        if (typeof pack.j.session_count === 'number' || typeof pack.j.total === 'number') {
+                            updateLabelProgress(
+                                typeof pack.j.session_count === 'number' ? pack.j.session_count : null,
+                                typeof pack.j.total === 'number' ? pack.j.total : null
+                            );
+                        }
                         var next = card.nextElementSibling;
                         if (next && !next.classList.contains('labeled')) {
                             next.scrollIntoView({ behavior: 'smooth', block: 'center' });

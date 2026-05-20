@@ -32,6 +32,9 @@ use Seismo\Repository\MagnituLabelRepository;
 
 final class MagnituLabelUiController
 {
+    /** Session key for in-flow label count (resets when the PHP session ends). */
+    private const SESSION_LABEL_COUNT = 'label_session_count';
+
     private const ALLOWED_LABELS = ['investigation_lead', 'important', 'background', 'noise'];
 
     /** Per-family fetch cap when building the labeling queue. */
@@ -47,12 +50,15 @@ final class MagnituLabelUiController
         $filter     = $this->normaliseFilter($_GET['type'] ?? 'all');
         $offset     = $this->normaliseOffset($_GET['offset'] ?? 0);
         $nextOffset = $offset + self::PER_FAMILY;
-        $queueJson  = '[]';
+        $queueJson         = '[]';
+        $labelSessionCount = $this->sessionLabelCount();
+        $labelTotalCount   = 0;
 
         try {
             $pdo       = getDbConnection();
             $export    = new MagnituExportRepository($pdo);
             $labelRepo = new MagnituLabelRepository($pdo);
+            $labelTotalCount = $labelRepo->count();
             $labeled   = $labelRepo->listLabeledKeys();
             $raw       = $this->gatherEntries($export, $filter, $offset);
             $unlabeled = [];
@@ -126,6 +132,7 @@ final class MagnituLabelUiController
         try {
             $repo = new MagnituLabelRepository(getDbConnection());
             $repo->upsert($entryType, $entryId, $label, $reasoning, gmdate('Y-m-d H:i:s'));
+            $total = $repo->count();
         } catch (PDOException $e) {
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Database error.'], JSON_UNESCAPED_UNICODE);
@@ -133,8 +140,43 @@ final class MagnituLabelUiController
             return;
         }
 
+        $sessionCount = $this->incrementSessionLabelCount();
+
         // Token is not rotated; no need to ship a fresh one to the client.
-        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+        echo json_encode([
+            'ok'            => true,
+            'session_count' => $sessionCount,
+            'total'         => $total,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function sessionLabelCount(): int
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE && session_status() !== PHP_SESSION_NONE) {
+            return 0;
+        }
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return 0;
+        }
+
+        return max(0, (int)($_SESSION[self::SESSION_LABEL_COUNT] ?? 0));
+    }
+
+    private function incrementSessionLabelCount(): int
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return 0;
+        }
+        $next = $this->sessionLabelCount() + 1;
+        $_SESSION[self::SESSION_LABEL_COUNT] = $next;
+
+        return $next;
     }
 
     private function normaliseFilter(mixed $raw): string
