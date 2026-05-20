@@ -18,6 +18,9 @@
  * @var string $csrfField From DashboardController (CSRF hidden input HTML)
  * @var bool $embedTimelineExpandAllInDayRow When true (index only), first day heading shares a row with "expand all".
  * @var bool $embedDashboardTimelineSearch When true (index + items), mobile search form is embedded in that row.
+ * @var bool $showTimelineFavouritesToggle When true, show ★ favs link beside expand all (index / filter preview).
+ * @var bool $timelineFavouritesOn
+ * @var string $timelineFavouritesToggleHref
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
@@ -71,7 +74,8 @@ $entryLoopIndex                 = 0;
                                             require __DIR__ . '/dashboard_index_search_form.php';
                                             echo '</div>';
                                         }
-                                        echo '<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                                        require __DIR__ . '/timeline_day_row_actions.php';
+                                        echo '</div>';
                                     } else {
                                         echo '<div class="magnitu-day-separator"><span class="magnitu-day-separator-text">' . htmlspecialchars($__h) . '</span></div>';
                                     }
@@ -92,7 +96,8 @@ $entryLoopIndex                 = 0;
                             require __DIR__ . '/dashboard_index_search_form.php';
                             echo '</div>';
                         }
-                        echo '<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button></div>';
+                        require __DIR__ . '/timeline_day_row_actions.php';
+                        echo '</div>';
                         $timelineExpandAllInDayRowDone = true;
                     }
                     ?>
@@ -440,15 +445,7 @@ $entryLoopIndex                 = 0;
                                     <?php if ($createdAt): ?>
                                         <span class="entry-date"><?= htmlspecialchars($createdAt) ?></span>
                                     <?php endif; ?>
-                                    <?php if ($showFavourites): ?>
-                                    <form method="POST" action="?action=toggle_favourite" class="favourite-form">
-                                        <?= $csrfField ?>
-                                        <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
-                                        <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
-                                        <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
-                                        <button type="submit" class="favourite-btn<?= $isFavourite ? ' is-favourite' : '' ?>" title="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>"><?= $isFavourite ? '★' : '☆' ?></button>
-                                    </form>
-                                    <?php endif; ?>
+                                    <?php require __DIR__ . '/entry_meta_favourite_hide.php'; ?>
                                 </div>
                             </div>
                         </div>

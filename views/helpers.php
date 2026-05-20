@@ -57,6 +57,38 @@ if (!function_exists('seismo_magnitu_day_heading')) {
     }
 }
 
+if (!function_exists('seismo_timeline_view_link_params')) {
+    /**
+     * Query params for index/filter timeline links (preserves search, filters, paging).
+     *
+     * @param 'index'|'filter' $action
+     */
+    function seismo_timeline_view_link_params(string $action, bool $favouritesView): array
+    {
+        $params = ['action' => $action];
+        if ($favouritesView) {
+            $params['view'] = 'favourites';
+        }
+        $searchQuery = trim((string)($_GET['q'] ?? ''));
+        if ($searchQuery !== '') {
+            $params['q'] = $searchQuery;
+        }
+        foreach (['limit', 'offset', 'none', 'filter_form', 'filters'] as $k) {
+            if (!isset($_GET[$k])) {
+                continue;
+            }
+            $v = $_GET[$k];
+            if (is_array($v)) {
+                $params[$k] = $v;
+            } elseif (is_scalar($v)) {
+                $params[$k] = $v;
+            }
+        }
+
+        return $params;
+    }
+}
+
 if (!function_exists('seismo_parl_press_commission_from_guid')) {
     /**
      * Second pill label for parlament.ch press rows (0.4: lex document_type).

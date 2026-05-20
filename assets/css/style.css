@@ -1601,9 +1601,27 @@ textarea.search-input.setup-code-preview {
 
 /* Expand buttons — compact, same size as sort button */
 .btn.entry-expand-btn,
-.btn.entry-expand-all-btn {
+.btn.entry-expand-all-btn,
+.btn.timeline-favourites-toggle-btn {
     font-size: 12px;
     padding: 4px 10px;
+}
+
+.timeline-day-row-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+}
+
+.timeline-favourites-toggle-btn {
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.timeline-favourites-toggle-btn.is-active {
+    background-color: #f0f0f0;
+    box-shadow: 2px 2px 0 #000000;
 }
 
 /* ═══ Cards ═══ */
@@ -1658,7 +1676,7 @@ textarea.search-input.setup-code-preview {
     gap: 8px;
 }
 
-.timeline-day-row--expand-only.timeline-day-row--with-inline-search .entry-expand-all-btn {
+.timeline-day-row--expand-only.timeline-day-row--with-inline-search .timeline-day-row-actions {
     margin-left: auto;
 }
 

@@ -27,17 +27,11 @@ $headerTitle    = seismoBrandTitle();
 $headerSubtitle = null;
 $activeNav      = 'index';
 
-$indexLinkParams = ['action' => 'index'];
-if ($searchQuery !== '') {
-    $indexLinkParams['q'] = $searchQuery;
-}
-$indexNewestQs = http_build_query($indexLinkParams);
-
-$indexFavParams = ['action' => 'index', 'view' => 'favourites'];
-if ($searchQuery !== '') {
-    $indexFavParams['q'] = $searchQuery;
-}
-$indexFavouritesQs = http_build_query($indexFavParams);
+$indexNewestQs = http_build_query(seismo_timeline_view_link_params('index', false));
+$indexFavouritesQs = http_build_query(seismo_timeline_view_link_params('index', true));
+$timelineFavouritesOn = $currentView === 'favourites';
+$timelineFavouritesToggleHref = $timelineFavouritesOn ? $indexNewestQs : $indexFavouritesQs;
+$showTimelineFavouritesToggle = true;
 
 $clearSearchParams = ['action' => 'index'];
 if ($currentView === 'favourites') {
@@ -113,6 +107,9 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
                 ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
+                <div class="timeline-day-row timeline-day-row--expand-only">
+                    <?php require __DIR__ . '/partials/timeline_day_row_actions.php'; ?>
+                </div>
                 <div class="empty-state">
                     <?php if ($emptyTimelineHint === 'favourites'): ?>
                         <p>No favourites yet. Star entries with the ☆ button on each card, or switch back to <a href="?<?= e($indexNewestQs) ?>">Newest</a>.</p>

@@ -59,11 +59,11 @@ $filterPageNoneParams            = $filterResetParams;
 $filterPageNoneParams['none']    = '1';
 $filterPageNoneQs               = http_build_query($filterPageNoneParams);
 
-$filterNewestOnlyParams = ['action' => 'filter'];
-if ($searchQuery !== '') {
-    $filterNewestOnlyParams['q'] = $searchQuery;
-}
-$filterNewestOnlyQs = http_build_query($filterNewestOnlyParams);
+$filterNewestOnlyQs = http_build_query(seismo_timeline_view_link_params('filter', false));
+$filterFavouritesQs = http_build_query(seismo_timeline_view_link_params('filter', true));
+$timelineFavouritesOn = $currentView === 'favourites';
+$timelineFavouritesToggleHref = $timelineFavouritesOn ? $filterNewestOnlyQs : $filterFavouritesQs;
+$showTimelineFavouritesToggle = true;
 
 $filterDropSearchParams = ['action' => 'filter'];
 if ($currentView === 'favourites') {
@@ -236,6 +236,9 @@ $formAction = $basePath . '/index.php';
                 ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
+                <div class="timeline-day-row timeline-day-row--expand-only">
+                    <?php require __DIR__ . '/partials/timeline_day_row_actions.php'; ?>
+                </div>
                 <div class="empty-state">
                     <?php if ($emptyTimelineHint === 'favourites'): ?>
                         <p>No favourites yet. Star entries on a card, or switch to <a href="?<?= e($filterNewestOnlyQs) ?>">all entries</a> on this page.</p>
