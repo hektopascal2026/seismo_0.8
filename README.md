@@ -28,10 +28,7 @@ Requires **`docs/db-schema.sql`** on the server — the mothership migrator read
 
 ### Path satellite (optional desk)
 
-1. Mothership running with entries in database **`seismo`**.
-2. **Settings → Satellites** — add slug (e.g. `security`, `digital`).
-3. On the VPS: **`sudo bin/seismo-satellite-provision.sh <slug>`** (creates `seismo_<slug>`, stub `/<slug>/`, assets symlink).
-4. Open **`https://your-host/<slug>/`** — timeline, highlights, label training, Magnitu API; no feeds/mail/Lex admin.
+See **[Path satellites](#path-satellites)** below for the full walkthrough. Short version: register in Settings → Satellites, then `sudo bin/seismo-satellite-provision.sh <slug>` on the VPS.
 
 ---
 
@@ -88,19 +85,110 @@ Optional session auth: **`SEISMO_ADMIN_PASSWORD_HASH`** in `config.local.php` (s
 
 ## Path satellites
 
-Desks are **views** over shared ingest, not separate apps:
+Desks are **views** over shared ingest, not separate apps. One codebase at `/var/www/seismo` serves the mothership (`/`) and every path (`/<slug>/`). Each desk only adds a URL prefix, a **scores** database (`seismo_<slug>`), and a narrower route table.
 
-| Layer | Mothership | Satellite (`/security/`, …) |
-|-------|------------|-------------------------------|
-| Code | `/var/www/seismo` | Same tree |
-| Entries | `seismo.*` | Cross-DB read from `seismo` |
-| Scores / labels / favourites | `seismo` | `seismo_<slug>` |
-| Routes | Full admin + ingest | Timeline, highlights, label, settings (general + Magnitu), Magnitu API |
-| Cron | `refresh_cron.php` | No-op (refresh via mothership) |
+| Layer | Mothership (`/`) | Satellite (`/<slug>/`) |
+|-------|-------------------|-------------------------|
+| Code | `/var/www/seismo` | **Same tree** (stub `/<slug>/index.php` only) |
+| Entries | `seismo.*` | Cross-DB **read** from `seismo` |
+| Scores / labels / favourites | `seismo` | `seismo_<slug>` (local) |
+| Routes | Feeds, mail, Lex, Leg, retention, … | Timeline, highlights, label, settings (general + Magnitu), Magnitu API |
+| Cron | `refresh_cron.php` every 5 min | None — **Refresh** triggers mothership ingest |
 
-**Provision:** `bin/seismo-satellite-provision.sh <slug>` — MariaDB create/grant, `php migrate.php --scores-db=seismo_<slug>`, seed Magnitu `api_key` from registry, write stub + `assets` symlink.
+**Removed in 0.6.2:** `satellite-prune.json`, `seismo-generator`, per-desk pruned codebases, `SEISMO_SATELLITE_MODE` / `SEISMO_MOTHERSHIP_DB`.
 
-**Removed in 0.6.2:** `satellite-prune.json`, JSON download for `seismo-generator`, per-desk pruned codebases, `SEISMO_SATELLITE_MODE` / `SEISMO_MOTHERSHIP_DB` config.
+### Creating a desk
+
+**Prerequisites:** mothership healthy (`php migrate.php` on `seismo`, cron running, entries ingested), latest code deployed, `config.local.php` with `DB_NAME` / `SEISMO_ENTRIES_DB` = `seismo`.
+
+**1. Register in the UI (mothership)**
+
+Open **Settings → Satellites** (`?action=settings&tab=satellite`). Under **Add a satellite**:
+
+| Field | Example |
+|-------|---------|
+| Slug | `security` (URL `/security/`, DB `seismo_security`) |
+| Display name | `Security` → stored as “Seismo Security” |
+| Magnitu profile | same as slug (or leave blank) |
+| Brand accent | optional, e.g. `#4a90e2` |
+| **Remote refresh** | checked by default — stores shared secret in mothership `system_config` so the desk **Refresh** button can trigger ingest |
+
+Click **Add satellite**. Status stays **`pending`** until provisioning.
+
+**2. Provision on the VPS (SSH)**
+
+```bash
+cd /var/www/seismo
+sudo bin/seismo-satellite-provision.sh security
+```
+
+The script (requires the registry row from step 1):
+
+- Creates `seismo_<slug>` and grants the app DB user `SELECT` on `seismo.*`, `ALL` on `seismo_<slug>.*`
+- Runs `php migrate.php --scores-db=seismo_<slug>` (local tables only; mothership migrations are skipped)
+- Seeds Magnitu `api_key` from the registry into the desk `system_config`
+- Writes `/<slug>/index.php` and `/<slug>/assets` → `../assets` if missing
+- Sets registry status to **`active`**
+
+On MariaDB via socket, if needed:
+
+```bash
+export SEISMO_MYSQL_SOCKET=/run/mysqld/mysqld.sock
+export SEISMO_MYSQL_ADMIN_USER=root
+```
+
+**3. Smoke test**
+
+- `https://your-host/<slug>/` — timeline (may be empty until mothership has entries)
+- `https://your-host/<slug>/?action=health` — satellite mode, entries DB `seismo`, scores DB `seismo_<slug>`
+- **Refresh** on the timeline — should call mothership ingest (if remote refresh was enabled when adding)
+
+**4. Magnitu (per desk)**
+
+Point Magnitu at `https://your-host/<slug>/` with that desk’s Bearer `api_key` (from the registry; **Rotate key** in Settings if you regenerate it, then update Magnitu or re-run provision).
+
+Repeat for each desk (`digital`, `sicherheit`, …). Slugs in git (`security/`, `digital/`) are optional examples — provision creates any valid slug folder.
+
+### Deploying code changes
+
+**Usually you change nothing on satellites** — one `git pull` updates mothership and all `/<slug>/` paths together.
+
+```bash
+cd /var/www/seismo
+git pull
+# optional when OPcache does not auto-revalidate:
+sudo systemctl reload php8.5-fpm
+```
+
+| What changed | Mothership | Each satellite desk |
+|--------------|------------|---------------------|
+| PHP, views, CSS, assets, route logic | `git pull` (+ optional FPM reload) | **Nothing** (same tree) |
+| **Mothership** DB schema (`feeds`, `emails`, `lex_items`, …) | `php migrate.php` | **Nothing** |
+| **Scores** DB schema (`entry_scores`, `magnitu_labels`, desk `system_config`) | N/A on mothership-only desks | `php migrate.php --scores-db=seismo_<slug>` **for each desk** |
+| New desk | Settings → add + `bin/seismo-satellite-provision.sh <slug>` | That desk only |
+| `config.local.php` | Edit **once** | **Nothing** (shared file) |
+| Cron / ingest | `refresh_cron.php` on mothership only | **Nothing** |
+
+Most migrations are **mothership-only** (feeds, mail, plugins, scrapers). The scores migrator records skipped versions on `seismo_<slug>` without running them. Run `--scores-db` only when a release changes **local** tables (see `docs/db-schema-local.sql` — rare after initial provision).
+
+**Satellites never need:** a second deploy, pruned bundles, extra Nginx vhosts, or their own cron.
+
+```text
+Deploy code once      →  all paths use it
+Migrate seismo        →  shared entries + mothership config
+Migrate seismo_<slug> →  only when scoring/label tables change
+```
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Provision: “not in registry” | Add the row in Settings → Satellites first |
+| 404 on `/<slug>/` | Run `bin/seismo-satellite-provision.sh <slug>`; check `/<slug>/index.php` exists |
+| Broken CSS | `/<slug>/assets` should symlink to `../assets` |
+| Refresh not configured | Add a desk with **Remote refresh** checked, or enable on the next add |
+| `migrationScope()` error on `--scores-db` | Pull latest code; re-run `php migrate.php --scores-db=seismo_<slug>` |
+| DB permission errors | App user: `SELECT` on `seismo.*`, `ALL` on `seismo_<slug>.*` |
 
 ---
 
@@ -114,9 +202,9 @@ Each satellite desk has its own `api_key` and training labels in `seismo_<slug>`
 
 ## Deploy notes
 
-- **Nginx:** pass `Authorization` to PHP-FPM (`fastcgi_param HTTP_AUTHORIZATION $http_authorization;`) so Magnitu/export Bearer APIs work; set `fastcgi_param HTTPS` / `X-Forwarded-Proto` when TLS terminates in front of PHP. One server block for the app root; no extra vhost per desk.
-- **Cron:** mothership — `php /var/www/seismo/refresh_cron.php` (CLI only); newsbridge — `php …/newsbridge/newsbridge_cron.php`. Overlapping mothership runs skipped via MySQL advisory lock.
-- **Migrations:** `php migrate.php` on `seismo`; `php migrate.php --scores-db=seismo_<slug>` for each desk (provision script runs this).
+- **Nginx:** pass `Authorization` to PHP-FPM so Magnitu/export Bearer APIs work; set `fastcgi_param HTTPS` / `X-Forwarded-Proto` when TLS terminates in front of PHP. **One server block** for the app root — path desks need no extra vhost.
+- **Cron:** mothership only — `php /var/www/seismo/refresh_cron.php` (CLI only). Overlapping runs skipped via MySQL advisory lock.
+- **Migrations:** `php migrate.php` on the entries DB; per-desk `php migrate.php --scores-db=seismo_<slug>` when local scoring tables change (provision runs this for new desks). See [Deploying code changes](#deploying-code-changes) under Path satellites.
 
 ---
 
