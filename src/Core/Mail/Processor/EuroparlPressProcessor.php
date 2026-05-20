@@ -8,7 +8,7 @@ use Seismo\Core\Mail\EmailBodyDisplay;
 use Seismo\Core\Mail\EmailBodyProcessorInterface;
 
 /**
- * European Parliament "EP TODAY" plenary digests (ep.europa.eu).
+ * European Parliament press mail (ep.europa.eu): EP TODAY digests and single press releases.
  */
 final class EuroparlPressProcessor implements EmailBodyProcessorInterface
 {
@@ -41,8 +41,9 @@ final class EuroparlPressProcessor implements EmailBodyProcessorInterface
 
     private static function stripInlineMarkers(string $body): string
     {
+        $body = (string) preg_replace('/\[\d+\]\s*scribo-webmail[^\s\[\]\r\n]*/iu', '', $body);
         $body = (string) preg_replace('/\[\d+\]/u', '', $body);
-        $body = (string) preg_replace('/\s{2,}/u', ' ', $body);
+        $body = (string) preg_replace('/[ \t]{2,}/u', ' ', $body);
 
         return trim($body);
     }
@@ -83,36 +84,63 @@ final class EuroparlPressProcessor implements EmailBodyProcessorInterface
 
     private static function isNoiseLine(string $line, string $subject): bool
     {
-        $lower = mb_strtolower($line, 'UTF-8');
+        $trimmed = self::normalizeLineForNoise($line);
+        $lower   = mb_strtolower($trimmed, 'UTF-8');
+        if ($trimmed === '') {
+            return true;
+        }
         if (str_contains($lower, 'scribo-webmail')) {
             return true;
         }
-        if ($subject !== '' && $line === $subject) {
+        if ($subject !== '' && $line === $subject && preg_match('/^ep today\b/i', $subject) === 1) {
             return true;
         }
-        if (preg_match('/^ep today\b/i', $line) === 1) {
+        if (preg_match('/\bep today\b/i', $trimmed) === 1) {
             return true;
         }
-        if (preg_match('/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+\d{1,2}\s+\w+/i', $line) === 1) {
+        if (preg_match('/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+\d{1,2}\s+\w+/i', $trimmed) === 1) {
             return true;
         }
-        if (preg_match('/^\d{1,2}-\d{1,2}-\d{2,4}\b/', $line) === 1) {
+        if (preg_match('/^\d{1,2}-\d{1,2}-\d{2,4}\b/u', $trimmed) === 1 && mb_strlen($trimmed, 'UTF-8') <= 12) {
             return true;
         }
-        if (preg_match('/^press service\b/i', $lower) === 1) {
+        if (preg_match('/^press service\b/u', $lower) === 1) {
             return true;
         }
-        if (preg_match('/^european parliament\b/i', $lower) === 1) {
+        if (preg_match('/^european parliament\b/u', $lower) === 1) {
             return true;
         }
-        if (preg_match('/^plenary session\b/i', $lower) === 1 && mb_strlen($line, 'UTF-8') < 80) {
+        if (preg_match('/^available in\b/u', $lower) === 1) {
+            return true;
+        }
+        if (preg_match('/^press release\b/u', $lower) === 1 && mb_strlen($trimmed, 'UTF-8') <= 40) {
+            return true;
+        }
+        if (preg_match('/^plenary session\b/u', $lower) === 1 && mb_strlen($trimmed, 'UTF-8') <= 80) {
             return true;
         }
         if (preg_match('/^view (this )?e?-?mail in (your )?browser/i', $lower) === 1) {
             return true;
         }
+        if (preg_match('/^[a-z]{2}$/u', $lower) === 1) {
+            return true;
+        }
+        if (preg_match('/^[A-Z]{2,6}$/u', $trimmed) === 1) {
+            return true;
+        }
+        if (preg_match('/^\d{1,3}$/u', $trimmed) === 1) {
+            return true;
+        }
 
-        return mb_strlen($line, 'UTF-8') < 4;
+        return mb_strlen($trimmed, 'UTF-8') < 4;
+    }
+
+    private static function normalizeLineForNoise(string $line): string
+    {
+        $line = trim($line);
+        $line = (string) preg_replace('/\*+$/u', '', $line);
+
+        return trim($line);
     }
 
     /**
@@ -135,6 +163,9 @@ final class EuroparlPressProcessor implements EmailBodyProcessorInterface
     private static function looksLikeHeadline(string $line, string $subject): bool
     {
         if (self::isNoiseLine($line, $subject)) {
+            return false;
+        }
+        if (preg_match('/\bep today\b/i', $line) === 1) {
             return false;
         }
         $len = mb_strlen($line, 'UTF-8');

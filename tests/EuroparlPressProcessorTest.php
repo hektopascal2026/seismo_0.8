@@ -30,6 +30,39 @@ final class EuroparlPressProcessorTest extends TestCase
         self::assertStringNotContainsString('Press service', (string)($out['text_body'] ?? ''));
     }
 
+    public function testStripsSinglePressReleaseChromeBeforeHeadline(): void
+    {
+        $headline = 'Slovakia: MEPs demand action to protect EU values and the EU budget';
+        $row = [
+            'subject'   => $headline,
+            'text_body' => "[1] scribo-webmail-logo [33]\n"
+                . "Press service **\n"
+                . "European Parliament **\n"
+                . "Available in *\n"
+                . "[2] scribo-webmail-es [34]\n"
+                . "[3] scribo-webmail-cs [35]\n"
+                . "Press release\n"
+                . "20-05-2026\n"
+                . "Plenary session\n"
+                . "LIBE\n"
+                . "CONT\n"
+                . $headline . "\n"
+                . 'In a resolution adopted on Wednesday with 347 votes for, 165 against and 25 abstentions.',
+        ];
+
+        $out = (new EuroparlPressProcessor())->process($row);
+
+        self::assertSame($headline, $out['derived_title']);
+        $body = (string)($out['text_body'] ?? '');
+        self::assertStringStartsWith($headline, $body);
+        self::assertStringContainsString('resolution adopted', $body);
+        self::assertStringNotContainsString('scribo-webmail', $body);
+        self::assertStringNotContainsString('Press service', $body);
+        self::assertStringNotContainsString('Available in', $body);
+        self::assertStringNotContainsString('LIBE', $body);
+        self::assertStringNotContainsString('CONT', $body);
+    }
+
     public function testLeavesUnrelatedSubjectsUntouched(): void
     {
         $row = [
