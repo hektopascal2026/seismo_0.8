@@ -231,14 +231,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         $statusRaw = (string)($event['status'] ?? 'scheduled');
                         $statusLabel = ucfirst($statusRaw);
 
-                        $description = trim(strip_tags((string)($event['description'] ?? '')));
-                        $bodyText = trim(strip_tags((string)($event['content'] ?? '')));
-                        if ($bodyText === $description) { $bodyText = ''; }
-
-                        $combined = $description;
-                        if ($bodyText !== '') {
-                            $combined = ($description !== '' ? $description . "\n\n" : '') . $bodyText;
-                        }
+                        $combined = seismo_calendar_event_body_text($event);
                         $preview = mb_substr($combined, 0, 300);
                         $hasMore = mb_strlen($combined) > 300;
                         if ($hasMore) { $preview .= '...'; }

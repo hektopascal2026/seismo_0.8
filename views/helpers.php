@@ -240,6 +240,30 @@ if (!function_exists('seismo_calendar_event_type_label')) {
     }
 }
 
+if (!function_exists('seismo_calendar_event_body_text')) {
+    /**
+     * Display body for Leg / calendar_events cards.
+     *
+     * Parlament.ch stores Ausgangslage in `description` and Begründung /
+     * eingereichter Text in `content` — the dashboard must read both.
+     *
+     * @param array<string, mixed> $event
+     */
+    function seismo_calendar_event_body_text(array $event): string
+    {
+        $description = trim(strip_tags((string)($event['description'] ?? '')));
+        $bodyText    = trim(strip_tags((string)($event['content'] ?? '')));
+        if ($bodyText === $description) {
+            $bodyText = '';
+        }
+        if ($bodyText === '') {
+            return $description;
+        }
+
+        return $description !== '' ? $description . "\n\n" . $bodyText : $bodyText;
+    }
+}
+
 if (!function_exists('seismo_council_label')) {
     /**
      * Expand a council code from Parlament.ch into a readable label.

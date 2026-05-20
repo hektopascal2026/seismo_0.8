@@ -292,9 +292,11 @@ $entryLoopIndex                 = 0;
                                 elseif ($calDaysUntil === 1) $calDateLabel .= ' (tomorrow)';
                                 elseif ($calDaysUntil > 1 && $calDaysUntil <= 14) $calDateLabel .= " (in {$calDaysUntil}d)";
                             }
-                            $calDesc = strip_tags($calEvent['description'] ?? '');
+                            $calDesc = seismo_calendar_event_body_text($calEvent);
                             $calPreview = mb_substr($calDesc, 0, 200);
-                            if (mb_strlen($calDesc) > 200) $calPreview .= '...';
+                            if (mb_strlen($calDesc) > 200) {
+                                $calPreview .= '...';
+                            }
                             $calHasMore = mb_strlen($calDesc) > 200;
                             $calMeta = $calEvent['metadata'] ? json_decode($calEvent['metadata'], true) : [];
                         ?>
@@ -317,9 +319,9 @@ $entryLoopIndex                 = 0;
                                     <?= htmlspecialchars($calEvent['title']) ?>
                                 <?php endif; ?>
                             </h3>
-                            <?php if ($calDesc): ?>
-                                <div class="entry-content entry-preview"><?= htmlspecialchars($calPreview) ?></div>
-                                <div class="entry-full-content"><?= htmlspecialchars($calDesc) ?></div>
+                            <?php if ($calDesc !== ''): ?>
+                                <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($calPreview, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) ?></div>
+                                <div class="entry-full-content"><?= nl2br(htmlspecialchars($calDesc, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
