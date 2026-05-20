@@ -41,6 +41,9 @@ final class DashboardController
     private const FILTER_PILL_CACHE_AT  = '_seismo_filter_pill_at';
     private const FILTER_PILL_CACHE_TTL = 60;
 
+    /** Session key for timeline newest vs favourites-only view. */
+    private const SESSION_TIMELINE_VIEW = '_seismo_timeline_view';
+
     public function show(): void
     {
         $csrfField = CsrfToken::field();
@@ -49,9 +52,7 @@ final class DashboardController
         $offset = $this->clampOffset($_GET['offset'] ?? null);
 
         $searchQuery = trim((string)($_GET['q'] ?? ''));
-        $currentView = (isset($_GET['view']) && (string)$_GET['view'] === 'favourites')
-            ? 'favourites'
-            : 'newest';
+        $currentView = $this->resolveTimelineView();
 
         $dashboardError = null;
         $allItems        = [];
@@ -84,7 +85,7 @@ final class DashboardController
         $showTimelineRefresh = self::shouldShowTimelineRefresh();
         $timelineRefreshAction = isSatellite() ? 'refresh_remote' : 'refresh_all';
         $timelineRefreshReturnAction = 'index';
-        $returnQuery         = $this->buildReturnQuery('index');
+        $returnQuery         = $this->buildReturnQuery('index', $currentView);
 
         $emptyTimelineHint = 'default';
         if ($dashboardError === null) {
@@ -111,9 +112,7 @@ final class DashboardController
         $offset = $this->clampOffset($_GET['offset'] ?? null);
 
         $searchQuery = trim((string)($_GET['q'] ?? ''));
-        $currentView = (isset($_GET['view']) && (string)$_GET['view'] === 'favourites')
-            ? 'favourites'
-            : 'newest';
+        $currentView = $this->resolveTimelineView();
 
         $dashboardError = null;
         $allItems        = [];
@@ -142,7 +141,7 @@ final class DashboardController
         require_once SEISMO_ROOT . '/views/helpers.php';
 
         $filterPillOptions = $pillOpts;
-        $returnQuery      = $this->buildReturnQuery('filter');
+        $returnQuery      = $this->buildReturnQuery('filter', $currentView);
 
         $emptyTimelineHint = 'default';
         if ($dashboardError === null) {
@@ -347,15 +346,49 @@ final class DashboardController
     }
 
     /**
-     * Preserve dashboard GET state for favourite form round-trips (no leading "?").
+     * Newest vs favourites for index/filter. Persists in session when toggled.
+     *
+     * @return 'newest'|'favourites'
      */
-    private function buildReturnQuery(string $action = 'index'): string
+    private function resolveTimelineView(): string
+    {
+        if (isset($_GET['view'])) {
+            $raw = trim((string)$_GET['view']);
+            if ($raw === 'favourites') {
+                $_SESSION[self::SESSION_TIMELINE_VIEW] = 'favourites';
+
+                return 'favourites';
+            }
+            if ($raw === 'newest' || $raw === '') {
+                $_SESSION[self::SESSION_TIMELINE_VIEW] = 'newest';
+
+                return 'newest';
+            }
+        }
+
+        $stored = $_SESSION[self::SESSION_TIMELINE_VIEW] ?? 'newest';
+
+        return $stored === 'favourites' ? 'favourites' : 'newest';
+    }
+
+    /**
+     * Preserve dashboard GET state for favourite form round-trips (no leading "?").
+     *
+     * @param 'newest'|'favourites' $currentView
+     */
+    private function buildReturnQuery(string $action = 'index', string $currentView = 'newest'): string
     {
         $p = $_GET;
         if (!is_array($p)) {
             $p = [];
         }
         $p['action'] = $action === 'filter' ? 'filter' : 'index';
+        if ($currentView === 'favourites') {
+            $p['view'] = 'favourites';
+        } else {
+            unset($p['view']);
+        }
+
         return http_build_query($p);
     }
 

@@ -1605,6 +1605,8 @@ textarea.search-input.setup-code-preview {
 .btn.timeline-favourites-toggle-btn {
     font-size: 12px;
     padding: 4px 10px;
+    line-height: 1;
+    box-sizing: border-box;
 }
 
 .timeline-day-row-actions {
@@ -1614,14 +1616,24 @@ textarea.search-input.setup-code-preview {
     gap: 8px;
 }
 
-.timeline-favourites-toggle-btn {
-    text-decoration: none;
+.timeline-day-row-actions .entry-expand-all-btn,
+.timeline-day-row-actions .timeline-favourites-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    margin: 0;
     white-space: nowrap;
+}
+
+.timeline-favourites-toggle-star {
+    font-size: 10px;
+    line-height: 1;
+    margin-right: 2px;
 }
 
 .timeline-favourites-toggle-btn.is-active {
     background-color: #f0f0f0;
-    box-shadow: 2px 2px 0 #000000;
 }
 
 /* ═══ Cards ═══ */

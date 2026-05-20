@@ -16,6 +16,7 @@
  * @var string $returnQuery
  * @var float $alertThreshold
  * @var string $emptyTimelineHint
+ * @var string $currentView 'newest'|'favourites'
  */
 
 declare(strict_types=1);
@@ -28,11 +29,12 @@ $headerSubtitle = null;
 $activeNav      = 'filter';
 
 $searchQuery = trim((string)($_GET['q'] ?? ''));
-$currentView = (isset($_GET['view']) && (string)$_GET['view'] === 'favourites')
-    ? 'favourites'
-    : 'newest';
+$currentView = $currentView ?? 'newest';
 
 $filterNavParams = ['action' => 'filter'];
+if ($currentView === 'favourites') {
+    $filterNavParams['view'] = 'favourites';
+}
 foreach (['q', 'view', 'limit', 'offset', 'none', 'filter_form', 'filters'] as $k) {
     if (!isset($_GET[$k])) {
         continue;
@@ -265,6 +267,11 @@ $formAction = $basePath . '/index.php';
     </script>
     <script>
     (function() {
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.timeline-favourites-toggle-btn');
+            if (!btn || !btn.dataset.href) return;
+            window.location.assign(btn.dataset.href);
+        });
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');
             var full    = card.querySelector('.entry-full-content');

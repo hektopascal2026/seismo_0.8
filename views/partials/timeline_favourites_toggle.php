@@ -14,8 +14,10 @@ if ($timelineFavouritesToggleHref === '') {
     return;
 }
 $basePath = getBasePath();
+$toggleUrl = $basePath . '/index.php?' . $timelineFavouritesToggleHref;
 ?>
-<a href="<?= e($basePath) ?>/index.php?<?= e($timelineFavouritesToggleHref) ?>"
-   class="btn btn-secondary timeline-favourites-toggle-btn<?= $timelineFavouritesOn ? ' is-active' : '' ?>"
-   title="<?= $timelineFavouritesOn ? 'Show all timeline entries' : 'Show starred favourites only' ?>"
-   aria-pressed="<?= $timelineFavouritesOn ? 'true' : 'false' ?>">★ favs</a>
+<button type="button"
+        class="btn btn-secondary timeline-favourites-toggle-btn<?= $timelineFavouritesOn ? ' is-active' : '' ?>"
+        data-href="<?= e($toggleUrl) ?>"
+        title="<?= $timelineFavouritesOn ? 'Show all timeline entries' : 'Show starred favourites only' ?>"
+        aria-pressed="<?= $timelineFavouritesOn ? 'true' : 'false' ?>"><span class="timeline-favourites-toggle-star" aria-hidden="true">★</span> favs</button>

@@ -127,6 +127,11 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
 
     <script>
     (function() {
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.timeline-favourites-toggle-btn');
+            if (!btn || !btn.dataset.href) return;
+            window.location.assign(btn.dataset.href);
+        });
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');
             var full    = card.querySelector('.entry-full-content');

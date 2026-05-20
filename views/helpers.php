@@ -65,10 +65,7 @@ if (!function_exists('seismo_timeline_view_link_params')) {
      */
     function seismo_timeline_view_link_params(string $action, bool $favouritesView): array
     {
-        $params = ['action' => $action];
-        if ($favouritesView) {
-            $params['view'] = 'favourites';
-        }
+        $params = ['action' => $action, 'view' => $favouritesView ? 'favourites' : 'newest'];
         $searchQuery = trim((string)($_GET['q'] ?? ''));
         if ($searchQuery !== '') {
             $params['q'] = $searchQuery;
