@@ -1682,7 +1682,7 @@ textarea.search-input.setup-code-preview {
     justify-content: flex-end;
 }
 
-/* Index only: mobile search sits between day label and “expand all” */
+/* Index only: mobile search in day row (first row on narrow viewports) */
 .timeline-inline-search {
     display: none;
 }
@@ -2384,29 +2384,29 @@ textarea.search-input.setup-code-preview {
         min-width: 0;
     }
 
-    /* Two-row timeline toolbar: date + actions, then full-width search */
+    /* Two-row timeline toolbar: full-width search, then date + actions */
     .timeline-day-row--with-inline-search {
         flex-wrap: wrap;
         align-items: center;
         gap: 0.5rem 0.625rem;
     }
 
-    .timeline-day-row--with-inline-search .magnitu-day-separator {
+    .timeline-day-row--with-inline-search .timeline-inline-search {
         order: 1;
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .timeline-day-row--with-inline-search .magnitu-day-separator {
+        order: 2;
         flex: 0 1 auto;
     }
 
     .timeline-day-row--with-inline-search .timeline-day-row-actions {
-        order: 2;
+        order: 3;
         flex: 0 0 auto;
         margin-inline-start: auto;
-    }
-
-    .timeline-day-row--with-inline-search .timeline-inline-search {
-        order: 3;
-        flex: 1 1 100%;
-        width: 100%;
-        max-width: 100%;
     }
 
     .timeline-day-row--expand-only.timeline-day-row--with-inline-search .timeline-inline-search {
