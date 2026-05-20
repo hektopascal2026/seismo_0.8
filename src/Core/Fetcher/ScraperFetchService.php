@@ -139,6 +139,15 @@ final class ScraperFetchService
 
         $candidates = $this->collectMatchingLinkUrls($listingUrl, $html, $linkPattern, self::LINKS_SCAN_CAP);
         if ($candidates === []) {
+            $candidates = AsfinagPressListingDiscovery::discoverArticleUrls(
+                $this->http,
+                $listingUrl,
+                $html,
+                $linkPattern,
+                min($maxArticles, self::LINKS_SCAN_CAP)
+            );
+        }
+        if ($candidates === []) {
             return [
                 'items'       => [],
                 'warnings'    => [],
