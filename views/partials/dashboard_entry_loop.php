@@ -293,7 +293,6 @@ $entryLoopIndex                 = 0;
                                 $calPreview .= '...';
                             }
                             $calHasMore = mb_strlen($calDesc) > 200;
-                            $calMeta = $calEvent['metadata'] ? json_decode($calEvent['metadata'], true) : [];
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -318,9 +317,6 @@ $entryLoopIndex                 = 0;
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
-                                    <?php if (!empty($calMeta['business_number'])): ?>
-                                        <span class="entry-meta-mono"><?= htmlspecialchars($calMeta['business_number']) ?></span>
-                                    <?php endif; ?>
                                     <?php if ($calHasUrl): ?>
                                     <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
                                     <?php endif; ?>
