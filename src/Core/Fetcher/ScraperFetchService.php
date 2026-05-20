@@ -225,6 +225,17 @@ final class ScraperFetchService
         return (bool)preg_match('#^https?://#i', $u);
     }
 
+    /** Skip tab/pagination hrefs (e.g. INTERPOL `?limit=12&page=3`). */
+    private function isListingPaginationUrl(string $url): bool
+    {
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (!is_string($query) || $query === '') {
+            return false;
+        }
+
+        return str_contains($query, 'page=') || str_contains($query, 'limit=');
+    }
+
     private function fetchHtmlBody(string $pageUrl): string
     {
         $res = $this->http->getWebPage($pageUrl);
@@ -274,6 +285,9 @@ final class ScraperFetchService
             $rawHref = $el->getAttribute('href');
             $absolute = $this->resolveAgainstBase($listingUrl, $rawHref);
             if ($absolute === '' || !$this->isNavigableHttpUrl($absolute)) {
+                continue;
+            }
+            if ($this->isListingPaginationUrl($absolute)) {
                 continue;
             }
             $targetParts = parse_url($absolute);

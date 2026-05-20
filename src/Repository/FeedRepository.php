@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Fetcher\ScraperListingUrl;
 
 /**
  * `feeds` table — Slice 8 module admin (Slice 8).
@@ -41,7 +42,7 @@ final class FeedRepository
               AND (IFNULL(f.category, '') <> 'scraper')
               AND NOT EXISTS (
                   SELECT 1 FROM {$sc} sc
-                  WHERE sc.url = f.url AND sc.disabled = 0
+                  WHERE " . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0
               )
             ORDER BY f.id ASC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;

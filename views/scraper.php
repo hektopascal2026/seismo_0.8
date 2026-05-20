@@ -97,6 +97,7 @@ $sourcesQs = 'action=scraper&view=sources';
                 <div class="admin-form-field">
                     <label>Page URL <input type="url" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://…"></label>
                 </div>
+                <p class="admin-hint">Paste the listing URL from your browser. A trailing <code>/</code> at the end is optional — Seismo stores one canonical form so you do not get duplicate feeds.</p>
                 <div class="admin-form-field">
                     <label>Link pattern (substring) <input type="text" name="link_pattern" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link_pattern'] ?? '')) ?>" placeholder="must appear in the article URL" title="0.4-style: plain substring in resolved http(s) URL, not a regex."></label>
                 </div>

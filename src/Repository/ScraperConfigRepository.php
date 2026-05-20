@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Fetcher\ScraperListingUrl;
 
 /**
  * `scraper_configs` — web scraper targets (Slice 8).
@@ -64,7 +65,7 @@ final class ScraperConfigRepository
     {
         $this->assertNotSatellite();
         $name = trim((string)($data['name'] ?? ''));
-        $url  = trim((string)($data['url'] ?? ''));
+        $url  = ScraperListingUrl::normalize(trim((string)($data['url'] ?? '')));
         if ($name === '' || $url === '') {
             throw new \InvalidArgumentException('Scraper name and URL are required.');
         }
@@ -99,7 +100,9 @@ final class ScraperConfigRepository
             throw new \InvalidArgumentException('Scraper config not found.');
         }
         $name = array_key_exists('name', $data) ? trim((string)$data['name']) : (string)$existing['name'];
-        $url  = array_key_exists('url', $data) ? trim((string)$data['url']) : (string)$existing['url'];
+        $url  = array_key_exists('url', $data)
+            ? ScraperListingUrl::normalize(trim((string)$data['url']))
+            : ScraperListingUrl::normalize((string)$existing['url']);
         if ($name === '' || $url === '') {
             throw new \InvalidArgumentException('Scraper name and URL are required.');
         }

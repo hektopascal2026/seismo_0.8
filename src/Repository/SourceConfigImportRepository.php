@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Fetcher\ScraperListingUrl;
 
 /**
  * Focused importer for source definitions.
@@ -97,7 +98,7 @@ final class SourceConfigImportRepository
         try {
             foreach ($rows as $row) {
                 $name = trim((string)($row['name'] ?? ''));
-                $url = trim((string)($row['url'] ?? ''));
+                $url = ScraperListingUrl::normalize(trim((string)($row['url'] ?? '')));
                 if ($name === '' || $url === '') {
                     $stats['skipped']++;
                     continue;
@@ -112,7 +113,9 @@ final class SourceConfigImportRepository
                 }
                 $disabled = !empty($row['disabled']) ? 1 : 0;
 
-                $find = $this->pdo->prepare("SELECT id FROM {$t} WHERE url = ? LIMIT 1");
+                $find = $this->pdo->prepare(
+                    'SELECT id FROM ' . $t . ' WHERE ' . ScraperListingUrl::sqlColumnEqualsParam('url') . ' LIMIT 1'
+                );
                 $find->execute([$url]);
                 $existingId = $find->fetchColumn();
 

@@ -7,6 +7,7 @@ namespace Seismo\Repository;
 use DateTimeImmutable;
 use PDO;
 use PDOException;
+use Seismo\Core\Fetcher\ScraperListingUrl;
 
 /**
  * RSS / Substack / scraper rows in `feed_items` + `feeds` metadata.
@@ -94,17 +95,18 @@ final class FeedItemRepository
         $offset = max(0, $offset);
         $feeds = entryTable('feeds');
         $sc    = entryTable('scraper_configs');
+        $urlEq = ScraperListingUrl::sqlColumnsEqual('sc2.url', 'f.url');
         $sql = "SELECT f.*,
             (SELECT sc2.link_pattern FROM {$sc} sc2
-                WHERE sc2.url = f.url AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
+                WHERE {$urlEq} AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
             (SELECT sc3.date_selector FROM {$sc} sc3
-                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
+                WHERE " . ScraperListingUrl::sqlColumnsEqual('sc3.url', 'f.url') . " AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
             (SELECT sc4.exclude_selectors FROM {$sc} sc4
-                WHERE sc4.url = f.url AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
+                WHERE " . ScraperListingUrl::sqlColumnsEqual('sc4.url', 'f.url') . " AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
             FROM {$feeds} f
             WHERE f.disabled = 0
               AND EXISTS (
-                SELECT 1 FROM {$sc} sc0 WHERE sc0.url = f.url AND sc0.disabled = 0
+                SELECT 1 FROM {$sc} sc0 WHERE " . ScraperListingUrl::sqlColumnsEqual('sc0.url', 'f.url') . " AND sc0.disabled = 0
               )
             ORDER BY f.id ASC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
@@ -126,16 +128,16 @@ final class FeedItemRepository
         $sc    = entryTable('scraper_configs');
         $sql = "SELECT f.*,
             (SELECT sc2.link_pattern FROM {$sc} sc2
-                WHERE sc2.url = f.url AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
+                WHERE " . ScraperListingUrl::sqlColumnsEqual('sc2.url', 'f.url') . " AND sc2.disabled = 0 ORDER BY sc2.id ASC LIMIT 1) AS scraper_link_pattern,
             (SELECT sc3.date_selector FROM {$sc} sc3
-                WHERE sc3.url = f.url AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
+                WHERE " . ScraperListingUrl::sqlColumnsEqual('sc3.url', 'f.url') . " AND sc3.disabled = 0 ORDER BY sc3.id ASC LIMIT 1) AS scraper_date_selector,
             (SELECT sc4.exclude_selectors FROM {$sc} sc4
-                WHERE sc4.url = f.url AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
+                WHERE " . ScraperListingUrl::sqlColumnsEqual('sc4.url', 'f.url') . " AND sc4.disabled = 0 ORDER BY sc4.id ASC LIMIT 1) AS scraper_exclude_selectors
             FROM {$feeds} f
             WHERE f.disabled = 0
               AND f.id > ?
               AND EXISTS (
-                SELECT 1 FROM {$sc} sc0 WHERE sc0.url = f.url AND sc0.disabled = 0
+                SELECT 1 FROM {$sc} sc0 WHERE " . ScraperListingUrl::sqlColumnsEqual('sc0.url', 'f.url') . " AND sc0.disabled = 0
               )
             ORDER BY f.id ASC
             LIMIT " . (int)$limit;
@@ -154,12 +156,13 @@ final class FeedItemRepository
         if (isSatellite()) {
             throw new \RuntimeException('FeedItemRepository::disableFeedsByUrl must not run on a satellite.');
         }
-        $url = trim($url);
+        $url = ScraperListingUrl::normalize(trim($url));
         if ($url === '') {
             return 0;
         }
         $table = entryTable('feeds');
-        $sql   = 'UPDATE ' . $table . ' SET disabled = 1 WHERE url = ?';
+        $sql   = 'UPDATE ' . $table . ' SET disabled = 1 WHERE '
+            . ScraperListingUrl::sqlColumnEqualsParam('url');
         $stmt  = $this->pdo->prepare($sql);
         $stmt->execute([$url]);
 
@@ -182,7 +185,7 @@ final class FeedItemRepository
         if (isSatellite()) {
             throw new \RuntimeException('FeedItemRepository::ensureScraperFeed must not run on a satellite.');
         }
-        $url = trim($url);
+        $url = ScraperListingUrl::normalize(trim($url));
         if ($url === '' || !$this->isNavigableHttpUrl($url)) {
             throw new \InvalidArgumentException('Scraper feed URL must be a navigable http(s) URL.');
         }
@@ -196,18 +199,21 @@ final class FeedItemRepository
         }
 
         $table = entryTable('feeds');
-        $sel = $this->pdo->prepare("SELECT id FROM {$table} WHERE url = ? ORDER BY id ASC LIMIT 1");
+        $sel = $this->pdo->prepare(
+            'SELECT id FROM ' . $table . ' WHERE ' . ScraperListingUrl::sqlColumnEqualsParam('url') . ' ORDER BY id ASC LIMIT 1'
+        );
         $sel->execute([$url]);
         $existingId = (int)($sel->fetchColumn() ?: 0);
 
         if ($existingId > 0) {
             $upd = $this->pdo->prepare("UPDATE {$table}
-                SET source_type = 'scraper',
+                SET url = ?,
+                    source_type = 'scraper',
                     title = ?,
                     category = ?,
                     disabled = 0
                 WHERE id = ?");
-            $upd->execute([$title, $cat, $existingId]);
+            $upd->execute([$url, $title, $cat, $existingId]);
 
             return $existingId;
         }
@@ -249,7 +255,8 @@ final class FeedItemRepository
                        0, 0, NULL, NULL, NULL
                 FROM {$sc} sc
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM {$feeds} f WHERE f.url = sc.url
+                    SELECT 1 FROM {$feeds} f
+                    WHERE " . ScraperListingUrl::sqlColumnsEqual('f.url', 'sc.url') . "
                 )";
             $ins = $this->pdo->prepare($insertSql);
             $ins->execute();
@@ -262,7 +269,7 @@ final class FeedItemRepository
                 WHERE f.disabled = 1
                   AND EXISTS (
                       SELECT 1 FROM {$sc} sc
-                      WHERE sc.url = f.url AND sc.disabled = 0
+                      WHERE " . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0
                   )";
             $upd = $this->pdo->prepare($reenableSql);
             $upd->execute();
