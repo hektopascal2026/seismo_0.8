@@ -11,20 +11,17 @@ use Seismo\Service\Http\BaseClient;
 /**
  * Swiss Parliament press releases (parlament.ch SharePoint REST).
  *
- * Primary path: **POST** `/_api/search/postquery` with taxonomy **RefinementFilters**.
- * When Akamai returns an HTML “Request Rejected” / “Access Denied” page (common for
- * datacenter IPs or `Seismo/*` User-Agents), falls back to **GET** the configured list
- * `…/items` OData endpoint. **SDA** uses the separate news site list (`/de/services/news/…/Seiten`);
- * **Medienmitteilungen** use `press-releases/…/Pages`. SDA rows are identified by list URL / `FileRef` path, not slug prefix.
+ * Fetches via **GET** the configured list `…/items` OData endpoint. **SDA** uses the news
+ * site list (`/de/services/news/…/Seiten`); **Medienmitteilungen** use `press-releases/…/Pages`.
+ * Rows are filtered by `guid_prefix` (`parl_mm` vs `parl_sda`) using list URL / `FileRef` path and slug shape.
  *
  * Configuration comes from the parent `feeds` row:
- * - `url` — SharePoint **list items** URL (`…/items`) for OData fallback; also used to derive `postquery` (MM only).
+ * - `url` — SharePoint **list items** URL (`…/items`).
  * - `description` — optional JSON:
  *   - `lookback_days`, `limit`, `language` — same as always.
- *   - `guid_prefix` — `parl_mm` (default) vs `parl_sda`; selects the built-in **PdNewsTypeDE** refinement token.
+ *   - `guid_prefix` — `parl_mm` (default) vs `parl_sda`.
  *     When `odata_title_substring` is set and `guid_prefix` is omitted, defaults to **`parl_sda`** (legacy hint).
- *   - `refinement_filters` — optional **array of FQL strings**; when set, replaces the built-in PdNewsTypeDE filter(s).
- *   - `search_post_url` — optional full URL to `postquery` if derivation from `url` fails.
+ *   - `odata_title_substring` — optional OData `$filter` substring on `Title` (SDA list).
  */
 final class ParlPressFetchService
 {
@@ -36,15 +33,6 @@ final class ParlPressFetchService
 
     /** @var list<string> */
     private const LANGUAGES = ['de', 'fr', 'it', 'en', 'rm'];
-
-    /** UTF-8 encoding of U+01C2 twice — SharePoint taxonomy refinement prefix before ASCII-hex label. */
-    private const TAX_MARKER = "\xC7\x82\xC7\x82";
-
-    /** Hex of ASCII `Medienmitteilung` — official press releases. */
-    private const HEX_NEWS_TYPE_MM = '4d656469656e6d69747465696c756e67';
-
-    /** Hex of ASCII `SDA-Meldung` — agency wire. */
-    private const HEX_NEWS_TYPE_SDA = '5344412d4d656c64756e67';
 
     /** SDA-Meldungen (news site `Seiten` list) — not `press-releases/Pages`. */
     public const DEFAULT_SDA_LIST_ITEMS_URL = 'https://www.parlament.ch/de/services/news/_api/web/lists/getByTitle(\'Seiten\')/items';
@@ -85,76 +73,9 @@ final class ParlPressFetchService
             $guidPrefix = $this->normaliseGuidPrefix((string)($guidPrefixRaw ?? 'parl_mm'));
         }
 
-        $searchPostUrl = trim((string)($opts['search_post_url'] ?? ''));
-        if ($searchPostUrl === '') {
-            $searchPostUrl = $this->deriveSearchPostUrlFromListItemsUrl($apiBase);
-        }
+        $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle, $lang);
 
-        $refinements = null;
-        if (isset($opts['refinement_filters']) && is_array($opts['refinement_filters'])) {
-            $refinements = array_values(array_filter(array_map(static fn ($v) => trim((string)$v), $opts['refinement_filters'])));
-        }
-        if ($refinements === null || $refinements === []) {
-            $refinements = $this->defaultRefinementFilters($guidPrefix);
-        }
-
-        if (self::isParlNewsListUrl($apiBase)) {
-            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle, $lang);
-
-            return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
-        }
-
-        $sinceUtc = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-            ->modify('-' . $lookback . ' days')
-            ->format('Y-m-d');
-        // KQL: scope to press-releases tree + freshness (SharePoint managed property LastModifiedTime).
-        $querytext = 'Path:https://www.parlament.ch/press-releases/* LastModifiedTime>=' . $sinceUtc;
-
-        try {
-            $cellRows = $this->executeSharePointSearch($searchPostUrl, $querytext, $limit, $refinements);
-
-            return $this->buildRowsFromSearchCells($cellRows, $lang, $guidPrefix, $limit);
-        } catch (\RuntimeException $e) {
-            if (!$this->exceptionIndicatesEdgeWaf($e)) {
-                throw $e;
-            }
-            error_log(
-                'Seismo parl_press: SharePoint search POST blocked by edge WAF (' . $e->getMessage()
-                . '); falling back to list OData GET.'
-            );
-
-            $listItems = $this->fetchListODataItems($apiBase, $lookback, $limit, $titleNeedle, $lang);
-
-            return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
-        }
-    }
-
-    /**
-     * @param list<array<string, mixed>> $cellRows
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function buildRowsFromSearchCells(array $cellRows, string $lang, string $guidPrefix, int $limit): array
-    {
-        $seenPath = [];
-        $out = [];
-        foreach ($cellRows as $cells) {
-            $item = $this->syntheticListItemFromSearchCells($cells, $lang);
-            $pathKey = trim((string)($item['FileRef'] ?? ''));
-            if ($pathKey === '' || isset($seenPath[$pathKey])) {
-                continue;
-            }
-            $seenPath[$pathKey] = true;
-            $row = $this->tryBuildParlPressRow($item, $lang, $guidPrefix);
-            if ($row !== null) {
-                $out[] = $row;
-                if (count($out) >= $limit) {
-                    break;
-                }
-            }
-        }
-
-        return $out;
+        return $this->buildRowsFromListItems($listItems, $lang, $guidPrefix, $limit);
     }
 
     /**
@@ -185,73 +106,7 @@ final class ParlPressFetchService
     }
 
     /**
-     * @param list<string> $refinementFilterStrings FQL refinement strings (OData verbose `results` array).
-     *
-     * @return list<array<string, mixed>> One associative map per hit (managed property name → value).
-     */
-    private function executeSharePointSearch(
-        string $postUrl,
-        string $querytext,
-        int $limit,
-        array $refinementFilterStrings,
-    ): array {
-        $payload = [
-            'request' => [
-                'Querytext'        => $querytext,
-                'RowLimit'         => $limit,
-                'TrimDuplicates'   => false,
-                'RefinementFilters' => ['results' => array_values($refinementFilterStrings)],
-                'SelectProperties' => [
-                    'results' => [
-                        'Title',
-                        'Path',
-                        'Created',
-                        'LastModifiedTime',
-                        'Description',
-                        'HitHighlightedSummary',
-                        'Author',
-                    ],
-                ],
-            ],
-        ];
-
-        $response = $this->http->postJson($postUrl, $payload, $this->sharePointJsonHeaders());
-
-        if ($response->status < 200 || $response->status >= 300) {
-            if ($this->responseLooksLikeEdgeWaf($response)) {
-                throw $this->edgeWafException('search POST', $response->status);
-            }
-            throw new \RuntimeException(
-                'parlament.ch search POST HTTP ' . $response->status . ': ' . mb_substr($response->body, 0, 300)
-            );
-        }
-        if ($this->responseLooksLikeEdgeWaf($response)) {
-            throw $this->edgeWafException('search POST', $response->status);
-        }
-
-        $data = json_decode($response->body, true);
-        if (!is_array($data)) {
-            throw new \RuntimeException('parlament.ch search returned invalid JSON.');
-        }
-        if (isset($data['error'])) {
-            $msg = $data['error']['message']['value'] ?? $data['error']['message'] ?? json_encode($data['error']);
-            throw new \RuntimeException('parlament.ch search error: ' . (is_string($msg) ? $msg : json_encode($msg)));
-        }
-
-        $rows = $this->extractSearchTableRows($data);
-        $out = [];
-        foreach ($rows as $row) {
-            $cells = $this->searchRowCellsToMap($row);
-            if ($cells !== []) {
-                $out[] = $cells;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * Legacy SharePoint list OData (`feeds.url` …/items) when search POST is WAF-blocked.
+     * SharePoint list OData (`feeds.url` …/items).
      *
      * @return list<array<string, mixed>>
      */
@@ -418,149 +273,16 @@ final class ParlPressFetchService
             || str_contains($body, 'Access Denied');
     }
 
-    private function exceptionIndicatesEdgeWaf(\RuntimeException $e): bool
-    {
-        return str_contains($e->getMessage(), 'edge WAF')
-            || str_contains($e->getMessage(), 'Request Rejected')
-            || str_contains($e->getMessage(), 'Access Denied');
-    }
-
     private function edgeWafException(string $via, int $status): \RuntimeException
     {
         return new \RuntimeException(
             'parlament.ch ' . $via . ' blocked by edge WAF (HTTP ' . $status
-            . ' HTML “Request Rejected” / “Access Denied”) — automatic list OData fallback will be attempted.'
+            . ' HTML “Request Rejected” / “Access Denied”).'
         );
     }
 
     /**
-     * @return list<string>
-     */
-    private function defaultRefinementFilters(string $guidPrefix): array
-    {
-        $hex = $guidPrefix === 'parl_sda' ? self::HEX_NEWS_TYPE_SDA : self::HEX_NEWS_TYPE_MM;
-
-        return [self::refinementPdNewsTypeDe($hex)];
-    }
-
-    private static function refinementPdNewsTypeDe(string $hexLabel): string
-    {
-        return 'PdNewsTypeDE:"' . self::TAX_MARKER . $hexLabel . '"';
-    }
-
-    private function deriveSearchPostUrlFromListItemsUrl(string $listItemsUrl): string
-    {
-        $u = trim($listItemsUrl);
-        if (($q = strpos($u, '?')) !== false) {
-            $u = substr($u, 0, $q);
-        }
-        $u = rtrim($u, '/');
-        if (preg_match('#^(https?://[^/]+/press-releases)(?:/.*)?$#i', $u, $m)) {
-            return $m[1] . '/_api/search/postquery';
-        }
-        if (preg_match('#^(https?://[^/]+)(/.+)/_api/web/#i', $u, $m)) {
-            return $m[1] . $m[2] . '/_api/search/postquery';
-        }
-
-        throw new \RuntimeException(
-            'Cannot derive SharePoint `/_api/search/postquery` URL from feeds.url — use the standard …/press-releases/…/items list URL, or set `search_post_url` in description JSON.'
-        );
-    }
-
-    /**
-     * @param array<string, mixed> $data Decoded postquery JSON (odata=verbose).
-     *
-     * @return list<array<string, mixed>> Raw `Rows.results` row objects.
-     */
-    private function extractSearchTableRows(array $data): array
-    {
-        $roots = [
-            $data['d']['postquery'] ?? null,
-            $data['d']['PostQuery'] ?? null,
-            $data['postquery'] ?? null,
-            $data['d'] ?? null,
-        ];
-        foreach ($roots as $root) {
-            if (!is_array($root)) {
-                continue;
-            }
-            $rows = $root['PrimaryQueryResult']['RelevantResults']['Table']['Rows']['results'] ?? null;
-            if (is_array($rows)) {
-                return $rows;
-            }
-        }
-
-        return [];
-    }
-
-    /**
-     * @param array<string, mixed> $row One search `Rows.results[]` element.
-     *
-     * @return array<string, mixed> Managed property name → display value
-     */
-    private function searchRowCellsToMap(array $row): array
-    {
-        $cells = $row['Cells']['results'] ?? $row['Cells'] ?? null;
-        if (!is_array($cells)) {
-            return [];
-        }
-        $map = [];
-        foreach ($cells as $c) {
-            if (!is_array($c)) {
-                continue;
-            }
-            $k = trim((string)($c['Key'] ?? ''));
-            if ($k === '') {
-                continue;
-            }
-            $map[$k] = $c['Value'] ?? '';
-        }
-
-        return $map;
-    }
-
-    /**
-     * @param array<string, mixed> $cells Search hit cells (managed properties).
-     *
-     * @return array<string, mixed> Shape compatible with list-item parsing helpers.
-     */
-    private function syntheticListItemFromSearchCells(array $cells, string $lang): array
-    {
-        $path = trim((string)($cells['Path'] ?? ''));
-        $fileRef = '';
-        if (str_starts_with($path, 'https://www.parlament.ch')) {
-            $p = parse_url($path, PHP_URL_PATH);
-            $fileRef = is_string($p) ? $p : '';
-        } elseif (str_starts_with($path, '/')) {
-            $fileRef = $path;
-        }
-
-        $title = trim((string)($cells['Title'] ?? ''));
-        $desc = trim(strip_tags((string)($cells['Description'] ?? '')));
-        if ($desc === '') {
-            $desc = trim(strip_tags((string)($cells['HitHighlightedSummary'] ?? '')));
-        }
-
-        $rawDate = $cells['LastModifiedTime'] ?? $cells['Created'] ?? null;
-        $rawDateStr = is_string($rawDate) ? $rawDate : (is_scalar($rawDate) ? (string)$rawDate : '');
-
-        $item = [
-            'Title'            => $title,
-            'FileRef'          => $fileRef,
-            'Created'          => $rawDateStr,
-            'ArticleStartDate' => null,
-            'ContentType'      => ['Name' => 'Press Release'],
-        ];
-        foreach (self::LANGUAGES as $l) {
-            $item['Title_' . $l] = $title;
-        }
-        $item['Content_' . $lang] = $desc;
-
-        return $item;
-    }
-
-    /**
-     * @param array<string, mixed> $item List-shaped row (from search synthesis or legacy).
+     * @param array<string, mixed> $item SharePoint list row.
      *
      * @return ?array<string, mixed>
      */
@@ -796,7 +518,7 @@ final class ParlPressFetchService
     }
 
     /**
-     * Public page URL from list/search row ({@see FileRef}, {@see EncodedAbsUrl}, or Pages path + slug).
+     * Public page URL from list row ({@see FileRef}, {@see EncodedAbsUrl}, or Pages path + slug).
      *
      * @param array<string, mixed> $item
      */
