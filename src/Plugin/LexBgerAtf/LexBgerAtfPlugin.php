@@ -98,16 +98,15 @@ final class LexBgerAtfPlugin implements SourceFetcherInterface
         $rows = [];
         foreach ($refs as $ref) {
             $url = $this->documentUrl($base, $ref['doc_id_raw'], $lang);
-            $title = $this->fetchDocumentTitle($url);
-            if ($title === '') {
-                $title = $ref['celex'];
-            }
+            $meta = $this->fetchDocumentMeta($url, $ref['celex']);
+            $title = $meta['title'] !== '' ? $meta['title'] : self::celexToDisplayLabel($ref['celex']);
+            $docDate = $meta['document_date'] ?? $ref['document_date'];
             $rows[] = [
                 'celex'         => $ref['celex'],
                 'title'         => mb_substr($title, 0, 65535),
-                'description'   => null,
-                'document_date' => $ref['document_date'],
-                'document_type' => 'Leitentscheid (BGE)',
+                'description'   => $meta['description'],
+                'document_date' => $docDate,
+                'document_type' => 'Leitentscheid',
                 'eurlex_url'    => mb_substr($url, 0, 500),
                 'work_uri'      => mb_substr($url, 0, 500),
                 'source'        => $this->getConfigKey(),
@@ -210,15 +209,25 @@ final class LexBgerAtfPlugin implements SourceFetcherInterface
         return '';
     }
 
+    /** Approximate calendar year for lookback filtering when the document page has no date. */
     private function documentDateFromCelex(string $celex): string
     {
         if (preg_match('/^(\d+)-[IVX]+-/i', $celex, $m)) {
             $calYear = (int)$m[1] + self::BGE_YEAR_OFFSET;
 
-            return $calYear . '-06-01';
+            return $calYear . '-12-31';
         }
 
         return gmdate('Y-m-d');
+    }
+
+    public static function celexToDisplayLabel(string $celex): string
+    {
+        if (preg_match('/^(\d+)-([IVX]+)-(\d+)$/i', $celex, $m)) {
+            return $m[1] . ' ' . strtoupper($m[2]) . ' ' . $m[3];
+        }
+
+        return $celex;
     }
 
     private function documentUrl(string $base, string $encodedDocId, string $lang): string
@@ -227,18 +236,100 @@ final class LexBgerAtfPlugin implements SourceFetcherInterface
             . '&lang=' . rawurlencode($lang) . '&type=show_document';
     }
 
-    private function fetchDocumentTitle(string $url): string
+    /**
+     * @return array{title: string, description: ?string, document_date: ?string}
+     */
+    private function fetchDocumentMeta(string $url, string $celex): array
     {
         try {
             $html = $this->fetchHtml($url);
         } catch (\Throwable) {
-            return '';
-        }
-        if (preg_match('/<title>\s*([^<]+?)\s*<\/title>/i', $html, $m)) {
-            return html_entity_decode(trim($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return ['title' => '', 'description' => null, 'document_date' => null];
         }
 
-        return '';
+        return $this->parseDocumentMeta($html, $celex);
+    }
+
+    /**
+     * @return array{title: string, description: ?string, document_date: ?string}
+     */
+    private function parseDocumentMeta(string $html, string $celex): array
+    {
+        $title = '';
+        $description = null;
+        $documentDate = null;
+        $citation = self::celexToDisplayLabel($celex);
+
+        preg_match_all('#<div class="paraatf">([^<]+)</div>#', $html, $m);
+
+        foreach ($m[1] ?? [] as $rawPara) {
+            $para = html_entity_decode(trim(strip_tags($rawPara)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $para = preg_replace('/\s+/u', ' ', $para) ?? $para;
+            if ($para === '' || $para === $citation || preg_match('/^\d+\s+[IVX]+\s+\d+$/u', $para)) {
+                continue;
+            }
+            if (preg_match('/vom\s+\d{1,2}\.\s+/u', $para)) {
+                $parsed = $this->parseFrenchGermanDateFromLine($para);
+                if ($parsed !== null) {
+                    $documentDate = $parsed;
+                }
+                continue;
+            }
+            if (mb_strlen($para) >= 40 && ($title === '' || str_contains($para, 'i.S.'))) {
+                $title = $para;
+            }
+        }
+
+        if (preg_match('#id="regeste"[^>]*>(.*?)(?=<a\s+name=)#s', $html, $reg)) {
+            $regText = html_entity_decode(strip_tags($reg[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $regText = trim(preg_replace('/\s+/u', ' ', $regText) ?? '');
+            if ($regText !== '') {
+                $description = mb_substr($regText, 0, 4000);
+            }
+        }
+
+        if ($title === '' && preg_match('/<title>\s*([^<]+?)\s*<\/title>/i', $html, $tm)) {
+            $pageTitle = html_entity_decode(trim($tm[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if ($pageTitle !== $citation) {
+                $title = $pageTitle;
+            }
+        }
+
+        return [
+            'title'         => $title,
+            'description'   => $description,
+            'document_date' => $documentDate,
+        ];
+    }
+
+    private function parseFrenchGermanDateFromLine(string $line): ?string
+    {
+        if (!preg_match('/vom\s+(\d{1,2})\.\s+([A-Za-zäöüÄÖÜéèêà]+)\s+(\d{4})/u', $line, $m)) {
+            return null;
+        }
+
+        static $months = [
+            'januar' => '01', 'janvier' => '01', 'gennaio' => '01',
+            'februar' => '02', 'février' => '02', 'fevrier' => '02', 'febbraio' => '02',
+            'märz' => '03', 'maerz' => '03', 'mars' => '03', 'marzo' => '03',
+            'april' => '04', 'avril' => '04',
+            'mai' => '05', 'maggio' => '05',
+            'juni' => '06', 'juin' => '06', 'giugno' => '06',
+            'juli' => '07', 'juillet' => '07', 'luglio' => '07',
+            'august' => '08', 'août' => '08', 'aout' => '08', 'agosto' => '08',
+            'september' => '09', 'septembre' => '09', 'settembre' => '09',
+            'oktober' => '10', 'octobre' => '10', 'ottobre' => '10',
+            'november' => '11', 'novembre' => '11',
+            'dezember' => '12', 'décembre' => '12', 'decembre' => '12', 'dicembre' => '12',
+        ];
+
+        $monthKey = mb_strtolower($m[2], 'UTF-8');
+        $month = $months[$monthKey] ?? null;
+        if ($month === null) {
+            return null;
+        }
+
+        return sprintf('%04d-%s-%02d', (int)$m[3], $month, (int)$m[1]);
     }
 
     private static function compareCelex(string $a, string $b): int

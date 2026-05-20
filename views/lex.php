@@ -473,6 +473,10 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
                             }
                         }
                         $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
+                        if (function_exists('seismo_lex_bge_footer_mono_hide')) {
+                            $lexLexPageFooterMonoHide = $lexLexPageFooterMonoHide
+                                || seismo_lex_bge_footer_mono_hide($source, $celexRow, $lexHeadingTitle);
+                        }
                     ?>
                     <div class="entry-card">
                         <div class="entry-header">

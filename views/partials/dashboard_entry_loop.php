@@ -143,6 +143,9 @@ $entryLoopIndex                 = 0;
                             // For JUS items: parse readable case number from slug
                             $lexCelexRaw = (string)($lexItem['celex'] ?? '');
                             $lexCelexDisplay = $lexCelexRaw;
+                            if ($lexSource === 'ch_bge' && preg_match('/^\d+-[IVX]+-\d+$/i', $lexCelexRaw)) {
+                                $lexCelexDisplay = seismo_lex_bge_celex_for_display($lexCelexRaw);
+                            }
                             if ($isJus && preg_match('/^CH_(?:BGer|BGE|BVGE)_\d{3}_(.+)_\d{4}-\d{2}-\d{2}$/', $lexCelexDisplay, $m)) {
                                 $rawCn = $m[1];
                                 $isBVGer = (strpos($lexCelexDisplay, 'CH_BVGE_') === 0);
@@ -176,10 +179,6 @@ $entryLoopIndex                 = 0;
                                 $lexLinkLabel = 'parlament.ch →';
                             }
 
-                            $lexFooterMonoHide = ($lexSource === 'eu' && !$isParlSwissLex)
-                                || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'))
-                                || ($lexSource === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $lexCelexRaw));
-
                             $lexDesc = trim($lexItem['description'] ?? '');
                             $lexPreview = mb_substr($lexDesc, 0, 300);
                             if (mb_strlen($lexDesc) > 300) $lexPreview .= '...';
@@ -190,6 +189,11 @@ $entryLoopIndex                 = 0;
                                 ? seismo_lex_card_heading_title($lexItem)
                                 : trim((string)($lexItem['title'] ?? ''));
                             $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
+
+                            $lexFooterMonoHide = ($lexSource === 'eu' && !$isParlSwissLex)
+                                || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'))
+                                || ($lexSource === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $lexCelexRaw))
+                                || seismo_lex_bge_footer_mono_hide($lexSource, $lexCelexRaw, $lexHeadingTitle);
                         ?>
                         <div class="entry-card">
                             <?php if ($useLexJurisdictionHeader): ?>

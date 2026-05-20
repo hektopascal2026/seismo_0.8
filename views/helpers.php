@@ -109,6 +109,27 @@ if (!function_exists('seismo_is_navigable_url')) {
     }
 }
 
+if (!function_exists('seismo_lex_bge_celex_for_display')) {
+    /** Human-readable BGE citation (152-IV-41 → 152 IV 41). */
+    function seismo_lex_bge_celex_for_display(string $celex): string
+    {
+        return \Seismo\Plugin\LexBgerAtf\LexBgerAtfPlugin::celexToDisplayLabel($celex);
+    }
+}
+
+if (!function_exists('seismo_lex_bge_footer_mono_hide')) {
+    /** Hide redundant hyphenated celex under the card when the heading is already the citation. */
+    function seismo_lex_bge_footer_mono_hide(string $source, string $celexRaw, string $headingTitle): bool
+    {
+        if ($source !== 'ch_bge' || !preg_match('/^\d+-[IVX]+-\d+$/i', $celexRaw)) {
+            return false;
+        }
+        $citation = seismo_lex_bge_celex_for_display($celexRaw);
+
+        return trim($headingTitle) === $citation || trim($headingTitle) === $celexRaw;
+    }
+}
+
 if (!function_exists('seismo_lex_card_heading_title')) {
     /**
      * Primary heading for Lex cards. EU rows often stored CELEX as `title` when
