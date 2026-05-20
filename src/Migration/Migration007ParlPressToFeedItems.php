@@ -17,11 +17,16 @@ namespace Seismo\Migration;
 use PDO;
 use PDOException;
 
-final class Migration007ParlPressToFeedItems
+final class Migration007ParlPressToFeedItems implements MigrationContract
 {
     public const VERSION = 23;
 
     private const API_URL = "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items";
+
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
 
     public function apply(PDO $pdo, MigrationTarget $target): void
     {

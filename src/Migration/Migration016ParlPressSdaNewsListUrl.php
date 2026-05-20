@@ -15,11 +15,16 @@ namespace Seismo\Migration;
 use PDO;
 use Seismo\Core\Fetcher\ParlPressFetchService;
 
-final class Migration016ParlPressSdaNewsListUrl
+final class Migration016ParlPressSdaNewsListUrl implements MigrationContract
 {
     public const VERSION = 32;
 
     private const OLD_PRESS_RELEASES_LIST = "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items";
+
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
 
     public function apply(PDO $pdo, MigrationTarget $target): void
     {
