@@ -83,7 +83,14 @@ final class ScraperConfigRepository
             !empty($data['disabled']) ? 1 : 0,
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        $newId = (int)$this->pdo->lastInsertId();
+        (new SourceLogRepository($this->pdo))->appendQuietly(
+            SourceLogRepository::KIND_SCRAPER,
+            $newId,
+            $name
+        );
+
+        return $newId;
     }
 
     /**

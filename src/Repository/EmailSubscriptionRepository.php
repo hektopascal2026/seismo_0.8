@@ -345,7 +345,14 @@ final class EmailSubscriptionRepository
             !empty($data['unsubscribe_one_click']) ? 1 : 0,
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        $newId = (int)$this->pdo->lastInsertId();
+        (new SourceLogRepository($this->pdo))->appendQuietly(
+            SourceLogRepository::KIND_MAIL,
+            $newId,
+            $displayName
+        );
+
+        return $newId;
     }
 
     private function insertPendingDomain(string $domain, string $fromName): int

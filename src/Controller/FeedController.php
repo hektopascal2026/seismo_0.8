@@ -8,7 +8,6 @@ use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedRepository;
-use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\RefreshAllService;
 use Seismo\Service\RefreshMutexBusyException;
@@ -159,7 +158,6 @@ final class FeedController
             } else {
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Feed added (#' . $newId . ').';
-                $this->appendSourceLogFeed($pdo, $newId, $payload['source_type'], $payload['title']);
             }
         } catch (\Throwable $e) {
             error_log('Seismo feed_save: ' . $e->getMessage());
@@ -167,28 +165,6 @@ final class FeedController
         }
 
         $this->redirect(['view' => 'sources']);
-    }
-
-    /**
-     * Log new RSS / Substack / Parl. press feeds only (not scraper-backed feeds).
-     */
-    private function appendSourceLogFeed(\PDO $pdo, int $feedId, string $sourceType, string $title): void
-    {
-        $st = strtolower(trim($sourceType));
-        $kind = match ($st) {
-            'rss'         => SourceLogRepository::KIND_RSS,
-            'substack'    => SourceLogRepository::KIND_SUBSTACK,
-            'parl_press'  => SourceLogRepository::KIND_PARL_PRESS,
-            default       => null,
-        };
-        if ($kind === null) {
-            return;
-        }
-        try {
-            (new SourceLogRepository($pdo))->append($kind, $feedId, $title);
-        } catch (\Throwable $e) {
-            error_log('Seismo source_log (feed): ' . $e->getMessage());
-        }
     }
 
     /**

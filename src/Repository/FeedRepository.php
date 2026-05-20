@@ -108,7 +108,10 @@ final class FeedRepository
             !empty($data['disabled']) ? 1 : 0,
         ]);
 
-        return (int)$this->pdo->lastInsertId();
+        $newId = (int)$this->pdo->lastInsertId();
+        (new SourceLogRepository($this->pdo))->appendFeedQuietly($newId, $sourceType, $title);
+
+        return $newId;
     }
 
     /**

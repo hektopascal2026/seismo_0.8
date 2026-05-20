@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
-use PDOException;
 
 final class SourceLogRepository
 {
@@ -47,6 +46,50 @@ final class SourceLogRepository
     }
 
     /**
+     * Log a new RSS / Substack / Parl. press feed (not scraper-backed feeds).
+     */
+    public function appendFeed(int $feedId, string $sourceType, string $title): void
+    {
+        $kind = self::feedKindForSourceType($sourceType);
+        if ($kind === null) {
+            return;
+        }
+        $this->append($kind, $feedId, $title);
+    }
+
+    public function appendFeedQuietly(int $feedId, string $sourceType, string $title): void
+    {
+        try {
+            $this->appendFeed($feedId, $sourceType, $title);
+        } catch (\Throwable $e) {
+            $kind = self::feedKindForSourceType($sourceType) ?? 'feed';
+            error_log('Seismo source_log (' . $kind . '): ' . $e->getMessage());
+        }
+    }
+
+    public static function feedKindForSourceType(string $sourceType): ?string
+    {
+        return match (strtolower(trim($sourceType))) {
+            'rss'        => self::KIND_RSS,
+            'substack'   => self::KIND_SUBSTACK,
+            'parl_press' => self::KIND_PARL_PRESS,
+            default      => null,
+        };
+    }
+
+    /**
+     * Best-effort append; never throws to callers (cron / ingest must not fail).
+     */
+    public function appendQuietly(string $kind, int $refId, string $labelSnapshot): void
+    {
+        try {
+            $this->append($kind, $refId, $labelSnapshot);
+        } catch (\Throwable $e) {
+            error_log('Seismo source_log (' . $kind . '): ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Newest first.
      *
      * @return list<array{id:int|string, occurred_at:string, kind:string, ref_id:int, label_snapshot:string}>
@@ -54,20 +97,13 @@ final class SourceLogRepository
     public function listRecent(int $limit = 1000): array
     {
         $limit = max(1, min(5000, $limit));
-        try {
-            $stmt = $this->pdo->query(
-                'SELECT id, occurred_at, kind, ref_id, label_snapshot
-                   FROM source_log
-                  ORDER BY occurred_at DESC, id DESC
-                  LIMIT ' . $limit
-            );
+        $stmt = $this->pdo->query(
+            'SELECT id, occurred_at, kind, ref_id, label_snapshot
+               FROM source_log
+              ORDER BY occurred_at DESC, id DESC
+              LIMIT ' . $limit
+        );
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        } catch (PDOException $e) {
-            if (str_contains($e->getMessage(), '1146') && str_contains($e->getMessage(), 'source_log')) {
-                return [];
-            }
-            throw $e;
-        }
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 }

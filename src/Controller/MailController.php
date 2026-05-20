@@ -7,7 +7,6 @@ namespace Seismo\Controller;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryRepository;
-use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\EmailSubscriptionReprocessService;
 use Seismo\Service\RefreshAllService;
@@ -211,12 +210,6 @@ final class MailController
             } else {
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Subscription added (#' . $newId . ').';
-                try {
-                    (new SourceLogRepository(getDbConnection()))
-                        ->append(SourceLogRepository::KIND_MAIL, $newId, $payload['display_name']);
-                } catch (\Throwable $e) {
-                    error_log('Seismo source_log (mail): ' . $e->getMessage());
-                }
             }
         } catch (\Throwable $e) {
             error_log('Seismo mail_subscription_save: ' . $e->getMessage());
