@@ -2210,6 +2210,31 @@ textarea.search-input.setup-code-preview {
     opacity: 1;
 }
 
+.hide-entry-form {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.hide-entry-btn {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: #000000;
+    opacity: 0.45;
+    cursor: pointer;
+}
+
+.hide-entry-btn:hover {
+    opacity: 1;
+}
+
 .entry-actions .entry-date {
     white-space: nowrap;
 }

@@ -109,15 +109,7 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                     <?php if (!empty($item['published_date'])): ?>
                                         <span class="entry-date"><?= date('d.m.Y H:i', strtotime((string)$item['published_date'])) ?></span>
                                     <?php endif; ?>
-                                    <?php if (!empty($showFavourites)): ?>
-                                    <form method="POST" action="?action=toggle_favourite" class="favourite-form">
-                                        <?= $csrfField ?>
-                                        <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
-                                        <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
-                                        <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
-                                        <button type="submit" class="favourite-btn<?= $isFavourite ? ' is-favourite' : '' ?>" title="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>"><?= $isFavourite ? '★' : '☆' ?></button>
-                                    </form>
-                                    <?php endif; ?>
+                                    <?php require __DIR__ . '/entry_meta_favourite_hide.php'; ?>
                                 </div>
                             </div>
                         </div>

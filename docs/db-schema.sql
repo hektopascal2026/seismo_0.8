@@ -1,5 +1,5 @@
 -- =============================================================================
--- Seismo — consolidated base schema (schema version 17)
+-- Seismo — consolidated base schema (schema version 36)
 -- =============================================================================
 --
 -- Origin: flattened end state of Seismo 0.4's `initDatabase()` (SCHEMA_VERSION = 17).
@@ -108,11 +108,13 @@ CREATE TABLE IF NOT EXISTS emails (
     date_received DATETIME  DEFAULT NULL,
     date_sent     DATETIME  DEFAULT NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    hidden        TINYINT(1)  NOT NULL DEFAULT 0,
     UNIQUE KEY uniq_emails_imap_uid (imap_uid),
     UNIQUE KEY uniq_emails_gmail_message_id (gmail_message_id),
     INDEX idx_created_at    (created_at),
     INDEX idx_from_email    (from_email),
-    INDEX idx_date_received (date_received)
+    INDEX idx_date_received (date_received),
+    INDEX idx_hidden        (hidden)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- fetched_emails: legacy table removed at schema v19 — merged into `emails` above.

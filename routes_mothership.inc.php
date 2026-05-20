@@ -48,6 +48,11 @@ $router->register(
     false
 );
 $router->register(
+    'hide_entry',
+    \Seismo\Controller\HideEntryController::class . '::hide',
+    false
+);
+$router->register(
     'lex',
     \Seismo\Controller\LexController::class . '::show',
     true

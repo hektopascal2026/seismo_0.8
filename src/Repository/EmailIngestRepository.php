@@ -44,11 +44,11 @@ final class EmailIngestRepository
         $sql = 'INSERT INTO ' . $t . ' (
             imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
-            body_text, body_html, raw_headers, metadata, text_body, html_body
+            body_text, body_html, raw_headers, metadata, text_body, html_body, hidden
         ) VALUES (
             ?, NULL, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, NULL, ?, ?
+            ?, ?, ?, NULL, ?, ?, 0
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
             from_addr = VALUES(from_addr),
@@ -112,11 +112,11 @@ final class EmailIngestRepository
         $sql = 'INSERT INTO ' . $t . ' (
             imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
-            body_text, body_html, raw_headers, metadata, text_body, html_body
+            body_text, body_html, raw_headers, metadata, text_body, html_body, hidden
         ) VALUES (
             NULL, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, 0
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
             from_addr = VALUES(from_addr),

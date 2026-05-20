@@ -72,6 +72,7 @@ final class EntryRepository
     private const CALENDAR_MERGE_LOOKBACK_DAYS = 400;
 
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
+    private const SQL_EMAIL_VISIBLE = 'e.hidden = 0';
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
 
     /**
@@ -641,7 +642,8 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE EXISTS (
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND EXISTS (
                     SELECT 1 FROM ' . $st . ' stf
                     WHERE stf.from_email = e.from_email
                       AND stf.removed_at IS NULL
@@ -668,7 +670,8 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE NOT EXISTS (
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND NOT EXISTS (
                     SELECT 1 FROM ' . $st . ' x
                     WHERE x.from_email = e.from_email
                       AND x.removed_at IS NULL
@@ -689,6 +692,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
+            WHERE ' . self::SQL_EMAIL_VISIBLE . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
 
@@ -909,7 +913,8 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE EXISTS (
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND EXISTS (
                     SELECT 1 FROM ' . $st . ' stf
                     WHERE stf.from_email = e.from_email
                       AND stf.removed_at IS NULL
@@ -937,7 +942,8 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE NOT EXISTS (
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND NOT EXISTS (
                     SELECT 1 FROM ' . $st . ' x
                     WHERE x.from_email = e.from_email
                       AND x.removed_at IS NULL
@@ -960,7 +966,8 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . $where . '
+            WHERE ' . self::SQL_EMAIL_VISIBLE . '
+              AND ' . $where . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
 
@@ -1122,7 +1129,8 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE e.id IN (' . $ph . ')';
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND e.id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;
             }
@@ -1493,6 +1501,7 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 
@@ -1545,7 +1554,8 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . $whereSql . '
+                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND ' . $whereSql . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 

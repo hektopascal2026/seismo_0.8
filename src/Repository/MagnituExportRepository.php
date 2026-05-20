@@ -127,9 +127,12 @@ final class MagnituExportRepository
                    AND st.removed_at IS NULL
                    AND st.disabled = 0";
         $params = [];
+        $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0' : '1=1';
         if ($since !== null && $since !== '') {
-            $sql .= " WHERE e.`{$dateCol}` >= ?";
+            $sql .= " WHERE {$hiddenClause} AND e.`{$dateCol}` >= ?";
             $params[] = $since;
+        } else {
+            $sql .= " WHERE {$hiddenClause}";
         }
         $sql .= " ORDER BY e.`{$dateCol}` DESC LIMIT {$limit}";
 
@@ -305,6 +308,7 @@ final class MagnituExportRepository
             return [];
         }
 
+        $hiddenClause = in_array('hidden', $cols, true) ? 'WHERE e.hidden = 0' : '';
         $sql = "SELECT e.id,
                        e.subject,
                        e.`{$fromEmailCol}`                          AS from_email,
@@ -318,6 +322,7 @@ final class MagnituExportRepository
                     ON st.from_email = e.`{$fromEmailCol}`
                    AND st.removed_at IS NULL
                    AND st.disabled = 0
+                 {$hiddenClause}
                  ORDER BY e.`{$dateCol}` DESC
                  LIMIT {$limit} OFFSET {$offset}";
 

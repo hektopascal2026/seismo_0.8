@@ -119,7 +119,7 @@ final class EmailRepository
     private function buildPruneWhere(array $keepPredicates): string
     {
         $keeps = \Seismo\Service\RetentionPredicates::forEntryType('email', $keepPredicates);
-        $where = 't.' . self::AGE_COLUMN . ' < ?';
+        $where = 't.' . self::AGE_COLUMN . ' < ? AND t.hidden = 0';
         if ($keeps !== '') {
             $where .= ' AND NOT (' . $keeps . ')';
         }
