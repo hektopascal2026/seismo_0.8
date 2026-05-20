@@ -363,10 +363,7 @@ final class LexController
 
             $natRaw = trim((string)($_POST['fr_natures'] ?? ''));
             if ($natRaw !== '') {
-                $fr['natures'] = array_values(array_filter(array_map(
-                    static fn (string $s): string => strtoupper(trim($s)),
-                    preg_split('/[\s,]+/', $natRaw) ?: []
-                )));
+                $fr['natures'] = LexLegifrancePlugin::allowedNaturesFromConfig(['natures' => $natRaw]);
             } elseif (!isset($fr['natures']) || !is_array($fr['natures'])) {
                 $fr['natures'] = ['LOI', 'ORDONNANCE', 'DECRET'];
             }

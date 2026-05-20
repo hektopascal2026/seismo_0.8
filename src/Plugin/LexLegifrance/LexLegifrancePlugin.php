@@ -64,17 +64,7 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
             ->format('Y-m-d');
         $endDate = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d');
 
-        $natures = $config['natures'] ?? ['LOI', 'ORDONNANCE', 'DECRET'];
-        if (!is_array($natures)) {
-            $natures = ['LOI', 'ORDONNANCE', 'DECRET'];
-        }
-        $natures = array_values(array_filter(array_map(
-            static fn ($v) => is_string($v) ? strtoupper(trim($v)) : '',
-            $natures
-        )));
-        if ($natures === []) {
-            $natures = ['LOI', 'ORDONNANCE', 'DECRET'];
-        }
+        $allowedNatures = self::allowedNaturesFromConfig($config);
 
         $limitTotal = max(1, min((int)($config['limit'] ?? 100), 200));
         $token = $this->fetchAccessToken($tokenUrl, $clientId, $clientSecret);
@@ -89,7 +79,7 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
             ],
             [
                 'facette' => 'NATURE',
-                'valeurs' => $natures,
+                'valeurs' => $allowedNatures,
             ],
         ];
 
@@ -143,7 +133,7 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
                 if (!is_array($hit)) {
                     continue;
                 }
-                $mapped = $this->mapSearchHit($hit);
+                $mapped = $this->mapSearchHit($hit, $allowedNatures);
                 if ($mapped !== null) {
                     $rows[] = $mapped;
                 }
@@ -163,10 +153,64 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
     }
 
     /**
+     * @return list<string>
+     */
+    public static function allowedNaturesFromConfig(array $config): array
+    {
+        $raw = $config['natures'] ?? ['LOI', 'ORDONNANCE', 'DECRET'];
+        if (is_string($raw)) {
+            $raw = preg_split('/[\s,]+/', trim($raw)) ?: [];
+        }
+        if (!is_array($raw)) {
+            $raw = ['LOI', 'ORDONNANCE', 'DECRET'];
+        }
+        $natures = array_values(array_filter(array_map(
+            static fn ($v) => is_string($v) ? self::normalizeNatureKey($v) : '',
+            $raw
+        )));
+        if ($natures === []) {
+            return ['LOI', 'ORDONNANCE', 'DECRET'];
+        }
+
+        return $natures;
+    }
+
+    /**
+     * Compare nature labels case- and accent-insensitively (API may return "Décret").
+     */
+    public static function normalizeNatureKey(string $raw): string
+    {
+        $u = mb_strtoupper(trim($raw), 'UTF-8');
+
+        return str_replace(
+            ['É', 'È', 'Ê', 'Ë', 'À', 'Â', 'Ä', 'Ù', 'Û', 'Ü', 'Î', 'Ï', 'Ô', 'Ö', 'Ç'],
+            ['E', 'E', 'E', 'E', 'A', 'A', 'A', 'U', 'U', 'U', 'I', 'I', 'O', 'O', 'C'],
+            $u
+        );
+    }
+
+    /**
+     * @param list<string> $allowedNatures Normalized keys from {@see allowedNaturesFromConfig()}.
+     */
+    private static function hitNatureIsAllowed(array $hit, array $allowedNatures): bool
+    {
+        $nature = self::normalizeNatureKey((string)($hit['nature'] ?? ''));
+        if ($nature === '') {
+            return true;
+        }
+
+        return in_array($nature, $allowedNatures, true);
+    }
+
+    /**
+     * @param list<string> $allowedNatures
      * @return array<string, mixed>|null
      */
-    private function mapSearchHit(array $hit): ?array
+    private function mapSearchHit(array $hit, array $allowedNatures): ?array
     {
+        if (!self::hitNatureIsAllowed($hit, $allowedNatures)) {
+            return null;
+        }
         $titles = $hit['titles'] ?? [];
         $titleStr = '';
         $id = '';
