@@ -27,7 +27,7 @@ $activeNav = 'styleguide';
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
         <h2 class="section-title">Typography</h2>
-        <p class="admin-intro">Body uses the system stack at 14px. <span class="type-sample-big">Big (18px)</span> for titles. <span class="type-sample-small">Small (12px)</span> for meta.</p>
+        <p class="admin-intro">Body uses the system stack at 0.875rem (14px at default root). <span class="type-sample-big">Big (1.125rem)</span> for titles. <span class="type-sample-small">Small (0.75rem)</span> for meta.</p>
 
         <h2 class="section-title module-section-spaced">Buttons</h2>
         <p class="admin-form-actions">
@@ -39,7 +39,7 @@ $activeNav = 'styleguide';
         </p>
 
         <h2 class="section-title module-section-spaced">Messages</h2>
-        <div class="message message-success">Success — 12px, 2px border</div>
+        <div class="message message-success">Success — 0.75rem, 0.125rem border</div>
         <div class="message message-error">Error</div>
         <div class="message message-info">Info</div>
 
