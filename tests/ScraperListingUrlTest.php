@@ -38,4 +38,14 @@ final class ScraperListingUrlTest extends TestCase
             'https://www.interpol.int/News-and-Events'
         ));
     }
+
+    public function testSqlColumnsEqualIsBalancedSql(): void
+    {
+        $sql = ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url');
+        self::assertSame(
+            "TRIM(TRAILING '/' FROM sc.url) = TRIM(TRAILING '/' FROM f.url)",
+            $sql
+        );
+        self::assertSame(substr_count($sql, '('), substr_count($sql, ')'));
+    }
 }

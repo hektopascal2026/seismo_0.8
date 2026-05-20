@@ -17,7 +17,7 @@ final class ScraperListingUrl
      */
     public static function sqlColumnsEqual(string $leftColumn, string $rightColumn): string
     {
-        return 'TRIM(TRAILING \'/\' FROM ' . $leftColumn . ') = TRIM(TRAILING \'/\' FROM ' . $rightColumn;
+        return 'TRIM(TRAILING \'/\' FROM ' . $leftColumn . ') = TRIM(TRAILING \'/\' FROM ' . $rightColumn . ')';
     }
 
     /**
