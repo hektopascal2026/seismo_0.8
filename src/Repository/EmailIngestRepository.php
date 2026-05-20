@@ -7,7 +7,9 @@ namespace Seismo\Repository;
 use PDO;
 use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
+use Seismo\Core\Mail\EmailMetadata;
 use Seismo\Core\Mail\EmailSubscriptionProcessor;
+use Seismo\Core\Mail\EmailWebViewUrlExtractor;
 
 /**
  * INSERT / upsert path for the unified `emails` table (IMAP + Gmail API).
@@ -209,7 +211,11 @@ final class EmailIngestRepository
      */
     private function prepareRow(array $row, array $subs): array
     {
+        $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
         $row = EmailIngestNormalizer::normalizeBodies($row);
+        $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
+        // Before listing/subscription stripping — those remove “view in browser” lines from plain text.
+        $row = $this->applyWebViewUrlMetadata($row, $htmlBeforeNormalize, $plainAfterNormalize);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
         $row = EmailSubscriptionProcessor::apply($row, $subs);
         $row = $this->syncAndCapBodies($row);
@@ -251,6 +257,34 @@ final class EmailIngestRepository
         }
 
         return $row;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param string $htmlForExtract  Raw HTML as stored on fetch (before any body stripping).
+     * @param string $plainForExtract Plain body right after {@see EmailIngestNormalizer}, before listing/subscription processors.
+     * @return array<string, mixed>
+     */
+    public function applyWebViewUrlMetadata(
+        array $row,
+        string $htmlForExtract = '',
+        string $plainForExtract = '',
+    ): array {
+        $html = trim($htmlForExtract);
+        if ($html === '') {
+            $html = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
+        }
+        $plain = trim($plainForExtract);
+        if ($plain === '') {
+            $plain = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
+        }
+
+        $url = $html !== '' ? EmailWebViewUrlExtractor::fromHtml($html) : null;
+        if ($url === null && $plain !== '') {
+            $url = EmailWebViewUrlExtractor::fromPlainText($plain);
+        }
+
+        return EmailMetadata::mergeWebViewUrl($row, $url);
     }
 
     private function nullStr(mixed $v): ?string
@@ -328,7 +362,7 @@ final class EmailIngestRepository
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html
+                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
                  FROM ' . $t . ' WHERE LOWER(from_email) = ? ORDER BY id DESC LIMIT ' . $limit
             );
             $stmt->execute([$param]);
@@ -338,7 +372,7 @@ final class EmailIngestRepository
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html
+                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
                  FROM ' . $t . '
                  WHERE LOWER(from_email) = ?
                     OR LOWER(from_email) LIKE ?
@@ -352,7 +386,7 @@ final class EmailIngestRepository
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
-    public function updateProcessedContent(int $emailId, string $textBody, ?string $derivedTitle): void
+    public function updateProcessedContent(int $emailId, string $textBody, ?string $derivedTitle, ?string $metadataJson = null): void
     {
         if (isSatellite()) {
             throw new \RuntimeException('EmailIngestRepository::updateProcessedContent must not run on a satellite.');
@@ -362,7 +396,21 @@ final class EmailIngestRepository
         }
         $textBody = $this->capBodyBytes($textBody);
         $t        = entryTable('emails');
-        $stmt     = $this->pdo->prepare(
+        if ($metadataJson !== null) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE ' . $t . ' SET text_body = ?, body_text = ?, derived_title = ?, metadata = ? WHERE id = ?'
+            );
+            $stmt->execute([
+                $textBody !== '' ? $textBody : null,
+                $textBody !== '' ? $textBody : null,
+                $derivedTitle,
+                $metadataJson !== '' ? $metadataJson : null,
+                $emailId,
+            ]);
+
+            return;
+        }
+        $stmt = $this->pdo->prepare(
             'UPDATE ' . $t . ' SET text_body = ?, body_text = ?, derived_title = ? WHERE id = ?'
         );
         $stmt->execute([

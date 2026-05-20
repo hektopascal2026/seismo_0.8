@@ -95,7 +95,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                 <td><strong>Direct Ingest</strong></td>
                                 <td>
                                     <strong>Feeds:</strong> RSS/Atom and Substack publications.<br>
-                                    <strong>Mail:</strong> IMAP ingest with domain-first matching (e.g., <code>@example.com</code>).<br>
+                                    <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; optional body processors for digest senders; <strong>View in browser →</strong> when a webview link is present.<br>
                                     <strong>Scraper:</strong> Scheduled fetches of complex web pages.
                                 </td>
                             </tr>
@@ -211,7 +211,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.6.2 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.6.3 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Mail readability &amp; webview links</div>
+                        <ul>
+                            <li><strong>Body processors:</strong> Mail → Subscriptions can assign a named processor (e.g. Europarl “EP TODAY”) to derive a headline and normalize digest plain text; <strong>Reprocess stored mail</strong> reapplies rules without refetching Gmail.</li>
+                            <li><strong>View in browser →</strong> on email cards for any sender when the stored HTML includes a typical webview / Webansicht link (captured before boilerplate stripping).</li>
+                            <li><strong>Schema v33:</strong> <code>email_subscriptions.body_processor</code>, <code>emails.derived_title</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.2</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Path satellites on one VPS</div>
                         <ul>
                             <li><strong>One codebase:</strong> desks at <code>/&lt;slug&gt;/</code> (e.g. <code>/security/</code>, <code>/digital/</code>) share the <code>seismo</code> entries database; scores and labels live in <code>seismo_&lt;slug&gt;</code>.</li>

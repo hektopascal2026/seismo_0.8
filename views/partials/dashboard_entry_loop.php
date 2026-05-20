@@ -386,6 +386,7 @@ $entryLoopIndex                 = 0;
                                 }
                             }
                             $hasMore = $bodyDisplay !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $bodyDisplay) ?? '')) > 200;
+                            $webViewUrl = seismo_email_web_view_url($email);
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -419,12 +420,18 @@ $entryLoopIndex                 = 0;
                                         echo htmlspecialchars($bodyPreview);
                                     }
                                 ?>
+                                <?php if ($webViewUrl !== null): ?>
+                                    <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                <?php endif; ?>
                             </div>
                             <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                    <?php endif; ?>
+                                    <?php if ($webViewUrl !== null && $bodyPreview === ''): ?>
+                                        <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link">View in browser &rarr;</a>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">

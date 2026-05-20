@@ -44,7 +44,10 @@ final class EmailSubscriptionReprocessService
         $subs = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         $n    = 0;
         foreach ($rows as $row) {
+            $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
             $row = EmailIngestNormalizer::normalizeBodies($row);
+            $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
+            $row = $ingest->applyWebViewUrlMetadata($row, $htmlBeforeNormalize, $plainAfterNormalize);
             $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
             if (!empty($ui['strip_listing_boilerplate'])) {
                 $subj = trim((string)($row['subject'] ?? ''));
@@ -59,7 +62,8 @@ final class EmailSubscriptionReprocessService
             $ingest->updateProcessedContent(
                 (int)$row['id'],
                 trim((string)($row['text_body'] ?? $row['body_text'] ?? '')),
-                self::nullIfEmpty((string)($row['derived_title'] ?? ''))
+                self::nullIfEmpty((string)($row['derived_title'] ?? '')),
+                isset($row['metadata']) && $row['metadata'] !== null ? (string)$row['metadata'] : null
             );
             ++$n;
         }

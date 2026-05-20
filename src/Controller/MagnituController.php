@@ -406,6 +406,7 @@ final class MagnituController
         $title   = $derived !== ''
             ? $derived
             : ((string)($row['subject'] ?? '') !== '' ? (string)$row['subject'] : '(No subject)');
+        $webView = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($row['metadata'] ?? null) ?? '';
 
         return [
             'entry_type'      => 'email',
@@ -413,7 +414,7 @@ final class MagnituController
             'title'           => $title,
             'description'     => $description,
             'content'         => $body,
-            'link'            => '',
+            'link'            => $webView,
             'author'          => $display,
             'published_date'  => $row['entry_date'] ?? null,
             'source_name'     => $display,

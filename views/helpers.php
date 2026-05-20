@@ -282,6 +282,21 @@ if (!function_exists('seismo_format_lex_refresh_utc')) {
     }
 }
 
+if (!function_exists('seismo_email_web_view_url')) {
+    /**
+     * Newsletter “view in browser” / Webansicht URL from ingest metadata, if any.
+     */
+    function seismo_email_web_view_url(array $email): ?string
+    {
+        $url = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($email['metadata'] ?? null);
+        if ($url !== null && seismo_is_navigable_url($url)) {
+            return $url;
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('seismo_email_display_title')) {
     /**
      * Card headline: derived title from ingest processor when present, else subject.
