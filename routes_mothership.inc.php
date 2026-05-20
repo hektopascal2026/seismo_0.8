@@ -363,6 +363,11 @@ $router->register(
     false
 );
 $router->register(
+    'mail_subscription_reprocess',
+    \Seismo\Controller\MailController::class . '::reprocessSubscription',
+    false
+);
+$router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
     true

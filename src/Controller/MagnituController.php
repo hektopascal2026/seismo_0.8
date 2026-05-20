@@ -402,13 +402,15 @@ final class MagnituController
         $fromAddr = (string)($row['from_email'] ?? '');
         $display  = $fromName !== '' ? $fromName : $fromAddr;
         $description = mb_substr(trim((string)preg_replace('/\s+/', ' ', $body)), 0, 500);
+        $derived = trim((string)($row['derived_title'] ?? ''));
+        $title   = $derived !== ''
+            ? $derived
+            : ((string)($row['subject'] ?? '') !== '' ? (string)$row['subject'] : '(No subject)');
 
         return [
             'entry_type'      => 'email',
             'entry_id'        => (int)$row['id'],
-            'title'           => (string)($row['subject'] ?? '') !== ''
-                                    ? (string)$row['subject']
-                                    : '(No subject)',
+            'title'           => $title,
             'description'     => $description,
             'content'         => $body,
             'link'            => '',

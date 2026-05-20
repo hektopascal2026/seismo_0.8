@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Mail\EmailBodyProcessorRegistry;
 
 /**
  * `email_subscriptions` — domain-first newsletter registry (Slice 8).
@@ -320,13 +321,14 @@ final class EmailSubscriptionRepository
             : 1;
         $stripListing = !empty($data['strip_listing_boilerplate']) ? 1 : 0;
         $autoDetected = !empty($data['auto_detected']) ? 1 : 0;
+        $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
 
         $t   = entryTable('email_subscriptions');
         $sql = "INSERT INTO {$t} (
             match_type, match_value, display_name, category, disabled, show_in_magnitu, strip_listing_boilerplate,
-            auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
+            body_processor, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
@@ -336,6 +338,7 @@ final class EmailSubscriptionRepository
             !empty($data['disabled']) ? 1 : 0,
             $showMagnitu,
             $stripListing,
+            $bodyProcessor,
             $autoDetected,
             $data['unsubscribe_url'] ?? null,
             $data['unsubscribe_mailto'] ?? null,
@@ -388,6 +391,9 @@ final class EmailSubscriptionRepository
         $stripListing = array_key_exists('strip_listing_boilerplate', $data)
             ? (!empty($data['strip_listing_boilerplate']) ? 1 : 0)
             : (int)($existing['strip_listing_boilerplate'] ?? 0);
+        $bodyProcessor = array_key_exists('body_processor', $data)
+            ? self::normalizeBodyProcessor($data['body_processor'])
+            : self::normalizeBodyProcessor($existing['body_processor'] ?? null);
 
         $t   = entryTable('email_subscriptions');
         $sql = "UPDATE {$t} SET
@@ -398,6 +404,7 @@ final class EmailSubscriptionRepository
             disabled = ?,
             show_in_magnitu = ?,
             strip_listing_boilerplate = ?,
+            body_processor = ?,
             auto_detected = 0,
             unsubscribe_url = ?,
             unsubscribe_mailto = ?,
@@ -412,6 +419,7 @@ final class EmailSubscriptionRepository
             $disabled,
             $showMagnitu,
             $stripListing,
+            $bodyProcessor,
             $data['unsubscribe_url'] ?? $existing['unsubscribe_url'],
             $data['unsubscribe_mailto'] ?? $existing['unsubscribe_mailto'],
             array_key_exists('unsubscribe_one_click', $data)
@@ -419,6 +427,19 @@ final class EmailSubscriptionRepository
                 : (int)($existing['unsubscribe_one_click'] ?? 0),
             $id,
         ]);
+    }
+
+    public static function normalizeBodyProcessor(mixed $value): ?string
+    {
+        $key = trim((string)($value ?? ''));
+        if ($key === '') {
+            return null;
+        }
+        if (!in_array($key, EmailBodyProcessorRegistry::knownKeys(), true)) {
+            throw new \InvalidArgumentException('Unknown body processor: ' . $key);
+        }
+
+        return $key;
     }
 
     public function softDelete(int $id): void

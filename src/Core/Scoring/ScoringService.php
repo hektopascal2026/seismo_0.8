@@ -146,11 +146,15 @@ final class ScoringService
                 $body = strip_tags((string)($row['html_body'] ?? ''));
             }
             $subject = (string)($row['subject'] ?? '');
+            $scoreTitle = trim((string)($row['derived_title'] ?? ''));
+            if ($scoreTitle === '') {
+                $scoreTitle = $subject;
+            }
             $ui      = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
             if ($body !== '' && !empty($ui['strip_listing_boilerplate'])) {
                 $body = EmailListingBoilerplateStripper::strip($body, $subject !== '' ? $subject : null);
             }
-            $result = RecipeScorer::score($recipe, $subject, $body, 'email');
+            $result = RecipeScorer::score($recipe, $scoreTitle, $body, 'email');
             if ($result === null) {
                 continue;
             }

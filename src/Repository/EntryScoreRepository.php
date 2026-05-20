@@ -311,9 +311,12 @@ final class EntryScoreRepository
             return [];
         }
 
+        $derivedCol = $this->pickColumn($cols, ['derived_title']);
+        $derivedSel = $derivedCol !== null ? ', e.`' . $derivedCol . '` AS derived_title' : '';
+
         $sql = "SELECT e.id, e.subject,
                        e.`{$textBody}` AS text_body,
-                       e.`{$htmlBody}` AS html_body
+                       e.`{$htmlBody}` AS html_body{$derivedSel}
                   FROM {$table} e
                  WHERE NOT EXISTS (
                        SELECT 1 FROM entry_scores es

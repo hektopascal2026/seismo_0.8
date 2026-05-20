@@ -20,7 +20,10 @@
 
 declare(strict_types=1);
 
+use Seismo\Core\Mail\EmailBodyProcessorRegistry;
+
 $basePath = getBasePath();
+$processorChoices = EmailBodyProcessorRegistry::choicesForAdmin();
 $accent     = seismoBrandAccent();
 
 $headerTitle    = 'Mail';
@@ -208,6 +211,17 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate (example: email subject repeated in body, &ldquo;Medienmitteilung&rdquo;, &ldquo;view in browser&rdquo; and image display lines, etc., including EN/DE; applies to new mail in the DB, recipe scoring, Magnitu sync, and dashboard cards)</label>
                 </div>
                 <div class="admin-form-field">
+                    <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>
+                    <label>Body processor
+                        <select name="body_processor" class="search-input" style="width:100%; max-width:28rem;">
+                            <?php foreach ($processorChoices as $key => $label): ?>
+                                <option value="<?= e($key) ?>" <?= $proc === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                </div>
+                <p class="admin-hint">Processors run at ingest and when you reprocess stored mail. Use for digests with generic subjects (e.g. EP TODAY).</p>
+                <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
                 </div>
                 <div class="admin-form-field">
@@ -224,6 +238,13 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     <?php endif; ?>
                 </div>
             </form>
+            <?php if ($editRow): ?>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_reprocess" class="admin-inline-form" style="margin-top:0.5rem;">
+                <?= $csrfField ?>
+                <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
+                <button type="submit" class="btn btn-secondary">Reprocess stored mail</button>
+            </form>
+            <?php endif; ?>
             <?php endif; ?>
 
             <?php if (!$satellite && $reviewingPending && $editRow !== null): ?>
@@ -261,6 +282,16 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
                     <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate</label>
+                </div>
+                <div class="admin-form-field">
+                    <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>
+                    <label>Body processor
+                        <select name="body_processor" class="search-input" style="width:100%; max-width:28rem;">
+                            <?php foreach ($processorChoices as $key => $label): ?>
+                                <option value="<?= e($key) ?>" <?= $proc === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
                 </div>
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>

@@ -7,6 +7,7 @@ namespace Seismo\Repository;
 use PDO;
 use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
+use Seismo\Core\Mail\EmailSubscriptionProcessor;
 
 /**
  * INSERT / upsert path for the unified `emails` table (IMAP + Gmail API).
@@ -40,11 +41,11 @@ final class EmailIngestRepository
         $t = entryTable('emails');
         $sql = 'INSERT INTO ' . $t . ' (
             imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
-            subject, from_email, from_name, date_utc, date_received, date_sent,
+            subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, raw_headers, metadata, text_body, html_body
         ) VALUES (
             ?, NULL, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, NULL, ?, ?
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
@@ -52,6 +53,7 @@ final class EmailIngestRepository
             to_addr = VALUES(to_addr),
             cc_addr = VALUES(cc_addr),
             subject = VALUES(subject),
+            derived_title = VALUES(derived_title),
             from_email = VALUES(from_email),
             from_name = VALUES(from_name),
             date_utc = VALUES(date_utc),
@@ -75,6 +77,7 @@ final class EmailIngestRepository
                 $row['to_addr'],
                 $row['cc_addr'],
                 $row['subject'],
+                $row['derived_title'],
                 $row['from_email'],
                 $row['from_name'],
                 $row['date_utc'],
@@ -106,11 +109,11 @@ final class EmailIngestRepository
         $t = entryTable('emails');
         $sql = 'INSERT INTO ' . $t . ' (
             imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
-            subject, from_email, from_name, date_utc, date_received, date_sent,
+            subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, raw_headers, metadata, text_body, html_body
         ) VALUES (
             NULL, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
@@ -118,6 +121,7 @@ final class EmailIngestRepository
             to_addr = VALUES(to_addr),
             cc_addr = VALUES(cc_addr),
             subject = VALUES(subject),
+            derived_title = VALUES(derived_title),
             from_email = VALUES(from_email),
             from_name = VALUES(from_name),
             date_utc = VALUES(date_utc),
@@ -142,6 +146,7 @@ final class EmailIngestRepository
                 $row['to_addr'],
                 $row['cc_addr'],
                 $row['subject'],
+                $row['derived_title'],
                 $row['from_email'],
                 $row['from_name'],
                 $row['date_utc'],
@@ -206,10 +211,12 @@ final class EmailIngestRepository
     {
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
+        $row = EmailSubscriptionProcessor::apply($row, $subs);
         $row = $this->syncAndCapBodies($row);
 
         $row['message_id'] = $this->truncate($row['message_id'] ?? null, 512);
         $row['subject']    = $this->truncate($row['subject'] ?? null, 500);
+        $row['derived_title'] = $this->truncate($row['derived_title'] ?? null, 500);
         $row['from_email'] = $this->truncate($row['from_email'] ?? null, 255);
         $row['from_name']  = $this->truncate($row['from_name'] ?? null, 255);
 
@@ -302,5 +309,67 @@ final class EmailIngestRepository
         }
 
         return substr($body, 0, self::MAX_BODY_BYTES) . "\n\n[truncated]";
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function fetchRowsForSubscriptionMatch(string $matchType, string $matchValue, int $limit): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('EmailIngestRepository::fetchRowsForSubscriptionMatch must not run on a satellite.');
+        }
+        $matchType = strtolower(trim($matchType));
+        $limit     = max(1, min(500, $limit));
+        $t         = entryTable('emails');
+        if ($matchType === 'email') {
+            $param = strtolower(trim($matchValue));
+            if ($param === '') {
+                return [];
+            }
+            $stmt = $this->pdo->prepare(
+                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html
+                 FROM ' . $t . ' WHERE LOWER(from_email) = ? ORDER BY id DESC LIMIT ' . $limit
+            );
+            $stmt->execute([$param]);
+        } elseif ($matchType === 'domain') {
+            $domain = strtolower(ltrim(trim($matchValue), '@'));
+            if ($domain === '') {
+                return [];
+            }
+            $stmt = $this->pdo->prepare(
+                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html
+                 FROM ' . $t . '
+                 WHERE LOWER(from_email) = ?
+                    OR LOWER(from_email) LIKE ?
+                 ORDER BY id DESC LIMIT ' . $limit
+            );
+            $stmt->execute([$domain, '%@' . $domain]);
+        } else {
+            return [];
+        }
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function updateProcessedContent(int $emailId, string $textBody, ?string $derivedTitle): void
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('EmailIngestRepository::updateProcessedContent must not run on a satellite.');
+        }
+        if ($emailId <= 0) {
+            return;
+        }
+        $textBody = $this->capBodyBytes($textBody);
+        $t        = entryTable('emails');
+        $stmt     = $this->pdo->prepare(
+            'UPDATE ' . $t . ' SET text_body = ?, body_text = ?, derived_title = ? WHERE id = ?'
+        );
+        $stmt->execute([
+            $textBody !== '' ? $textBody : null,
+            $textBody !== '' ? $textBody : null,
+            $derivedTitle,
+            $emailId,
+        ]);
     }
 }

@@ -360,7 +360,10 @@ $entryLoopIndex                 = 0;
                             $fromDisplay = $fromName !== '' ? $fromName : ($fromEmail !== '' ? $fromEmail : 'Unknown sender');
 
                             $subject = trim((string)($email['subject'] ?? ''));
-                            if ($subject === '') $subject = '(No subject)';
+                            if ($subject === '') {
+                                $subject = '(No subject)';
+                            }
+                            $displayTitle = seismo_email_display_title($email);
 
                             $body = (string)($email['text_body'] ?? $email['body_text'] ?? '');
                             if ($body === '') {
@@ -372,16 +375,17 @@ $entryLoopIndex                 = 0;
                                 $subject,
                                 !empty($email['subscription_strip_listing_boilerplate'])
                             );
-                            if ($body === '') {
+                            $bodyDisplay = $body !== '' ? seismo_format_email_body_for_display($body) : '';
+                            if ($bodyDisplay === '') {
                                 $bodyPreview = '';
                             } else {
-                                $previewFlat = trim(preg_replace('/\s+/', ' ', $body) ?? '');
+                                $previewFlat = trim(preg_replace('/\s+/', ' ', $bodyDisplay) ?? '');
                                 $bodyPreview = mb_substr($previewFlat, 0, 200);
                                 if (mb_strlen($previewFlat) > 200) {
                                     $bodyPreview .= '...';
                                 }
                             }
-                            $hasMore = $body !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $body) ?? '')) > 200;
+                            $hasMore = $bodyDisplay !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $bodyDisplay) ?? '')) > 200;
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -400,9 +404,9 @@ $entryLoopIndex                 = 0;
                             </div>
                             <h3 class="entry-title">
                                 <?php if (!empty($searchQuery)): ?>
-                                    <?= seismo_highlight_search_term($subject, $searchQuery) ?>
+                                    <?= seismo_highlight_search_term($displayTitle, $searchQuery) ?>
                                 <?php else: ?>
-                                    <?= htmlspecialchars($subject) ?>
+                                    <?= htmlspecialchars($displayTitle) ?>
                                 <?php endif; ?>
                             </h3>
                             <div class="entry-content entry-preview">
@@ -416,7 +420,7 @@ $entryLoopIndex                 = 0;
                                     }
                                 ?>
                             </div>
-                            <div class="entry-full-content"><?= htmlspecialchars($body) ?></div>
+                            <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>

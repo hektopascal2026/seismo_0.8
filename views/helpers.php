@@ -282,6 +282,29 @@ if (!function_exists('seismo_format_lex_refresh_utc')) {
     }
 }
 
+if (!function_exists('seismo_email_display_title')) {
+    /**
+     * Card headline: derived title from ingest processor when present, else subject.
+     */
+    function seismo_email_display_title(array $email): string
+    {
+        $derived = trim((string)($email['derived_title'] ?? ''));
+        if ($derived !== '') {
+            return $derived;
+        }
+        $subject = trim((string)($email['subject'] ?? ''));
+
+        return $subject !== '' ? $subject : '(No subject)';
+    }
+}
+
+if (!function_exists('seismo_format_email_body_for_display')) {
+    function seismo_format_email_body_for_display(string $body): string
+    {
+        return \Seismo\Core\Mail\EmailBodyDisplay::formatForDisplay($body);
+    }
+}
+
 if (!function_exists('seismo_strip_email_listing_boilerplate')) {
     /**
      * Remove fixed “News Service Bund … | date … / … , place , date -” listing lines

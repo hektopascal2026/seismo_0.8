@@ -9,6 +9,7 @@ use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\EmailSubscriptionReprocessService;
 use Seismo\Service\RefreshAllService;
 
 final class MailController
@@ -190,6 +191,7 @@ final class MailController
                 'disabled'               => ((string)($_POST['disabled'] ?? '0')) === '1',
                 'show_in_magnitu'        => ((string)($_POST['show_in_magnitu'] ?? '0')) === '1',
                 'strip_listing_boilerplate' => ((string)($_POST['strip_listing_boilerplate'] ?? '0')) === '1',
+                'body_processor'         => (string)($_POST['body_processor'] ?? ''),
                 'unsubscribe_url'        => (string)($_POST['unsubscribe_url'] ?? ''),
                 'unsubscribe_mailto'     => (string)($_POST['unsubscribe_mailto'] ?? ''),
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',
@@ -305,6 +307,48 @@ final class MailController
         }
 
         $this->redirect(['view' => 'subscriptions']);
+    }
+
+    public function reprocessSubscription(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirect(['view' => 'subscriptions']);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirect(['view' => 'subscriptions']);
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode — email subscriptions are managed on the mothership only.';
+            $this->redirect(['view' => 'subscriptions']);
+
+            return;
+        }
+
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $_SESSION['error'] = 'Invalid subscription.';
+
+            $this->redirect(['view' => 'subscriptions']);
+
+            return;
+        }
+
+        try {
+            $n = (new EmailSubscriptionReprocessService(getDbConnection()))->reprocessSubscription($id);
+            $_SESSION['success'] = $n > 0
+                ? 'Reprocessed ' . $n . ' stored message(s) with current body rules.'
+                : 'No stored messages matched this subscription.';
+        } catch (\Throwable $e) {
+            error_log('Seismo mail_subscription_reprocess: ' . $e->getMessage());
+            $_SESSION['error'] = $e->getMessage();
+        }
+
+        $this->redirect(['view' => 'items', 'subscription' => (string)$id]);
     }
 
     /**
