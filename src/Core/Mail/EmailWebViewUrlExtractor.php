@@ -44,8 +44,12 @@ final class EmailWebViewUrlExtractor
             if ($href === null) {
                 continue;
             }
-            $label = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
-            if (self::labelLooksLikeWebView($label)) {
+            $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
+            $context = self::anchorContextText($anchor);
+            if (EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
+                || EmailWebViewPhraseLexicon::textLooksLikeWebView($context)
+                || EmailWebViewPhraseLexicon::shortAnchorInWebViewContext($label, $context)
+            ) {
                 return $href;
             }
         }
@@ -60,14 +64,67 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
+        $near = self::urlNearWebViewPhrase($plain);
+        if ($near !== null) {
+            return $near;
+        }
+
         foreach (preg_split("/\r\n|\n|\r/", $plain) ?: [] as $line) {
             $line = trim((string)$line);
-            if ($line === '' || !self::labelLooksLikeWebView($line)) {
+            if ($line === '' || !EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
                 continue;
             }
-            if (preg_match('#https?://[^\s<>"\'\)]+#i', $line, $m) === 1) {
-                $url = self::normalizeHref($m[0]);
 
+            return self::firstHttpUrl($line);
+        }
+
+        return null;
+    }
+
+    private static function urlNearWebViewPhrase(string $text): ?string
+    {
+        $lower   = EmailWebViewPhraseLexicon::normalizeForMatch($text);
+        $bestPos = null;
+        foreach (EmailWebViewPhraseLexicon::allPhrases() as $phrase) {
+            $pos = mb_strpos($lower, $phrase, 0, 'UTF-8');
+            if ($pos !== false && ($bestPos === null || $pos < $bestPos)) {
+                $bestPos = $pos;
+            }
+        }
+        if ($bestPos === null) {
+            return null;
+        }
+
+        $slice = mb_substr($text, (int)$bestPos, 2500, 'UTF-8');
+
+        return self::firstHttpUrl($slice);
+    }
+
+    private static function anchorContextText(DOMElement $anchor): string
+    {
+        $node = $anchor->parentNode;
+        for ($i = 0; $i < 5 && $node instanceof DOMElement; $i++) {
+            $text = trim($node->textContent ?? '');
+            if ($text !== '' && mb_strlen($text, 'UTF-8') <= 800) {
+                return $text;
+            }
+            if ($text !== '') {
+                return mb_substr($text, 0, 800, 'UTF-8');
+            }
+            $node = $node->parentNode;
+        }
+
+        return '';
+    }
+
+    private static function firstHttpUrl(string $text): ?string
+    {
+        if (preg_match_all('#https?://[^\s<>"\'\]]+#iu', $text, $matches) === false) {
+            return null;
+        }
+        foreach ($matches[0] as $raw) {
+            $url = self::normalizeHref(rtrim((string)$raw, '.,;)]'));
+            if ($url !== null && !EmailTrackingUrl::isTrackingOrAsset($url)) {
                 return $url;
             }
         }
@@ -75,64 +132,11 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function labelLooksLikeWebView(string $text): bool
-    {
-        $lower = mb_strtolower(trim($text), 'UTF-8');
-        if ($lower === '') {
-            return false;
-        }
-
-        foreach (self::webViewPhrases() as $phrase) {
-            if (str_contains($lower, $phrase)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function webViewPhrases(): array
-    {
-        return [
-            'view this email in your browser',
-            'view this e-mail in your browser',
-            'view in browser',
-            'view in your browser',
-            'view online',
-            'view this email online',
-            'view this e-mail online',
-            'read online',
-            'web version',
-            'webversion',
-            'online version',
-            'online-version',
-            'email im browser',
-            'e-mail im browser',
-            'im browser ansehen',
-            'im web-browser ansehen',
-            'webansicht',
-            'web-ansicht',
-            'online ansehen',
-            'online lesen',
-            'probleme mit der anzeige',
-            'probleme bei der anzeige',
-            'having trouble viewing this email',
-            'having trouble viewing this e-mail',
-            'if you cannot view this email',
-            'if you can\'t read this email',
-            'click here to view',
-            'voir cet e-mail dans votre navigateur',
-            'voir cet email dans votre navigateur',
-            'version en ligne',
-        ];
-    }
-
     private static function normalizeHref(string $href): ?string
     {
         $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $href = ltrim($href, '[');
+        $href = rtrim($href, '].,;');
         if ($href === ''
             || str_starts_with(strtolower($href), 'mailto:')
             || str_starts_with(strtolower($href), 'tel:')

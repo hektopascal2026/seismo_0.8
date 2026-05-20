@@ -6,6 +6,7 @@ namespace Seismo\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Seismo\Core\Mail\EmailMetadata;
+use Seismo\Core\Mail\EmailWebViewPhraseLexicon;
 use Seismo\Core\Mail\EmailWebViewUrlExtractor;
 
 final class EmailWebViewUrlExtractorTest extends TestCase
@@ -37,6 +38,46 @@ final class EmailWebViewUrlExtractorTest extends TestCase
             'https://ep.europa.eu/mail/view/1',
             EmailMetadata::webViewUrlFromMetadata($row['metadata'] ?? null)
         );
+    }
+
+    public function testBadenWuerttembergGermanHierLinkUsesParentContext(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/mail/baden_wuerttemberg_webview.html');
+        self::assertIsString($html);
+
+        self::assertSame(
+            'https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example',
+            EmailWebViewUrlExtractor::fromHtml($html)
+        );
+
+        $plain = 'Falls Sie Ihre E-Mail nicht oder nur teilweise sehen, klicken Sie hier '
+            . '[https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example]' . "\n\nNewsletter body.";
+
+        self::assertSame(
+            'https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example',
+            EmailWebViewUrlExtractor::fromPlainText($plain)
+        );
+    }
+
+    public function testLexiconCoversBoilerplateAlignedGermanPhrases(): void
+    {
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView(
+            'Probleme mit der Anzeige dieser E-Mail? Klicken Sie hier.'
+        ));
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView(
+            'Si vous ne voyez pas cet e-mail, cliquez ici pour la version en ligne.'
+        ));
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView(
+            "If you can't read this e-mail in your inbox, view it in your browser."
+        ));
+        self::assertGreaterThan(120, count(EmailWebViewPhraseLexicon::allPhrases()));
+    }
+
+    public function testFrenchAccentNormalization(): void
+    {
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView(
+            'Problème d\'affichage — voir la version en ligne'
+        ));
     }
 
     public function testPlainWebViewLineSurvivesWhenHtmlSnapshotUsedAfterStrip(): void
