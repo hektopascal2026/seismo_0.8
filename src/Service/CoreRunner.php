@@ -49,18 +49,21 @@ final class CoreRunner
 
     private const CHUNK_RSS_FEEDS     = 12;
     private const CHUNK_SCRAPER_FEEDS = 8;
-    private const CHUNK_WEB_SCRAPER_MAX_ARTICLES = 8;
 
     /**
-     * Wall-clock seconds for forced (web) runs to keep pulling chunks before yielding.
-     *
-     * Keep below common shared-host proxy/FPM 60s ceilings to avoid 503 timeouts
-     * from synchronous Diagnostics refresh requests.
+     * Wall-clock seconds for forced (web) chunked RSS/scraper loops before yielding.
+     * Production Nginx/FPM allow ~300s; stay under that for timeline/Diagnostics refresh.
      */
-    private const CHUNK_WEB_TIME_BUDGET_SEC = 45;
+    private const CHUNK_WEB_TIME_BUDGET_SEC = 120;
 
-    /** Safety cap on chunk iterations per forced HTTP refresh. */
-    private const CHUNK_WEB_MAX_LOOPS = 80;
+    /**
+     * CLI cron: advance multiple chunks per tick when not throttled (mutex-held whole script).
+     * Leave headroom in a 5-minute schedule slot for parl press, mail, plugins, retention.
+     */
+    private const CHUNK_CRON_TIME_BUDGET_SEC = 240;
+
+    /** Safety cap on chunk iterations per budgeted RSS/scraper run. */
+    private const CHUNK_MAX_LOOPS = 80;
 
     private const K_RSS_AFTER        = 'refresh_chunk:rss_after_id';
     private const K_RSS_ITEMS_ACC    = 'refresh_chunk:rss_items_acc';
@@ -123,27 +126,7 @@ final class CoreRunner
             return $this->runRssLegacy($force);
         }
 
-        if ($force) {
-            $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
-            $chunkItemSum = 0;
-            $last         = PluginRunResult::ok(0);
-            for ($i = 0; $i < self::CHUNK_WEB_MAX_LOOPS && microtime(true) < $deadline; $i++) {
-                $last = $this->runRssChunkedOnce($force);
-                if ($last->isThrottleSkipped()) {
-                    return $last;
-                }
-                if ($last->persistToPluginRunLog) {
-                    return $last;
-                }
-                $chunkItemSum += $last->count;
-            }
-
-            $msg = 'Chunked RSS: paused (time budget) — next cron or refresh continues the cycle.';
-
-            return new PluginRunResult('ok', $chunkItemSum, $msg, false);
-        }
-
-        return $this->runRssChunkedOnce($force);
+        return $this->runRssChunkedWithBudget($force);
     }
 
     /**
@@ -364,27 +347,7 @@ final class CoreRunner
             return $this->runScraperLegacy($force);
         }
 
-        if ($force) {
-            $deadline = microtime(true) + self::CHUNK_WEB_TIME_BUDGET_SEC;
-            $chunkItemSum = 0;
-            $last         = PluginRunResult::ok(0);
-            for ($i = 0; $i < self::CHUNK_WEB_MAX_LOOPS && microtime(true) < $deadline; $i++) {
-                $last = $this->runScraperChunkedOnce($force);
-                if ($last->isThrottleSkipped()) {
-                    return $last;
-                }
-                if ($last->persistToPluginRunLog) {
-                    return $last;
-                }
-                $chunkItemSum += $last->count;
-            }
-
-            $msg = 'Chunked scraper: paused (time budget) — next cron or refresh continues the cycle.';
-
-            return new PluginRunResult('ok', $chunkItemSum, $msg, false);
-        }
-
-        return $this->runScraperChunkedOnce($force);
+        return $this->runScraperChunkedWithBudget($force);
     }
 
     private function runScraperLegacy(bool $force): PluginRunResult
@@ -419,9 +382,7 @@ final class CoreRunner
                         $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                         $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                         $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                        $maxArticles = $force
-                            ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
-                            : ScraperFetchService::PRODUCTION_MAX_ARTICLES;
+                        $maxArticles = ScraperFetchService::PRODUCTION_MAX_ARTICLES;
                         $out         = $this->scraper->fetchScraperFeedItems(
                             $url,
                             $linkPattern,
@@ -460,6 +421,54 @@ final class CoreRunner
         $this->record(self::ID_SCRAPER, $r, $duration);
 
         return $r;
+    }
+
+    private function runRssChunkedWithBudget(bool $force): PluginRunResult
+    {
+        return $this->runChunkedCoreWithBudget(
+            $force,
+            fn (bool $f): PluginRunResult => $this->runRssChunkedOnce($f),
+            'RSS'
+        );
+    }
+
+    private function runScraperChunkedWithBudget(bool $force): PluginRunResult
+    {
+        return $this->runChunkedCoreWithBudget(
+            $force,
+            fn (bool $f): PluginRunResult => $this->runScraperChunkedOnce($f),
+            'scraper'
+        );
+    }
+
+    /**
+     * @param callable(bool): PluginRunResult $runOnce
+     */
+    private function runChunkedCoreWithBudget(bool $force, callable $runOnce, string $label): PluginRunResult
+    {
+        $budgetSec = $force ? self::CHUNK_WEB_TIME_BUDGET_SEC : self::CHUNK_CRON_TIME_BUDGET_SEC;
+        $deadline  = microtime(true) + $budgetSec;
+        $chunkItemSum = 0;
+        $last         = PluginRunResult::ok(0);
+        for ($i = 0; $i < self::CHUNK_MAX_LOOPS && microtime(true) < $deadline; $i++) {
+            $last = $runOnce($force);
+            if ($last->isThrottleSkipped()) {
+                return $last;
+            }
+            if ($last->persistToPluginRunLog) {
+                return $last;
+            }
+            $chunkItemSum += $last->count;
+        }
+
+        $via = $force ? 'next cron or refresh' : 'next cron tick';
+
+        return new PluginRunResult(
+            'ok',
+            $chunkItemSum,
+            'Chunked ' . $label . ': paused (time budget) — ' . $via . ' continues the cycle.',
+            false
+        );
     }
 
     private function runScraperChunkedOnce(bool $force): PluginRunResult
@@ -508,9 +517,7 @@ final class CoreRunner
                     $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
                     $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
                     $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                    $maxArticles = $force
-                        ? self::CHUNK_WEB_SCRAPER_MAX_ARTICLES
-                        : ScraperFetchService::PRODUCTION_MAX_ARTICLES;
+                    $maxArticles = ScraperFetchService::PRODUCTION_MAX_ARTICLES;
                     $out         = $this->scraper->fetchScraperFeedItems(
                         $url,
                         $linkPattern,

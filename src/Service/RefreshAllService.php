@@ -22,7 +22,8 @@ use Seismo\Repository\PluginRunLogRepository;
  * Orchestrates plugin execution. Shared by:
  *   - Master cron (refresh_cron.php) — calls runAll() with throttling.
  *   - Web "Refresh all" — Diagnostics uses runAll(force: true); timeline Refresh
- *     uses runAll(force: true, skipLexPlugins: true) so HTTP stays within timeouts.
+ *     uses runAll(force: true, skipLexPlugins: true). Chunked RSS/scraper use a
+ *     ~120s web budget for chunked RSS/scraper in {@see CoreRunner}.
  *   - Per-plugin refresh buttons — calls runPlugin($id, force: true).
  *   - Diagnostics "Test" button — calls testPlugin($id) (no persistence).
  *
