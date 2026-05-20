@@ -1454,13 +1454,13 @@ final class EntryRepository
             $extra = " AND (f.source_type IN ('rss', 'substack', 'parl_press'))
                 AND (IFNULL(f.category, '') <> 'scraper')
                 AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE "
-            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0)';
+            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0)";
         } elseif ($mode === 'scraper') {
             $extra = " AND (
                 f.source_type = 'scraper'
                 OR IFNULL(f.category, '') = 'scraper'
                 OR EXISTS (SELECT 1 FROM {$sc} sc2 WHERE "
-            . ScraperListingUrl::sqlColumnsEqual('sc2.url', 'f.url') . ' AND sc2.disabled = 0)
+            . ScraperListingUrl::sqlColumnsEqual('sc2.url', 'f.url') . " AND sc2.disabled = 0)
             )";
         } else {
             return [];
@@ -1857,12 +1857,12 @@ final class EntryRepository
             } elseif ($kind === 'scraper') {
                 $parts[] = "(f.source_type = 'scraper' OR f.category = 'scraper'
                     OR EXISTS (SELECT 1 FROM {$sc} sc WHERE "
-            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0))';
+            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0))";
             } elseif ($kind === 'rss') {
                 $parts[] = "(f.source_type NOT IN ('substack','scraper')
                     AND (f.category IS NULL OR f.category != 'scraper')
                     AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE "
-            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0))';
+            . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0))";
             }
         }
         if ($parts === []) {

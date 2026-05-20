@@ -33,7 +33,7 @@ final class SourceConfigExportRepository
               AND (IFNULL(f.category, '') <> 'scraper')
               AND NOT EXISTS (
                   SELECT 1 FROM {$sc} sc
-                  WHERE " . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0
+                  WHERE " . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0
               )
             ORDER BY f.id ASC";
 
