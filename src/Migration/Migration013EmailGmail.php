@@ -22,7 +22,12 @@ final class Migration013EmailGmail
 {
     public const VERSION = 29;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         try {
             $pdo->exec(

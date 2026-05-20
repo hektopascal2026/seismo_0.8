@@ -17,7 +17,12 @@ final class Migration009ScraperExcludeSelectors
 {
     public const VERSION = 25;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         if ($this->columnExists($pdo, 'scraper_configs', 'exclude_selectors')) {
             return;

@@ -199,10 +199,10 @@ final class DashboardController
             $this->redirectAfterRemoteRefresh();
         }
 
-        $mother = trim((string)SEISMO_MOTHERSHIP_URL);
+        $mother = seismoMothershipBaseUrl();
         $key    = (string)SEISMO_REMOTE_REFRESH_KEY;
-        if ($mother === '' || $key === '') {
-            $_SESSION['error'] = 'Remote refresh is not configured on this satellite (SEISMO_MOTHERSHIP_URL / SEISMO_REMOTE_REFRESH_KEY).';
+        if ($key === '') {
+            $_SESSION['error'] = 'Remote refresh is not configured (set SEISMO_REMOTE_REFRESH_KEY in config.local.php).';
 
             $this->endRemoteRefreshOrJson($ajax);
 
@@ -297,8 +297,7 @@ final class DashboardController
             return true;
         }
 
-        return trim((string)SEISMO_MOTHERSHIP_URL) !== ''
-            && (string)SEISMO_REMOTE_REFRESH_KEY !== '';
+        return (string)SEISMO_REMOTE_REFRESH_KEY !== '';
     }
 
     private function redirectAfterRemoteRefresh(): void

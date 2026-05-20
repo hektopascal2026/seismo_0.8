@@ -15,7 +15,12 @@ final class Migration011SourceLog
 {
     public const VERSION = 27;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         if ($this->tableExists($pdo, 'source_log')) {
             return;

@@ -222,7 +222,7 @@ final class SettingsController
         if ($tab === 'satellite') {
             try {
                 $satellitesMothershipUrl = self::mothershipBaseUrl();
-                $satellitesMothershipDb  = self::currentDatabaseName($pdo);
+                $satellitesMothershipDb  = (string)SEISMO_ENTRIES_DB;
                 $satellitesRemoteRefreshKeyConfigured = defined('SEISMO_REMOTE_REFRESH_KEY')
                     && (string)SEISMO_REMOTE_REFRESH_KEY !== '';
                 $satellitesSuggestedRefreshKey = (string)($config->get('satellites_suggested_refresh_key') ?? '');

@@ -5,10 +5,11 @@
  * Copy this file to `config.local.php` and fill in your values. `config.local.php`
  * is git-ignored so secrets never reach the repo.
  *
- * Seismo runs in one of two modes:
- *   - Mothership (default) — scrapes sources, owns entry tables.
- *   - Satellite           — lightweight instance reading entries from a
- *                           mothership DB on the same MySQL server. See below.
+ * VPS layout (path satellites):
+ *   - One codebase at `/var/www/seismo`
+ *   - Entries + ingest in database `seismo` (mothership)
+ *   - Each desk: `seismo_<slug>` scores DB + URL `https://seismo.live/<slug>/`
+ *   - Register desks in Settings → Satellites, then run `bin/seismo-satellite-provision.sh <slug>`
  */
 
 /**
@@ -16,88 +17,51 @@
  *
  * Use hostname only for DB_HOST; optional port via DB_PORT or legacy "host:3306"
  * (parsed in getDbConnection()).
+ *
+ * DB_NAME / SEISMO_ENTRIES_DB name the shared entries database (`seismo`).
+ * Path satellites connect to `seismo_<slug>` for scores automatically.
  */
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'CHANGE_ME');
+define('DB_NAME', 'seismo');
 define('DB_USER', 'CHANGE_ME');
 define('DB_PASS', 'CHANGE_ME');
+define('SEISMO_ENTRIES_DB', 'seismo');
 // define('DB_PORT', '3306'); // optional — omit to use the driver default (3306)
 
 /**
- * Lex legislation JSON (optional).
- *
- * Copy `lex_config.example.json` to `lex_config.json` in the install root if you want a
- * mutable file on disk. `lex_config.json` is git-ignored. If the file is absent,
- * `LexConfigStore` uses the same defaults as the example file.
- */
-
-/**
  * Optional — protect Settings → Feed diagnostics with ?key= on the URL.
- * Leave unset/empty to keep diagnostics open on localhost only, or set it on a
- * public host to require the matching key.
  */
 // define('FEED_DIAGNOSTIC_KEY', 'generate-a-long-random-string');
 
 /**
- * Optional — mothership-only shared secret for `?action=refresh_all_remote`.
- * When set, satellites can trigger the same pipeline as the web Refresh button.
+ * Optional — shared secret for satellite Refresh → mothership ingest (`refresh_all_remote`).
  * Generate with:  php -r "echo bin2hex(random_bytes(32));"
  */
 // define('SEISMO_REMOTE_REFRESH_KEY', 'generate-a-long-random-string');
 
 /**
- * Satellite mode (leave commented on a mothership).
- *
- * A satellite is a second Seismo instance pointing at a different Magnitu
- * profile. It reads entries cross-DB from the mothership and keeps its own
- * scoring tables (entry_scores, magnitu_config, magnitu_labels). The DB_USER
- * on this satellite must have SELECT on the mothership database.
- *
- * Use boolean true / false only (not 1 / 0 — though 1 / 0 are accepted via cast).
+ * Optional — absolute mothership base URL (no trailing slash) for satellite Refresh.
+ * Defaults to the current request host + {@see getBasePath()} when unset.
  */
-// define('SEISMO_SATELLITE_MODE', true);
-// define('SEISMO_MOTHERSHIP_DB', 'seismo_main');
-// define('SEISMO_MOTHERSHIP_URL', 'https://example.com/seismo');
-// define('SEISMO_REMOTE_REFRESH_KEY', 'same-value-as-on-mothership');
+// define('SEISMO_MOTHERSHIP_URL', 'https://seismo.live');
 
 /**
- * Optional per-satellite branding (replaces the default "Seismo" name;
- * the UI still appends a space and "v{SEISMO_VERSION}" after it).
+ * Optional per-desk branding override (normally taken from satellites_registry).
  */
-// define('SEISMO_BRAND_TITLE', 'Seismo Digital');
+// define('SEISMO_BRAND_TITLE', 'Seismo Security');
 // define('SEISMO_BRAND_ACCENT', '#4a90e2');
 
 /**
- * Optional — IANA timezone for dashboard day labels and formatted clocks in the UI
- * (data stays UTC in the database). Default: Europe/Zurich.
+ * Optional — IANA timezone for dashboard day labels (data stays UTC in the database).
  */
 // define('SEISMO_VIEW_TIMEZONE', 'Europe/Zurich');
 
 /**
  * Optional — require login for the web UI.
- *
- * When this constant is unset OR an empty string, Seismo runs without any
- * auth (same as today). When set to a password_hash() output, the web UI
- * redirects unauthenticated visitors to `?action=login`. The Magnitu API
- * is unaffected — it keeps its own Bearer-token auth.
- *
- * Generate the hash locally and paste it here:
- *   php -r "echo password_hash('yourpass', PASSWORD_DEFAULT);"
  */
 // define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
 
 /**
- * Optional — run DB migrations from the browser (no SSH / PHP CLI on host).
- *
- * Many shared hosts only allow uploading files and opening URLs — no terminal.
- * Set a long random secret here, then run migrations once via one of:
- *   - Authorization: Bearer YOUR_SECRET (best — avoids query strings / most logs)
- *   - POST key=YOUR_SECRET (e.g. HTML form; action URL without key in query)
- *   - GET ?action=migrate&key=YOUR_SECRET (works; key may appear in access logs)
- *
- * Plain-text response: current version, then either “Nothing to do” or apply
- * pending migrations. Remove or empty this key after you are done if you prefer.
- *
- * Generate locally:  php -r "echo bin2hex(random_bytes(32));"
+ * Optional — run DB migrations from the browser (mothership only).
  */
 // define('SEISMO_MIGRATE_KEY', 'paste-a-long-random-string-here');

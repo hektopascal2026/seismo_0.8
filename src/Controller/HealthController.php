@@ -63,7 +63,9 @@ final class HealthController
                 'dbVersion'     => $dbVersion,
                 'schemaVersion' => $schemaVersion,
                 'satellite'     => isSatellite(),
-                'mothershipDb'  => SEISMO_MOTHERSHIP_DB,
+                'satelliteSlug' => seismoSatelliteSlug(),
+                'entriesDb'     => SEISMO_ENTRIES_DB,
+                'scoresDb'      => seismoScoresDbName(),
                 'brandTitle'    => seismoBrandTitle(),
                 'basePath'      => getBasePath(),
             ];

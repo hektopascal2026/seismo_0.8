@@ -248,11 +248,6 @@ $router->register(
     false
 );
 $router->register(
-    'satellite_download_json',
-    \Seismo\Controller\SatelliteController::class . '::downloadJson',
-    true
-);
-$router->register(
     'styleguide',
     \Seismo\Controller\StyleguideController::class . '::show',
     true

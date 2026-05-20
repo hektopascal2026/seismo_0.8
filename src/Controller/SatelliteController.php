@@ -2,8 +2,8 @@
 /**
  * Mothership-only satellite registry (Settings → Satellites).
  *
- * Persists rows in {@see SystemConfigRepository} under `satellites_registry`
- * and exports `satellite-<slug>.json` for the external `seismo-generator` CLI.
+ * Persists rows in {@see SystemConfigRepository} under `satellites_registry`.
+ * Provisioning (MariaDB + path stub) is done via `bin/seismo-satellite-provision.sh`.
  */
 
 declare(strict_types=1);
@@ -18,7 +18,6 @@ final class SatelliteController
 {
     private const KEY_REGISTRY            = 'satellites_registry';
     private const KEY_SUGGESTED_REFRESH   = 'satellites_suggested_refresh_key';
-    private const EXPORT_SCHEMA_VERSION   = 1;
 
     public function add(): void
     {
@@ -26,13 +25,19 @@ final class SatelliteController
             return;
         }
 
-        $slug = $this->normaliseSlug((string)($_POST['slug'] ?? ''));
+        $slug = seismoNormaliseSatelliteSlug((string)($_POST['slug'] ?? ''));
         $displayName = trim((string)($_POST['display_name'] ?? ''));
-        $profile = $this->normaliseSlug((string)($_POST['magnitu_profile'] ?? $slug));
+        $profile = seismoNormaliseSatelliteSlug((string)($_POST['magnitu_profile'] ?? $slug));
         $accent = trim((string)($_POST['brand_accent'] ?? ''));
 
         if ($slug === '') {
             $_SESSION['error'] = 'Slug is required (letters, numbers, dashes).';
+            $this->redirect();
+
+            return;
+        }
+        if (in_array($slug, seismoReservedSatelliteSlugs(), true)) {
+            $_SESSION['error'] = "Slug '{$slug}' is reserved — choose another.";
             $this->redirect();
 
             return;
@@ -64,15 +69,18 @@ final class SatelliteController
         $registry[] = [
             'slug' => $slug,
             'display_name' => $displayName,
+            'mount_path' => '/' . $slug,
+            'db_name' => 'seismo_' . $slug,
             'magnitu_profile' => $profile !== '' ? $profile : $slug,
             'brand_accent' => $accent,
             'api_key' => $this->generateKey(),
+            'status' => 'pending',
             'created_at' => gmdate('Y-m-d\TH:i:s\Z'),
         ];
 
         $this->saveRegistry($config, $registry);
 
-        $_SESSION['success'] = "Satellite '{$slug}' added. Download its JSON to feed into seismo-generator.";
+        $_SESSION['success'] = "Satellite '{$slug}' registered. Run bin/seismo-satellite-provision.sh {$slug} on the VPS to create its database and path.";
         $this->redirect($slug);
     }
 
@@ -82,7 +90,7 @@ final class SatelliteController
             return;
         }
 
-        $slug = $this->normaliseSlug((string)($_POST['slug'] ?? ''));
+        $slug = seismoNormaliseSatelliteSlug((string)($_POST['slug'] ?? ''));
         $pdo = getDbConnection();
         $config = new SystemConfigRepository($pdo);
         $registry = $this->loadRegistry($config);
@@ -91,7 +99,7 @@ final class SatelliteController
             static fn($s) => ($s['slug'] ?? '') !== $slug
         ));
         $this->saveRegistry($config, $filtered);
-        $_SESSION['success'] = "Satellite '{$slug}' removed from registry. The satellite's own database is untouched.";
+        $_SESSION['success'] = "Satellite '{$slug}' removed from registry. Its scores database and /{$slug}/ folder are untouched — delete those manually if needed.";
         $this->redirect();
     }
 
@@ -101,15 +109,17 @@ final class SatelliteController
             return;
         }
 
-        $slug = $this->normaliseSlug((string)($_POST['slug'] ?? ''));
+        $slug = seismoNormaliseSatelliteSlug((string)($_POST['slug'] ?? ''));
         $pdo = getDbConnection();
         $config = new SystemConfigRepository($pdo);
         $registry = $this->loadRegistry($config);
         $found = false;
+        $scoresDb = 'seismo_' . $slug;
         foreach ($registry as &$sat) {
             if (($sat['slug'] ?? '') === $slug) {
                 $sat['api_key'] = $this->generateKey();
                 $sat['rotated_at'] = gmdate('Y-m-d\TH:i:s\Z');
+                $scoresDb = (string)($sat['db_name'] ?? $scoresDb);
                 $found = true;
                 break;
             }
@@ -124,7 +134,7 @@ final class SatelliteController
         }
 
         $this->saveRegistry($config, $registry);
-        $_SESSION['success'] = "API key rotated for '{$slug}'. Download new JSON and re-deploy the satellite.";
+        $_SESSION['success'] = "API key rotated for '{$slug}'. Update Magnitu and set api_key in `{$scoresDb}.system_config` if already provisioned.";
         $this->redirect($slug);
     }
 
@@ -136,79 +146,8 @@ final class SatelliteController
 
         $config = new SystemConfigRepository(getDbConnection());
         $config->set(self::KEY_SUGGESTED_REFRESH, $this->generateKey());
-        $_SESSION['success'] = 'Generated a new suggested SEISMO_REMOTE_REFRESH_KEY. Paste it into mothership + satellite config.local.php.';
+        $_SESSION['success'] = 'Generated a new suggested SEISMO_REMOTE_REFRESH_KEY. Paste it into config.local.php on this host.';
         $this->redirect();
-    }
-
-    public function downloadJson(): void
-    {
-        if (isSatellite()) {
-            http_response_code(404);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo "Satellite registry is only available on the mothership.\n";
-            exit;
-        }
-
-        $slug = $this->normaliseSlug((string)($_GET['slug'] ?? ''));
-        $pdo = getDbConnection();
-        $config = new SystemConfigRepository($pdo);
-        $registry = $this->loadRegistry($config);
-        $sat = null;
-        foreach ($registry as $row) {
-            if (($row['slug'] ?? '') === $slug) {
-                $sat = $row;
-                break;
-            }
-        }
-        if ($sat === null) {
-            http_response_code(404);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo "Satellite '{$slug}' not found.\n";
-            exit;
-        }
-
-        $refreshKey = $this->getRemoteRefreshKey();
-        if ($refreshKey === '') {
-            $suggested = $config->get(self::KEY_SUGGESTED_REFRESH);
-            $refreshKey = $suggested !== null && $suggested !== ''
-                ? $suggested
-                : '<SET SEISMO_REMOTE_REFRESH_KEY IN MOTHERSHIP config.local.php>';
-        }
-
-        $payload = [
-            'schema_version' => self::EXPORT_SCHEMA_VERSION,
-            'slug' => $sat['slug'],
-            'display_name' => $sat['display_name'],
-            'mothership_url' => $this->detectMothershipUrl(),
-            'mothership_db' => $this->detectMothershipDbName($pdo),
-            'mothership_remote_refresh_key' => $refreshKey,
-            'magnitu' => [
-                'api_key' => $sat['api_key'],
-                'profile_slug' => $sat['magnitu_profile'] ?? $sat['slug'],
-            ],
-            'brand' => [
-                'accent' => $sat['brand_accent'] ?? '',
-                'title' => $sat['display_name'],
-            ],
-            'filters' => [
-                'labels' => ['investigation_lead', 'important'],
-            ],
-            'exported_at' => gmdate('Y-m-d\TH:i:s\Z'),
-        ];
-
-        $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($json === false) {
-            http_response_code(500);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo "Could not encode JSON.\n";
-            exit;
-        }
-
-        header('Content-Type: application/json; charset=utf-8');
-        header('Content-Disposition: attachment; filename="satellite-' . $slug . '.json"');
-        header('Content-Length: ' . (string)strlen($json));
-        echo $json;
-        exit;
     }
 
     private function guardMothershipPost(): bool
@@ -270,16 +209,6 @@ final class SatelliteController
         return bin2hex(random_bytes(32));
     }
 
-    private function normaliseSlug(string $slug): string
-    {
-        $slug = strtolower(trim($slug));
-        $slug = (string)preg_replace('/[^a-z0-9-]+/', '-', $slug);
-        $slug = (string)preg_replace('/-+/', '-', $slug);
-        $slug = trim($slug, '-');
-
-        return substr($slug, 0, 40);
-    }
-
     /**
      * Stored display names are canonical "Seismo {suffix}". Accept suffix-only input
      * as well as a full pasted title starting with "Seismo " (any case).
@@ -295,38 +224,5 @@ final class SatelliteController
         }
 
         return 'Seismo ' . $input;
-    }
-
-    private function getRemoteRefreshKey(): string
-    {
-        return defined('SEISMO_REMOTE_REFRESH_KEY') ? (string)SEISMO_REMOTE_REFRESH_KEY : '';
-    }
-
-    /**
-     * Absolute public base URL for this install (no trailing slash), for JSON export.
-     * Uses {@see getBasePath()} so subfolder installs work.
-     */
-    private function detectMothershipUrl(): string
-    {
-        $scheme = 'http';
-        $httpsFlag = (string)($_SERVER['HTTPS'] ?? '');
-        if ($httpsFlag !== '' && strtolower($httpsFlag) !== 'off') {
-            $scheme = 'https';
-        } elseif (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
-            $scheme = 'https';
-        }
-        $host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
-        $bp = getBasePath();
-
-        return $scheme . '://' . $host . ($bp === '' ? '' : $bp);
-    }
-
-    private function detectMothershipDbName(PDO $pdo): string
-    {
-        try {
-            return (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
-        } catch (\Throwable) {
-            return '';
-        }
     }
 }

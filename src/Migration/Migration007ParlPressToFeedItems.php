@@ -23,7 +23,7 @@ final class Migration007ParlPressToFeedItems
 
     private const API_URL = "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items";
 
-    public function apply(PDO $pdo): void
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         $feedId = $this->ensureParlPressFeed($pdo);
         if ($feedId <= 0) {

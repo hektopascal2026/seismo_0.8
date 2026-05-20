@@ -17,7 +17,12 @@ final class Migration010EmailSubscriptionStripListing
 {
     public const VERSION = 26;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         if ($this->columnExists($pdo, 'email_subscriptions', 'strip_listing_boilerplate')) {
             return;

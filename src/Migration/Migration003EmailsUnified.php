@@ -41,7 +41,12 @@ final class Migration003EmailsUnified
 {
     public const VERSION = 19;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         if (!$this->tableExists($pdo, 'emails')) {
             throw new RuntimeException('Migration 003: table `emails` is missing.');

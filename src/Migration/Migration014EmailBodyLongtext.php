@@ -18,7 +18,12 @@ final class Migration014EmailBodyLongtext
 {
     public const VERSION = 30;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         try {
             $pdo->exec(

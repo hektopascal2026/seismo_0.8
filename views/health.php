@@ -50,7 +50,9 @@ $basePath = isset($data['basePath']) ? (string)$data['basePath'] : '';
         <dt>Mode</dt>
         <dd>
             <?php if ($data['satellite']): ?>
-                satellite (reads from <span class="health-code"><?= e((string)$data['mothershipDb']) ?></span>)
+                satellite <span class="health-code"><?= e((string)($data['satelliteSlug'] ?? '')) ?></span>
+                — entries <span class="health-code"><?= e((string)($data['entriesDb'] ?? '')) ?></span>,
+                scores <span class="health-code"><?= e((string)($data['scoresDb'] ?? '')) ?></span>
             <?php else: ?>
                 mothership
             <?php endif; ?>

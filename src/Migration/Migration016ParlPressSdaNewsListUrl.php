@@ -21,7 +21,7 @@ final class Migration016ParlPressSdaNewsListUrl
 
     private const OLD_PRESS_RELEASES_LIST = "https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items";
 
-    public function apply(PDO $pdo): void
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         $newUrl = ParlPressFetchService::DEFAULT_SDA_LIST_ITEMS_URL;
         $newLink = 'https://www.parlament.ch/de/services/news/';

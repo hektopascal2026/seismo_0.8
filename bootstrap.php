@@ -18,7 +18,7 @@
 
 declare(strict_types=1);
 
-define('SEISMO_VERSION', '0.6.1');
+define('SEISMO_VERSION', '0.6.2');
 define('SEISMO_ROOT', __DIR__);
 
 // ---------------------------------------------------------------------------
@@ -73,8 +73,10 @@ if (!defined('DB_PORT')) {
 // 2. SEISMO_* defaults (satellite / branding / remote refresh)
 // ---------------------------------------------------------------------------
 $__seismoDefaults = [
-    'SEISMO_MOTHERSHIP_DB'     => '',
-    'SEISMO_SATELLITE_MODE'    => false,
+    /** Shared entries database on the VPS (feeds, emails, lex, leg). */
+    'SEISMO_ENTRIES_DB'        => 'seismo',
+    /** Set by /<slug>/index.php stub before bootstrap; empty on mothership. */
+    'SEISMO_SATELLITE_SLUG'    => '',
     'SEISMO_BRAND_TITLE'       => '',
     'SEISMO_BRAND_ACCENT'      => '',
     'SEISMO_MOTHERSHIP_URL'    => '',
@@ -91,6 +93,10 @@ foreach ($__seismoDefaults as $__c => $__v) {
     }
 }
 unset($__seismoDefaults, $__c, $__v);
+
+if (!defined('SEISMO_ENTRIES_DB') || SEISMO_ENTRIES_DB === '') {
+    define('SEISMO_ENTRIES_DB', defined('DB_NAME') && DB_NAME !== '' ? (string)DB_NAME : 'seismo');
+}
 
 // ---------------------------------------------------------------------------
 // 3. Autoloaders — Composer first, then our own Seismo\* loader.
@@ -123,6 +129,10 @@ spl_autoload_register(static function (string $class): void {
 /**
  * PDO singleton. One connection per request.
  *
+ * Default database is the scores/config catalog: `seismo` on the mothership,
+ * `seismo_<slug>` on a path satellite. Entry-source tables are always read via
+ * {@see entryTable()} against {@see SEISMO_ENTRIES_DB}.
+ *
  * Throws PDOException on failure — callers decide how to present the error
  * (HTTP 503 vs CLI stderr). See `migrate.php` and `index.php` for both styles.
  */
@@ -141,7 +151,7 @@ function getDbConnection(): PDO
     if (defined('DB_PORT') && DB_PORT !== '' && DB_PORT !== null) {
         $port = (int)DB_PORT;
     }
-    $dsn = 'mysql:host=' . $host . ';dbname=' . DB_NAME . ';charset=utf8mb4';
+    $dsn = 'mysql:host=' . $host . ';dbname=' . seismoScoresDbName() . ';charset=utf8mb4';
     if ($port !== null) {
         $dsn .= ';port=' . $port;
     }
@@ -197,35 +207,179 @@ function getBasePath(): string
 }
 
 /**
- * True when this instance is a lightweight satellite.
- *
- * Satellites read entries cross-DB from a mothership and only keep scoring
- * tables locally. Used to hide admin/fetcher UI and short-circuit write routes.
+ * Normalised path slug (e.g. `security` for /security/). Empty on mothership.
  */
-function isSatellite(): bool
+function seismoSatelliteSlug(): string
 {
-    // Accept only boolean true/false in config.local.php; cast so `1`/`0` from
-    // older copies do not silently fail the === true check.
-    return (bool)SEISMO_SATELLITE_MODE;
+    static $resolved = null;
+    if ($resolved !== null) {
+        return $resolved;
+    }
+    if (defined('SEISMO_SATELLITE_SLUG') && SEISMO_SATELLITE_SLUG !== '') {
+        $resolved = seismoNormaliseSatelliteSlug((string)SEISMO_SATELLITE_SLUG);
+
+        return $resolved;
+    }
+    $base = getBasePath();
+    if ($base === '') {
+        $resolved = '';
+
+        return $resolved;
+    }
+    $segment = trim($base, '/');
+    if ($segment === '' || str_contains($segment, '/')) {
+        $segment = explode('/', $segment, 2)[0] ?? '';
+    }
+    $resolved = seismoNormaliseSatelliteSlug($segment);
+
+    return $resolved;
+}
+
+function seismoNormaliseSatelliteSlug(string $slug): string
+{
+    $slug = strtolower(trim($slug));
+    $slug = (string)preg_replace('/[^a-z0-9-]+/', '-', $slug);
+    $slug = (string)preg_replace('/-+/', '-', $slug);
+    $slug = trim($slug, '-');
+
+    return substr($slug, 0, 40);
+}
+
+/** Slugs that must not be used as /{slug}/ mount paths. */
+function seismoReservedSatelliteSlugs(): array
+{
+    return [
+        'assets', 'vendor', 'src', 'config', 'docs', 'tests', 'newsbridge', 'storage',
+        'logs', 'bin', 'views', 'migrate', 'index', 'health',
+    ];
 }
 
 /**
- * SQL reference for an entry-source table.
+ * True when this request is served from a path satellite (e.g. /security/).
+ */
+function isSatellite(): bool
+{
+    return seismoSatelliteSlug() !== '';
+}
+
+/**
+ * MariaDB database that holds scores, labels, favourites, and system_config
+ * for the current desk.
+ */
+function seismoScoresDbName(): string
+{
+    $slug = seismoSatelliteSlug();
+    if ($slug === '') {
+        return (string)SEISMO_ENTRIES_DB;
+    }
+    $sat = seismoCurrentSatellite();
+    if ($sat !== null && ($sat['db_name'] ?? '') !== '') {
+        return (string)$sat['db_name'];
+    }
+
+    return 'seismo_' . $slug;
+}
+
+/**
+ * Registry row for the active path satellite, or null on mothership / unknown slug.
  *
- * Local mode  → bare table name.
- * Satellite   → `mothership_db`.table  for cross-DB reads.
+ * @return array<string, mixed>|null
+ */
+function seismoCurrentSatellite(): ?array
+{
+    static $cached = null;
+    static $loaded = false;
+    if ($loaded) {
+        return $cached;
+    }
+    $loaded = true;
+    $slug = seismoSatelliteSlug();
+    if ($slug === '') {
+        $cached = null;
+
+        return null;
+    }
+    foreach (seismoSatellitesRegistry() as $row) {
+        if (($row['slug'] ?? '') === $slug) {
+            $cached = $row;
+
+            return $cached;
+        }
+    }
+    $cached = [
+        'slug' => $slug,
+        'db_name' => 'seismo_' . $slug,
+        'mount_path' => '/' . $slug,
+        'display_name' => 'Seismo ' . ucfirst($slug),
+        'magnitu_profile' => $slug,
+        'brand_accent' => '',
+    ];
+
+    return $cached;
+}
+
+/**
+ * Mothership satellite registry from `system_config.satellites_registry`.
  *
- * Use for entry-source tables only: feed_items, feeds, lex_items,
- * calendar_events (Leg), sender_tags, email_subscriptions, and the email
- * table. NEVER use for entry_scores, magnitu_config, magnitu_labels — those
- * are always local to each instance.
+ * @return list<array<string, mixed>>
+ */
+function seismoSatellitesRegistry(): array
+{
+    static $registry = null;
+    if ($registry !== null) {
+        return $registry;
+    }
+    $registry = [];
+    if (!hasDbConnection() || isSatellite()) {
+        if (!isSatellite()) {
+            return $registry;
+        }
+        try {
+            $entriesDb = (string)SEISMO_ENTRIES_DB;
+            $quoted = '`' . str_replace('`', '``', $entriesDb) . '`';
+            $pdo = getDbConnection();
+            $stmt = $pdo->prepare(
+                "SELECT config_value FROM {$quoted}.system_config WHERE config_key = 'satellites_registry' LIMIT 1"
+            );
+            $stmt->execute();
+            $raw = $stmt->fetchColumn();
+            if (is_string($raw) && $raw !== '') {
+                $decoded = json_decode($raw, true);
+                $registry = is_array($decoded) ? array_values($decoded) : [];
+            }
+        } catch (\Throwable) {
+            $registry = [];
+        }
+
+        return $registry;
+    }
+    try {
+        $config = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
+        $raw = $config->get('satellites_registry');
+        if ($raw !== null && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $registry = is_array($decoded) ? array_values($decoded) : [];
+        }
+    } catch (\Throwable) {
+        $registry = [];
+    }
+
+    return $registry;
+}
+
+/**
+ * SQL reference for an entry-source table in {@see SEISMO_ENTRIES_DB}.
+ *
+ * Use for entry-source tables only. NEVER use for entry_scores, system_config,
+ * magnitu_labels, entry_favourites — those live in {@see seismoScoresDbName()}.
  */
 function entryTable(string $table): string
 {
     $quoted = '`' . str_replace('`', '``', $table) . '`';
-    if (SEISMO_MOTHERSHIP_DB !== '') {
-        return '`' . str_replace('`', '``', SEISMO_MOTHERSHIP_DB) . '`.' . $quoted;
+    if (isSatellite()) {
+        return '`' . str_replace('`', '``', (string)SEISMO_ENTRIES_DB) . '`.' . $quoted;
     }
+
     return $quoted;
 }
 
@@ -235,9 +389,10 @@ function entryTable(string $table): string
  */
 function entryDbSchemaExpr(): string
 {
-    if (SEISMO_MOTHERSHIP_DB !== '') {
-        return "'" . addslashes(SEISMO_MOTHERSHIP_DB) . "'";
+    if (isSatellite()) {
+        return "'" . addslashes((string)SEISMO_ENTRIES_DB) . "'";
     }
+
     return 'DATABASE()';
 }
 
@@ -300,6 +455,12 @@ function seismoBrandDisplaySplit(string $storedTitle): ?array
 function seismoBrandSuffix(): string
 {
     $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+    if ($t === '' && isSatellite()) {
+        $sat = seismoCurrentSatellite();
+        if ($sat !== null) {
+            $t = trim((string)($sat['display_name'] ?? ''));
+        }
+    }
     if ($t === '') {
         return 'Seismo';
     }
@@ -342,12 +503,18 @@ function seismoSatelliteBrandSplit(): bool
 function seismoBrandTitle(): string
 {
     if (isSatellite()) {
-        if (seismoSatelliteBrandSplit()) {
+        $configured = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+        if ($configured === '') {
+            $sat = seismoCurrentSatellite();
+            if ($sat !== null && trim((string)($sat['display_name'] ?? '')) !== '') {
+                $configured = trim((string)$sat['display_name']);
+            }
+        }
+        if ($configured !== '' && seismoBrandDisplaySplit($configured) !== null) {
             return 'Seismo ' . seismoBrandSuffix();
         }
-        $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
 
-        return $t !== '' ? $t : 'Seismo';
+        return $configured !== '' ? $configured : 'Seismo';
     }
 
     return trim(seismoBrandBase() . ' ' . seismoBrandVersionLabel());
@@ -358,7 +525,49 @@ function seismoBrandTitle(): string
  */
 function seismoBrandAccent(): ?string
 {
-    return SEISMO_BRAND_ACCENT !== '' ? (string)SEISMO_BRAND_ACCENT : null;
+    if (SEISMO_BRAND_ACCENT !== '') {
+        return (string)SEISMO_BRAND_ACCENT;
+    }
+    if (isSatellite()) {
+        $sat = seismoCurrentSatellite();
+        $accent = trim((string)($sat['brand_accent'] ?? ''));
+        if ($accent !== '') {
+            return $accent;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Absolute mothership base URL (no trailing slash) for satellite remote refresh.
+ * Uses {@see SEISMO_MOTHERSHIP_URL} when set; otherwise derives from the current request
+ * (path satellites strip their mount segment).
+ */
+function seismoMothershipBaseUrl(): string
+{
+    if (defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== '') {
+        return rtrim((string)SEISMO_MOTHERSHIP_URL, '/');
+    }
+    $scheme = 'http';
+    $httpsFlag = (string)($_SERVER['HTTPS'] ?? '');
+    if ($httpsFlag !== '' && strtolower($httpsFlag) !== 'off') {
+        $scheme = 'https';
+    } elseif (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
+        $scheme = 'https';
+    }
+    $host = (string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost');
+    $bp = getBasePath();
+    if (isSatellite() && $bp !== '') {
+        $parent = dirname($bp);
+        if ($parent === '/' || $parent === '\\' || $parent === '.') {
+            $bp = '';
+        } else {
+            $bp = rtrim(str_replace('\\', '/', $parent), '/');
+        }
+    }
+
+    return $scheme . '://' . $host . ($bp === '' ? '' : $bp);
 }
 
 /**

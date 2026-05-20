@@ -7,9 +7,7 @@
  * No feeds, Lex/Leg admin, Settings → Diagnostics tab, retention, exports, or other
  * mothership-only surfaces.
  *
- * Satellite bundle pruning (seismo-generator) uses `satellite-prune.json` — when
- * adding mothership-only routes or views (e.g. `settings_save_mail`, Settings → Mail
- * partial `views/partials/settings_mail.php`), update that manifest so generated uploads stay in sync.
+ * Path satellites share the mothership codebase; this route table hides admin surfaces.
  *
  * @var \Seismo\Http\Router $router
  */
@@ -29,11 +27,6 @@ $router->register(
 $router->register(
     'health',
     \Seismo\Controller\HealthController::class . '::show',
-    true
-);
-$router->register(
-    'migrate',
-    \Seismo\Controller\MigrateController::class . '::runWeb',
     true
 );
 $router->register(

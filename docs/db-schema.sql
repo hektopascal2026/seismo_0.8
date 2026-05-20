@@ -26,12 +26,10 @@
 -- Schema v19 (`Migration003EmailsUnified`) merges the former `fetched_emails`
 -- shape into `emails`. `getEmailTableName()` in bootstrap resolves to `emails`.
 --
--- Satellite mode
--- --------------
--- When SEISMO_MOTHERSHIP_DB is set, entry-source tables (feeds, feed_items,
--- scraper_configs, lex_items, calendar_events, sender_tags, emails) live in the
--- mothership DB and are read cross-DB. Scoring tables (entry_scores,
--- magnitu_config, magnitu_labels, entry_favourites) are always local.
+-- Path satellites
+-- ---------------
+-- Entry-source tables live in the shared `seismo` database. Each desk has a
+-- separate scores database (`seismo_<slug>`) — see `docs/db-schema-local.sql`.
 -- =============================================================================
 
 

@@ -211,7 +211,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.6.1 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.6.2 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Path satellites on one VPS</div>
+                        <ul>
+                            <li><strong>One codebase:</strong> desks at <code>/&lt;slug&gt;/</code> (e.g. <code>/security/</code>, <code>/digital/</code>) share the <code>seismo</code> entries database; scores and labels live in <code>seismo_&lt;slug&gt;</code>.</li>
+                            <li><strong>Provision:</strong> Settings → Satellites registry plus <code>bin/seismo-satellite-provision.sh</code> on the server — no pruned bundles or external generator.</li>
+                            <li><strong>Migrations:</strong> <code>php migrate.php --scores-db=…</code> for desk databases; remote refresh auto-targets the mothership URL on the same host.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.1</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Gmail sender review &amp; QoL</div>
                         <ul>
                             <li><strong>New senders queue:</strong> Gmail ingest proposes domain subscriptions with a display name; you review and confirm before they join the active registry (legacy IMAP ingest unchanged).</li>
@@ -224,7 +233,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <ul>
                             <li><strong>Production deploy:</strong> documented stack for Hetzner VPS (Nginx, PHP-FPM, MariaDB) with <code>/var/www/seismo</code> layout and cron ingest.</li>
                             <li><strong>Gmail API:</strong> OAuth connect in Settings → Mail; unified <code>emails</code> table replaces split IMAP/Gmail storage paths.</li>
-                            <li><strong>Operations:</strong> numbered migrations through schema v30, source-config JSON export/import, satellite prune bundles.</li>
+                            <li><strong>Operations:</strong> numbered migrations, source-config JSON export/import (legacy pruned satellite bundles superseded in 0.6.2).</li>
                         </ul>
                     </div>
                     <div class="about-timeline-entry">

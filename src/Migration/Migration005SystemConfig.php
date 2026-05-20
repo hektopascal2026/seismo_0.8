@@ -48,9 +48,14 @@ use PDOException;
 use RuntimeException;
 use Seismo\Repository\SystemConfigRepository;
 
-final class Migration005SystemConfig
+final class Migration005SystemConfig implements MigrationContract
 {
     public const VERSION = 21;
+
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::Both;
+    }
 
     private const LEGACY_TABLE = 'magnitu_config';
     private const NEW_TABLE    = 'system_config';
@@ -74,11 +79,11 @@ final class Migration005SystemConfig
         ],
     ];
 
-    public function apply(PDO $pdo): void
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         $this->renameTable($pdo);
 
-        if (isSatellite()) {
+        if ($target === MigrationTarget::Scores) {
             return;
         }
 

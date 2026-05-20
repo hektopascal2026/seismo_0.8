@@ -2,16 +2,14 @@
 /**
  * Seismo schema migrator (CLI only).
  *
- * Applies versioned migrations in `src/Migration/`. The base migration (17)
- * loads `docs/db-schema.sql` (consolidated 0.4 schema, all CREATE IF NOT EXISTS).
+ * Default: mothership migrations on the database from config.local.php
+ * (scores catalog = `seismo`, includes entry sources).
  *
- * Safe on your live database: if `system_config.schema_version` is already
- * at the latest, nothing runs except a quick version check. Table was
- * named `magnitu_config` before Migration 005 (Slice 5a); the runner
- * reads both names during the transition.
+ * Satellite scores DB:
+ *   php migrate.php --scores-db=seismo_security
  *
  * Usage:
- *   php migrate.php           # apply pending migrations
+ *   php migrate.php           # apply pending mothership migrations
  *   php migrate.php --status  # print current schema version and exit
  */
 
@@ -26,22 +24,35 @@ if (PHP_SAPI !== 'cli') {
 require __DIR__ . '/bootstrap.php';
 
 use Seismo\Migration\MigrationRunner;
+use Seismo\Migration\MigrationTarget;
 
 $statusOnly = in_array('--status', $argv, true);
+$scoresDb   = null;
+foreach ($argv as $arg) {
+    if (str_starts_with($arg, '--scores-db=')) {
+        $scoresDb = substr($arg, strlen('--scores-db='));
+    }
+}
 
-echo "Seismo migrate — " . SEISMO_VERSION . "\n";
+$target = MigrationTarget::Mothership;
+if ($scoresDb !== null && $scoresDb !== '') {
+    $target = MigrationTarget::Scores;
+}
+
+echo "Seismo migrate — " . SEISMO_VERSION . " ({$target->value})\n";
 
 try {
-    $pdo = getDbConnection();
+    $pdo = seismoPdoForMigrate($scoresDb);
 } catch (Throwable $e) {
     fwrite(STDERR, "Database connection failed: " . $e->getMessage() . "\n");
     exit(2);
 }
 
 $dbVersion = (string)$pdo->query('SELECT VERSION()')->fetchColumn();
-echo "Connected to MySQL {$dbVersion}\n";
+$dbName    = (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
+echo "Connected to MySQL {$dbVersion} — database `{$dbName}`\n";
 
-$runner = new MigrationRunner($pdo);
+$runner = new MigrationRunner($pdo, $target);
 $current = $runner->getCurrentVersion();
 echo "Current schema version: {$current}\n";
 
@@ -55,11 +66,6 @@ if ($current >= MigrationRunner::LATEST_VERSION) {
     exit(0);
 }
 
-if (isSatellite()) {
-    fwrite(STDERR, "Migrations only run on the mothership. This instance is in satellite mode — skip migrate.php here.\n");
-    exit(4);
-}
-
 try {
     $runner->run(static function (string $line): void {
         echo $line;
@@ -71,3 +77,37 @@ try {
 
 echo "Done.\n";
 exit(0);
+
+/**
+ * @throws RuntimeException
+ */
+function seismoPdoForMigrate(?string $scoresDb): PDO
+{
+    $host = DB_HOST;
+    $port = null;
+    if (preg_match('/^(.+):(\d+)$/', $host, $m)) {
+        $host = $m[1];
+        $port = (int)$m[2];
+    }
+    if (defined('DB_PORT') && DB_PORT !== '' && DB_PORT !== null) {
+        $port = (int)DB_PORT;
+    }
+    $dbName = $scoresDb !== null && $scoresDb !== ''
+        ? $scoresDb
+        : (defined('SEISMO_ENTRIES_DB') ? (string)SEISMO_ENTRIES_DB : DB_NAME);
+    if ($dbName === '') {
+        throw new RuntimeException('Database name is empty — set DB_NAME / SEISMO_ENTRIES_DB in config.local.php');
+    }
+    $dsn = 'mysql:host=' . $host . ';dbname=' . $dbName . ';charset=utf8mb4';
+    if ($port !== null) {
+        $dsn .= ';port=' . $port;
+    }
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ]);
+    $pdo->exec("SET time_zone = '+00:00'");
+
+    return $pdo;
+}

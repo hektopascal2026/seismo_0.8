@@ -21,7 +21,12 @@ final class Migration015ParlPressSdaFeed
 {
     public const VERSION = 31;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         if ($this->sdaFeedExists($pdo)) {
             return;

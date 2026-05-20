@@ -29,11 +29,16 @@ use PDO;
 use PDOException;
 use RuntimeException;
 
-final class Migration004ExportKey
+final class Migration004ExportKey implements MigrationContract
 {
     public const VERSION = 20;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::Both;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         try {
             $stmt = $pdo->prepare(

@@ -215,7 +215,7 @@ final class EntryScoreRepository
     // These queries cross-join local `entry_scores` with the entry-source
     // tables (which `entryTable()` satellite-wraps). Both live on the same
     // MariaDB server in any supported deployment (mothership, or satellite
-    // whose `SEISMO_MOTHERSHIP_DB` points at another DB on the same host),
+    // whose default catalog is `seismo_<slug>` while entries live in `seismo`),
     // so a single PDO connection suffices.
     //
     // Each method returns a flat array of rows with the exact columns

@@ -18,7 +18,12 @@ final class Migration002PluginRunLog
 {
     public const VERSION = 18;
 
-    public function apply(PDO $pdo): void
+    public static function migrationScope(): MigrationScope
+    {
+        return MigrationScope::MothershipOnly;
+    }
+
+    public function apply(PDO $pdo, MigrationTarget $target): void
     {
         $sql = "CREATE TABLE IF NOT EXISTS plugin_run_log (
             id            INT AUTO_INCREMENT PRIMARY KEY,

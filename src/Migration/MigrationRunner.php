@@ -23,9 +23,15 @@ final class MigrationRunner
 
     public function __construct(
         private PDO $pdo,
+        private MigrationTarget $target = MigrationTarget::Mothership,
         ?SystemConfigRepository $systemConfig = null,
     ) {
         $this->systemConfig = $systemConfig ?? new SystemConfigRepository($pdo);
+    }
+
+    public function getTarget(): MigrationTarget
+    {
+        return $this->target;
     }
 
     /**
@@ -95,14 +101,9 @@ final class MigrationRunner
      */
     public function run(callable $log): void
     {
-        if (isSatellite()) {
-            throw new RuntimeException(
-                'Migrations only run on the mothership. This instance has SEISMO_SATELLITE_MODE enabled; do not apply DDL on a satellite.'
-            );
-        }
-
         $current = $this->getCurrentVersion();
 
+        /** @var array<int, MigrationContract> $migrations */
         $migrations = [
             Migration001BaseSchema::VERSION    => new Migration001BaseSchema(),
             Migration002PluginRunLog::VERSION  => new Migration002PluginRunLog(),
@@ -128,8 +129,14 @@ final class MigrationRunner
             if ($current >= $targetVersion) {
                 continue;
             }
-            $log("Applying migration to version {$targetVersion} …\n");
-            $migration->apply($this->pdo);
+            if (!$this->target->accepts($migration::migrationScope())) {
+                $this->persistSchemaVersion($targetVersion);
+                $current = $targetVersion;
+                $log("Skipped migration {$targetVersion} for target {$this->target->value} (not applicable).\n");
+                continue;
+            }
+            $log("Applying migration to version {$targetVersion} ({$this->target->value}) …\n");
+            $migration->apply($this->pdo, $this->target);
             $this->persistSchemaVersion($targetVersion);
             $current = $targetVersion;
             $log("OK — schema version is now {$targetVersion}.\n");
