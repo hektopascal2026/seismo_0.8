@@ -14,6 +14,10 @@
  * @var array<string, mixed> $euCfg
  * @var array<string, mixed> $deCfg
  * @var array<string, mixed> $frCfg
+ * @var array<string, mixed> $jusBgerCfg
+ * @var array<string, mixed> $jusBgeCfg
+ * @var array<string, mixed> $jusBvgerCfg
+ * @var string $jusBannedWordsStr
  * @var string $csrfField Hidden CSRF inputs (LexController)
  */
 
@@ -140,7 +144,68 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
                     <?= $csrfField ?>
                     <button type="submit" class="btn btn-primary">Refresh Légifrance (FR)</button>
                 </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bger" class="admin-inline-form">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh Jus: BGer</button>
+                </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bge" class="admin-inline-form">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh Jus: BGE</button>
+                </form>
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bvger" class="admin-inline-form">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-primary">Refresh Jus: BVGer</button>
+                </form>
             </div>
+        </div>
+
+        <div class="latest-entries-section module-section-spaced">
+            <h2 class="section-title">Jus (Swiss case law) — entscheidsuche.ch</h2>
+            <p class="admin-intro">BGer, BGE, and BVGer are separate plugins. If refresh reports <em>Disabled in config</em>, enable the source below and save before refreshing.</p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_jus" class="admin-form-card">
+                <?= $csrfField ?>
+                <div class="admin-form-field">
+                    <label><input type="checkbox" name="ch_bger_enabled" value="1" <?= !empty($jusBgerCfg['enabled']) ? 'checked' : '' ?>> BGer enabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BGer lookback days<br>
+                    <input type="number" name="ch_bger_lookback_days" value="<?= (int)($jusBgerCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BGer row limit (max 500)<br>
+                    <input type="number" name="ch_bger_limit" value="<?= (int)($jusBgerCfg['limit'] ?? 100) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label><input type="checkbox" name="ch_bge_enabled" value="1" <?= !empty($jusBgeCfg['enabled']) ? 'checked' : '' ?>> BGE enabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BGE lookback days<br>
+                    <input type="number" name="ch_bge_lookback_days" value="<?= (int)($jusBgeCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BGE row limit (max 500)<br>
+                    <input type="number" name="ch_bge_limit" value="<?= (int)($jusBgeCfg['limit'] ?? 50) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label><input type="checkbox" name="ch_bvger_enabled" value="1" <?= !empty($jusBvgerCfg['enabled']) ? 'checked' : '' ?>> BVGer enabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BVGer lookback days<br>
+                    <input type="number" name="ch_bvger_lookback_days" value="<?= (int)($jusBvgerCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>BVGer row limit (max 500)<br>
+                    <input type="number" name="ch_bvger_limit" value="<?= (int)($jusBvgerCfg['limit'] ?? 100) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Banned title words (comma-separated, case-insensitive)<br>
+                    <input type="text" name="jus_banned_words" value="<?= e($jusBannedWordsStr) ?>" autocomplete="off" class="search-input" style="width:100%;"></label>
+                    <p class="admin-hint">Decisions whose title contains any listed word are skipped on ingest.</p>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save Jus settings</button>
+                </div>
+            </form>
         </div>
 
         <div class="latest-entries-section module-section-spaced">

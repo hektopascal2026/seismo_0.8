@@ -64,6 +64,13 @@ final class LexController
         $euCfg = is_array($lexCfg['eu'] ?? null) ? $lexCfg['eu'] : [];
         $deCfg = is_array($lexCfg['de'] ?? null) ? $lexCfg['de'] : [];
         $frCfg = is_array($lexCfg['fr'] ?? null) ? $lexCfg['fr'] : [];
+        $jusBgerCfg = is_array($lexCfg['ch_bger'] ?? null) ? $lexCfg['ch_bger'] : [];
+        $jusBgeCfg = is_array($lexCfg['ch_bge'] ?? null) ? $lexCfg['ch_bge'] : [];
+        $jusBvgerCfg = is_array($lexCfg['ch_bvger'] ?? null) ? $lexCfg['ch_bvger'] : [];
+        $jusBannedWordsStr = '';
+        if (!empty($lexCfg['jus_banned_words']) && is_array($lexCfg['jus_banned_words'])) {
+            $jusBannedWordsStr = implode(', ', array_map('strval', $lexCfg['jus_banned_words']));
+        }
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/lex.php';
@@ -213,6 +220,21 @@ final class LexController
     public function refreshLegifrance(): void
     {
         $this->runLexPluginRefresh('legifrance', 'Légifrance');
+    }
+
+    public function refreshJusBger(): void
+    {
+        $this->runLexPluginRefresh('jus_bger', 'Jus: BGer');
+    }
+
+    public function refreshJusBge(): void
+    {
+        $this->runLexPluginRefresh('jus_bge', 'Jus: BGE');
+    }
+
+    public function refreshJusBvger(): void
+    {
+        $this->runLexPluginRefresh('jus_bvger', 'Jus: BVGer');
     }
 
     public function saveLexEu(): void
@@ -377,6 +399,67 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo save_lex_fr: ' . $e->getMessage());
             $_SESSION['error'] = 'Could not save Légifrance settings: ' . $e->getMessage();
+        }
+
+        $this->redirectToLex();
+    }
+
+    public function saveLexJus(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectToLex();
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectToLex();
+
+            return;
+        }
+
+        $store = new LexConfigStore();
+        $isEnabled = $this->postEnabledClosure();
+        $defaults = $store->defaultConfig();
+
+        try {
+            $full = $store->load();
+            foreach (['ch_bger' => 'ch_bger_enabled', 'ch_bge' => 'ch_bge_enabled', 'ch_bvger' => 'ch_bvger_enabled'] as $block => $enabledField) {
+                $blockDefaults = is_array($defaults[$block] ?? null) ? $defaults[$block] : [];
+                $cfg = is_array($full[$block] ?? null) ? $full[$block] : [];
+                $cfg['enabled'] = $isEnabled(
+                    $enabledField,
+                    (bool)($cfg['enabled'] ?? $blockDefaults['enabled'] ?? true)
+                );
+                $cfg['lookback_days'] = max(1, (int)($_POST[$block . '_lookback_days'] ?? $cfg['lookback_days'] ?? 90));
+                $cfg['limit'] = max(1, min((int)($_POST[$block . '_limit'] ?? $cfg['limit'] ?? 100), 500));
+                $cfg['notes'] = trim((string)($_POST[$block . '_notes'] ?? $cfg['notes'] ?? ''));
+                $store->savePluginBlock($block, $cfg);
+            }
+
+            $bwRaw = trim((string)($_POST['jus_banned_words'] ?? ''));
+            if ($bwRaw === '') {
+                $full['jus_banned_words'] = [];
+            } else {
+                $chunks = preg_split('/[\s,;]+/u', $bwRaw) ?: [];
+                $words = [];
+                foreach ($chunks as $chunk) {
+                    if (!is_string($chunk)) {
+                        continue;
+                    }
+                    $w = trim($chunk);
+                    if ($w !== '') {
+                        $words[] = $w;
+                    }
+                }
+                $full['jus_banned_words'] = array_values(array_unique($words));
+            }
+            $store->save($full);
+
+            $_SESSION['success'] = 'Jus (Swiss case law) settings saved.';
+        } catch (\Throwable $e) {
+            error_log('Seismo save_lex_jus: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not save Jus settings: ' . $e->getMessage();
         }
 
         $this->redirectToLex();

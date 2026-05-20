@@ -196,7 +196,7 @@ final class LexConfigStore
                 'notes' => '',
             ],
             'ch_bge' => [
-                'enabled' => false,
+                'enabled' => true,
                 'base_url' => 'https://entscheidsuche.ch',
                 'lookback_days' => 90,
                 'limit' => 50,

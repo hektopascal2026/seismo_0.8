@@ -98,6 +98,26 @@ $router->register(
     false
 );
 $router->register(
+    'save_lex_jus',
+    \Seismo\Controller\LexController::class . '::saveLexJus',
+    false
+);
+$router->register(
+    'refresh_jus_bger',
+    \Seismo\Controller\LexController::class . '::refreshJusBger',
+    false
+);
+$router->register(
+    'refresh_jus_bge',
+    \Seismo\Controller\LexController::class . '::refreshJusBge',
+    false
+);
+$router->register(
+    'refresh_jus_bvger',
+    \Seismo\Controller\LexController::class . '::refreshJusBvger',
+    false
+);
+$router->register(
     'leg',
     \Seismo\Controller\LegController::class . '::show',
     true
