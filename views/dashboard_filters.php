@@ -132,8 +132,6 @@ $formAction = $basePath . '/index.php';
         <?php endif; ?>
 
         <div class="search-section search-section-spaced">
-            <p class="admin-intro">Toggle sources below; the feed updates on this page. Open a lean <a href="<?= e($basePath) ?>/index.php?action=index">Timeline</a> when you prefer no controls.</p>
-
             <div class="filter-page-actions">
                 <a href="<?= e($basePath) ?>/index.php?<?= e($filterPageAllQs) ?>" class="btn btn-primary">All</a>
                 <a href="<?= e($basePath) ?>/index.php?<?= e($filterPageNoneQs) ?>" class="btn btn-secondary">None</a>

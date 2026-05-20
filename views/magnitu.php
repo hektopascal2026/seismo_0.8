@@ -29,7 +29,6 @@ $headerSubtitle = 'Scores ≥ ' . round($alertThreshold * 100) . '% (alert thres
 $activeNav      = 'magnitu';
 
 $timelineHighlightsSortHighestOn = !empty($timelineHighlightsSortHighestOn);
-$highlightsSortLabel = $timelineHighlightsSortHighestOn ? 'highest score first' : 'newest first';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,13 +54,6 @@ $highlightsSortLabel = $timelineHighlightsSortHighestOn ? 'highest score first' 
             <div class="message message-error"><?= e((string)$_SESSION['error']) ?></div>
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
-
-        <p class="admin-intro">
-            Feed, email, Lex, and Leg entries whose current score is at or above your
-            <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">alert threshold</a>
-            — Magnitu (ML) and recipe scores both qualify. Sorted <?= e($highlightsSortLabel) ?>.
-            <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
-        </p>
 
         <?php if ($dashboardError !== null): ?>
             <div class="message message-error"><?= e($dashboardError) ?></div>

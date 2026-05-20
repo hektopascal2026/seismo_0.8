@@ -95,13 +95,6 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
             <?php unset($_SESSION['error']); ?>
         <?php endif; ?>
 
-        <p class="admin-intro">
-            Apply Magnitu class labels for training. Saved to this instance&rsquo;s <code>magnitu_labels</code>
-            (same data Magnitu sync pulls). Filters match the old magnitu-mini queue: all sources, legislation only, or news-shaped feed items only.
-            <a href="<?= e($basePath) ?>/index.php?action=magnitu">Highlights</a>
-            &middot; <a href="<?= e($basePath) ?>/index.php?action=index">Timeline</a>
-        </p>
-
         <nav class="label-page-toolbar" aria-label="Entry family filter">
             <a href="<?= e($filterQs('all')) ?>" class="<?= $filter === 'all' ? 'active' : '' ?>">All</a>
             <a href="<?= e($filterQs('lex_item')) ?>" class="<?= $filter === 'lex_item' ? 'active' : '' ?>">Legislation</a>
