@@ -407,6 +407,8 @@ final class EmailWebViewPhraseLexicon
             'bilder werden in dieser e-mail nicht',
             'modernen e-mail-reader',
             'modernen email-reader',
+            'news service bund',
+            'medienmitteilung |',
         ];
     }
 

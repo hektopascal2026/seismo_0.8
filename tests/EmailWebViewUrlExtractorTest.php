@@ -40,6 +40,40 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         );
     }
 
+    public function testEuroparlPressHeadlineLinkIsWebViewUrl(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/mail/europarl_press_headline_link.html');
+        self::assertIsString($html);
+
+        $expected = 'https://www.europarl.europa.eu/news/en/press-room/20260513IPR43308/'
+            . 'slovakia-meps-demand-action-to-protect-eu-values-and-the-eu-budget';
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromHtml($html));
+
+        $plain = "Press service European Parliament\nPress release 20-05-2026\n"
+            . "Slovakia: MEPs demand action to protect EU values and the EU budget\n"
+            . $expected . "\n"
+            . 'In a resolution adopted on Wednesday.';
+
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
+    public function testNewsServiceBundHeadlineLinkIsWebViewUrl(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/mail/news_service_bund_headline_link.html');
+        self::assertIsString($html);
+
+        $expected = 'https://www.admin.ch/de/newnsb/TDa4boIj7yF-wQiV_ccp4';
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromHtml($html));
+
+        $plain = "News Service Bund www.news.admin.ch\n"
+            . "Medienmitteilung | 20.05.2026\n"
+            . "Handelsabkommen: Bundesrat will Landwirtschaft gezielt unterstützen\n"
+            . $expected . "\n"
+            . 'Bern, 20.05.2026 - summary text.';
+
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
     public function testBadenWuerttembergGermanHierLinkUsesParentContext(): void
     {
         $html = file_get_contents(__DIR__ . '/fixtures/mail/baden_wuerttemberg_webview.html');
