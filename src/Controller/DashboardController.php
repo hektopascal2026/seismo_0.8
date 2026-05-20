@@ -387,11 +387,7 @@ final class DashboardController
     private function resolveAlertThreshold(): float
     {
         try {
-            $config = new SystemConfigRepository(getDbConnection());
-            $raw    = $config->get('alert_threshold');
-            if ($raw !== null && $raw !== '' && is_numeric($raw)) {
-                return max(0.0, min(1.0, (float)$raw));
-            }
+            return (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
         } catch (\Throwable $e) {
             // fall through
         }

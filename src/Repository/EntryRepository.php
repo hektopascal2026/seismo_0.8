@@ -197,8 +197,9 @@ final class EntryRepository
      * back. Magnitu's ML output remains authoritative once it arrives (the
      * UPSERT in `EntryScoreRepository` overwrites the recipe row).
      *
-     * Ordered by the entry's own timestamp (family-specific) and hydrated only
-     * for the current window so scored rows are never silently dropped.
+     * Ordered by score time (newest rescored first), then hydrated from entry
+     * tables. The score query stays on local `entry_scores` only so a missing
+     * optional family table or email date-column mismatch cannot zero the list.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -208,46 +209,24 @@ final class EntryRepository
         $offset = max(0, $offset);
         $alertThreshold = max(0.0, min(1.0, $alertThreshold));
         try {
-            // Chronological (entry-date) ordering across all entry families.
-            // Compute a comparable unix timestamp via per-family LEFT JOINs.
-            $fi = entryTable('feed_items');
-            $em = entryTable('emails');
-            $li = entryTable('lex_items');
-            $ce = entryTable('calendar_events');
-
             $stmt = $this->pdo->prepare(
-                'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source,
-                        COALESCE(
-                          UNIX_TIMESTAMP(fi.published_date),
-                          UNIX_TIMESTAMP(fi.cached_at),
-                          UNIX_TIMESTAMP(COALESCE(e.date_received, e.date_utc, e.created_at, e.date_sent)),
-                          CASE
-                            WHEN li.document_date IS NOT NULL AND DATE(li.created_at) = li.document_date THEN UNIX_TIMESTAMP(li.created_at)
-                            WHEN li.document_date IS NOT NULL THEN UNIX_TIMESTAMP(CONCAT(li.document_date, \' 00:00:00\'))
-                            ELSE UNIX_TIMESTAMP(li.created_at)
-                          END,
-                          UNIX_TIMESTAMP(COALESCE(ce.event_date, ce.created_at)),
-                          UNIX_TIMESTAMP(es.scored_at)
-                        ) AS sort_ts
+                'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source
                  FROM entry_scores es
-                 LEFT JOIN ' . $fi . ' fi
-                   ON es.entry_type = \'feed_item\' AND fi.id = es.entry_id AND fi.hidden = 0
-                 LEFT JOIN ' . $em . ' e
-                   ON es.entry_type = \'email\' AND e.id = es.entry_id
-                 LEFT JOIN ' . $li . ' li
-                   ON es.entry_type = \'lex_item\' AND li.id = es.entry_id
-                 LEFT JOIN ' . $ce . ' ce
-                   ON es.entry_type = \'calendar_event\' AND ce.id = es.entry_id
                  WHERE es.score_source IN (\'magnitu\', \'recipe\')
                    AND es.relevance_score >= ?
                    AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                 ORDER BY sort_ts DESC, es.scored_at DESC, es.id DESC
+                 ORDER BY es.scored_at DESC, es.id DESC
                  LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
             );
             $stmt->execute([$alertThreshold]);
             /** @var array<int, array<string, mixed>> $scoreRows */
             $scoreRows = $stmt->fetchAll() ?: [];
         } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            error_log('EntryRepository getHighlightsTimeline: ' . $e->getMessage());
+
             return [];
         }
 

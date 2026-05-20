@@ -38,10 +38,7 @@ final class MagnituHighlightsController
         try {
             $pdo    = getDbConnection();
             $config = new SystemConfigRepository($pdo);
-            $raw    = $config->get('alert_threshold');
-            if ($raw !== null && $raw !== '' && is_numeric($raw)) {
-                $alertThreshold = max(0.0, min(1.0, (float)$raw));
-            }
+            $alertThreshold = $config->getAlertThreshold();
 
             $repo   = new EntryRepository($pdo);
             $limit  = $this->clampLimit($_GET['limit'] ?? null, $pdo);

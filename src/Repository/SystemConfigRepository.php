@@ -88,6 +88,35 @@ final class SystemConfigRepository
     }
 
     /**
+     * Magnitu alert threshold as 0.0–1.0 for Highlights and badge logic.
+     *
+     * Values above 1.0 are treated as percentages (e.g. a legacy `60` row
+     * becomes 0.60) so a mis-saved config cannot clamp to 1.0 and hide every
+     * highlight.
+     */
+    public function getAlertThreshold(float $default = 0.60): float
+    {
+        $raw = $this->get('alert_threshold');
+        if ($raw === null || $raw === '' || !is_numeric($raw)) {
+            return $default;
+        }
+
+        return self::normalizeAlertThreshold((float)$raw);
+    }
+
+    /**
+     * Clamp a threshold input to 0.0–1.0; divide by 100 when given as a percent.
+     */
+    public static function normalizeAlertThreshold(float $value): float
+    {
+        if ($value > 1.0) {
+            $value /= 100.0;
+        }
+
+        return max(0.0, min(1.0, $value));
+    }
+
+    /**
      * Upsert a key. Used by migrations for `schema_version` and by
      * settings / plugin code. Throws PDOException if `system_config`
      * is missing — run base migrations first.

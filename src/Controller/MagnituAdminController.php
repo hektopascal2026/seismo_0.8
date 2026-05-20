@@ -65,7 +65,7 @@ final class MagnituAdminController
         }
 
         $thresholdRaw = $_POST['alert_threshold'] ?? '0.60';
-        $threshold    = max(0.0, min(1.0, (float)$thresholdRaw));
+        $threshold    = SystemConfigRepository::normalizeAlertThreshold((float)$thresholdRaw);
         $sort         = isset($_POST['sort_by_relevance']) ? '1' : '0';
 
         try {
