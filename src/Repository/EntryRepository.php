@@ -197,9 +197,11 @@ final class EntryRepository
      * back. Magnitu's ML output remains authoritative once it arrives (the
      * UPSERT in `EntryScoreRepository` overwrites the recipe row).
      *
-     * Ordered by score time (newest rescored first), then hydrated from entry
-     * tables. The score query stays on local `entry_scores` only so a missing
-     * optional family table or email date-column mismatch cannot zero the list.
+     * Ordered by relevance (highest first), then hydrated from entry tables.
+     * The score query stays on local `entry_scores` only so a missing optional
+     * family table or email date-column mismatch cannot zero the list. Callers
+     * should pass a generous `$limit` (see {@see MAX_LIMIT}) — ordering by
+     * `scored_at` would drop strong scores when a batch rescore touches many rows.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -215,7 +217,7 @@ final class EntryRepository
                  WHERE es.score_source IN (\'magnitu\', \'recipe\')
                    AND es.relevance_score >= ?
                    AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                 ORDER BY es.scored_at DESC, es.id DESC
+                 ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                  LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
             );
             $stmt->execute([$alertThreshold]);
@@ -317,8 +319,7 @@ final class EntryRepository
             }
         }
 
-        // Preserve the DB ordering (scored_at DESC, id DESC) so paging is stable
-        // and never depends on the entry family's own timestamp granularity.
+        // Preserve score-query ordering (relevance DESC, then scored_at, id).
         $rank = array_flip($orderedKeys);
         usort(
             $items,
@@ -328,6 +329,24 @@ final class EntryRepository
                 return ($rank[$ka] ?? PHP_INT_MAX) <=> ($rank[$kb] ?? PHP_INT_MAX);
             }
         );
+
+        $hydratedKeys = [];
+        foreach ($items as $item) {
+            $hydratedKeys[(string)($item['entry_type'] ?? '') . ':' . (string)($item['entry_id'] ?? '')] = true;
+        }
+        $dropped = array_values(array_filter(
+            $orderedKeys,
+            static fn (string $k): bool => !isset($hydratedKeys[$k])
+        ));
+        if ($dropped !== []) {
+            $sample = implode(', ', array_slice($dropped, 0, 8));
+            $more   = count($dropped) > 8 ? ' …' : '';
+            error_log(
+                'EntryRepository highlights: ' . count($dropped)
+                . ' scored row(s) could not be hydrated: ' . $sample . $more
+            );
+        }
+
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
 

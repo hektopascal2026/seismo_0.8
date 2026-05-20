@@ -91,18 +91,14 @@ final class MagnituHighlightsController
         return min(EntryRepository::MAX_LIMIT, max(1, $n));
     }
 
+    /**
+     * Highlights lists every row above the alert threshold (up to MAX_LIMIT),
+     * not the small dashboard timeline window.
+     */
     private function defaultTimelineLimit(\PDO $pdo): int
     {
-        try {
-            $config = new SystemConfigRepository($pdo);
-            $raw    = $config->get(SettingsController::KEY_DASHBOARD_LIMIT);
-            if ($raw !== null && $raw !== '' && ctype_digit($raw)) {
-                return max(1, min(EntryRepository::MAX_LIMIT, (int)$raw));
-            }
-        } catch (\Throwable $e) {
-            // ignore
-        }
+        unset($pdo);
 
-        return DashboardController::DEFAULT_LIMIT_FALLBACK;
+        return EntryRepository::MAX_LIMIT;
     }
 }
