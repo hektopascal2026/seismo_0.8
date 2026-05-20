@@ -18,6 +18,11 @@ namespace Seismo\Service\Http;
  * Non-2xx responses do NOT throw. Callers inspect Response::$status and
  * decide what counts as an error for their domain (e.g. ParlCh treats 4xx
  * as bad config, not as a transient blip).
+ *
+ * cURL easy handles share DNS + connection state via one process-wide share
+ * object ({@see curlShareHandle()}). PHP 8.5+ uses {@see curl_share_init_persistent()}
+ * so warm FPM workers and long CLI cron ticks reuse TCP/TLS to repeat hosts
+ * (scraper article bursts, SharePoint OData, etc.).
  */
 final class BaseClient
 {
@@ -26,6 +31,9 @@ final class BaseClient
 
     /** Milliseconds to wait before retrying a 429/503. */
     private const RETRY_SLEEP_MS = 1000;
+
+    /** @var \CurlShareHandle|null Lazily created; never closed (persistent on PHP 8.5+). */
+    private static ?\CurlShareHandle $curlShare = null;
 
     public function __construct(
         private readonly int $timeoutSeconds = self::DEFAULT_TIMEOUT,
@@ -155,6 +163,10 @@ final class BaseClient
         if ($webEncoding) {
             $opts[CURLOPT_ENCODING] = '';
         }
+        $share = self::curlShareHandle();
+        if ($share !== null) {
+            $opts[CURLOPT_SHARE] = $share;
+        }
         curl_setopt_array($ch, $opts);
 
         if ($body !== null) {
@@ -237,5 +249,48 @@ final class BaseClient
             : '';
 
         return 'Seismo/' . $version . $contact;
+    }
+
+    /**
+     * Process-wide cURL share for DNS + TCP/TLS connection reuse across requests.
+     */
+    private static function curlShareHandle(): ?\CurlShareHandle
+    {
+        if (self::$curlShare !== null) {
+            return self::$curlShare;
+        }
+
+        if (!function_exists('curl_init')) {
+            return null;
+        }
+
+        if (function_exists('curl_share_init_persistent')) {
+            $share = curl_share_init_persistent([
+                CURL_LOCK_DATA_DNS,
+                CURL_LOCK_DATA_CONNECT,
+            ]);
+            if ($share instanceof \CurlShareHandle) {
+                self::$curlShare = $share;
+
+                return self::$curlShare;
+            }
+
+            return null;
+        }
+
+        if (!function_exists('curl_share_init')) {
+            return null;
+        }
+
+        $share = curl_share_init();
+        if (!$share instanceof \CurlShareHandle) {
+            return null;
+        }
+
+        curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+        curl_share_setopt($share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+        self::$curlShare = $share;
+
+        return self::$curlShare;
     }
 }
