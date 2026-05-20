@@ -29,9 +29,7 @@ $scraperHasMore = mb_strlen($scraperContent) > 200;
                         <div class="entry-card">
                             <div class="entry-header">
                                 <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars((string)($predictedLabel ?? '')) ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
+                                <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if (seismo_is_navigable_url($scraperLink)): ?>
@@ -65,7 +63,6 @@ $scraperHasMore = mb_strlen($scraperContent) > 200;
                                     <?php if (!empty($item['published_date'])): ?>
                                         <span class="entry-date"><?= date('d.m.Y H:i', strtotime((string)$item['published_date'])) ?></span>
                                     <?php endif; ?>
-                                    <?php require __DIR__ . '/entry_meta_favourite_hide.php'; ?>
                                 </div>
                             </div>
                         </div>

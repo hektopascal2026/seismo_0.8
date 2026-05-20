@@ -63,9 +63,7 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                         <span class="entry-tag <?= $feedCatTagClass ?>"><?= htmlspecialchars($feedLabel) ?></span>
                                     <?php endif; ?>
                                 <?php endif; ?>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
+                                <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if (seismo_is_navigable_url($itemUrl)): ?>
@@ -109,7 +107,6 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                     <?php if (!empty($item['published_date'])): ?>
                                         <span class="entry-date"><?= date('d.m.Y H:i', strtotime((string)$item['published_date'])) ?></span>
                                     <?php endif; ?>
-                                    <?php require __DIR__ . '/entry_meta_favourite_hide.php'; ?>
                                 </div>
                             </div>
                         </div>

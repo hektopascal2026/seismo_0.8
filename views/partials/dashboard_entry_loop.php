@@ -212,9 +212,7 @@ $entryLoopIndex                 = 0;
                                     <span class="entry-lex-eu-doc-type"><?= htmlspecialchars($lexDocType) ?></span>
                                 </div>
                                 <div class="entry-header--lex-eu-right">
-                                    <?php if ($relevanceScore !== null): ?>
-                                        <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                    <?php endif; ?>
+                                    <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                                 </div>
                             </div>
                             <?php else: ?>
@@ -225,9 +223,7 @@ $entryLoopIndex                 = 0;
                                     <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
                                 <?php endif; ?>
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
+                                <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <?php endif; ?>
                             <h3 class="entry-title">
@@ -269,15 +265,6 @@ $entryLoopIndex                 = 0;
                                     <?php if ($lexDate): ?>
                                         <span class="entry-date"><?= $lexDate ?></span>
                                     <?php endif; ?>
-                                    <?php if ($showFavourites): ?>
-                                    <form method="POST" action="?action=toggle_favourite" class="favourite-form">
-                                        <?= $csrfField ?>
-                                        <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
-                                        <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
-                                        <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
-                                        <button type="submit" class="favourite-btn<?= $isFavourite ? ' is-favourite' : '' ?>" title="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>"><?= $isFavourite ? '★' : '☆' ?></button>
-                                    </form>
-                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -311,9 +298,7 @@ $entryLoopIndex                 = 0;
                                 <?php if ($calCouncil): ?>
                                     <span class="entry-tag entry-tag--leg-council"><?= htmlspecialchars($calCouncil) ?></span>
                                 <?php endif; ?>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
+                                <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if ($calHasUrl): ?>
@@ -343,15 +328,6 @@ $entryLoopIndex                 = 0;
                                 <div class="entry-meta-right">
                                     <?php if ($calDateLabel): ?>
                                         <span class="entry-date"><?= htmlspecialchars($calDateLabel) ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($showFavourites): ?>
-                                    <form method="POST" action="?action=toggle_favourite" class="favourite-form">
-                                        <?= $csrfField ?>
-                                        <input type="hidden" name="entry_type" value="<?= htmlspecialchars($favouriteEntryType) ?>">
-                                        <input type="hidden" name="entry_id" value="<?= $favouriteEntryId ?>">
-                                        <input type="hidden" name="return_query" value="<?= htmlspecialchars($returnQuery) ?>">
-                                        <button type="submit" class="favourite-btn<?= $isFavourite ? ' is-favourite' : '' ?>" title="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= $isFavourite ? 'Remove from favourites' : 'Add to favourites' ?>"><?= $isFavourite ? '★' : '☆' ?></button>
-                                    </form>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -406,9 +382,7 @@ $entryLoopIndex                 = 0;
                                 <?php elseif ($legacySenderTag): ?>
                                     <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
-                                <?php if ($relevanceScore !== null): ?>
-                                    <span class="magnitu-badge <?= $scoreBadgeClass ?>" title="<?= htmlspecialchars($predictedLabel ?? '') ?> (<?= round($relevanceScore * 100) ?>%)"><?= round($relevanceScore * 100) ?></span>
-                                <?php endif; ?>
+                                <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">
                                 <?php if (!empty($searchQuery)): ?>
@@ -445,7 +419,6 @@ $entryLoopIndex                 = 0;
                                     <?php if ($createdAt): ?>
                                         <span class="entry-date"><?= htmlspecialchars($createdAt) ?></span>
                                     <?php endif; ?>
-                                    <?php require __DIR__ . '/entry_meta_favourite_hide.php'; ?>
                                 </div>
                             </div>
                         </div>

@@ -1,6 +1,6 @@
 <?php
 /**
- * Star + hide controls for feed_item and email cards.
+ * Star + hide controls for feed_item and email cards (top-right of entry card).
  *
  * Expects: $csrfField, $returnQuery, $favouriteEntryType, $favouriteEntryId,
  *          $isFavourite, $showFavourites (optional), $showHide (optional, default true).
@@ -10,7 +10,12 @@ $showHide       = !isset($showHide) || $showHide;
 $canHide        = $showHide
     && in_array((string)($favouriteEntryType ?? ''), ['feed_item', 'email'], true)
     && (int)($favouriteEntryId ?? 0) > 0;
+
+if (!$canHide && !$showFavourites) {
+    return;
+}
 ?>
+<div class="entry-card-actions">
 <?php if ($canHide): ?>
 <form method="POST" action="?action=hide_entry" class="hide-entry-form" onsubmit="return confirm('Hide this entry? It stays hidden after refresh.');">
     <?= $csrfField ?>
@@ -29,3 +34,4 @@ $canHide        = $showHide
     <button type="submit" class="favourite-btn<?= !empty($isFavourite) ? ' is-favourite' : '' ?>" title="<?= !empty($isFavourite) ? 'Remove from favourites' : 'Add to favourites' ?>" aria-label="<?= !empty($isFavourite) ? 'Remove from favourites' : 'Add to favourites' ?>"><?= !empty($isFavourite) ? '★' : '☆' ?></button>
 </form>
 <?php endif; ?>
+</div>
