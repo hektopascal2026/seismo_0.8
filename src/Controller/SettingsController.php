@@ -131,10 +131,7 @@ final class SettingsController
         $mailGmailConnected      = false;
         $mailOAuthRedirectUri    = '';
 
-        $migrateKeyConfigured      = false;
         $configLocalWritable       = false;
-        $pendingMigrateKey         = null;
-        $migrateKeyPasteBlock      = null;
         $adminPasswordPasteBlock   = null;
         $sessionAuthEnabled        = AuthGate::isEnabled();
 
@@ -150,18 +147,7 @@ final class SettingsController
 
         if ($tab === 'general') {
             $cfgPath = SEISMO_ROOT . '/config.local.php';
-            $migrateKeyConfigured = defined('SEISMO_MIGRATE_KEY')
-                && is_string(SEISMO_MIGRATE_KEY)
-                && SEISMO_MIGRATE_KEY !== '';
             $configLocalWritable = is_file($cfgPath) && is_writable($cfgPath);
-            if (isset($_SESSION['settings_pending_migrate_key']) && is_string($_SESSION['settings_pending_migrate_key'])) {
-                $pendingMigrateKey = $_SESSION['settings_pending_migrate_key'];
-                unset($_SESSION['settings_pending_migrate_key']);
-            }
-            if (isset($_SESSION['settings_migrate_key_paste']) && is_string($_SESSION['settings_migrate_key_paste'])) {
-                $migrateKeyPasteBlock = $_SESSION['settings_migrate_key_paste'];
-                unset($_SESSION['settings_migrate_key_paste']);
-            }
             if (isset($_SESSION['settings_admin_password_paste']) && is_string($_SESSION['settings_admin_password_paste'])) {
                 $adminPasswordPasteBlock = $_SESSION['settings_admin_password_paste'];
                 unset($_SESSION['settings_admin_password_paste']);

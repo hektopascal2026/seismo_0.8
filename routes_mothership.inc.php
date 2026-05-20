@@ -38,11 +38,6 @@ $router->register(
     true
 );
 $router->register(
-    'migrate',
-    \Seismo\Controller\MigrateController::class . '::runWeb',
-    true
-);
-$router->register(
     'toggle_favourite',
     \Seismo\Controller\FavouriteController::class . '::toggle',
     false
@@ -185,16 +180,6 @@ $router->register(
 $router->register(
     'settings_save',
     \Seismo\Controller\SettingsController::class . '::saveGeneral',
-    false
-);
-$router->register(
-    'settings_generate_migrate_key',
-    \Seismo\Controller\SettingsController::class . '::generateMigrateKey',
-    false
-);
-$router->register(
-    'settings_save_migrate_key',
-    \Seismo\Controller\SettingsController::class . '::saveMigrateKey',
     false
 );
 $router->register(
