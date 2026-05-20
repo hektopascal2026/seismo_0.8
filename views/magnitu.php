@@ -14,6 +14,9 @@
  * @var string $emptyTimelineHint
  * @var \Seismo\Repository\TimelineFilter $timelineFilter
  * @var array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $filterPillOptions
+ * @var bool $showTimelineHighlightsSortToggle
+ * @var bool $timelineHighlightsSortHighestOn
+ * @var string $timelineHighlightsSortToggleHref
  */
 
 declare(strict_types=1);
@@ -24,6 +27,9 @@ $accent   = seismoBrandAccent();
 $headerTitle    = 'Highlights';
 $headerSubtitle = 'Scores ≥ ' . round($alertThreshold * 100) . '% (alert threshold)';
 $activeNav      = 'magnitu';
+
+$timelineHighlightsSortHighestOn = !empty($timelineHighlightsSortHighestOn);
+$highlightsSortLabel = $timelineHighlightsSortHighestOn ? 'highest score first' : 'newest first';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -53,7 +59,7 @@ $activeNav      = 'magnitu';
         <p class="admin-intro">
             Feed, email, Lex, and Leg entries whose current score is at or above your
             <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=magnitu">alert threshold</a>
-            — Magnitu (ML) and recipe scores both qualify. Sorted newest-first.
+            — Magnitu (ML) and recipe scores both qualify. Sorted <?= e($highlightsSortLabel) ?>.
             <a href="<?= e($basePath) ?>/index.php?action=index">← Timeline</a>
         </p>
 
@@ -62,17 +68,16 @@ $activeNav      = 'magnitu';
         <?php endif; ?>
 
         <div class="latest-entries-section">
-            <div class="section-title-row">
-                <h2 class="section-title">
-                    <?= count($allItems) ?> <?= count($allItems) === 1 ? 'entry' : 'entries' ?>
-                </h2>
-                <button class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button>
-            </div>
-
             <?php if ($dashboardError !== null): ?>
             <?php elseif ($allItems !== []): ?>
+                <?php
+                $embedTimelineExpandAllInDayRow = true;
+                ?>
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
+                <div class="timeline-day-row timeline-day-row--expand-only">
+                    <?php require __DIR__ . '/partials/timeline_day_row_actions.php'; ?>
+                </div>
                 <div class="empty-state">
                     <?php if ($emptyTimelineHint === 'highlights'): ?>
                         <p>No entries match this threshold yet. Lower the alert threshold under
@@ -88,6 +93,11 @@ $activeNav      = 'magnitu';
 
     <script>
     (function() {
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.timeline-highlights-sort-toggle-btn');
+            if (!btn || !btn.dataset.href) return;
+            window.location.assign(btn.dataset.href);
+        });
         function collapse(card, btn) {
             var preview = card.querySelector('.entry-preview');
             var full    = card.querySelector('.entry-full-content');

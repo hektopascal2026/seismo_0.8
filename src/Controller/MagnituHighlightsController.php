@@ -31,9 +31,10 @@ final class MagnituHighlightsController
     {
         $csrfField = CsrfToken::field();
 
-        $allItems       = [];
-        $pageError      = null;
-        $alertThreshold = 0.60;
+        $allItems         = [];
+        $pageError        = null;
+        $alertThreshold   = 0.60;
+        $sortByRelevance  = $this->resolveHighlightsSortByRelevance();
 
         try {
             $pdo    = getDbConnection();
@@ -43,7 +44,7 @@ final class MagnituHighlightsController
             $repo   = new EntryRepository($pdo);
             $limit  = $this->clampLimit($_GET['limit'] ?? null, $pdo);
             $offset = max(0, (int)($_GET['offset'] ?? 0));
-            $allItems = $repo->getHighlightsTimeline($alertThreshold, $limit, $offset);
+            $allItems = $repo->getHighlightsTimeline($alertThreshold, $limit, $offset, $sortByRelevance);
         } catch (\Throwable $e) {
             error_log('Seismo magnitu highlights: ' . $e->getMessage());
             $pageError = 'Could not load highlights. Check error_log for details.';
@@ -60,8 +61,40 @@ final class MagnituHighlightsController
         $timelineFilter    = TimelineFilter::fromQueryArray([]);
         $filterPillOptions = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
         $dashboardError    = $pageError;
+        $timelineHighlightsSortHighestOn = $sortByRelevance;
+        $timelineHighlightsSortToggleHref = http_build_query(
+            $this->highlightsSortLinkParams(!$sortByRelevance)
+        );
+        $showTimelineHighlightsSortToggle = true;
 
         require SEISMO_ROOT . '/views/magnitu.php';
+    }
+
+    private function resolveHighlightsSortByRelevance(): bool
+    {
+        return isset($_GET['sort']) && (string)$_GET['sort'] === 'highest';
+    }
+
+    /**
+     * @return array<string, scalar>
+     */
+    private function highlightsSortLinkParams(bool $sortHighest): array
+    {
+        $params = ['action' => 'magnitu'];
+        if ($sortHighest) {
+            $params['sort'] = 'highest';
+        }
+        foreach (['limit', 'offset'] as $k) {
+            if (!isset($_GET[$k])) {
+                continue;
+            }
+            $v = $_GET[$k];
+            if (is_scalar($v) && $v !== '') {
+                $params[$k] = $v;
+            }
+        }
+
+        return $params;
     }
 
     /**

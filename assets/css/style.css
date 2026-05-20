@@ -1619,9 +1619,10 @@ textarea.search-input.setup-code-preview {
     gap: 0.5rem;
 }
 
-/* Timeline toolbar pair: ★ favs + expand all — matched control utilities */
+/* Timeline toolbar: ★ favs / highest sort + expand all — matched control utilities */
 .timeline-day-row-actions .btn.entry-expand-all-btn,
-.timeline-day-row-actions .btn.timeline-favourites-toggle-btn {
+.timeline-day-row-actions .btn.timeline-favourites-toggle-btn,
+.timeline-day-row-actions .btn.timeline-highlights-sort-toggle-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1643,7 +1644,8 @@ textarea.search-input.setup-code-preview {
     margin-inline-end: 0.125rem;
 }
 
-.timeline-favourites-toggle-btn.is-active {
+.timeline-favourites-toggle-btn.is-active,
+.timeline-highlights-sort-toggle-btn.is-active {
     background-color: #f0f0f0;
 }
 

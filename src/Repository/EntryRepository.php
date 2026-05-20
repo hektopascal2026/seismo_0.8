@@ -199,30 +199,51 @@ final class EntryRepository
      * back. Magnitu's ML output remains authoritative once it arrives (the
      * UPSERT in `EntryScoreRepository` overwrites the recipe row).
      *
-     * Ordered by relevance (highest first), then hydrated from entry tables.
-     * The score query stays on local `entry_scores` only so a missing optional
-     * family table or email date-column mismatch cannot zero the list. Callers
-     * should pass a generous `$limit` (see {@see MAX_LIMIT}) — ordering by
-     * `scored_at` would drop strong scores when a batch rescore touches many rows.
+     * Default order is entry date (newest first). Pass `$sortByRelevance = true`
+     * for highest score first (then `scored_at`, id). The score query stays on
+     * local `entry_scores` only so a missing optional family table or email
+     * date-column mismatch cannot zero the list. Chronological mode loads every
+     * qualifying score row (capped), hydrates, sorts in PHP, then applies
+     * `$offset` / `$limit`. Relevance mode uses SQL `ORDER BY relevance_score`
+     * so a generous `$limit` (see {@see MAX_LIMIT}) still returns the strongest
+     * rows — ordering by `scored_at` alone would drop strong scores when a
+     * batch rescore touches many rows.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getHighlightsTimeline(float $alertThreshold, int $limit, int $offset = 0): array
-    {
+    public function getHighlightsTimeline(
+        float $alertThreshold,
+        int $limit,
+        int $offset = 0,
+        bool $sortByRelevance = false
+    ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
         $alertThreshold = max(0.0, min(1.0, $alertThreshold));
         try {
-            $stmt = $this->pdo->prepare(
-                'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source
-                 FROM entry_scores es
-                 WHERE es.score_source IN (\'magnitu\', \'recipe\')
-                   AND es.relevance_score >= ?
-                   AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                 ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
-                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
-            );
-            $stmt->execute([$alertThreshold]);
+            if ($sortByRelevance) {
+                $stmt = $this->pdo->prepare(
+                    'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source
+                     FROM entry_scores es
+                     WHERE es.score_source IN (\'magnitu\', \'recipe\')
+                       AND es.relevance_score >= ?
+                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
+                     ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
+                     LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
+                );
+                $stmt->execute([$alertThreshold]);
+            } else {
+                $stmt = $this->pdo->prepare(
+                    'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source
+                     FROM entry_scores es
+                     WHERE es.score_source IN (\'magnitu\', \'recipe\')
+                       AND es.relevance_score >= ?
+                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
+                     ORDER BY es.id DESC
+                     LIMIT ' . (int)$this->highlightsChronologicalFetchCap()
+                );
+                $stmt->execute([$alertThreshold]);
+            }
             /** @var array<int, array<string, mixed>> $scoreRows */
             $scoreRows = $stmt->fetchAll() ?: [];
         } catch (PDOException $e) {
@@ -234,7 +255,21 @@ final class EntryRepository
             return [];
         }
 
-        return $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
+        $items = $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
+        if (!$sortByRelevance) {
+            $this->sortMergedTimeline($items, false);
+            $items = array_slice($items, $offset, $limit);
+        }
+
+        return $items;
+    }
+
+    /**
+     * Upper bound on score rows loaded before PHP chronological sort on Highlights.
+     */
+    private function highlightsChronologicalFetchCap(): int
+    {
+        return self::MAX_LIMIT * 10;
     }
 
     /**

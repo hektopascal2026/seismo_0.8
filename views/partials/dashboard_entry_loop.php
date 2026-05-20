@@ -21,6 +21,9 @@
  * @var bool $showTimelineFavouritesToggle When true, show ★ favs link beside expand all (index / filter preview).
  * @var bool $timelineFavouritesOn
  * @var string $timelineFavouritesToggleHref
+ * @var bool $showTimelineHighlightsSortToggle When true, show highest-sort toggle (Highlights page).
+ * @var bool $timelineHighlightsSortHighestOn
+ * @var string $timelineHighlightsSortToggleHref
  */
 $searchQuery = $searchQuery ?? '';
 if (!isset($showFavourites)) {
