@@ -18,7 +18,6 @@
  * @var list<array<string, mixed>> $satellitesRegistry
  * @var string $satellitesMothershipUrl
  * @var string $satellitesMothershipDb
- * @var bool $satellitesRemoteRefreshKeyConfigured
  * @var string $satellitesHighlightSlug
  * @var array<string, string|null> $mailConfig
  * @var bool $mailPasswordOnFile

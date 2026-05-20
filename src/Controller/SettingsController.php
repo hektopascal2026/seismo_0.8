@@ -123,7 +123,6 @@ final class SettingsController
         $satellitesRegistry                   = [];
         $satellitesMothershipUrl              = '';
         $satellitesMothershipDb               = '';
-        $satellitesRemoteRefreshKeyConfigured = false;
         $satellitesHighlightSlug              = '';
 
         $mailConfig              = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
@@ -222,7 +221,6 @@ final class SettingsController
             try {
                 $satellitesMothershipUrl = self::mothershipBaseUrl();
                 $satellitesMothershipDb  = (string)SEISMO_ENTRIES_DB;
-                $satellitesRemoteRefreshKeyConfigured = seismoRemoteRefreshKeyConfigured();
                 $rawReg = $config->get('satellites_registry');
                 if ($rawReg !== null && $rawReg !== '') {
                     $decoded = json_decode($rawReg, true);

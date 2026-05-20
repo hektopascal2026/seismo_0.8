@@ -78,7 +78,9 @@ final class SatelliteController
         ];
 
         $this->saveRegistry($config, $registry);
-        seismoEnsureRemoteRefreshKey();
+        if (isset($_POST['remote_refresh']) && (string)$_POST['remote_refresh'] === '1') {
+            seismoEnsureRemoteRefreshKey();
+        }
 
         $_SESSION['success'] = "Satellite '{$slug}' registered. Run bin/seismo-satellite-provision.sh {$slug} on the VPS to create its database and path.";
         $this->redirect($slug);
