@@ -433,6 +433,10 @@ final class LexController
                 );
                 $cfg['lookback_days'] = max(1, (int)($_POST[$block . '_lookback_days'] ?? $cfg['lookback_days'] ?? 90));
                 $cfg['limit'] = max(1, min((int)($_POST[$block . '_limit'] ?? $cfg['limit'] ?? 100), 500));
+                if ($block === 'ch_bge') {
+                    $lang = strtolower(trim((string)($_POST['ch_bge_lang'] ?? $cfg['lang'] ?? 'de')));
+                    $cfg['lang'] = in_array($lang, ['de', 'fr', 'it'], true) ? $lang : 'de';
+                }
                 $cfg['notes'] = trim((string)($_POST[$block . '_notes'] ?? $cfg['notes'] ?? ''));
                 $store->savePluginBlock($block, $cfg);
             }

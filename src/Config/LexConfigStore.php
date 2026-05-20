@@ -198,10 +198,11 @@ final class LexConfigStore
             ],
             'ch_bge' => [
                 'enabled' => true,
-                'base_url' => 'https://entscheidsuche.ch',
+                'base_url' => 'https://search.bger.ch/ext/eurospider/live/de/php/clir/http/',
+                'lang' => 'de',
                 'lookback_days' => 365,
-                'limit' => 50,
-                'notes' => '',
+                'limit' => 100,
+                'notes' => 'Official BGE Leitentscheide (index_atf.php), not entscheidsuche.',
             ],
             'ch_bvger' => [
                 'enabled' => true,

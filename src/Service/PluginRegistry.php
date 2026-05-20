@@ -6,6 +6,7 @@ namespace Seismo\Service;
 
 use Seismo\Plugin\LexEu\LexEuPlugin;
 use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
+use Seismo\Plugin\LexBgerAtf\LexBgerAtfPlugin;
 use Seismo\Plugin\LexJus\LexJusPlugin;
 use Seismo\Plugin\LexLegifrance\LexLegifrancePlugin;
 use Seismo\Plugin\LexRechtBund\LexRechtBundPlugin;
@@ -30,7 +31,7 @@ final class PluginRegistry
             'recht_bund'  => new LexRechtBundPlugin(),
             'legifrance'  => new LexLegifrancePlugin(),
             'jus_bger'    => new LexJusPlugin('jus_bger', 'Jus: BGer', 'ch_bger', 'CH_BGer'),
-            'jus_bge'     => new LexJusPlugin('jus_bge', 'Jus: BGE', 'ch_bge', 'CH_BGE'),
+            'jus_bge'     => new LexBgerAtfPlugin(),
             'jus_bvger'   => new LexJusPlugin('jus_bvger', 'Jus: BVGer', 'ch_bvger', 'CH_BVGer'),
             'parl_ch'     => new ParlChPlugin(),
         ];

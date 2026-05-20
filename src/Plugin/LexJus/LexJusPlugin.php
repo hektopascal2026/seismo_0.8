@@ -90,22 +90,22 @@ final class LexJusPlugin implements SourceFetcherInterface
 
         $actions = $this->fetchActions($baseUrl);
 
-        $files = $actions !== []
+        $manifestFiles = $actions !== []
             ? $this->selectFilesToFetch($actions, $cutoffDate, $limit)
             : [];
 
-        // CH_BGer `/last` can be a historical backlog (oldest-first) with no rows in lookback.
-        // entscheidsuche.ch/_search.php returns recent decisions by spider + date.
-        if ($files === [] || ($actions !== [] && !$this->manifestHasPathsWithinLookback($actions, $cutoffDate))) {
+        // `/last` is a small crawl delta (BGE often ~5 paths); search is the full catalogue by date.
+        $searchFiles = [];
+        $needSearch = $manifestFiles === []
+            || ($actions !== [] && !$this->manifestHasPathsWithinLookback($actions, $cutoffDate))
+            || count($manifestFiles) < $limit;
+        if ($needSearch) {
             $searchFiles = $this->fetchFilePathsFromSearch($baseUrl, $cutoffDate, $limit);
-            if ($searchFiles !== []) {
-                $files = $searchFiles;
-            }
         }
 
+        $files = $this->mergeFilePathsNewestFirst($limit, $searchFiles, $manifestFiles);
+
         if ($files === [] && $actions !== []) {
-            // Last resort: newest manifest paths regardless of filename date (may still
-            // yield 0 rows after Datum filtering — search path above is the real fix).
             $files = $this->selectFilesToFetch($actions, null, $limit);
         }
         if ($files === []) {
@@ -232,6 +232,44 @@ final class LexJusPlugin implements SourceFetcherInterface
         }
 
         return $fallback;
+    }
+
+    /**
+     * @param list<string> ...$pathLists
+     * @return list<string>
+     */
+    private function mergeFilePathsNewestFirst(int $limit, array ...$pathLists): array
+    {
+        $seen = [];
+        $candidates = [];
+        foreach ($pathLists as $paths) {
+            foreach ($paths as $filePath) {
+                if (!is_string($filePath) || $filePath === '' || isset($seen[$filePath])) {
+                    continue;
+                }
+                $seen[$filePath] = true;
+                $fileDate = '0000-00-00';
+                if (preg_match('/_(\d{4}-\d{2}-\d{2})\.json$/', $filePath, $m)) {
+                    $fileDate = $m[1];
+                }
+                $candidates[] = ['path' => $filePath, 'date' => $fileDate];
+            }
+        }
+
+        usort(
+            $candidates,
+            static fn (array $a, array $b): int => strcmp($b['date'], $a['date'])
+        );
+
+        $out = [];
+        foreach ($candidates as $row) {
+            $out[] = $row['path'];
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return $out;
     }
 
     /**

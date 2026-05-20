@@ -150,7 +150,7 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bge" class="admin-inline-form">
                     <?= $csrfField ?>
-                    <button type="submit" class="btn btn-primary">Refresh Jus: BGE</button>
+                    <button type="submit" class="btn btn-primary">Refresh BGE Leitentscheide</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bvger" class="admin-inline-form">
                     <?= $csrfField ?>
@@ -176,15 +176,24 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
                     <input type="number" name="ch_bger_limit" value="<?= (int)($jusBgerCfg['limit'] ?? 100) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
                 <div class="admin-form-field">
-                    <label><input type="checkbox" name="ch_bge_enabled" value="1" <?= !empty($jusBgeCfg['enabled']) ? 'checked' : '' ?>> BGE enabled</label>
+                    <label><input type="checkbox" name="ch_bge_enabled" value="1" <?= !empty($jusBgeCfg['enabled']) ? 'checked' : '' ?>> BGE Leitentscheide enabled (search.bger.ch)</label>
                 </div>
                 <div class="admin-form-field">
                     <label>BGE lookback days<br>
-                    <input type="number" name="ch_bge_lookback_days" value="<?= (int)($jusBgeCfg['lookback_days'] ?? 90) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
+                    <input type="number" name="ch_bge_lookback_days" value="<?= (int)($jusBgeCfg['lookback_days'] ?? 365) ?>" min="1" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Language (bger.ch)<br>
+                    <select name="ch_bge_lang" class="search-input" style="width:100%; max-width:10rem;">
+                        <?php $bgeLang = (string)($jusBgeCfg['lang'] ?? 'de'); ?>
+                        <option value="de" <?= $bgeLang === 'de' ? 'selected' : '' ?>>de</option>
+                        <option value="fr" <?= $bgeLang === 'fr' ? 'selected' : '' ?>>fr</option>
+                        <option value="it" <?= $bgeLang === 'it' ? 'selected' : '' ?>>it</option>
+                    </select></label>
                 </div>
                 <div class="admin-form-field">
                     <label>BGE row limit (max 500)<br>
-                    <input type="number" name="ch_bge_limit" value="<?= (int)($jusBgeCfg['limit'] ?? 50) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                    <input type="number" name="ch_bge_limit" value="<?= (int)($jusBgeCfg['limit'] ?? 100) ?>" min="1" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
                 </div>
                 <div class="admin-form-field">
                     <label><input type="checkbox" name="ch_bvger_enabled" value="1" <?= !empty($jusBvgerCfg['enabled']) ? 'checked' : '' ?>> BVGer enabled</label>
