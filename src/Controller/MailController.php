@@ -22,7 +22,9 @@ final class MailController
         $basePath  = getBasePath();
         $satellite = isSatellite();
 
-        $view = (isset($_GET['view']) && (string)$_GET['view'] === 'subscriptions') ? 'subscriptions' : 'items';
+        $viewParam = (string)($_GET['view'] ?? '');
+        // Align with Feeds/Scraper (`view=sources`); keep `subscriptions` for old bookmarks.
+        $view = ($viewParam === 'sources' || $viewParam === 'subscriptions') ? 'sources' : 'items';
         $editId = (int)($_GET['edit'] ?? 0);
         $subscriptionId = (int)($_GET['subscription'] ?? 0);
 
@@ -67,7 +69,7 @@ final class MailController
 
             $subscriptions  = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
             $pendingSenders = $subRepo->listPending(EmailSubscriptionRepository::MAX_LIMIT, 0);
-            if ($view === 'subscriptions') {
+            if ($view === 'sources') {
                 foreach ($subscriptions as $row) {
                     $sid = (int)$row['id'];
                     $subscriptionLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
@@ -152,8 +154,8 @@ final class MailController
     private function redirectAfterMailRefresh(): void
     {
         $v = trim((string)($_POST['return_view'] ?? ''));
-        if ($v === 'subscriptions') {
-            header('Location: ?' . http_build_query(['action' => 'mail', 'view' => 'subscriptions']), true, 303);
+        if ($v === 'sources' || $v === 'subscriptions') {
+            header('Location: ?' . http_build_query(['action' => 'mail', 'view' => 'sources']), true, 303);
         } else {
             header('Location: ?action=mail', true, 303);
         }
@@ -163,19 +165,19 @@ final class MailController
     public function saveSubscription(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode — email subscriptions are managed on the mothership only.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -221,25 +223,25 @@ final class MailController
             $_SESSION['error'] = $e->getMessage();
         }
 
-        $this->redirect(['view' => 'subscriptions']);
+        $this->redirect(['view' => 'sources']);
     }
 
     public function deleteSubscription(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode — email subscriptions are managed on the mothership only.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -248,7 +250,7 @@ final class MailController
         if ($id <= 0) {
             $_SESSION['error'] = 'Invalid subscription.';
 
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -262,7 +264,7 @@ final class MailController
             $_SESSION['error'] = $e->getMessage();
         }
 
-        $this->redirect(['view' => 'subscriptions']);
+        $this->redirect(['view' => 'sources']);
     }
 
     /**
@@ -271,19 +273,19 @@ final class MailController
     public function disableSubscription(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode — email subscriptions are managed on the mothership only.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -292,7 +294,7 @@ final class MailController
         if ($id <= 0) {
             $_SESSION['error'] = 'Invalid subscription.';
 
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -306,25 +308,25 @@ final class MailController
             $_SESSION['error'] = $e->getMessage();
         }
 
-        $this->redirect(['view' => 'subscriptions']);
+        $this->redirect(['view' => 'sources']);
     }
 
     public function reprocessSubscription(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode — email subscriptions are managed on the mothership only.';
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }
@@ -333,7 +335,7 @@ final class MailController
         if ($id <= 0) {
             $_SESSION['error'] = 'Invalid subscription.';
 
-            $this->redirect(['view' => 'subscriptions']);
+            $this->redirect(['view' => 'sources']);
 
             return;
         }

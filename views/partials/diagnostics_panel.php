@@ -184,7 +184,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                     <td><?= e((string)($mr['display_name'] ?? '')) ?></td>
                                     <td class="diag-source-health-mono"><?= e($matchLabel) ?></td>
                                     <td class="diag-source-health-mono"><?= e($liShown) ?></td>
-                                    <td><a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions">Mail</a></td>
+                                    <td><a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources">Mail</a></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

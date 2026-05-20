@@ -10,7 +10,7 @@
  * @var bool $showModuleRefresh Optional — Feeds / Scraper / Mail top-bar module refresh (mothership).
  * @var string|null $moduleRefreshAction e.g. refresh_feed_sources
  * @var string|null $moduleRefreshLabel e.g. Refresh Feeds
- * @var string|null $moduleRefreshReturnView items|sources|subscriptions — POST back after refresh
+ * @var string|null $moduleRefreshReturnView items|sources — POST back after refresh
  */
 
 declare(strict_types=1);

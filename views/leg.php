@@ -16,8 +16,13 @@
  * @var array<string, mixed> $parlChCfg
  * @var int $totalRows        Total rows for current sources/type (past + upcoming)
  * @var int $hiddenPastRows   Rows the current filter is hiding (i.e. past-dated)
+ * @var string $view 'items'|'sources'
  * @var string $csrfField Hidden CSRF inputs (LegController)
  * @var array<string, array<string, mixed>> $legEntryScores `entry_type:entry_id` → `entry_scores` row
+ * @var bool $showModuleRefresh
+ * @var string $moduleRefreshAction
+ * @var string $moduleRefreshLabel
+ * @var string $moduleRefreshReturnView
  */
 
 declare(strict_types=1);
@@ -28,6 +33,8 @@ if (!function_exists('seismo_format_utc')) {
 
 $accent = seismoBrandAccent();
 $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-m-d');
+$itemsQs   = 'action=leg';
+$sourcesQs = 'action=leg&view=sources';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -61,10 +68,19 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
             <div class="message message-error"><?= e($pageError) ?></div>
         <?php endif; ?>
 
-        <?php if ($satellite): ?>
+        <div class="view-toggle view-toggle-bar">
+            <span class="view-toggle-label">View:</span>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>">Sources</a>
+        </div>
+
+        <?php if ($satellite && $view === 'sources'): ?>
+            <p class="message message-info">Satellite mode: Leg sources are read-only here. Manage them on the mothership.</p>
+        <?php elseif ($satellite): ?>
             <p class="message message-info">Satellite mode: Leg rows are read from the mothership. Refresh is disabled.</p>
         <?php endif; ?>
 
+        <?php if ($view === 'items'): ?>
         <form method="get" action="<?= e($basePath) ?>/index.php" id="leg-filter-form">
             <input type="hidden" name="action" value="leg">
             <input type="hidden" name="sources_submitted" value="1">
@@ -112,50 +128,6 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
             </div>
         </form>
 
-        <?php if (!$satellite): ?>
-        <div class="latest-entries-section module-section-spaced">
-            <h2 class="section-title">Refresh Parlament CH</h2>
-            <p class="admin-intro" style="margin-top:0;">Runs the <code>parl_ch</code> plugin only (parliamentary business calendar).</p>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_parl_ch" class="admin-inline-form">
-                <?= $csrfField ?>
-                <button type="submit" class="btn btn-primary">Refresh Parlament CH</button>
-            </form>
-        </div>
-
-        <div class="latest-entries-section module-section-spaced">
-            <h2 class="section-title">Parlament CH settings</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_leg_parl_ch" class="admin-form-card admin-form-card-narrow">
-                <?= $csrfField ?>
-                <div class="admin-form-field">
-                    <label><input type="checkbox" name="parliament_ch_enabled" value="1" <?= !empty($parlChCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Language (DE, FR, IT, EN, RM)<br>
-                    <input type="text" name="parliament_ch_language" value="<?= e((string)($parlChCfg['language'] ?? 'DE')) ?>" maxlength="2" class="search-input" style="width:100%; max-width:8rem;"></label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Lookforward days (7–365)<br>
-                    <input type="number" name="parliament_ch_lookforward_days" value="<?= (int)($parlChCfg['lookforward_days'] ?? 90) ?>" min="7" max="365" class="search-input" style="width:100%; max-width:10rem;"></label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Lookback days (1–90)<br>
-                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 28) ?>" min="1" max="90" class="search-input" style="width:100%; max-width:10rem;"></label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Row limit (10–500)<br>
-                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 200) ?>" min="10" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
-                </div>
-                <div class="admin-form-field">
-                    <label>Notes<br>
-                    <textarea name="parliament_ch_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($parlChCfg['notes'] ?? '')) ?></textarea></label>
-                </div>
-                <div class="admin-form-actions">
-                    <button type="submit" class="btn btn-success">Save Parlament CH settings</button>
-                </div>
-            </form>
-        </div>
-        <?php endif; ?>
-
         <div class="latest-entries-section">
             <div class="section-title-row">
                 <h2 class="section-title">
@@ -197,7 +169,7 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                             sessions and dated hearings appear here without toggling.
                         </p>
                     <?php else: ?>
-                        <p>No Leg entries yet. Refresh Parlament CH above to pull upcoming parliamentary business.</p>
+                        <p>No Leg entries yet. Configure and refresh under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Sources</a>, or run refresh from Diagnostics.</p>
                     <?php endif; ?>
                 </div>
             <?php else: ?>
@@ -235,14 +207,6 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                         $preview = mb_substr($combined, 0, 300);
                         $hasMore = mb_strlen($combined) > 300;
                         if ($hasMore) { $preview .= '...'; }
-
-                        $metadata = [];
-                        if (!empty($event['metadata'])) {
-                            $decoded = json_decode((string)$event['metadata'], true);
-                            if (is_array($decoded)) { $metadata = $decoded; }
-                        }
-                        $businessNumber = (string)($metadata['business_number'] ?? '');
-                        $author = (string)($metadata['author'] ?? '');
 
                         $eventUrl = (string)($event['url'] ?? '');
 
@@ -303,12 +267,6 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                                 <?php if ($hasMore): ?>
                                     <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
                                 <?php endif; ?>
-                                <?php if ($businessNumber !== ''): ?>
-                                    <span class="entry-meta-mono"><?= e($businessNumber) ?></span>
-                                <?php endif; ?>
-                                <?php if ($author !== ''): ?>
-                                    <span class="entry-author-muted"><?= e($author) ?></span>
-                                <?php endif; ?>
                                 <?php if (seismo_is_navigable_url($eventUrl)): ?>
                                     <a href="<?= e($eventUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch →</a>
                                 <?php endif; ?>
@@ -321,6 +279,65 @@ $todayLocal = (new DateTimeImmutable('now', seismo_view_timezone()))->format('Y-
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
+        <?php else: ?>
+        <div class="latest-entries-section">
+            <h2 class="section-title">Leg sources</h2>
+            <p class="admin-intro">Parliamentary business ingest. Use <strong>Refresh Parlament CH</strong> in the top bar to run the <code>parl_ch</code> plugin.</p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Enabled</th>
+                        <th>Last refreshed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>🇨🇭 Parlament CH</td>
+                        <td><?= !empty($parlChCfg['enabled']) ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
+                        <td><?php
+                            $refreshLine = seismo_format_utc($lastFetchedBySource['parliament_ch'] ?? null);
+                            echo $refreshLine !== null ? e($refreshLine) : '<span class="table-cell-placeholder">Never</span>';
+                        ?></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <?php if (!$satellite): ?>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=save_leg_parl_ch" class="admin-form-card admin-form-card-narrow">
+                <?= $csrfField ?>
+                <h3>Parlament CH</h3>
+                <div class="admin-form-field">
+                    <label><input type="checkbox" name="parliament_ch_enabled" value="1" <?= !empty($parlChCfg['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Language (DE, FR, IT, EN, RM)<br>
+                    <input type="text" name="parliament_ch_language" value="<?= e((string)($parlChCfg['language'] ?? 'DE')) ?>" maxlength="2" class="search-input" style="width:100%; max-width:8rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Lookforward days (7–365)<br>
+                    <input type="number" name="parliament_ch_lookforward_days" value="<?= (int)($parlChCfg['lookforward_days'] ?? 90) ?>" min="7" max="365" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Lookback days (1–90)<br>
+                    <input type="number" name="parliament_ch_lookback_days" value="<?= (int)($parlChCfg['lookback_days'] ?? 28) ?>" min="1" max="90" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Row limit (10–500)<br>
+                    <input type="number" name="parliament_ch_limit" value="<?= (int)($parlChCfg['limit'] ?? 200) ?>" min="10" max="500" class="search-input" style="width:100%; max-width:10rem;"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Notes<br>
+                    <textarea name="parliament_ch_notes" rows="2" class="search-input" style="width:100%;"><?= e((string)($parlChCfg['notes'] ?? '')) ?></textarea></label>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save Parlament CH settings</button>
+                </div>
+            </form>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
     </div>
 
     <script>

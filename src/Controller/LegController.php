@@ -24,6 +24,9 @@ final class LegController
     public function show(): void
     {
         $csrfField = CsrfToken::field();
+        $satellite = isSatellite();
+        $viewParam = (string)($_GET['view'] ?? '');
+        $view = ($viewParam === 'sources') ? 'sources' : 'items';
 
         $events = [];
         $calendarCfg = [];
@@ -48,49 +51,51 @@ final class LegController
                 }
             ));
 
-            $sourcesSubmitted = isset($_GET['sources_submitted']);
-            if ($sourcesSubmitted) {
-                $activeSources = isset($_GET['sources']) ? (array)$_GET['sources'] : [];
-            } else {
-                $activeSources = $enabledSources;
-            }
-            $activeSources = array_values(array_intersect($activeSources, $enabledSources));
-
-            $showPast = !empty($_GET['show_past']);
-            $eventType = trim((string)($_GET['event_type'] ?? ''));
-
             $repo = new CalendarEventRepository($pdo);
-            if ($activeSources !== []) {
-                $typeFilter = $eventType !== '' ? $eventType : null;
-                $events = $repo->listBySources(
-                    $activeSources,
-                    self::LIST_LIMIT,
-                    0,
-                    $showPast,
-                    $typeFilter
-                );
-                $eventTypes = $repo->distinctEventTypes($activeSources);
-
-                // When the upcoming-only view returns nothing, we still want
-                // to tell the user whether rows actually exist (so they can
-                // flip "Show all") or the DB really is empty. Skip the extra
-                // COUNT when rows were returned — nothing to disambiguate.
-                if ($events === [] && !$showPast) {
-                    $totalRows = $repo->countBySources($activeSources, true, $typeFilter);
-                    $hiddenPastRows = $totalRows;
-                }
-
-                $pairs = [];
-                foreach ($events as $ev) {
-                    $eid = (int)($ev['id'] ?? 0);
-                    if ($eid > 0) {
-                        $pairs[] = ['calendar_event', $eid];
-                    }
-                }
-                $legEntryScores = (new EntryScoreRepository($pdo))->fetchScoresIndexedByPairs($pairs);
-            }
-
             $lastBySource = $repo->getLastFetchedBySources(CalendarEventRepository::LEG_PAGE_SOURCES);
+
+            if ($view === 'items') {
+                $sourcesSubmitted = isset($_GET['sources_submitted']);
+                if ($sourcesSubmitted) {
+                    $activeSources = isset($_GET['sources']) ? (array)$_GET['sources'] : [];
+                } else {
+                    $activeSources = $enabledSources;
+                }
+                $activeSources = array_values(array_intersect($activeSources, $enabledSources));
+
+                $showPast = !empty($_GET['show_past']);
+                $eventType = trim((string)($_GET['event_type'] ?? ''));
+
+                if ($activeSources !== []) {
+                    $typeFilter = $eventType !== '' ? $eventType : null;
+                    $events = $repo->listBySources(
+                        $activeSources,
+                        self::LIST_LIMIT,
+                        0,
+                        $showPast,
+                        $typeFilter
+                    );
+                    $eventTypes = $repo->distinctEventTypes($activeSources);
+
+                    // When the upcoming-only view returns nothing, we still want
+                    // to tell the user whether rows actually exist (so they can
+                    // flip "Show all") or the DB really is empty. Skip the extra
+                    // COUNT when rows were returned — nothing to disambiguate.
+                    if ($events === [] && !$showPast) {
+                        $totalRows = $repo->countBySources($activeSources, true, $typeFilter);
+                        $hiddenPastRows = $totalRows;
+                    }
+
+                    $pairs = [];
+                    foreach ($events as $ev) {
+                        $eid = (int)($ev['id'] ?? 0);
+                        if ($eid > 0) {
+                            $pairs[] = ['calendar_event', $eid];
+                        }
+                    }
+                    $legEntryScores = (new EntryScoreRepository($pdo))->fetchScoresIndexedByPairs($pairs);
+                }
+            }
         } catch (\Throwable $e) {
             error_log('Seismo leg: ' . $e->getMessage());
             $pageError = 'Could not load Leg entries. Check error_log for details.';
@@ -99,8 +104,12 @@ final class LegController
         $lastFetchedBySource = $lastBySource;
 
         $basePath = getBasePath();
-        $satellite = isSatellite();
         $parlChCfg = is_array($calendarCfg['parliament_ch'] ?? null) ? $calendarCfg['parliament_ch'] : [];
+
+        $showModuleRefresh       = !$satellite;
+        $moduleRefreshAction     = 'refresh_parl_ch';
+        $moduleRefreshLabel      = 'Refresh Parlament CH';
+        $moduleRefreshReturnView = $view;
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/leg.php';
@@ -109,14 +118,14 @@ final class LegController
     public function refreshParlCh(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLeg();
+            $this->redirectAfterLegRefresh();
 
             return;
         }
 
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLeg();
+            $this->redirectAfterLegRefresh();
 
             return;
         }
@@ -127,7 +136,7 @@ final class LegController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_parl_ch: ' . $e->getMessage());
             $_SESSION['error'] = 'Parlament CH refresh failed: ' . $e->getMessage();
-            $this->redirectToLeg();
+            $this->redirectAfterLegRefresh();
 
             return;
         }
@@ -140,20 +149,20 @@ final class LegController
             $_SESSION['error'] = 'Parlament CH refresh failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectToLeg();
+        $this->redirectAfterLegRefresh();
     }
 
     public function saveLegParlCh(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLeg();
+            $this->redirectToLeg(['view' => 'sources']);
 
             return;
         }
 
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLeg();
+            $this->redirectToLeg(['view' => 'sources']);
 
             return;
         }
@@ -191,12 +200,27 @@ final class LegController
             $_SESSION['error'] = 'Could not save Parlament CH settings.';
         }
 
+        $this->redirectToLeg(['view' => 'sources']);
+    }
+
+    private function redirectAfterLegRefresh(): void
+    {
+        $v = trim((string)($_POST['return_view'] ?? ''));
+        if ($v === 'sources') {
+            $this->redirectToLeg(['view' => 'sources']);
+
+            return;
+        }
         $this->redirectToLeg();
     }
 
-    private function redirectToLeg(): void
+    /**
+     * @param array<string, scalar|null> $query
+     */
+    private function redirectToLeg(array $query = []): void
     {
-        header('Location: ' . getBasePath() . '/index.php?action=leg', true, 303);
+        $q = array_merge(['action' => 'leg'], $query);
+        header('Location: ' . getBasePath() . '/index.php?' . http_build_query($q), true, 303);
         exit;
     }
 }

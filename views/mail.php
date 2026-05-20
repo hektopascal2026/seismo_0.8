@@ -1,6 +1,6 @@
 <?php
 /**
- * Email timeline — Items | Subscriptions (Slice 8).
+ * Email timeline — Items | Sources (Slice 8).
  *
  * @var array<int, array<string, mixed>> $allItems
  * @var list<array<string, mixed>> $subscriptions
@@ -13,7 +13,7 @@
  * @var ?string $pageError
  * @var string $csrfField
  * @var float $alertThreshold
- * @var string $view 'items'|'subscriptions'
+ * @var string $view 'items'|'sources'
  * @var bool $satellite
  * @var ?string $dashboardError
  */
@@ -30,8 +30,8 @@ $headerTitle    = 'Mail';
 $headerSubtitle = 'IMAP / newsletter';
 $activeNav      = 'mail';
 
-$itemsQs          = 'action=mail';
-$subscriptionsQs = 'action=mail&view=subscriptions';
+$itemsQs   = 'action=mail';
+$sourcesQs = 'action=mail&view=sources';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -61,11 +61,11 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
         <div class="view-toggle view-toggle-bar">
             <span class="view-toggle-label">View:</span>
             <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>
-            <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>" class="btn <?= $view === 'subscriptions' ? 'btn-primary' : 'btn-secondary' ?>">Subscriptions</a>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>">Sources</a>
         </div>
 
-        <?php if ($satellite && $view === 'subscriptions'): ?>
-            <p class="message message-info">Satellite mode: subscriptions are read-only here. Manage them on the mothership.</p>
+        <?php if ($satellite && $view === 'sources'): ?>
+            <p class="message message-info">Satellite mode: mail sources are read-only here. Manage them on the mothership.</p>
         <?php endif; ?>
 
         <?php if ($pageError !== null): ?>
@@ -84,7 +84,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 <p class="message message-info" style="margin-bottom:1rem;">
                     Mail items filtered to subscription #<?= (int)$subscriptionFilter['id'] ?> (<?= e($sfLabel) ?>).
                     <a href="<?= e($basePath) ?>/index.php?action=mail">Show all mail</a>
-                    · <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions&amp;edit=<?= (int)$subscriptionFilter['id'] ?>">Edit subscription</a>
+                    · <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= (int)$subscriptionFilter['id'] ?>">Edit source</a>
                 </p>
                 <?php if (!$satellite): ?>
                     <?php $subscriptionReprocessId = (int)$subscriptionFilter['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
@@ -101,13 +101,13 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">
-                    <p>No email rows yet. Configure IMAP fetch separately; subscription rules live under <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>">Subscriptions</a>.</p>
+                    <p>No email rows yet. Configure IMAP fetch separately; subscription rules live under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Sources</a>.</p>
                 </div>
             <?php endif; ?>
         </div>
         <?php else: ?>
         <div class="latest-entries-section">
-            <h2 class="section-title">Email subscriptions</h2>
+            <h2 class="section-title">Mail sources</h2>
             <p class="admin-intro">Domain-first matching (e.g. <code>example.com</code> covers <code>alice@example.com</code>). Per-address overrides use match type <em>email</em>. When Gmail ingests mail from an unknown domain, it is queued under <strong>New senders</strong> for review before it appears in the table below.</p>
 
             <?php if ($pendingSenders !== []): ?>
@@ -161,7 +161,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                             <td>
                                 <?php if (!$satellite): ?>
                                 <div class="admin-table-actions">
-                                    <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions&amp;edit=<?= $sid ?>" class="btn btn-primary btn-sm">Review</a>
+                                    <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= $sid ?>" class="btn btn-primary btn-sm">Review</a>
                                     <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_delete" class="admin-inline-form" onsubmit="return confirm('Dismiss this proposed sender?');">
                                         <?= $csrfField ?>
                                         <input type="hidden" name="id" value="<?= $sid ?>">
@@ -238,7 +238,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add subscription' ?></button>
                     <?php if ($editRow): ?>
-                        <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>" class="btn btn-secondary">Cancel edit</a>
+                        <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
                     <?php endif; ?>
                 </div>
             </form>
@@ -305,7 +305,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                 </div>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success">Confirm subscription</button>
-                    <a href="<?= e($basePath) ?>/index.php?<?= e($subscriptionsQs) ?>" class="btn btn-secondary">Cancel</a>
+                    <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>
             <?php $subscriptionReprocessId = (int)$editRow['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
@@ -378,7 +378,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
-                                <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=subscriptions&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_disable" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
