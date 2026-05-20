@@ -434,7 +434,7 @@ final class LexController
 
             $bwRaw = trim((string)($_POST['jus_banned_words'] ?? ''));
             if ($bwRaw === '') {
-                $full['jus_banned_words'] = [];
+                $bannedWords = [];
             } else {
                 $chunks = preg_split('/[\s,;]+/u', $bwRaw) ?: [];
                 $words = [];
@@ -447,9 +447,11 @@ final class LexController
                         $words[] = $w;
                     }
                 }
-                $full['jus_banned_words'] = array_values(array_unique($words));
+                $bannedWords = array_values(array_unique($words));
             }
-            $store->save($full);
+            // Do not call save($full) here — $full still holds pre-loop plugin blocks and would
+            // overwrite the per-block writes from savePluginBlock() above (e.g. enabled=false).
+            $store->save(['jus_banned_words' => $bannedWords]);
 
             $_SESSION['success'] = 'Jus (Swiss case law) settings saved.';
         } catch (\Throwable $e) {
