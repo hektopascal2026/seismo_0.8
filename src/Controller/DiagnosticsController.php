@@ -281,7 +281,7 @@ final class DiagnosticsController
 
     /**
      * Satellite-callable refresh — validates `?key=` against
-     * `SEISMO_REMOTE_REFRESH_KEY`. JSON response; no session (safe for cross-origin
+     * {@see seismoRemoteRefreshKey()}. JSON response; no session (safe for cross-origin
      * fetch from a public satellite page). Port of 0.4 `handleRefreshAllRemote`.
      *
      * Uses {@see RefreshAllService::runAll()} with Lex plugins skipped — same as
@@ -292,7 +292,7 @@ final class DiagnosticsController
     {
         header('Content-Type: application/json; charset=utf-8');
 
-        $expected = defined('SEISMO_REMOTE_REFRESH_KEY') ? (string)SEISMO_REMOTE_REFRESH_KEY : '';
+        $expected = seismoRemoteRefreshKey();
         if ($expected === '') {
             http_response_code(404);
             echo json_encode(['ok' => false, 'error' => 'remote refresh disabled']);

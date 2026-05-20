@@ -8,7 +8,6 @@
  * @var string $satellitesMothershipUrl
  * @var string $satellitesMothershipDb
  * @var bool $satellitesRemoteRefreshKeyConfigured
- * @var string $satellitesSuggestedRefreshKey
  * @var string $satellitesHighlightSlug
  */
 
@@ -30,24 +29,22 @@ $bp = $basePath;
 
             <?php if (!$satellitesRemoteRefreshKeyConfigured): ?>
             <div class="message message-warning">
-                <strong>SEISMO_REMOTE_REFRESH_KEY is not set.</strong>
-                Satellites can still browse entries, but their Refresh button (which triggers mothership ingest) will fail until this key is in <code>config.local.php</code>.
-                <?php if ($satellitesSuggestedRefreshKey !== ''): ?>
-                    <div style="margin-top: 0.5rem;">
-                        Suggested value:
-                        <code class="settings-code-inline"><?= e($satellitesSuggestedRefreshKey) ?></code>
-                    </div>
-                    <div style="margin-top: 0.5rem; font-size: 0.85rem;">
-                        Add to <code>config.local.php</code>:
-                    </div>
-                    <pre class="settings-code-block">define('SEISMO_REMOTE_REFRESH_KEY', '<?= e($satellitesSuggestedRefreshKey) ?>');</pre>
-                <?php else: ?>
-                    <form method="post" action="<?= e($bp) ?>/index.php?action=satellite_rotate_refresh_key" class="admin-inline-form" style="margin-top: 0.5rem;">
-                        <?= $csrfField ?>
-                        <button type="submit" class="btn btn-secondary btn-sm">Generate suggested key</button>
-                    </form>
-                <?php endif; ?>
+                <strong>Remote refresh is not enabled.</strong>
+                Path satellites can browse entries, but their <strong>Refresh</strong> button needs a shared secret in mothership <code>system_config</code> (no <code>config.local.php</code> edit).
+                <form method="post" action="<?= e($bp) ?>/index.php?action=satellite_rotate_refresh_key" class="admin-inline-form" style="margin-top: 0.5rem;">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-secondary btn-sm">Enable remote refresh</button>
+                </form>
             </div>
+            <?php else: ?>
+            <p class="admin-intro message message-info" style="margin-top: 0.75rem;">
+                <strong>Remote refresh</strong> is enabled. Satellite Refresh buttons trigger mothership ingest on this host.
+                <form method="post" action="<?= e($bp) ?>/index.php?action=satellite_rotate_refresh_key" class="admin-inline-form" style="margin-top: 0.5rem;"
+                      onsubmit="return confirm('Rotate the remote refresh key? All desks keep working — no file edits needed.');">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-secondary btn-sm">Rotate refresh key</button>
+                </form>
+            </p>
             <?php endif; ?>
 
             <?php if ($satellitesRegistry === []): ?>

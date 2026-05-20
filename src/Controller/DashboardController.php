@@ -164,7 +164,7 @@ final class DashboardController
 
     /**
      * Satellite POST handler — proxies to the mothership {@see DiagnosticsController::refreshAllRemote()}
-     * using {@see SEISMO_MOTHERSHIP_URL} and {@see SEISMO_REMOTE_REFRESH_KEY}.
+     * using {@see seismoMothershipBaseUrl()} and {@see seismoRemoteRefreshKey()}.
      * Same ingest scope as the mothership timeline toolbar (Lex plugins omitted).
      */
     public function refreshRemote(): void
@@ -200,9 +200,9 @@ final class DashboardController
         }
 
         $mother = seismoMothershipBaseUrl();
-        $key    = (string)SEISMO_REMOTE_REFRESH_KEY;
+        $key = seismoRemoteRefreshKey();
         if ($key === '') {
-            $_SESSION['error'] = 'Remote refresh is not configured (set SEISMO_REMOTE_REFRESH_KEY in config.local.php).';
+            $_SESSION['error'] = 'Remote refresh is not configured — enable it on the mothership under Settings → Satellites.';
 
             $this->endRemoteRefreshOrJson($ajax);
 
@@ -238,7 +238,7 @@ final class DashboardController
 
         $ok = (bool)($json['ok'] ?? false);
         if ($status === 401 || ($status >= 400 && !$ok && (($json['error'] ?? '') === 'invalid key'))) {
-            $_SESSION['error'] = 'Remote refresh rejected — check SEISMO_REMOTE_REFRESH_KEY matches the mothership.';
+            $_SESSION['error'] = 'Remote refresh rejected — rotate the refresh key on the mothership (Settings → Satellites).';
         } elseif ($status === 429) {
             $retry = (int)($json['retry_after'] ?? 0);
             $_SESSION['error'] = $retry > 0
@@ -297,7 +297,7 @@ final class DashboardController
             return true;
         }
 
-        return (string)SEISMO_REMOTE_REFRESH_KEY !== '';
+        return seismoRemoteRefreshKeyConfigured();
     }
 
     private function redirectAfterRemoteRefresh(): void

@@ -71,7 +71,7 @@ tests/            PHPUnit
 
 | Location | Role |
 |----------|------|
-| **`config.local.php`** | DB credentials (`seismo`), auth hash, `SEISMO_REMOTE_REFRESH_KEY`, migrate key — never commit |
+| **`config.local.php`** | DB credentials (`seismo`), auth hash, migrate key — never commit |
 | **`system_config`** (per desk) | Magnitu keys, recipe JSON, plugin blocks on mothership; mostly Magnitu + UI on satellites |
 | **`feeds` / `scraper_configs` / `email_subscriptions`** | Mothership only — exportable via `?action=export_source_configs` |
 
@@ -80,7 +80,7 @@ Optional session auth: **`SEISMO_ADMIN_PASSWORD_HASH`** in `config.local.php` (s
 | Constant | Role |
 |----------|------|
 | `SEISMO_ENTRIES_DB` | Shared entries database name (default `seismo`) |
-| `SEISMO_REMOTE_REFRESH_KEY` | Lets satellite **Refresh** trigger mothership ingest |
+| `remote_refresh_key` (`system_config`) | Shared secret for satellite **Refresh** → mothership ingest (auto-created in Settings → Satellites) |
 | `SEISMO_SATELLITE_SLUG` | Set by `/<slug>/index.php` stub — do not set on mothership |
 
 ---

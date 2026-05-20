@@ -539,6 +539,103 @@ function seismoBrandAccent(): ?string
     return null;
 }
 
+/** `system_config` key for satellite → mothership refresh (Settings → Satellites). */
+function seismoRemoteRefreshConfigKey(): string
+{
+    return 'remote_refresh_key';
+}
+
+/** Legacy key — read as fallback until all installs use {@see seismoRemoteRefreshConfigKey()}. */
+function seismoRemoteRefreshLegacyConfigKey(): string
+{
+    return 'satellites_suggested_refresh_key';
+}
+
+/**
+ * Shared secret for {@see refresh_all_remote} / satellite Refresh.
+ * Optional override via `SEISMO_REMOTE_REFRESH_KEY` in config.local.php; otherwise
+ * read from mothership `system_config`.
+ */
+function seismoRemoteRefreshKey(bool $forceReload = false): string
+{
+    static $cached = null;
+    if (!$forceReload && $cached !== null) {
+        return $cached;
+    }
+    $fromConst = defined('SEISMO_REMOTE_REFRESH_KEY') ? trim((string)SEISMO_REMOTE_REFRESH_KEY) : '';
+    if ($fromConst !== '') {
+        $cached = $fromConst;
+
+        return $cached;
+    }
+    foreach ([seismoRemoteRefreshConfigKey(), seismoRemoteRefreshLegacyConfigKey()] as $configKey) {
+        $fromDb = seismoMothershipConfigValue($configKey);
+        if ($fromDb !== null && $fromDb !== '') {
+            $cached = $fromDb;
+
+            return $cached;
+        }
+    }
+    $cached = '';
+
+    return $cached;
+}
+
+function seismoRemoteRefreshKeyConfigured(): bool
+{
+    return seismoRemoteRefreshKey() !== '';
+}
+
+/**
+ * Create a mothership refresh key in `system_config` when none exists (mothership only).
+ */
+function seismoEnsureRemoteRefreshKey(): string
+{
+    $existing = seismoRemoteRefreshKey();
+    if ($existing !== '') {
+        return $existing;
+    }
+    if (isSatellite() || !hasDbConnection()) {
+        return '';
+    }
+    $key = bin2hex(random_bytes(32));
+    $config = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
+    $config->set(seismoRemoteRefreshConfigKey(), $key);
+    seismoRemoteRefreshKey(true);
+
+    return $key;
+}
+
+/**
+ * Read one row from mothership `system_config` (cross-DB on path satellites).
+ */
+function seismoMothershipConfigValue(string $configKey): ?string
+{
+    if (!hasDbConnection()) {
+        return null;
+    }
+    try {
+        if (isSatellite()) {
+            $db = '`' . str_replace('`', '``', (string)SEISMO_ENTRIES_DB) . '`';
+            $pdo = getDbConnection();
+            $stmt = $pdo->prepare(
+                "SELECT config_value FROM {$db}.system_config WHERE config_key = ? LIMIT 1"
+            );
+            $stmt->execute([$configKey]);
+            $raw = $stmt->fetchColumn();
+        } else {
+            $raw = (new \Seismo\Repository\SystemConfigRepository(getDbConnection()))->get($configKey);
+        }
+        if ($raw === false || $raw === null || $raw === '') {
+            return null;
+        }
+
+        return (string)$raw;
+    } catch (\Throwable) {
+        return null;
+    }
+}
+
 /**
  * Absolute mothership base URL (no trailing slash) for satellite remote refresh.
  * Uses {@see SEISMO_MOTHERSHIP_URL} when set; otherwise derives from the current request

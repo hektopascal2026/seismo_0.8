@@ -16,8 +16,7 @@ use Seismo\Repository\SystemConfigRepository;
 
 final class SatelliteController
 {
-    private const KEY_REGISTRY            = 'satellites_registry';
-    private const KEY_SUGGESTED_REFRESH   = 'satellites_suggested_refresh_key';
+    private const KEY_REGISTRY = 'satellites_registry';
 
     public function add(): void
     {
@@ -79,6 +78,7 @@ final class SatelliteController
         ];
 
         $this->saveRegistry($config, $registry);
+        seismoEnsureRemoteRefreshKey();
 
         $_SESSION['success'] = "Satellite '{$slug}' registered. Run bin/seismo-satellite-provision.sh {$slug} on the VPS to create its database and path.";
         $this->redirect($slug);
@@ -145,8 +145,9 @@ final class SatelliteController
         }
 
         $config = new SystemConfigRepository(getDbConnection());
-        $config->set(self::KEY_SUGGESTED_REFRESH, $this->generateKey());
-        $_SESSION['success'] = 'Generated a new suggested SEISMO_REMOTE_REFRESH_KEY. Paste it into config.local.php on this host.';
+        $config->set(seismoRemoteRefreshConfigKey(), $this->generateKey());
+        seismoRemoteRefreshKey(true);
+        $_SESSION['success'] = 'Remote refresh key updated. All path satellites use it immediately — no config file edit needed.';
         $this->redirect();
     }
 

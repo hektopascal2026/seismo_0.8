@@ -34,10 +34,10 @@ define('SEISMO_ENTRIES_DB', 'seismo');
 // define('FEED_DIAGNOSTIC_KEY', 'generate-a-long-random-string');
 
 /**
- * Optional — shared secret for satellite Refresh → mothership ingest (`refresh_all_remote`).
- * Generate with:  php -r "echo bin2hex(random_bytes(32));"
+ * Optional — override remote refresh secret (normally stored in mothership system_config
+ * via Settings → Satellites; auto-created when you add a desk).
  */
-// define('SEISMO_REMOTE_REFRESH_KEY', 'generate-a-long-random-string');
+// define('SEISMO_REMOTE_REFRESH_KEY', 'only-if-you-need-a-file-override');
 
 /**
  * Optional — absolute mothership base URL (no trailing slash) for satellite Refresh.
