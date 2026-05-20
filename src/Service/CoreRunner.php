@@ -35,9 +35,9 @@ final class CoreRunner
 
     /** @var array<string, int> seconds between successful runs when not forced */
     private const THROTTLE_SECONDS = [
-        self::ID_RSS         => 1800,
-        self::ID_PARL_PRESS  => 1800,
-        self::ID_SCRAPER     => 3600,
+        self::ID_RSS         => 900,
+        self::ID_PARL_PRESS  => 900,
+        self::ID_SCRAPER     => 1800,
         self::ID_MAIL        => 900,
     ];
 
@@ -58,7 +58,7 @@ final class CoreRunner
 
     /**
      * CLI cron: advance multiple chunks per tick when not throttled (mutex-held whole script).
-     * Leave headroom in a 5-minute schedule slot for parl press, mail, plugins, retention.
+     * Leave headroom in a 2-minute cron schedule slot for parl press, mail, plugins, retention.
      */
     private const CHUNK_CRON_TIME_BUDGET_SEC = 240;
 

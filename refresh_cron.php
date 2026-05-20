@@ -3,9 +3,11 @@
  * Master Cron for Seismo 0.5.
  *
  * This is the ONLY cron job a shared-host admin needs to register. Suggested
- * Plesk entry (runs every 5 minutes):
+ * mothership VPS entry (every 2 minutes; mutex skips overlapping ticks):
  *
- *   *\/5 * * * *  /usr/bin/php /path/to/seismo/refresh_cron.php
+ *   *\/2 * * * *  /usr/bin/php /path/to/seismo/refresh_cron.php
+ *
+ * Shared hosts with coarse scheduler granularity may use *\/5 instead.
  *
  * The script is a thin shell around RefreshAllService::runAll(). Per-plugin
  * throttling lives inside the service: plugins whose

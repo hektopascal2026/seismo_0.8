@@ -22,7 +22,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 1. Copy **`config.local.php.example`** → **`config.local.php`** and set database credentials (`DB_NAME` = `seismo` on the VPS).
 2. Run migrations: **`php migrate.php`**.
 3. Open **`?action=health`**, then **`?action=index`**.
-4. Register cron: **`*/5 * * * * php /var/www/seismo/refresh_cron.php`**
+4. Register cron: **`*/2 * * * * php /var/www/seismo/refresh_cron.php`** (mutex skips overlaps; use `*/5` on coarse shared hosts)
 
 Requires **`docs/db-schema.sql`** on the server — the mothership migrator reads it at runtime.
 
@@ -93,7 +93,7 @@ Desks are **views** over shared ingest, not separate apps. One codebase at `/var
 | Entries | `seismo.*` | Cross-DB **read** from `seismo` |
 | Scores / labels / favourites | `seismo` | `seismo_<slug>` (local) |
 | Routes | Feeds, mail, Lex, Leg, retention, … | Timeline, highlights, label, settings (general + Magnitu), Magnitu API |
-| Cron | `refresh_cron.php` every 5 min | None — **Refresh** triggers mothership ingest |
+| Cron | `refresh_cron.php` every 2 min | None — **Refresh** triggers mothership ingest |
 
 **Removed in 0.6.2:** `satellite-prune.json`, `seismo-generator`, per-desk pruned codebases, `SEISMO_SATELLITE_MODE` / `SEISMO_MOTHERSHIP_DB`.
 
