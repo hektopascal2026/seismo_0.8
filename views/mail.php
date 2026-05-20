@@ -318,6 +318,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <th>ID</th>
                         <th>Match</th>
                         <th>Name</th>
+                        <th>Category</th>
                         <th>Latest</th>
                         <th>Disabled</th>
                         <th>Magnitu</th>
@@ -336,6 +337,16 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                         <td><?= $sid ?></td>
                         <td><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
                         <td><?= e((string)$row['display_name']) ?></td>
+                        <td>
+                            <?php
+                            $cat = trim((string)($row['category'] ?? ''));
+                            if ($cat === '') {
+                                echo '<span class="table-cell-placeholder">—</span>';
+                            } else {
+                                echo e($cat);
+                            }
+                            ?>
+                        </td>
                         <td>
                             <?php if ($peek !== null): ?>
                                 <?php
@@ -386,7 +397,7 @@ $subscriptionsQs = 'action=mail&view=subscriptions';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($subscriptions === []): ?>
-                    <tr class="data-table-empty"><td colspan="8">No subscriptions.</td></tr>
+                    <tr class="data-table-empty"><td colspan="9">No subscriptions.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
