@@ -161,7 +161,7 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
 
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Jus (Swiss case law) — entscheidsuche.ch</h2>
-            <p class="admin-intro">BGer, BGE, and BVGer are separate plugins. If refresh reports <em>Disabled in config</em>, enable the source below and save before refreshing.</p>
+            <p class="admin-intro">BGer, BGE, and BVGer are separate plugins. If refresh reports <em>Disabled in config</em>, enable the source below and save before refreshing. Use at least <strong>365</strong> lookback days for BGer if a 90-day window returns no rows — entscheidsuche updates can be several months behind.</p>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=save_lex_jus" class="admin-form-card">
                 <?= $csrfField ?>
                 <div class="admin-form-field">

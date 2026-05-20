@@ -191,21 +191,22 @@ final class LexConfigStore
             'ch_bger' => [
                 'enabled' => true,
                 'base_url' => 'https://entscheidsuche.ch',
-                'lookback_days' => 90,
+                // BGer index `/last` can lag; entscheidsuche search may be months behind real time.
+                'lookback_days' => 365,
                 'limit' => 100,
                 'notes' => '',
             ],
             'ch_bge' => [
                 'enabled' => true,
                 'base_url' => 'https://entscheidsuche.ch',
-                'lookback_days' => 90,
+                'lookback_days' => 365,
                 'limit' => 50,
                 'notes' => '',
             ],
             'ch_bvger' => [
                 'enabled' => true,
                 'base_url' => 'https://entscheidsuche.ch',
-                'lookback_days' => 90,
+                'lookback_days' => 365,
                 'limit' => 100,
                 'notes' => '',
             ],

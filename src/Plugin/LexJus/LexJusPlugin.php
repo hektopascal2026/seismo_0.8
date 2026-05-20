@@ -89,14 +89,23 @@ final class LexJusPlugin implements SourceFetcherInterface
         }
 
         $actions = $this->fetchActions($baseUrl);
-        if ($actions === []) {
-            return [];
+
+        $files = $actions !== []
+            ? $this->selectFilesToFetch($actions, $cutoffDate, $limit)
+            : [];
+
+        // CH_BGer `/last` can be a historical backlog (oldest-first) with no rows in lookback.
+        // entscheidsuche.ch/_search.php returns recent decisions by spider + date.
+        if ($files === [] || ($actions !== [] && !$this->manifestHasPathsWithinLookback($actions, $cutoffDate))) {
+            $searchFiles = $this->fetchFilePathsFromSearch($baseUrl, $cutoffDate, $limit);
+            if ($searchFiles !== []) {
+                $files = $searchFiles;
+            }
         }
 
-        $files = $this->selectFilesToFetch($actions, $cutoffDate, $limit);
-        if ($files === []) {
-            // Fallback: if cutoff filters everything (common on first sync),
-            // take the newest items regardless of date.
+        if ($files === [] && $actions !== []) {
+            // Last resort: newest manifest paths regardless of filename date (may still
+            // yield 0 rows after Datum filtering — search path above is the real fix).
             $files = $this->selectFilesToFetch($actions, null, $limit);
         }
         if ($files === []) {
@@ -227,11 +236,84 @@ final class LexJusPlugin implements SourceFetcherInterface
 
     /**
      * @param array<string, string> $actions
+     */
+    private function manifestHasPathsWithinLookback(array $actions, string $cutoffDate): bool
+    {
+        foreach ($actions as $filePath => $action) {
+            if ($action === 'delete' || !is_string($filePath) || $filePath === '') {
+                continue;
+            }
+            if (preg_match('/_(\d{4}-\d{2}-\d{2})\.json$/', $filePath, $m) && $m[1] >= $cutoffDate) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Recent decisions via entscheidsuche Elasticsearch (used when index `/last` is backlog-only).
+     *
+     * @return list<string> paths relative to `/docs/`, e.g. `CH_BGer/CH_BGer_…_2025-09-19.json`
+     */
+    private function fetchFilePathsFromSearch(string $baseUrl, string $cutoffDate, int $limit): array
+    {
+        $searchUrl = rtrim($baseUrl, '/') . '/_search.php';
+        $payload = [
+            'size' => min($limit, 100),
+            'query' => [
+                'bool' => [
+                    'filter' => [
+                        ['prefix' => ['hierarchy' => $this->spider]],
+                        ['range' => ['date' => ['gte' => $cutoffDate]]],
+                    ],
+                ],
+            ],
+            'sort' => [['date' => 'desc']],
+            '_source' => false,
+        ];
+
+        $resp = $this->http->postJson($searchUrl, $payload);
+        if (!$resp->isOk() || $resp->body === '') {
+            return [];
+        }
+
+        try {
+            $data = $resp->json();
+        } catch (\JsonException) {
+            return [];
+        }
+
+        $hits = $data['hits']['hits'] ?? null;
+        if (!is_array($hits)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($hits as $hit) {
+            if (!is_array($hit)) {
+                continue;
+            }
+            $id = trim((string)($hit['_id'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            $out[] = $this->spider . '/' . $id . '.json';
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, string> $actions
      * @return list<string>
      */
     private function selectFilesToFetch(array $actions, ?string $cutoffDate, int $limit): array
     {
-        $out = [];
+        $candidates = [];
         foreach ($actions as $filePath => $action) {
             if ($action === 'delete') {
                 continue;
@@ -240,15 +322,25 @@ final class LexJusPlugin implements SourceFetcherInterface
                 continue;
             }
 
-            if ($cutoffDate !== null) {
-                if (preg_match('/_(\d{4}-\d{2}-\d{2})\.json$/', $filePath, $m)) {
-                    if ($m[1] < $cutoffDate) {
-                        continue;
-                    }
+            $fileDate = '0000-00-00';
+            if (preg_match('/_(\d{4}-\d{2}-\d{2})\.json$/', $filePath, $m)) {
+                $fileDate = $m[1];
+                if ($cutoffDate !== null && $fileDate < $cutoffDate) {
+                    continue;
                 }
             }
 
-            $out[] = $filePath;
+            $candidates[] = ['path' => $filePath, 'date' => $fileDate];
+        }
+
+        usort(
+            $candidates,
+            static fn (array $a, array $b): int => strcmp($b['date'], $a['date'])
+        );
+
+        $out = [];
+        foreach ($candidates as $row) {
+            $out[] = $row['path'];
             if (count($out) >= $limit) {
                 break;
             }
