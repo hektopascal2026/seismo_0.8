@@ -46,7 +46,7 @@ final class MagnituController
         'de'       => 'recht.bund.de',
         'fr'       => 'Légifrance',
         'ch_bger'  => 'Bundesgericht',
-        'ch_bge'   => 'BGE Leitentscheide',
+        'ch_bge'   => 'BGE',
         'ch_bvger' => 'Bundesverwaltungsgericht',
     ];
 

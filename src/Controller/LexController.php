@@ -170,7 +170,7 @@ final class LexController
         try {
             $full = $store->load();
             $ch = is_array($full['ch'] ?? null) ? $full['ch'] : [];
-            $ch['enabled'] = $isEnabled('ch_enabled', (bool)($ch['enabled'] ?? true));
+            $ch['enabled'] = $isEnabled('ch_enabled', false);
             $ch['language'] = LexFedlexPlugin::normalizeFedlexLanguage(
                 (string)($_POST['ch_language'] ?? $ch['language'] ?? 'DEU')
             );
@@ -257,7 +257,7 @@ final class LexController
         try {
             $full = $store->load();
             $eu = is_array($full['eu'] ?? null) ? $full['eu'] : [];
-            $eu['enabled'] = $isEnabled('eu_enabled', (bool)($eu['enabled'] ?? true));
+            $eu['enabled'] = $isEnabled('eu_enabled', false);
             $eu['endpoint'] = trim((string)($_POST['eu_endpoint'] ?? $eu['endpoint'] ?? ''));
             if ($eu['endpoint'] === '') {
                 $eu['endpoint'] = (string)($store->defaultConfig()['eu']['endpoint'] ?? '');
@@ -299,7 +299,7 @@ final class LexController
         try {
             $full = $store->load();
             $de = is_array($full['de'] ?? null) ? $full['de'] : [];
-            $de['enabled'] = $isEnabled('de_enabled', (bool)($de['enabled'] ?? true));
+            $de['enabled'] = $isEnabled('de_enabled', false);
             $de['feed_url'] = trim((string)($_POST['de_feed_url'] ?? $de['feed_url'] ?? ''));
             $de['lookback_days'] = max(1, (int)($_POST['de_lookback_days'] ?? $de['lookback_days'] ?? 90));
             $de['limit'] = max(1, min((int)($_POST['de_limit'] ?? $de['limit'] ?? 100), 200));
@@ -358,7 +358,7 @@ final class LexController
         try {
             $full = $store->load();
             $fr = is_array($full['fr'] ?? null) ? $full['fr'] : [];
-            $fr['enabled'] = $isEnabled('fr_enabled', (bool)($fr['enabled'] ?? false));
+            $fr['enabled'] = $isEnabled('fr_enabled', false);
             $fr['client_id'] = trim((string)($_POST['fr_client_id'] ?? $fr['client_id'] ?? ''));
 
             $secretIn = (string)($_POST['fr_client_secret'] ?? '');
@@ -420,23 +420,14 @@ final class LexController
 
         $store = new LexConfigStore();
         $isEnabled = $this->postEnabledClosure();
-        $defaults = $store->defaultConfig();
 
         try {
             $full = $store->load();
             foreach (['ch_bger' => 'ch_bger_enabled', 'ch_bge' => 'ch_bge_enabled', 'ch_bvger' => 'ch_bvger_enabled'] as $block => $enabledField) {
-                $blockDefaults = is_array($defaults[$block] ?? null) ? $defaults[$block] : [];
                 $cfg = is_array($full[$block] ?? null) ? $full[$block] : [];
-                $cfg['enabled'] = $isEnabled(
-                    $enabledField,
-                    (bool)($cfg['enabled'] ?? $blockDefaults['enabled'] ?? true)
-                );
+                $cfg['enabled'] = $isEnabled($enabledField, false);
                 $cfg['lookback_days'] = max(1, (int)($_POST[$block . '_lookback_days'] ?? $cfg['lookback_days'] ?? 90));
                 $cfg['limit'] = max(1, min((int)($_POST[$block . '_limit'] ?? $cfg['limit'] ?? 100), 500));
-                if ($block === 'ch_bge') {
-                    $lang = strtolower(trim((string)($_POST['ch_bge_lang'] ?? $cfg['lang'] ?? 'de')));
-                    $cfg['lang'] = in_array($lang, ['de', 'fr', 'it'], true) ? $lang : 'de';
-                }
                 $cfg['notes'] = trim((string)($_POST[$block . '_notes'] ?? $cfg['notes'] ?? ''));
                 $store->savePluginBlock($block, $cfg);
             }

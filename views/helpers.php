@@ -113,7 +113,11 @@ if (!function_exists('seismo_lex_bge_celex_for_display')) {
     /** Human-readable BGE citation (152-IV-41 → 152 IV 41). */
     function seismo_lex_bge_celex_for_display(string $celex): string
     {
-        return \Seismo\Plugin\LexBgerAtf\LexBgerAtfPlugin::celexToDisplayLabel($celex);
+        if (preg_match('/^(\d+)-([IVX]+)-(\d+)$/i', $celex, $m)) {
+            return $m[1] . ' ' . strtoupper($m[2]) . ' ' . $m[3];
+        }
+
+        return $celex;
     }
 }
 
