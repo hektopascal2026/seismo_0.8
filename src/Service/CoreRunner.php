@@ -38,7 +38,7 @@ final class CoreRunner
         self::ID_RSS         => 900,
         self::ID_PARL_PRESS  => 900,
         self::ID_SCRAPER     => 1800,
-        self::ID_MAIL        => 900,
+        self::ID_MAIL        => 300,
     ];
 
     /**

@@ -335,7 +335,7 @@ $entryLoopIndex                 = 0;
                         <?php $email = $itemWrapper['data']; ?>
                         <?php
                             $dateValue = $email['date_received'] ?? $email['date_utc'] ?? $email['created_at'] ?? $email['date_sent'] ?? null;
-                            $createdAt = $dateValue ? date('d.m.Y H:i', strtotime($dateValue)) : '';
+                            $createdAt = seismo_format_stored_utc_datetime(is_string($dateValue) ? $dateValue : null);
                             
                             $fromName = trim((string)($email['from_name'] ?? ''));
                             $fromEmail = trim((string)($email['from_email'] ?? ''));

@@ -48,7 +48,7 @@ $imapExt = extension_loaded('imap');
             <p class="admin-intro">
                 Connect your Google inbox with OAuth. Seismo uses the Gmail API and a <strong>history cursor</strong>
                 (not “unread only”), so opening mail in Gmail does not block ingest. Runs on
-                <strong>Refresh all</strong> and <code>refresh_cron.php</code> (throttled to every 15 minutes).
+                <strong>Refresh all</strong> and <code>refresh_cron.php</code> (throttled to every 5 minutes on cron).
             </p>
 
             <?php if ($mailGmailConnected): ?>

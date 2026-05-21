@@ -699,6 +699,52 @@ if (!function_exists('seismo_view_timezone')) {
 }
 
 /**
+ * Parse a DB datetime string written as UTC (Gmail/IMAP ingest) for sorting and labels.
+ */
+if (!function_exists('seismo_parse_stored_utc_datetime')) {
+    function seismo_parse_stored_utc_datetime(?string $stored): ?\DateTimeImmutable
+    {
+        $stored = trim((string)$stored);
+        if ($stored === '') {
+            return null;
+        }
+        $utc = new \DateTimeZone('UTC');
+        $dt  = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $stored, $utc);
+        if ($dt !== false) {
+            return $dt;
+        }
+
+        try {
+            return new \DateTimeImmutable($stored, $utc);
+        } catch (\Exception) {
+            return null;
+        }
+    }
+}
+
+if (!function_exists('seismo_stored_utc_to_unix')) {
+    function seismo_stored_utc_to_unix(?string $stored): int
+    {
+        return seismo_parse_stored_utc_datetime($stored)?->getTimestamp() ?? 0;
+    }
+}
+
+/**
+ * Format a UTC-stored email timestamp for the dashboard (Europe/Zurich by default).
+ */
+if (!function_exists('seismo_format_stored_utc_datetime')) {
+    function seismo_format_stored_utc_datetime(?string $stored, string $format = 'd.m.Y H:i'): string
+    {
+        $dt = seismo_parse_stored_utc_datetime($stored);
+        if ($dt === null) {
+            return '';
+        }
+
+        return $dt->setTimezone(seismo_view_timezone())->format($format);
+    }
+}
+
+/**
  * HTML-escape helper for views.
  *
  * Always double-encodes, escapes both quote styles, and assumes UTF-8 input.

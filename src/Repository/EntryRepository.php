@@ -837,7 +837,7 @@ final class EntryRepository
             'type'         => 'email',
             'entry_type'   => 'email',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => $date !== '' ? (int)strtotime($date) : 0,
+            'date'         => seismo_stored_utc_to_unix($date !== '' ? $date : null),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
