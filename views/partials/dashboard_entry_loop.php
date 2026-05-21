@@ -145,7 +145,7 @@ $entryLoopIndex                 = 0;
                                 $lexUrl = trim((string)($lexItem['work_uri'] ?? ''));
                             }
                             $lexHasUrl = seismo_is_navigable_url($lexUrl);
-                            $lexDate = $lexItem['document_date'] ? date('d.m.Y', strtotime($lexItem['document_date'])) : '';
+                            $lexDate = seismo_format_lex_item_timeline_date($lexItem);
                             $isJus = in_array($lexSource, ['ch_bger', 'ch_bge', 'ch_bvger']);
                             
                             // For JUS items: parse readable case number from slug
@@ -278,15 +278,7 @@ $entryLoopIndex                 = 0;
                             $calCouncil = seismo_council_label($calEvent['council'] ?? '');
                             $calUrl = trim((string)($calEvent['url'] ?? ''));
                             $calHasUrl = seismo_is_navigable_url($calUrl);
-                            $calEventDate = $calEvent['event_date'] ?? null;
-                            $calDaysUntil = $calEventDate ? (int)((strtotime($calEventDate) - strtotime('today')) / 86400) : null;
-                            $calDateLabel = '';
-                            if ($calEventDate) {
-                                $calDateLabel = date('d.m.Y', strtotime($calEventDate));
-                                if ($calDaysUntil === 0) $calDateLabel .= ' (today)';
-                                elseif ($calDaysUntil === 1) $calDateLabel .= ' (tomorrow)';
-                                elseif ($calDaysUntil > 1 && $calDaysUntil <= 14) $calDateLabel .= " (in {$calDaysUntil}d)";
-                            }
+                            $calDateLabel = seismo_format_calendar_event_timeline_date($calEvent);
                             $calDesc = seismo_calendar_event_body_text($calEvent);
                             $calPreview = mb_substr($calDesc, 0, 200);
                             if (mb_strlen($calDesc) > 200) {
@@ -334,8 +326,7 @@ $entryLoopIndex                 = 0;
                     <?php else: ?>
                         <?php $email = $itemWrapper['data']; ?>
                         <?php
-                            $dateValue = $email['date_received'] ?? $email['date_utc'] ?? $email['created_at'] ?? $email['date_sent'] ?? null;
-                            $createdAt = seismo_format_stored_utc_datetime(is_string($dateValue) ? $dateValue : null);
+                            $createdAt = seismo_format_email_timeline_datetime($email);
                             
                             $fromName = trim((string)($email['from_name'] ?? ''));
                             $fromEmail = trim((string)($email['from_email'] ?? ''));

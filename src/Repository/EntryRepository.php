@@ -9,7 +9,7 @@
  *     'type'         => 'feed'|'substack'|'scraper'|'email'|'lex'|'calendar',
  *     'entry_type'   => 'feed_item'|'email'|'lex_item'|'calendar_event',
  *     'entry_id'     => int,
- *     'date'         => int (unix timestamp, for sort + day separators),
+ *     'date'         => int (unix timestamp from seismo_*_timeline_unix helpers — matches card clocks),
  *     'data'         => array (raw row from the source table — NOT escaped),
  *     'score'        => ?array (entry_scores row, local DB),
  *     'is_favourite' => bool (entry_favourites presence, local DB),
@@ -808,12 +808,11 @@ final class EntryRepository
             $type = 'feed';
         }
 
-        $date = (string)($row['published_date'] ?? $row['cached_at'] ?? '');
         return [
             'type'         => $type,
             'entry_type'   => 'feed_item',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => $date !== '' ? (int)strtotime($date) : 0,
+            'date'         => seismo_feed_item_timeline_unix($row),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
@@ -826,18 +825,11 @@ final class EntryRepository
      */
     private function wrapEmail(array $row): array
     {
-        $date = (string)(
-            $row['date_received']
-            ?? $row['date_utc']
-            ?? $row['created_at']
-            ?? $row['date_sent']
-            ?? ''
-        );
         return [
             'type'         => 'email',
             'entry_type'   => 'email',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => seismo_stored_utc_to_unix($date !== '' ? $date : null),
+            'date'         => seismo_email_timeline_unix($row),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
@@ -854,7 +846,7 @@ final class EntryRepository
             'type'         => 'lex',
             'entry_type'   => 'lex_item',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => $this->lexMergedTimelineUnix($row),
+            'date'         => seismo_lex_item_timeline_unix($row),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
@@ -867,12 +859,11 @@ final class EntryRepository
      */
     private function wrapCalendarEvent(array $row): array
     {
-        $date = (string)($row['event_date'] ?? $row['created_at'] ?? '');
         return [
             'type'         => 'calendar',
             'entry_type'   => 'calendar_event',
             'entry_id'     => (int)($row['id'] ?? 0),
-            'date'         => $date !== '' ? (int)strtotime($date) : 0,
+            'date'         => seismo_calendar_event_timeline_unix($row),
             'data'         => $row,
             'score'        => null,
             'is_favourite' => false,
@@ -2434,43 +2425,6 @@ final class EntryRepository
     private function mergePerSourceFetchCap(int $limit, int $offset): int
     {
         return self::MAX_LIMIT;
-    }
-
-    /**
-     * Timeline sort key for Lex: `document_date` is DATE-only so strtotime()
-     * is midnight — same-calendar-day feeds/emails beat it and bury Lex below
-     * the fold. When `created_at` matches that official publication day,
-     * use ingestion time so same-day dossiers compete fairly in the merged sort.
-     * Card labels still read `document_date` from the raw row in the view.
-     *
-     * @param array<string, mixed> $row
-     */
-    private function lexMergedTimelineUnix(array $row): int
-    {
-        $docRaw = $row['document_date'] ?? null;
-        $createdRaw = $row['created_at'] ?? null;
-        $created = ($createdRaw !== null && $createdRaw !== '')
-            ? (int)strtotime((string)$createdRaw)
-            : 0;
-
-        if ($docRaw === null || $docRaw === '') {
-            return $created;
-        }
-
-        $docStr = trim((string)$docRaw);
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $docStr)) {
-            return (int)strtotime($docStr) ?: $created;
-        }
-
-        $docUnix = (int)strtotime($docStr . ' 00:00:00');
-        if ($created > 0) {
-            $createdDay = date('Y-m-d', $created);
-            if ($createdDay === $docStr) {
-                return $created;
-            }
-        }
-
-        return $docUnix > 0 ? $docUnix : $created;
     }
 
     /**

@@ -18,6 +18,8 @@
 
 declare(strict_types=1);
 
+use Seismo\Util\TimelineEntryDatetime;
+
 define('SEISMO_VERSION', '0.6.3');
 define('SEISMO_ROOT', __DIR__);
 
@@ -680,21 +682,7 @@ function seismoMothershipBaseUrl(): string
 if (!function_exists('seismo_view_timezone')) {
     function seismo_view_timezone(): \DateTimeZone
     {
-        static $cached = null;
-        if ($cached instanceof \DateTimeZone) {
-            return $cached;
-        }
-        $name = defined('SEISMO_VIEW_TIMEZONE') ? (string)SEISMO_VIEW_TIMEZONE : 'Europe/Zurich';
-        if ($name === '') {
-            $name = 'Europe/Zurich';
-        }
-        try {
-            $cached = new \DateTimeZone($name);
-        } catch (\Exception $e) {
-            $cached = new \DateTimeZone('Europe/Zurich');
-        }
-
-        return $cached;
+        return TimelineEntryDatetime::viewTimezone();
     }
 }
 
@@ -704,43 +692,118 @@ if (!function_exists('seismo_view_timezone')) {
 if (!function_exists('seismo_parse_stored_utc_datetime')) {
     function seismo_parse_stored_utc_datetime(?string $stored): ?\DateTimeImmutable
     {
-        $stored = trim((string)$stored);
-        if ($stored === '') {
-            return null;
-        }
-        $utc = new \DateTimeZone('UTC');
-        $dt  = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $stored, $utc);
-        if ($dt !== false) {
-            return $dt;
-        }
-
-        try {
-            return new \DateTimeImmutable($stored, $utc);
-        } catch (\Exception) {
-            return null;
-        }
+        return TimelineEntryDatetime::parseStoredUtcDatetime($stored);
     }
 }
 
 if (!function_exists('seismo_stored_utc_to_unix')) {
     function seismo_stored_utc_to_unix(?string $stored): int
     {
-        return seismo_parse_stored_utc_datetime($stored)?->getTimestamp() ?? 0;
+        return TimelineEntryDatetime::storedUtcToUnix($stored);
     }
 }
 
 /**
- * Format a UTC-stored email timestamp for the dashboard (Europe/Zurich by default).
+ * Format a UTC-stored timestamp for the dashboard (Europe/Zurich by default).
  */
 if (!function_exists('seismo_format_stored_utc_datetime')) {
     function seismo_format_stored_utc_datetime(?string $stored, string $format = 'd.m.Y H:i'): string
     {
-        $dt = seismo_parse_stored_utc_datetime($stored);
-        if ($dt === null) {
-            return '';
-        }
+        return TimelineEntryDatetime::formatStoredUtcDatetime($stored, $format);
+    }
+}
 
-        return $dt->setTimezone(seismo_view_timezone())->format($format);
+if (!function_exists('seismo_timeline_unix_date_only_in_view_tz')) {
+    function seismo_timeline_unix_date_only_in_view_tz(?string $dateOnly): int
+    {
+        return TimelineEntryDatetime::unixDateOnlyInViewTz($dateOnly);
+    }
+}
+
+if (!function_exists('seismo_format_timeline_date_only_label')) {
+    function seismo_format_timeline_date_only_label(?string $dateOnly): string
+    {
+        return TimelineEntryDatetime::formatDateOnlyLabel($dateOnly);
+    }
+}
+
+if (!function_exists('seismo_feed_item_timeline_stored_datetime')) {
+    /** @param array<string, mixed> $row */
+    function seismo_feed_item_timeline_stored_datetime(array $row): ?string
+    {
+        return TimelineEntryDatetime::feedItemStoredDatetime($row);
+    }
+}
+
+if (!function_exists('seismo_feed_item_timeline_unix')) {
+    /** @param array<string, mixed> $row */
+    function seismo_feed_item_timeline_unix(array $row): int
+    {
+        return TimelineEntryDatetime::feedItemUnix($row);
+    }
+}
+
+if (!function_exists('seismo_format_feed_item_timeline_datetime')) {
+    /** @param array<string, mixed> $row */
+    function seismo_format_feed_item_timeline_datetime(array $row, string $format = 'd.m.Y H:i'): string
+    {
+        return TimelineEntryDatetime::formatFeedItemDatetime($row, $format);
+    }
+}
+
+if (!function_exists('seismo_email_timeline_stored_datetime')) {
+    /** @param array<string, mixed> $row */
+    function seismo_email_timeline_stored_datetime(array $row): ?string
+    {
+        return TimelineEntryDatetime::emailStoredDatetime($row);
+    }
+}
+
+if (!function_exists('seismo_email_timeline_unix')) {
+    /** @param array<string, mixed> $row */
+    function seismo_email_timeline_unix(array $row): int
+    {
+        return TimelineEntryDatetime::emailUnix($row);
+    }
+}
+
+if (!function_exists('seismo_format_email_timeline_datetime')) {
+    /** @param array<string, mixed> $row */
+    function seismo_format_email_timeline_datetime(array $row, string $format = 'd.m.Y H:i'): string
+    {
+        return TimelineEntryDatetime::formatEmailDatetime($row, $format);
+    }
+}
+
+if (!function_exists('seismo_lex_item_timeline_unix')) {
+    /** @param array<string, mixed> $row */
+    function seismo_lex_item_timeline_unix(array $row): int
+    {
+        return TimelineEntryDatetime::lexItemUnix($row);
+    }
+}
+
+if (!function_exists('seismo_format_lex_item_timeline_date')) {
+    /** @param array<string, mixed> $row */
+    function seismo_format_lex_item_timeline_date(array $row): string
+    {
+        return TimelineEntryDatetime::formatLexItemDate($row);
+    }
+}
+
+if (!function_exists('seismo_calendar_event_timeline_unix')) {
+    /** @param array<string, mixed> $row */
+    function seismo_calendar_event_timeline_unix(array $row): int
+    {
+        return TimelineEntryDatetime::calendarEventUnix($row);
+    }
+}
+
+if (!function_exists('seismo_format_calendar_event_timeline_date')) {
+    /** @param array<string, mixed> $row */
+    function seismo_format_calendar_event_timeline_date(array $row): string
+    {
+        return TimelineEntryDatetime::formatCalendarEventDate($row);
     }
 }
 
