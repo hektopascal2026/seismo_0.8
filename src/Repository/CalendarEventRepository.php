@@ -47,7 +47,8 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            $where .= ' AND ' . self::legFeedAtSqlExpression() . ' >= ?';
+            $where .= ' AND ' . self::legFeedVisibilitySql();
+            $bind[] = self::zurichLegAntwortBrCutoffUtc();
             $bind[] = self::zurichLegNewIngestCutoffUtc();
         }
         if ($eventType !== null && $eventType !== '') {
@@ -94,7 +95,8 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            $where .= ' AND ' . self::legFeedAtSqlExpression() . ' >= ?';
+            $where .= ' AND ' . self::legFeedVisibilitySql();
+            $bind[] = self::zurichLegAntwortBrCutoffUtc();
             $bind[] = self::zurichLegNewIngestCutoffUtc();
         }
         if ($eventType !== null && $eventType !== '') {
@@ -364,13 +366,26 @@ final class CalendarEventRepository
         return array_values(array_unique($out));
     }
 
-    /** Default Leg list: `leg_feed_at` / `created_at` within this many Zurich days. */
+    /** Default Leg list: newly filed Geschäfte within this many Zurich days. */
     private const LEG_NEW_INGEST_LOOKBACK_DAYS = 30;
 
     /** Sort/filter timestamp: `metadata.leg_feed_at` when set, else row `created_at`. */
     private static function legFeedAtSqlExpression(): string
     {
         return 'COALESCE(STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(metadata, \'$.leg_feed_at\')), \'%Y-%m-%d %H:%i:%s\'), created_at)';
+    }
+
+    /**
+     * Antwort BR uses a shorter window ({@see ParlChLegSignal::ANTWORT_BR_FEED_LOOKBACK_DAYS})
+     * keyed off Stellungnahme date, not catalogue refresh time.
+     */
+    private static function legFeedVisibilitySql(): string
+    {
+        $feedAt = self::legFeedAtSqlExpression();
+        $signal = "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.leg_signal'))";
+
+        return '(' . $signal . " = '" . ParlChLegSignal::SIGNAL_ANTWORT_BR . "' AND {$feedAt} >= ?)"
+            . ' OR ((' . $signal . " IS NULL OR {$signal} <> '" . ParlChLegSignal::SIGNAL_ANTWORT_BR . "') AND {$feedAt} >= ?)";
     }
 
     /**
@@ -453,13 +468,23 @@ final class CalendarEventRepository
     }
 
     /**
-     * Earliest leg-feed instant (UTC) in Leg’s default view (without “Show all”).
+     * Earliest leg-feed instant (UTC) for **New** rows in Leg’s default view.
      */
     private static function zurichLegNewIngestCutoffUtc(): string
     {
+        return self::zurichLegCutoffUtc(self::LEG_NEW_INGEST_LOOKBACK_DAYS);
+    }
+
+    private static function zurichLegAntwortBrCutoffUtc(): string
+    {
+        return self::zurichLegCutoffUtc(ParlChLegSignal::ANTWORT_BR_FEED_LOOKBACK_DAYS);
+    }
+
+    private static function zurichLegCutoffUtc(int $days): string
+    {
         $zurich = new DateTimeZone('Europe/Zurich');
         $cutoff = (new DateTimeImmutable('now', $zurich))
-            ->modify('-' . self::LEG_NEW_INGEST_LOOKBACK_DAYS . ' days')
+            ->modify('-' . $days . ' days')
             ->setTime(0, 0, 0);
 
         return $cutoff->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');

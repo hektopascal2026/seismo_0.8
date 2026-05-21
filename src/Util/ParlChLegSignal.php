@@ -13,6 +13,9 @@ final class ParlChLegSignal
 
     public const SIGNAL_ANTWORT_BR = 'antwort_br';
 
+    /** Default Leg list: Antwort BR rows stay visible this many Zurich days after Stellungnahme. */
+    public const ANTWORT_BR_FEED_LOOKBACK_DAYS = 7;
+
     /**
      * @param array<string, mixed> $row
      * @param array<string, mixed>|null $existingMetadata prior metadata when row already exists
@@ -34,22 +37,20 @@ final class ParlChLegSignal
         $incomingContent = trim((string)($row['content'] ?? ''));
         $hadBr = self::hadBrResponseAlready($existingMetadata, $existingContent, $incomingContent);
 
-        $now = gmdate('Y-m-d H:i:s');
-
         if ($isInsert) {
-            $meta['leg_signal'] = $hasBr ? self::SIGNAL_ANTWORT_BR : self::SIGNAL_NEW;
-            $meta['leg_feed_at'] = $now;
+            $signal = $hasBr ? self::SIGNAL_ANTWORT_BR : self::SIGNAL_NEW;
+            $meta['leg_signal'] = $signal;
+            $meta['leg_feed_at'] = self::canonicalFeedAt($meta, $signal, $existingCreatedAt);
         } elseif ($hasBr) {
-            if ($hadBr) {
-                if (is_array($existingMetadata) && isset($existingMetadata['leg_signal'])) {
-                    $meta['leg_signal'] = $existingMetadata['leg_signal'];
-                } else {
-                    $meta['leg_signal'] = self::SIGNAL_ANTWORT_BR;
-                }
-                $meta['leg_feed_at'] = self::resolveLegFeedAt($existingMetadata, $existingCreatedAt);
+            if ($hadBr && is_array($existingMetadata) && isset($existingMetadata['leg_signal'])) {
+                $meta['leg_signal'] = (string)$existingMetadata['leg_signal'];
             } else {
                 $meta['leg_signal'] = self::SIGNAL_ANTWORT_BR;
-                $meta['leg_feed_at'] = $now;
+            }
+            if ($meta['leg_signal'] === self::SIGNAL_ANTWORT_BR) {
+                $meta['leg_feed_at'] = self::canonicalFeedAt($meta, self::SIGNAL_ANTWORT_BR, $existingCreatedAt);
+            } elseif (is_array($existingMetadata) && isset($existingMetadata['leg_feed_at'])) {
+                $meta['leg_feed_at'] = (string)$existingMetadata['leg_feed_at'];
             }
         } elseif (is_array($existingMetadata)) {
             if (isset($existingMetadata['leg_signal'])) {
@@ -97,19 +98,34 @@ final class ParlChLegSignal
     }
 
     /**
-     * @param array<string, mixed>|null $existingMetadata
+     * @param array<string, mixed> $meta incoming row metadata (incl. br_response_date / submission_date)
      */
-    private static function resolveLegFeedAt(?array $existingMetadata, ?string $existingCreatedAt): string
+    public static function canonicalFeedAt(array $meta, string $signal, ?string $existingCreatedAt): string
     {
-        if (is_array($existingMetadata) && isset($existingMetadata['leg_feed_at'])) {
-            return (string)$existingMetadata['leg_feed_at'];
+        if ($signal === self::SIGNAL_ANTWORT_BR) {
+            $dateOnly = trim((string)($meta['br_response_date'] ?? ''));
+            if (self::isDateOnly($dateOnly)) {
+                return $dateOnly . ' 12:00:00';
+            }
         }
+        if ($signal === self::SIGNAL_NEW) {
+            $dateOnly = trim((string)($meta['submission_date'] ?? ''));
+            if (self::isDateOnly($dateOnly)) {
+                return $dateOnly . ' 12:00:00';
+            }
+        }
+
         $created = trim((string)$existingCreatedAt);
         if ($created !== '') {
             return $created;
         }
 
         return gmdate('Y-m-d H:i:s');
+    }
+
+    private static function isDateOnly(string $value): bool
+    {
+        return $value !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1;
     }
 
     public static function signalLabel(?string $signal): string
