@@ -206,7 +206,7 @@ final class CalendarEventRepository
         }
 
         $table = entryTable('calendar_events');
-        $existingMeta = $this->fetchExistingMetadataByRows($rows);
+        $existingRows = $this->fetchExistingRowsByKeys($rows);
 
         $sql = 'INSERT INTO ' . $table . ' (source, external_id, title, description, content, event_date, event_end_date, event_type, status, council, url, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -228,10 +228,19 @@ final class CalendarEventRepository
             $stmt = $this->pdo->prepare($sql);
             foreach ($rows as $row) {
                 $lookupKey = (string)($row['source'] ?? '') . "\0" . (string)($row['external_id'] ?? '');
-                $isInsert = !array_key_exists($lookupKey, $existingMeta);
-                $priorMeta = $isInsert ? null : ($existingMeta[$lookupKey] ?? null);
+                $prior = $existingRows[$lookupKey] ?? null;
+                $isInsert = $prior === null;
+                $priorMeta = is_array($prior) ? ($prior['metadata'] ?? null) : null;
+                $priorContent = is_array($prior) ? (string)($prior['content'] ?? '') : null;
+                $priorCreatedAt = is_array($prior) ? (string)($prior['created_at'] ?? '') : null;
                 if ((string)($row['source'] ?? '') === 'parliament_ch') {
-                    $row = ParlChLegSignal::applyToBusinessRow($row, $priorMeta, $isInsert);
+                    $row = ParlChLegSignal::applyToBusinessRow(
+                        $row,
+                        is_array($priorMeta) ? $priorMeta : null,
+                        $isInsert,
+                        $priorContent,
+                        $priorCreatedAt !== '' ? $priorCreatedAt : null,
+                    );
                 }
 
                 $metadata = $row['metadata'] ?? null;
@@ -366,9 +375,9 @@ final class CalendarEventRepository
 
     /**
      * @param array<int, array<string, mixed>> $rows
-     * @return array<string, array<string, mixed>|null> key `source\0external_id`
+     * @return array<string, array{metadata: ?array, content: string, created_at: string}> key `source\0external_id`
      */
-    private function fetchExistingMetadataByRows(array $rows): array
+    private function fetchExistingRowsByKeys(array $rows): array
     {
         $pairs = [];
         foreach ($rows as $row) {
@@ -384,31 +393,37 @@ final class CalendarEventRepository
         }
 
         $table = entryTable('calendar_events');
-        $conditions = [];
-        $bind = [];
-        foreach ($pairs as [$source, $ext]) {
-            $conditions[] = '(source = ? AND external_id = ?)';
-            $bind[] = $source;
-            $bind[] = $ext;
-        }
-
-        $sql = 'SELECT source, external_id, metadata FROM ' . $table
-            . ' WHERE ' . implode(' OR ', $conditions);
-
-        try {
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($bind);
-        } catch (PDOException $e) {
-            if (PdoMysqlDiagnostics::isMissingTable($e)) {
-                return [];
-            }
-            throw $e;
-        }
-
         $out = [];
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $key = (string)$row['source'] . "\0" . (string)$row['external_id'];
-            $out[$key] = $this->decodeMetadataColumn($row['metadata'] ?? null);
+        foreach (array_chunk($pairs, 50, true) as $chunk) {
+            $conditions = [];
+            $bind = [];
+            foreach ($chunk as [$source, $ext]) {
+                $conditions[] = '(source = ? AND external_id = ?)';
+                $bind[] = $source;
+                $bind[] = $ext;
+            }
+
+            $sql = 'SELECT source, external_id, metadata, content, created_at FROM ' . $table
+                . ' WHERE ' . implode(' OR ', $conditions);
+
+            try {
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($bind);
+            } catch (PDOException $e) {
+                if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                    return [];
+                }
+                throw $e;
+            }
+
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $key = (string)$row['source'] . "\0" . (string)$row['external_id'];
+                $out[$key] = [
+                    'metadata'   => $this->decodeMetadataColumn($row['metadata'] ?? null),
+                    'content'    => (string)($row['content'] ?? ''),
+                    'created_at' => (string)($row['created_at'] ?? ''),
+                ];
+            }
         }
 
         return $out;
