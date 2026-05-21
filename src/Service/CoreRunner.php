@@ -38,7 +38,7 @@ final class CoreRunner
         self::ID_RSS         => 900,
         self::ID_PARL_PRESS  => 900,
         self::ID_SCRAPER     => 1800,
-        self::ID_MAIL        => 300,
+        self::ID_MAIL        => 900,
     ];
 
     /**
@@ -568,9 +568,10 @@ final class CoreRunner
 
             return $r;
         }
-        if (!$force && $this->isThrottled(self::ID_MAIL, self::THROTTLE_SECONDS[self::ID_MAIL])) {
+        $mailThrottle = self::THROTTLE_SECONDS[self::ID_MAIL];
+        if (!$force && $this->isMailThrottled($mailThrottle)) {
             return PluginRunResult::throttleSkipped(
-                'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_MAIL] . 's.'
+                'Throttled — last mail run is fresher than ' . $mailThrottle . 's.'
             );
         }
 
@@ -858,6 +859,32 @@ final class CoreRunner
             return false;
         }
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        return ($now->getTimestamp() - $last->getTimestamp()) < $minSeconds;
+    }
+
+    /**
+     * Mail/Gmail: throttle on last successful run, and also on the last attempt
+     * when it failed (e.g. API 429) so cron does not hammer Google every tick.
+     */
+    private function isMailThrottled(int $minSeconds): bool
+    {
+        if ($minSeconds <= 0) {
+            return false;
+        }
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $lastOk = $this->runLog->lastSuccessfulRunAt(self::ID_MAIL);
+        if ($lastOk !== null && ($now->getTimestamp() - $lastOk->getTimestamp()) < $minSeconds) {
+            return true;
+        }
+        $last = $this->runLog->lastRunAt(self::ID_MAIL);
+        if ($last === null) {
+            return false;
+        }
+        $latest = $this->runLog->latestPerPlugin([self::ID_MAIL])[self::ID_MAIL] ?? null;
+        if ($latest === null || $latest['status'] !== 'error') {
+            return false;
+        }
 
         return ($now->getTimestamp() - $last->getTimestamp()) < $minSeconds;
     }

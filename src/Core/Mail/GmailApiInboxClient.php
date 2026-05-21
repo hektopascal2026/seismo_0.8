@@ -19,6 +19,9 @@ final class GmailApiInboxClient
     private const MAX_CAP     = 500;
     private const DEFAULT_CATCHUP_DAYS = 7;
 
+    /** Pause between per-message `users.messages.get` calls (Gmail user quota). */
+    private const MESSAGE_FETCH_DELAY_US = 100_000;
+
     public function __construct(
         private GmailOAuthService $oauth,
         private SystemConfigRepository $config,
@@ -56,10 +59,18 @@ final class GmailApiInboxClient
         }
 
         $rows = [];
-        foreach ($messageIds as $id) {
+        foreach ($messageIds as $i => $id) {
+            if ($i > 0) {
+                usleep(self::MESSAGE_FETCH_DELAY_US);
+            }
             try {
                 $msg = $gmail->users_messages->get('me', $id, ['format' => 'full']);
                 $rows[] = GmailMessageParser::toIngestRow($msg);
+            } catch (GoogleServiceException $e) {
+                if ($this->isRateLimitError($e)) {
+                    throw $e;
+                }
+                error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             } catch (\Throwable $e) {
                 error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             }
@@ -178,5 +189,26 @@ final class GmailApiInboxClient
         }
 
         return min($max, self::MAX_CAP);
+    }
+
+    private function isRateLimitError(GoogleServiceException $e): bool
+    {
+        if ($e->getCode() === 429) {
+            return true;
+        }
+        $errors = $e->getErrors();
+        if (!is_array($errors)) {
+            return false;
+        }
+        foreach ($errors as $err) {
+            if (!is_array($err)) {
+                continue;
+            }
+            if (($err['reason'] ?? '') === 'rateLimitExceeded') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

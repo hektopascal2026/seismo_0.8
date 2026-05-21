@@ -87,6 +87,33 @@ final class PluginRunLogRepository
     }
 
     /**
+     * Timestamp (UTC) of the most recent run for $pluginId (any status except
+     * throttle skips, which are not logged). Used by {@see \Seismo\Service\CoreRunner}
+     * mail backoff so Gmail API rate-limit errors are not retried every cron tick.
+     */
+    public function lastRunAt(string $pluginId): ?DateTimeImmutable
+    {
+        $sql = 'SELECT MAX(run_at) FROM plugin_run_log WHERE plugin_id = ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$pluginId]);
+            $raw = $stmt->fetchColumn();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return null;
+            }
+            throw $e;
+        }
+
+        if ($raw === false || $raw === null || $raw === '') {
+            return null;
+        }
+
+        return new DateTimeImmutable((string)$raw, new DateTimeZone('UTC'));
+    }
+
+    /**
      * Latest row per plugin id. Keys in the result mirror the input order.
      *
      * @param list<string> $pluginIds

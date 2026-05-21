@@ -48,7 +48,7 @@ $imapExt = extension_loaded('imap');
             <p class="admin-intro">
                 Connect your Google inbox with OAuth. Seismo uses the Gmail API and a <strong>history cursor</strong>
                 (not “unread only”), so opening mail in Gmail does not block ingest. Runs on
-                <strong>Refresh all</strong> and <code>refresh_cron.php</code> (throttled to every 5 minutes on cron).
+                <strong>Refresh all</strong> and <code>refresh_cron.php</code> (throttled to every 15 minutes on cron).
             </p>
 
             <?php if ($mailGmailConnected): ?>
@@ -88,6 +88,7 @@ $imapExt = extension_loaded('imap');
                     <label for="mail_max_messages">Max messages per run</label>
                     <input type="number" id="mail_max_messages" name="mail_max_messages" class="search-input" style="width:7rem;"
                            value="<?= (int)$maxMsg ?>" min="1" max="500">
+                    <div class="magnitu-field-hint">Default 50. Cron runs at most every 15 minutes; raising this increases Gmail API calls per tick.</div>
                 </div>
                 <div class="admin-form-field">
                     <label for="mail_gmail_catchup_days">Catch-up window (days, first sync / recovery)</label>

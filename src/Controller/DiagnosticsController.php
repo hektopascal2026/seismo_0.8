@@ -102,8 +102,11 @@ final class DiagnosticsController
             $row = $latest[$id] ?? null;
             $minInterval = (int)$meta['min_interval'];
             $nextAllowed = null;
-            if ($row !== null && in_array($row['status'], ['ok', 'warn'], true) && $minInterval > 0) {
-                $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+            if ($row !== null && $minInterval > 0) {
+                if (in_array($row['status'], ['ok', 'warn'], true)
+                    || ($id === CoreRunner::ID_MAIL && $row['status'] === 'error')) {
+                    $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+                }
             }
             $coreStatus[$id] = [
                 'id'           => $id,
