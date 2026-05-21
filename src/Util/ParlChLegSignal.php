@@ -37,10 +37,16 @@ final class ParlChLegSignal
         $incomingContent = trim((string)($row['content'] ?? ''));
         $hadBr = self::hadBrResponseAlready($existingMetadata, $existingContent, $incomingContent);
 
+        $status = (string)($row['status'] ?? 'scheduled');
+
         if ($isInsert) {
-            $signal = $hasBr ? self::SIGNAL_ANTWORT_BR : self::SIGNAL_NEW;
-            $meta['leg_signal'] = $signal;
-            $meta['leg_feed_at'] = self::canonicalFeedAt($meta, $signal, $existingCreatedAt);
+            if ($hasBr) {
+                $meta['leg_signal'] = self::SIGNAL_ANTWORT_BR;
+                $meta['leg_feed_at'] = self::canonicalFeedAt($meta, self::SIGNAL_ANTWORT_BR, $existingCreatedAt);
+            } elseif ($status !== 'completed') {
+                $meta['leg_signal'] = self::SIGNAL_NEW;
+                $meta['leg_feed_at'] = self::canonicalFeedAt($meta, self::SIGNAL_NEW, $existingCreatedAt);
+            }
         } elseif ($hasBr) {
             if ($hadBr && is_array($existingMetadata) && isset($existingMetadata['leg_signal'])) {
                 $meta['leg_signal'] = (string)$existingMetadata['leg_signal'];

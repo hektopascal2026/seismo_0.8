@@ -97,6 +97,21 @@ final class ParlChLegSignalTest extends TestCase
         $this->assertSame('2026-05-13 12:00:00', $out['metadata']['leg_feed_at']);
     }
 
+    public function testInsertCompletedWithoutBrGetsNoLegSignal(): void
+    {
+        $row = [
+            'external_id' => '20250037',
+            'status'      => 'completed',
+            'metadata'    => [
+                'has_br_response' => false,
+                'submission_date' => '2025-02-21',
+            ],
+        ];
+        $out = ParlChLegSignal::applyToBusinessRow($row, null, true, null, null);
+        $this->assertArrayNotHasKey('leg_signal', $out['metadata']);
+        $this->assertArrayNotHasKey('leg_feed_at', $out['metadata']);
+    }
+
     public function testSessionsSkipped(): void
     {
         $row = ['external_id' => 'session_99', 'metadata' => []];

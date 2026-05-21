@@ -384,8 +384,9 @@ final class CalendarEventRepository
         $feedAt = self::legFeedAtSqlExpression();
         $signal = "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.leg_signal'))";
 
+        // Only explicit signals — legacy rows without `leg_signal` stay under “Show all”.
         return '(' . $signal . " = '" . ParlChLegSignal::SIGNAL_ANTWORT_BR . "' AND {$feedAt} >= ?)"
-            . ' OR ((' . $signal . " IS NULL OR {$signal} <> '" . ParlChLegSignal::SIGNAL_ANTWORT_BR . "') AND {$feedAt} >= ?)";
+            . " OR (" . $signal . " = '" . ParlChLegSignal::SIGNAL_NEW . "' AND status <> 'completed' AND {$feedAt} >= ?)";
     }
 
     /**
