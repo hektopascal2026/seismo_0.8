@@ -341,6 +341,9 @@ final class EntryRepository
             }
         }
         foreach ($this->fetchCalendarRowsByIds($idsByType['calendar_event']) as $row) {
+            if (!$this->calendarRowVisibleInTimeline($row)) {
+                continue;
+            }
             $w = $this->wrapCalendarEvent($row);
             $k = 'calendar_event:' . $w['entry_id'];
             if (isset($best[$k])) {
@@ -566,6 +569,9 @@ final class EntryRepository
             $items[] = $this->wrapLexItem($row);
         }
         foreach ($this->fetchCalendarRowsByIds($byType['calendar_event']) as $row) {
+            if (!$this->calendarRowVisibleInTimeline($row)) {
+                continue;
+            }
             $items[] = $this->wrapCalendarEvent($row);
         }
 
@@ -773,6 +779,14 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function calendarRowVisibleInTimeline(array $row): bool
+    {
+        return (new CalendarEventRepository($this->pdo))->rowVisibleInDefaultLegFeed($row);
+    }
+
     private function fetchCalendarEvents(int $limit): array
     {
         $cal = new CalendarEventRepository($this->pdo);

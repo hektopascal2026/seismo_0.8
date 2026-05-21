@@ -401,6 +401,46 @@ final class CalendarEventRepository
     }
 
     /**
+     * PHP mirror of {@see legFeedVisibilityWhereClause()} for score-driven paths
+     * (Highlights, Favourites) that hydrate calendar rows by id.
+     *
+     * @param array<string, mixed> $row calendar_events row
+     */
+    public function rowVisibleInDefaultLegFeed(array $row): bool
+    {
+        $meta = $this->decodeMetadataColumn($row['metadata'] ?? null) ?? [];
+        $signal = (string)($meta['leg_signal'] ?? '');
+        $status = (string)($row['status'] ?? 'scheduled');
+
+        $feedAt = trim((string)($meta['leg_feed_at'] ?? ''));
+        if ($feedAt === '') {
+            $feedAt = trim((string)($row['created_at'] ?? ''));
+        }
+        if ($feedAt === '') {
+            return false;
+        }
+
+        $feedTs = strtotime($feedAt);
+        if ($feedTs === false) {
+            return false;
+        }
+
+        if ($signal === ParlChLegSignal::SIGNAL_ANTWORT_BR) {
+            $cutoff = strtotime(self::zurichLegAntwortBrCutoffUtc());
+
+            return $cutoff !== false && $feedTs >= $cutoff;
+        }
+
+        if ($signal === ParlChLegSignal::SIGNAL_NEW && $status !== 'completed') {
+            $cutoff = strtotime(self::zurichLegNewIngestCutoffUtc());
+
+            return $cutoff !== false && $feedTs >= $cutoff;
+        }
+
+        return false;
+    }
+
+    /**
      * Antwort BR uses a shorter window ({@see ParlChLegSignal::ANTWORT_BR_FEED_LOOKBACK_DAYS})
      * keyed off Stellungnahme date, not catalogue refresh time.
      */
