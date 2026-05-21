@@ -104,7 +104,7 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">
-                                    <?php $feedTimelineDate = seismo_format_feed_item_timeline_datetime($item); ?>
+                                    <?php $feedTimelineDate = (string)($itemWrapper['clock_label'] ?? ''); ?>
                                     <?php if ($feedTimelineDate !== ''): ?>
                                         <span class="entry-date"><?= htmlspecialchars($feedTimelineDate) ?></span>
                                     <?php endif; ?>

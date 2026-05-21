@@ -713,17 +713,18 @@ if (!function_exists('seismo_format_stored_utc_datetime')) {
     }
 }
 
-if (!function_exists('seismo_timeline_unix_date_only_in_view_tz')) {
-    function seismo_timeline_unix_date_only_in_view_tz(?string $dateOnly): int
+if (!function_exists('seismo_timeline_day_key_in_view_tz')) {
+    function seismo_timeline_day_key_in_view_tz(int $unix): string
     {
-        return TimelineEntryDatetime::unixDateOnlyInViewTz($dateOnly);
+        return TimelineEntryDatetime::timelineDayKeyInViewTz($unix);
     }
 }
 
-if (!function_exists('seismo_format_timeline_date_only_label')) {
-    function seismo_format_timeline_date_only_label(?string $dateOnly): string
+if (!function_exists('seismo_format_wrapper_card_clock')) {
+    /** @param array<string, mixed> $wrapper */
+    function seismo_format_wrapper_card_clock(array $wrapper): string
     {
-        return TimelineEntryDatetime::formatDateOnlyLabel($dateOnly);
+        return TimelineEntryDatetime::formatWrapperCardClock($wrapper);
     }
 }
 
@@ -783,11 +784,11 @@ if (!function_exists('seismo_lex_item_timeline_unix')) {
     }
 }
 
-if (!function_exists('seismo_format_lex_item_timeline_date')) {
+if (!function_exists('seismo_format_lex_item_timeline_datetime')) {
     /** @param array<string, mixed> $row */
-    function seismo_format_lex_item_timeline_date(array $row): string
+    function seismo_format_lex_item_timeline_datetime(array $row): string
     {
-        return TimelineEntryDatetime::formatLexItemDate($row);
+        return TimelineEntryDatetime::formatLexItemDatetime($row);
     }
 }
 

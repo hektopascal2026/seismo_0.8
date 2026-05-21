@@ -60,7 +60,7 @@ $scraperHasMore = mb_strlen($scraperContent) > 200;
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">
-                                    <?php $scraperTimelineDate = seismo_format_feed_item_timeline_datetime($item); ?>
+                                    <?php $scraperTimelineDate = (string)($itemWrapper['clock_label'] ?? ''); ?>
                                     <?php if ($scraperTimelineDate !== ''): ?>
                                         <span class="entry-date"><?= htmlspecialchars($scraperTimelineDate) ?></span>
                                     <?php endif; ?>

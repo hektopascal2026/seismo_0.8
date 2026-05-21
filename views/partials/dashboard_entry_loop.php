@@ -63,7 +63,7 @@ $entryLoopIndex                 = 0;
                     <?php if ($showDaySeparators): ?>
                         <?php
                             $__ts = (int)($itemWrapper['date'] ?? 0);
-                            $__dk = $__ts > 0 ? date('Y-m-d', $__ts) : '';
+                            $__dk = $__ts > 0 ? seismo_timeline_day_key_in_view_tz($__ts) : '';
                             if ($__dk !== '' && ($feedLoopPrevDayKey === null || $feedLoopPrevDayKey !== $__dk)) {
                                 $__h = seismo_magnitu_day_heading($__ts);
                                 if ($__h !== '') {
@@ -145,7 +145,7 @@ $entryLoopIndex                 = 0;
                                 $lexUrl = trim((string)($lexItem['work_uri'] ?? ''));
                             }
                             $lexHasUrl = seismo_is_navigable_url($lexUrl);
-                            $lexDate = seismo_format_lex_item_timeline_date($lexItem);
+                            $lexDate = (string)($itemWrapper['clock_label'] ?? '');
                             $isJus = in_array($lexSource, ['ch_bger', 'ch_bge', 'ch_bvger']);
                             
                             // For JUS items: parse readable case number from slug
@@ -278,7 +278,7 @@ $entryLoopIndex                 = 0;
                             $calCouncil = seismo_council_label($calEvent['council'] ?? '');
                             $calUrl = trim((string)($calEvent['url'] ?? ''));
                             $calHasUrl = seismo_is_navigable_url($calUrl);
-                            $calDateLabel = seismo_format_calendar_event_timeline_date($calEvent);
+                            $calDateLabel = (string)($itemWrapper['clock_label'] ?? '');
                             $calDesc = seismo_calendar_event_body_text($calEvent);
                             $calPreview = mb_substr($calDesc, 0, 200);
                             if (mb_strlen($calDesc) > 200) {
@@ -326,7 +326,7 @@ $entryLoopIndex                 = 0;
                     <?php else: ?>
                         <?php $email = $itemWrapper['data']; ?>
                         <?php
-                            $createdAt = seismo_format_email_timeline_datetime($email);
+                            $createdAt = (string)($itemWrapper['clock_label'] ?? '');
                             
                             $fromName = trim((string)($email['from_name'] ?? ''));
                             $fromEmail = trim((string)($email['from_email'] ?? ''));

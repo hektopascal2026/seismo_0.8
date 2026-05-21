@@ -9,7 +9,8 @@
  *     'type'         => 'feed'|'substack'|'scraper'|'email'|'lex'|'calendar',
  *     'entry_type'   => 'feed_item'|'email'|'lex_item'|'calendar_event',
  *     'entry_id'     => int,
- *     'date'         => int (unix timestamp from seismo_*_timeline_unix helpers — matches card clocks),
+ *     'date'         => int (unix timestamp — sort + day separators),
+ *     'clock_label'  => string (bottom-right card clock; always matches date),
  *     'data'         => array (raw row from the source table — NOT escaped),
  *     'score'        => ?array (entry_scores row, local DB),
  *     'is_favourite' => bool (entry_favourites presence, local DB),
@@ -65,10 +66,9 @@ final class EntryRepository
     public const MAX_LIMIT = 200;
 
     /**
-     * Leg (`calendar_events`) merge window into the blended dashboard feed.
-     * Rows with `event_date` older than this are omitted so very old dossiers do
-     * not crowd out feeds/Lex unless the Leg pill is excluded via
-     * {@see TimelineFilter::excludeCalendar} (explicit user toggle).
+     * Leg / parliamentary activity (`calendar_events`) merge window on the dashboard.
+     * Rows with `event_date` older than this are omitted unless the Leg pill is
+     * excluded via {@see TimelineFilter::excludeCalendar}.
      */
     private const CALENDAR_MERGE_LOOKBACK_DAYS = 400;
 
@@ -769,10 +769,8 @@ final class EntryRepository
     }
 
     /**
-     * Leg rows merged into the main timeline. Uses {@see CALENDAR_MERGE_LOOKBACK_DAYS}
-     * so older `event_date` dossiers remain eligible (explicit opt-out via
-     * TimelineFilter excludes Leg entirely). Rows are capped by `$limit`; user
-     * turns Leg off via dashboard filters, not this window.
+     * Parliamentary activity rows merged into the main timeline.
+     * Per-family fetch is newest ingestion first; global merge re-sorts by card clock.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -782,7 +780,7 @@ final class EntryRepository
         $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
                 WHERE event_date IS NULL
                    OR event_date >= DATE_SUB(CURDATE(), INTERVAL ' . $days . ' DAY)
-                ORDER BY event_date DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT ' . (int)$limit;
         return $this->selectOrEmpty($sql);
     }
@@ -808,7 +806,7 @@ final class EntryRepository
             $type = 'feed';
         }
 
-        return [
+        $wrapper = [
             'type'         => $type,
             'entry_type'   => 'feed_item',
             'entry_id'     => (int)($row['id'] ?? 0),
@@ -817,6 +815,9 @@ final class EntryRepository
             'score'        => null,
             'is_favourite' => false,
         ];
+        $wrapper['clock_label'] = seismo_format_wrapper_card_clock($wrapper);
+
+        return $wrapper;
     }
 
     /**
@@ -825,7 +826,7 @@ final class EntryRepository
      */
     private function wrapEmail(array $row): array
     {
-        return [
+        $wrapper = [
             'type'         => 'email',
             'entry_type'   => 'email',
             'entry_id'     => (int)($row['id'] ?? 0),
@@ -834,6 +835,9 @@ final class EntryRepository
             'score'        => null,
             'is_favourite' => false,
         ];
+        $wrapper['clock_label'] = seismo_format_wrapper_card_clock($wrapper);
+
+        return $wrapper;
     }
 
     /**
@@ -842,7 +846,7 @@ final class EntryRepository
      */
     private function wrapLexItem(array $row): array
     {
-        return [
+        $wrapper = [
             'type'         => 'lex',
             'entry_type'   => 'lex_item',
             'entry_id'     => (int)($row['id'] ?? 0),
@@ -851,6 +855,9 @@ final class EntryRepository
             'score'        => null,
             'is_favourite' => false,
         ];
+        $wrapper['clock_label'] = seismo_format_wrapper_card_clock($wrapper);
+
+        return $wrapper;
     }
 
     /**
@@ -859,7 +866,7 @@ final class EntryRepository
      */
     private function wrapCalendarEvent(array $row): array
     {
-        return [
+        $wrapper = [
             'type'         => 'calendar',
             'entry_type'   => 'calendar_event',
             'entry_id'     => (int)($row['id'] ?? 0),
@@ -868,6 +875,9 @@ final class EntryRepository
             'score'        => null,
             'is_favourite' => false,
         ];
+        $wrapper['clock_label'] = seismo_format_wrapper_card_clock($wrapper);
+
+        return $wrapper;
     }
 
     // ------------------------------------------------------------------
@@ -1104,7 +1114,7 @@ final class EntryRepository
                 WHERE title LIKE ?
                    OR description LIKE ?
                    OR content LIKE ?
-                ORDER BY event_date DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT ' . (int)$limit;
         return $this->selectPreparedOrEmpty($sql, [$term, $term, $term]);
     }

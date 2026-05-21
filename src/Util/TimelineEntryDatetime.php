@@ -7,11 +7,16 @@ namespace Seismo\Util;
 /**
  * Canonical dashboard timeline instants and card clocks (bottom-right).
  *
- * Repository sort keys and view labels must both come from here so feed/email
- * UTC storage and Europe/Zurich display stay aligned.
+ * Feed/scraper published_date strings are UTC wall-clock in DB (ingest writes
+ * `Y-m-d H:i:s` in UTC). Email columns are UTC instants shown in Zurich.
+ * Lex/Leg: official date on the card (`document_date` / `event_date`); when that
+ * is date-only, sort and clock use `created_at` (ingestion), like other news.
  */
 final class TimelineEntryDatetime
 {
+    public const CARD_FORMAT_DATETIME = 'd.m.Y H:i';
+    public const CARD_FORMAT_DATE     = 'd.m.Y';
+
     public static function viewTimezone(): \DateTimeZone
     {
         static $cached = null;
@@ -55,7 +60,10 @@ final class TimelineEntryDatetime
         return self::parseStoredUtcDatetime($stored)?->getTimestamp() ?? 0;
     }
 
-    public static function formatStoredUtcDatetime(?string $stored, string $format = 'd.m.Y H:i'): string
+    /**
+     * Email / generic UTC-stored columns → Zurich card clock.
+     */
+    public static function formatStoredUtcDatetime(?string $stored, string $format = self::CARD_FORMAT_DATETIME): string
     {
         $dt = self::parseStoredUtcDatetime($stored);
         if ($dt === null) {
@@ -65,7 +73,50 @@ final class TimelineEntryDatetime
         return $dt->setTimezone(self::viewTimezone())->format($format);
     }
 
-    public static function unixDateOnlyInViewTz(?string $dateOnly): int
+    /**
+     * Feed published_date / cached_at: format in UTC (same digits as DB / legacy cards).
+     */
+    public static function formatFeedStoredUtcFace(?string $stored, string $format = self::CARD_FORMAT_DATETIME): string
+    {
+        $dt = self::parseStoredUtcDatetime($stored);
+        if ($dt === null) {
+            return '';
+        }
+
+        return $dt->format($format);
+    }
+
+    /** Calendar day key for timeline separators (view timezone). */
+    public static function timelineDayKeyInViewTz(int $unix): string
+    {
+        if ($unix <= 0) {
+            return '';
+        }
+
+        return (new \DateTimeImmutable('@' . $unix))
+            ->setTimezone(self::viewTimezone())
+            ->format('Y-m-d');
+    }
+
+    /**
+     * Card clock from wrapper `date` unix — always matches {@see sortMergedTimeline()}.
+     */
+    public static function formatCardClockFromUnix(int $unix, bool $dateOnly): string
+    {
+        if ($unix <= 0) {
+            return '';
+        }
+
+        $tz = self::viewTimezone();
+        $dt = (new \DateTimeImmutable('@' . $unix))->setTimezone($tz);
+
+        return $dt->format($dateOnly ? self::CARD_FORMAT_DATE : self::CARD_FORMAT_DATETIME);
+    }
+
+    /**
+     * Start of calendar day in view TZ (date-only sources).
+     */
+    public static function unixDateOnlyStartInViewTz(?string $dateOnly): int
     {
         $dateOnly = trim((string)$dateOnly);
         if ($dateOnly === '') {
@@ -84,27 +135,30 @@ final class TimelineEntryDatetime
             return $parsed->setTimezone($viewTz)->setTime(0, 0)->getTimestamp();
         }
 
-        $ts = strtotime($dateOnly);
-        if ($ts === false) {
+        return 0;
+    }
+
+    /**
+     * End of calendar day in view TZ — date-only rows sort after timed entries the same day.
+     */
+    public static function unixDateOnlyEndInViewTz(?string $dateOnly): int
+    {
+        $dateOnly = trim((string)$dateOnly);
+        if ($dateOnly === '') {
             return 0;
         }
 
-        return (new \DateTimeImmutable('@' . $ts))
-            ->setTimezone($viewTz)
-            ->setTime(0, 0)
-            ->getTimestamp();
-    }
+        $viewTz = self::viewTimezone();
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateOnly)) {
+            $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $dateOnly, $viewTz);
+            if ($dt === false) {
+                return 0;
+            }
 
-    public static function formatDateOnlyLabel(?string $dateOnly): string
-    {
-        $unix = self::unixDateOnlyInViewTz($dateOnly);
-        if ($unix <= 0) {
-            return '';
+            return $dt->setTime(23, 59, 59)->getTimestamp();
         }
 
-        return (new \DateTimeImmutable('@' . $unix))
-            ->setTimezone(self::viewTimezone())
-            ->format('d.m.Y');
+        return self::unixDateOnlyStartInViewTz($dateOnly);
     }
 
     /**
@@ -137,11 +191,11 @@ final class TimelineEntryDatetime
     /**
      * @param array<string, mixed> $row
      */
-    public static function formatFeedItemDatetime(array $row, string $format = 'd.m.Y H:i'): string
+    public static function formatFeedItemDatetime(array $row, string $format = self::CARD_FORMAT_DATETIME): string
     {
         $raw = self::feedItemStoredDatetime($row);
 
-        return $raw !== null ? self::formatStoredUtcDatetime($raw, $format) : '';
+        return $raw !== null ? self::formatFeedStoredUtcFace($raw, $format) : '';
     }
 
     /**
@@ -172,11 +226,56 @@ final class TimelineEntryDatetime
     /**
      * @param array<string, mixed> $row
      */
-    public static function formatEmailDatetime(array $row, string $format = 'd.m.Y H:i'): string
+    public static function formatEmailDatetime(array $row, string $format = self::CARD_FORMAT_DATETIME): string
     {
         $raw = self::emailStoredDatetime($row);
 
         return $raw !== null ? self::formatStoredUtcDatetime($raw, $format) : '';
+    }
+
+    public static function isDateOnlyString(?string $value): bool
+    {
+        $value = trim((string)$value);
+
+        return $value !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1;
+    }
+
+    /**
+     * Official publication / session date is date-only → timeline uses ingestion.
+     *
+     * @param array<string, mixed> $row
+     */
+    public static function unixForOfficialDateOrIngestion(array $row, string $officialDateField): int
+    {
+        $official = trim((string)($row[$officialDateField] ?? ''));
+        if ($official === '') {
+            return 0;
+        }
+
+        if (!self::isDateOnlyString($official)) {
+            $parsed = self::parseStoredUtcDatetime($official);
+            if ($parsed !== null) {
+                return $parsed->getTimestamp();
+            }
+
+            return self::unixDateOnlyEndInViewTz($official);
+        }
+
+        $created = trim((string)($row['created_at'] ?? ''));
+        if ($created !== '') {
+            return self::storedUtcToUnix($created);
+        }
+
+        return self::unixDateOnlyEndInViewTz($official);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function cardShowsDateOnly(array $row, string $officialDateField): bool
+    {
+        return self::isDateOnlyString($row[$officialDateField] ?? null)
+            && trim((string)($row['created_at'] ?? '')) === '';
     }
 
     /**
@@ -184,23 +283,47 @@ final class TimelineEntryDatetime
      */
     public static function lexItemUnix(array $row): int
     {
-        return self::unixDateOnlyInViewTz(isset($row['document_date']) ? (string)$row['document_date'] : null);
+        return self::unixForOfficialDateOrIngestion($row, 'document_date');
     }
 
     /**
      * @param array<string, mixed> $row
      */
-    public static function formatLexItemDate(array $row): string
+    public static function lexItemCardIsDateOnly(array $row): bool
     {
-        return self::formatDateOnlyLabel(isset($row['document_date']) ? (string)$row['document_date'] : null);
+        return self::cardShowsDateOnly($row, 'document_date');
     }
 
     /**
+     * @param array<string, mixed> $row
+     */
+    public static function formatLexItemDatetime(array $row): string
+    {
+        $unix = self::lexItemUnix($row);
+        if ($unix <= 0) {
+            return '';
+        }
+
+        return self::formatCardClockFromUnix($unix, self::lexItemCardIsDateOnly($row));
+    }
+
+    /**
+     * Leg (parliamentary activity): same ingestion rule as Lex — `event_date` on
+     * the card, `created_at` for timeline order when the official date has no time.
+     *
      * @param array<string, mixed> $row
      */
     public static function calendarEventUnix(array $row): int
     {
-        return self::unixDateOnlyInViewTz(isset($row['event_date']) ? (string)$row['event_date'] : null);
+        return self::unixForOfficialDateOrIngestion($row, 'event_date');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function calendarEventCardIsDateOnly(array $row): bool
+    {
+        return self::cardShowsDateOnly($row, 'event_date');
     }
 
     /**
@@ -208,32 +331,48 @@ final class TimelineEntryDatetime
      */
     public static function formatCalendarEventDate(array $row): string
     {
-        $eventDate = trim((string)($row['event_date'] ?? ''));
-        if ($eventDate === '') {
+        $unix = self::calendarEventUnix($row);
+        if ($unix <= 0) {
             return '';
         }
 
-        $label = self::formatDateOnlyLabel($eventDate);
-        if ($label === '') {
+        return self::formatCardClockFromUnix($unix, self::calendarEventCardIsDateOnly($row));
+    }
+
+    /**
+     * @param array<string, mixed> $wrapper dashboard entry wrapper from EntryRepository
+     */
+    public static function formatWrapperCardClock(array $wrapper): string
+    {
+        $unix = (int)($wrapper['date'] ?? 0);
+        if ($unix <= 0) {
             return '';
         }
 
-        $viewTz = self::viewTimezone();
-        $eventDay = \DateTimeImmutable::createFromFormat('Y-m-d', $eventDate, $viewTz);
-        if ($eventDay === false) {
-            return $label;
-        }
+        $entryType = (string)($wrapper['entry_type'] ?? '');
+        $row       = is_array($wrapper['data'] ?? null) ? $wrapper['data'] : [];
 
-        $today = new \DateTimeImmutable('today', $viewTz);
-        $daysUntil = (int)$today->diff($eventDay)->format('%r%a');
-        if ($daysUntil === 0) {
-            $label .= ' (today)';
-        } elseif ($daysUntil === 1) {
-            $label .= ' (tomorrow)';
-        } elseif ($daysUntil > 1 && $daysUntil <= 14) {
-            $label .= ' (in ' . $daysUntil . 'd)';
-        }
+        return match ($entryType) {
+            'feed_item'       => self::formatFeedItemDatetime($row),
+            'email'           => self::formatEmailDatetime($row),
+            'lex_item'        => self::formatLexItemDatetime($row),
+            'calendar_event'  => self::formatCalendarEventDate($row),
+            default           => self::formatCardClockFromUnix($unix, false),
+        };
+    }
 
-        return $label;
+    /**
+     * @param array<string, mixed> $wrapper
+     */
+    public static function wrapperCardIsDateOnly(array $wrapper): bool
+    {
+        $entryType = (string)($wrapper['entry_type'] ?? '');
+        $row       = is_array($wrapper['data'] ?? null) ? $wrapper['data'] : [];
+
+        return match ($entryType) {
+            'lex_item'       => self::lexItemCardIsDateOnly($row),
+            'calendar_event' => self::calendarEventCardIsDateOnly($row),
+            default          => false,
+        };
     }
 }
