@@ -37,7 +37,8 @@ use Seismo\Repository\PluginRunLogRepository;
  *
  * Throttle skips use {@see PluginRunResult::throttleSkipped()} — they are **not**
  * persisted to `plugin_run_log` (cron stdout only). User-initiated refresh paths
- * call with `$force = true` to bypass the throttle.
+ * call with `$force = true` to bypass plugin/core throttles except {@see CoreRunner::ID_MAIL}
+ * (Gmail API quota — see {@see CoreRunner::runMail()}).
  *
  * Rows ARE persisted for every non-throttle outcome (ok, warn, error, skipped-
  * because-satellite, skipped-because-disabled-in-config). Those are the rows
@@ -76,7 +77,7 @@ final class RefreshAllService
     /**
      * Run core fetchers, then every registered plugin.
      *
-     * @param bool $force If true, ignore the per-plugin throttle (web "Refresh all").
+     * @param bool $force If true, ignore per-plugin/core throttles except mail (Gmail quota).
      * @param bool $skipLexPlugins If true, skip plugins with {@see SourceFetcherInterface::getEntryType()}
      *                            `lex_item` (timeline toolbar Refresh — Lex stays on Diagnostics / cron).
      * @param bool $refreshMutexHeldExternally When true, do not acquire/release {@see CronMutexRepository}

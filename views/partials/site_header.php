@@ -67,7 +67,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Triggers mothership refresh (feeds, press, scrapers, mail, Leg — Lex omitted, same as mothership toolbar)' : 'Refresh feeds, press, scrapers, mail, and parliament calendar. Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Triggers mothership refresh (feeds, press, scrapers, mail, Leg — Lex omitted, same as mothership toolbar)' : 'Refresh feeds, press, scrapers, parliament calendar, and mail when due (mail/Gmail at most every 15 minutes). Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
                     </form>
                 <?php endif; ?>
                 <?php

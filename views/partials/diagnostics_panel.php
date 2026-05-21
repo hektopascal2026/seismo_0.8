@@ -69,7 +69,7 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Master refresh</h2>
             <p class="admin-intro">
-                Runs every registered plugin now, ignoring throttle. The CLI cron
+                Runs every registered plugin now, ignoring throttle (except mail/Gmail — same 15&nbsp;min window as cron). The CLI cron
                 <code>refresh_cron.php</code> calls the same code with throttle on.
             </p>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form">

@@ -569,7 +569,8 @@ final class CoreRunner
             return $r;
         }
         $mailThrottle = self::THROTTLE_SECONDS[self::ID_MAIL];
-        if (!$force && $this->isMailThrottled($mailThrottle)) {
+        // Gmail quota: always respect mail throttle (timeline/diagnostics force=true does not bypass).
+        if ($this->isMailThrottled($mailThrottle)) {
             return PluginRunResult::throttleSkipped(
                 'Throttled — last mail run is fresher than ' . $mailThrottle . 's.'
             );
