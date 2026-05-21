@@ -441,6 +441,12 @@ final class EntryRepository
         int $limit,
         bool $sortByRelevance
     ): array {
+        // Chronological mode: strict newest-first slice — family quotas reorder
+        // items away from the card-clock order the user sees on the bottom right.
+        if (!$sortByRelevance) {
+            return array_slice($sortedItems, $offset, $limit);
+        }
+
         if ($offset > 0) {
             return array_slice($sortedItems, $offset, $limit);
         }

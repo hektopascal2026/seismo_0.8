@@ -12,34 +12,34 @@ use Seismo\Util\TimelineEntryDatetime;
  */
 final class TimelineEntryDatetimeTest extends TestCase
 {
-    public function testFeedItemShowsUtcFaceAndSortsBySameInstant(): void
+    public function testFeedItemShowsZurichClockMatchingSortInstant(): void
     {
         $row = ['published_date' => '2026-05-21 11:50:00'];
-        self::assertSame('21.05.2026 11:50', TimelineEntryDatetime::formatFeedItemDatetime($row));
+        self::assertSame('21.05.2026 13:50', TimelineEntryDatetime::formatFeedItemDatetime($row));
         self::assertGreaterThan(0, TimelineEntryDatetime::feedItemUnix($row));
     }
 
-    public function testEmailLaterThanFeedWhenLabelsSaySo(): void
+    public function testEmailLaterThanFeedWhenZurichLabelsSaySo(): void
     {
         $feed = ['published_date' => '2026-05-21 10:00:00'];
         $mail = ['date_received' => '2026-05-21 11:50:00'];
 
-        self::assertSame('21.05.2026 10:00', TimelineEntryDatetime::formatFeedItemDatetime($feed));
+        self::assertSame('21.05.2026 12:00', TimelineEntryDatetime::formatFeedItemDatetime($feed));
         self::assertSame('21.05.2026 13:50', TimelineEntryDatetime::formatEmailDatetime($mail));
 
         self::assertGreaterThan(
             TimelineEntryDatetime::feedItemUnix($feed),
             TimelineEntryDatetime::emailUnix($mail),
-            '13:50 card must sort above 10:00 feed card'
+            '13:50 card must sort above 12:00 feed card'
         );
     }
 
-    public function testMorningFeedAppearsBeforeNoonFeed(): void
+    public function testMorningFeedZurichLabelBeforeNoonFeed(): void
     {
         $morning = ['published_date' => '2026-05-21 06:30:00'];
         $noon    = ['published_date' => '2026-05-21 10:00:00'];
 
-        self::assertSame('21.05.2026 06:30', TimelineEntryDatetime::formatFeedItemDatetime($morning));
+        self::assertSame('21.05.2026 08:30', TimelineEntryDatetime::formatFeedItemDatetime($morning));
         self::assertGreaterThan(
             TimelineEntryDatetime::feedItemUnix($morning),
             TimelineEntryDatetime::feedItemUnix($noon)
@@ -84,6 +84,6 @@ final class TimelineEntryDatetimeTest extends TestCase
         ];
         $wrapper['clock_label'] = TimelineEntryDatetime::formatWrapperCardClock($wrapper);
 
-        self::assertSame('21.05.2026 09:00', $wrapper['clock_label']);
+        self::assertSame('21.05.2026 11:00', $wrapper['clock_label']);
     }
 }

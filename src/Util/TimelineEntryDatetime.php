@@ -7,8 +7,9 @@ namespace Seismo\Util;
 /**
  * Canonical dashboard timeline instants and card clocks (bottom-right).
  *
- * Feed/scraper published_date strings are UTC wall-clock in DB (ingest writes
- * `Y-m-d H:i:s` in UTC). Email columns are UTC instants shown in Zurich.
+ * Feed, email, Lex, and Leg card clocks and sort keys all use UTC instants from
+ * the DB, displayed in {@see viewTimezone()} (Europe/Zurich) so the timeline
+ * order matches the bottom-right time on every card.
  * Lex/Leg: official date on the card (`document_date` / `event_date`); when that
  * is date-only, sort and clock use `created_at` (ingestion), like other news.
  */
@@ -71,19 +72,6 @@ final class TimelineEntryDatetime
         }
 
         return $dt->setTimezone(self::viewTimezone())->format($format);
-    }
-
-    /**
-     * Feed published_date / cached_at: format in UTC (same digits as DB / legacy cards).
-     */
-    public static function formatFeedStoredUtcFace(?string $stored, string $format = self::CARD_FORMAT_DATETIME): string
-    {
-        $dt = self::parseStoredUtcDatetime($stored);
-        if ($dt === null) {
-            return '';
-        }
-
-        return $dt->format($format);
     }
 
     /** Calendar day key for timeline separators (view timezone). */
@@ -195,7 +183,7 @@ final class TimelineEntryDatetime
     {
         $raw = self::feedItemStoredDatetime($row);
 
-        return $raw !== null ? self::formatFeedStoredUtcFace($raw, $format) : '';
+        return $raw !== null ? self::formatStoredUtcDatetime($raw, $format) : '';
     }
 
     /**
