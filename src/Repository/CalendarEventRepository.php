@@ -8,10 +8,11 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
 use PDOException;
+use Seismo\Util\ParlChLegSignal;
 
 /**
  * Leg family table — bounded reads, transactional upserts, satellite-safe entryTable().
- * Leg page lists rows with **`event_date` descending** (newest first; tie-break `id` DESC).
+ * Leg page default view: **New** ingests and fresh **Antwort BR** (`metadata.leg_feed_at` window).
  */
 final class CalendarEventRepository
 {
@@ -24,7 +25,8 @@ final class CalendarEventRepository
     }
 
     /**
-     * Events ordered for the Leg page (newest calendar date first; `NULL` dates last).
+     * Events for the Leg page: default = rows with `leg_feed_at` (or `created_at`) in the ingest window.
+     * A new Bundesrat Stellungnahme sets `leg_signal` to `antwort_br` and refreshes `leg_feed_at`.
      *
      * @param list<string> $sources
      * @return list<array<string, mixed>>
@@ -45,12 +47,8 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            // DB session is UTC but Leg labels use Europe/Zurich — compute cutoff in
-            // PHP (avoids CONVERT_TZ portability issues). **30‑day rolling window**
-            // matches 0.4 `controllers/calendar.php`: `event_date >= DATE_SUB(curdate(),
-            // INTERVAL 30 DAY)`. “Show past” removes this floor.
-            $where .= ' AND (event_date IS NULL OR event_date >= ?)';
-            $bind[] = self::zurichLegUpcomingCutoff();
+            $where .= ' AND ' . self::legFeedAtSqlExpression() . ' >= ?';
+            $bind[] = self::zurichLegNewIngestCutoffUtc();
         }
         if ($eventType !== null && $eventType !== '') {
             $where .= ' AND event_type = ?';
@@ -59,8 +57,8 @@ final class CalendarEventRepository
 
         $sql = "SELECT * FROM {$table}
             WHERE {$where}
-            ORDER BY (event_date IS NULL), event_date DESC, id DESC
-            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+            ORDER BY " . self::legFeedAtSqlExpression() . ' DESC, id DESC
+            LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 
         try {
             $stmt = $this->pdo->prepare($sql);
@@ -78,7 +76,7 @@ final class CalendarEventRepository
     /**
      * Row count for the same filter shape as {@see listBySources()}, used by
      * the Leg view to tell "DB is empty" from "everything is hidden by the
-     * upcoming-only filter". Capped at no LIMIT because counts are cheap and
+     * new-ingest window". Capped at no LIMIT because counts are cheap and
      * the caller only reads an integer.
      *
      * @param list<string> $sources
@@ -96,8 +94,8 @@ final class CalendarEventRepository
         $where = 'source IN (' . $placeholders . ')';
         $bind = $sources;
         if (!$includePast) {
-            $where .= ' AND (event_date IS NULL OR event_date >= ?)';
-            $bind[] = self::zurichLegUpcomingCutoff();
+            $where .= ' AND ' . self::legFeedAtSqlExpression() . ' >= ?';
+            $bind[] = self::zurichLegNewIngestCutoffUtc();
         }
         if ($eventType !== null && $eventType !== '') {
             $where .= ' AND event_type = ?';
@@ -208,6 +206,8 @@ final class CalendarEventRepository
         }
 
         $table = entryTable('calendar_events');
+        $existingMeta = $this->fetchExistingMetadataByRows($rows);
+
         $sql = 'INSERT INTO ' . $table . ' (source, external_id, title, description, content, event_date, event_end_date, event_type, status, council, url, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
@@ -227,6 +227,13 @@ final class CalendarEventRepository
         try {
             $stmt = $this->pdo->prepare($sql);
             foreach ($rows as $row) {
+                $lookupKey = (string)($row['source'] ?? '') . "\0" . (string)($row['external_id'] ?? '');
+                $isInsert = !array_key_exists($lookupKey, $existingMeta);
+                $priorMeta = $isInsert ? null : ($existingMeta[$lookupKey] ?? null);
+                if ((string)($row['source'] ?? '') === 'parliament_ch') {
+                    $row = ParlChLegSignal::applyToBusinessRow($row, $priorMeta, $isInsert);
+                }
+
                 $metadata = $row['metadata'] ?? null;
                 if (is_array($metadata)) {
                     $metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -348,17 +355,99 @@ final class CalendarEventRepository
         return array_values(array_unique($out));
     }
 
-    /** Same as 0.4 non–show-past filter: thirty calendar days back in Zurich. */
-    private const LEG_UPCOMING_LOOKBACK_DAYS = 30;
+    /** Default Leg list: `leg_feed_at` / `created_at` within this many Zurich days. */
+    private const LEG_NEW_INGEST_LOOKBACK_DAYS = 30;
+
+    /** Sort/filter timestamp: `metadata.leg_feed_at` when set, else row `created_at`. */
+    private static function legFeedAtSqlExpression(): string
+    {
+        return 'COALESCE(STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(metadata, \'$.leg_feed_at\')), \'%Y-%m-%d %H:%i:%s\'), created_at)';
+    }
 
     /**
-     * Earliest `event_date` included in Leg’s default view (without “Show past”).
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<string, array<string, mixed>|null> key `source\0external_id`
      */
-    private static function zurichLegUpcomingCutoff(): string
+    private function fetchExistingMetadataByRows(array $rows): array
     {
-        return (new DateTimeImmutable('now', new DateTimeZone('Europe/Zurich')))
-            ->modify('-' . self::LEG_UPCOMING_LOOKBACK_DAYS . ' days')
-            ->format('Y-m-d');
+        $pairs = [];
+        foreach ($rows as $row) {
+            $source = (string)($row['source'] ?? '');
+            $ext = (string)($row['external_id'] ?? '');
+            if ($source === '' || $ext === '') {
+                continue;
+            }
+            $pairs[$source . "\0" . $ext] = [$source, $ext];
+        }
+        if ($pairs === []) {
+            return [];
+        }
+
+        $table = entryTable('calendar_events');
+        $conditions = [];
+        $bind = [];
+        foreach ($pairs as [$source, $ext]) {
+            $conditions[] = '(source = ? AND external_id = ?)';
+            $bind[] = $source;
+            $bind[] = $ext;
+        }
+
+        $sql = 'SELECT source, external_id, metadata FROM ' . $table
+            . ' WHERE ' . implode(' OR ', $conditions);
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($bind);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+
+        $out = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $key = (string)$row['source'] . "\0" . (string)$row['external_id'];
+            $out[$key] = $this->decodeMetadataColumn($row['metadata'] ?? null);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeMetadataColumn(mixed $raw): ?array
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (!is_string($raw)) {
+            return null;
+        }
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Earliest leg-feed instant (UTC) in Leg’s default view (without “Show all”).
+     */
+    private static function zurichLegNewIngestCutoffUtc(): string
+    {
+        $zurich = new DateTimeZone('Europe/Zurich');
+        $cutoff = (new DateTimeImmutable('now', $zurich))
+            ->modify('-' . self::LEG_NEW_INGEST_LOOKBACK_DAYS . ' days')
+            ->setTime(0, 0, 0);
+
+        return $cutoff->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
     }
 
     private function normalizeDate(mixed $v): ?string

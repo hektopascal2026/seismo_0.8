@@ -144,7 +144,15 @@ final class ParlChPlugin implements SourceFetcherInterface
             $submittedOrMotion = $this->plainTextFromHtml(
                 (string)($item['SubmittedText'] ?? $item['MotionText'] ?? '')
             );
-            $content = $reasonText !== '' ? $reasonText : $submittedOrMotion;
+            $brResponseText = $this->plainTextFromHtml((string)($item['FederalCouncilResponseText'] ?? ''));
+            $hasBrResponse = $brResponseText !== '';
+            if ($hasBrResponse) {
+                $content = $brResponseText;
+            } elseif ($reasonText !== '') {
+                $content = $reasonText;
+            } else {
+                $content = $submittedOrMotion;
+            }
             if ($content === '') {
                 $content = $description;
             }
@@ -153,6 +161,7 @@ final class ParlChPlugin implements SourceFetcherInterface
             // (old dossiers re-enter Curia Vista with ancient filing dates).
             $eventDate = $this->resolveBusinessEventDate($item);
             $submissionDate = $this->parseODataDate($item['SubmissionDate'] ?? null);
+            $brResponseDate = $this->parseODataDate($item['FederalCouncilProposalDate'] ?? null);
             $businessTypeId = $item['BusinessType'] ?? $item['BusinessTypeId'] ?? null;
             $eventType = (string)($businessTypes[$businessTypeId] ?? ($item['BusinessTypeName'] ?? 'Geschaeft'));
 
@@ -178,14 +187,17 @@ final class ParlChPlugin implements SourceFetcherInterface
                 'council'        => $council,
                 'url'            => $itemUrl,
                 'metadata'       => [
-                    'business_number'        => $item['BusinessShortNumber'] ?? null,
-                    'business_type_id'       => $businessTypeId,
-                    'status_id'              => $statusId,
-                    'status_text'            => $statusText,
-                    'submission_council_id'  => $councilId,
-                    'submission_date'        => $submissionDate,
-                    'author'                 => $item['SubmittedBy'] ?? null,
-                    'responsible_department' => $item['TagNames'] ?? null,
+                    'business_number'               => $item['BusinessShortNumber'] ?? null,
+                    'business_type_id'              => $businessTypeId,
+                    'status_id'                     => $statusId,
+                    'status_text'                   => $statusText,
+                    'submission_council_id'         => $councilId,
+                    'submission_date'               => $submissionDate,
+                    'has_br_response'               => $hasBrResponse,
+                    'br_response_date'              => $brResponseDate,
+                    'federal_council_proposal_text' => $item['FederalCouncilProposalText'] ?? null,
+                    'author'                        => $item['SubmittedBy'] ?? null,
+                    'responsible_department'        => $item['TagNames'] ?? null,
                 ],
             ];
         }

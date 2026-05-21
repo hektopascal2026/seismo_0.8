@@ -296,6 +296,45 @@ if (!function_exists('seismo_calendar_event_body_text')) {
     }
 }
 
+if (!function_exists('seismo_calendar_event_metadata')) {
+    /**
+     * @param array<string, mixed> $event
+     * @return array<string, mixed>
+     */
+    function seismo_calendar_event_metadata(array $event): array
+    {
+        $raw = $event['metadata'] ?? null;
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return [];
+        }
+
+        return is_array($decoded) ? $decoded : [];
+    }
+}
+
+if (!function_exists('seismo_leg_parl_ch_signal')) {
+    /**
+     * @param array<string, mixed> $event
+     */
+    function seismo_leg_parl_ch_signal(array $event): ?string
+    {
+        $signal = seismo_calendar_event_metadata($event)['leg_signal'] ?? null;
+        if (!is_string($signal) || $signal === '') {
+            return null;
+        }
+
+        return $signal;
+    }
+}
+
 if (!function_exists('seismo_council_label')) {
     /**
      * Expand a council code from Parlament.ch into a readable label.

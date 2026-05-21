@@ -969,6 +969,11 @@ textarea.search-input.setup-code-preview {
     border-color: #000000;
 }
 
+.entry-tag--leg-signal {
+    background-color: #f5f5f5;
+    border-color: #000000;
+}
+
 .entry-tag--status-completed {
     background-color: #f5f5f5;
 }

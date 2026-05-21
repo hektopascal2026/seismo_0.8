@@ -1,6 +1,6 @@
 <?php
 /**
- * Leg (parliamentary business) — forward-looking entries grouped by date.
+ * Leg (parliamentary business) — newly ingested affairs grouped by ingest date.
  *
  * @var array<int, array<string, mixed>> $events
  * @var array<string, mixed> $calendarCfg
@@ -155,18 +155,20 @@ $sourcesQs = 'action=leg&view=sources';
                             }
                         ?>
                         <p>
-                            No upcoming parliamentary business for the selected filter, but
+                            No newly ingested parliamentary business for the selected filter, but
                             <strong><?= (int)$hiddenPastRows ?></strong>
-                            past-dated
+                            older
                             entr<?= $hiddenPastRows === 1 ? 'y is' : 'ies are' ?>
-                            hidden.
+                            in the database.
                             <a href="<?= e($showAllUrl) ?>">Show all</a>
-                            to see them.
+                            to browse them.
                         </p>
                         <p class="empty-state-tip">
-                            Tip: most <em>Geschaefte</em> are tagged with their original
-                            submission date, which is usually in the past. Upcoming
-                            sessions and dated hearings appear here without toggling.
+                            Tip: this list shows <em>Geschäfte</em> when Seismo first picks them up
+                            (<strong>New</strong>) or when a
+                            <strong>Stellungnahme des Bundesrates</strong> appears
+                            (<strong>Antwort BR</strong>). Follow other updates on parlament.ch
+                            or via Medienmitteilungen in your feeds.
                         </p>
                     <?php else: ?>
                         <p>No Leg entries yet. Configure and refresh under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Sources</a>, or run refresh from Diagnostics.</p>
@@ -176,20 +178,27 @@ $sourcesQs = 'action=leg&view=sources';
                 <?php $currentGroup = null; ?>
                 <?php foreach ($events as $event): ?>
                     <?php
-                        $eventDate = $event['event_date'] ?? null;
-                        $groupKey = $eventDate ?: 'undated';
+                        $eventMeta = seismo_calendar_event_metadata($event);
+                        $legSignal = seismo_leg_parl_ch_signal($event);
+                        $feedAtRaw = isset($eventMeta['leg_feed_at']) && is_string($eventMeta['leg_feed_at'])
+                            ? $eventMeta['leg_feed_at']
+                            : (isset($event['created_at']) ? (string)$event['created_at'] : null);
+                        $ingestDt = \Seismo\Util\TimelineEntryDatetime::parseStoredUtcDatetime($feedAtRaw);
+                        $groupKey = $ingestDt !== null
+                            ? $ingestDt->setTimezone(seismo_view_timezone())->format('Y-m-d')
+                            : 'undated';
                         if ($groupKey !== $currentGroup):
                             $currentGroup = $groupKey;
-                            if ($eventDate) {
-                                $dateObj = new DateTimeImmutable((string)$eventDate, new DateTimeZone('UTC'));
-                                $daysUntil = (int)floor((strtotime((string)$eventDate) - strtotime($todayLocal)) / 86400);
-                                $groupLabel = $dateObj->format('l, d. F Y');
+                            if ($ingestDt !== null) {
+                                $ingestLocal = $ingestDt->setTimezone(seismo_view_timezone());
+                                $ingestDay = $ingestLocal->format('Y-m-d');
+                                $daysUntil = (int)floor((strtotime($ingestDay) - strtotime($todayLocal)) / 86400);
+                                $groupLabel = 'Added ' . $ingestLocal->format('l, d. F Y');
                                 if ($daysUntil === 0)       { $groupLabel .= ' (today)'; }
-                                elseif ($daysUntil === 1)   { $groupLabel .= ' (tomorrow)'; }
-                                elseif ($daysUntil > 1 && $daysUntil <= 7) { $groupLabel .= " (in {$daysUntil} days)"; }
+                                elseif ($daysUntil === 1)   { $groupLabel .= ' (yesterday)'; }
                                 elseif ($daysUntil < 0)     { $groupLabel .= ' (' . abs($daysUntil) . ' days ago)'; }
                             } else {
-                                $groupLabel = 'Date unknown';
+                                $groupLabel = 'Ingest date unknown';
                             }
                     ?>
                     <div class="leg-date-heading">
@@ -240,7 +249,14 @@ $sourcesQs = 'action=leg&view=sources';
                             <?php if ($legRel !== null): ?>
                                 <span class="magnitu-badge <?= e($legBadgeClass) ?>" title="<?= e((string)$legPred) ?> (<?= round($legRel * 100) ?>%)"><?= round($legRel * 100) ?></span>
                             <?php endif; ?>
-                            <?php if ($statusRaw !== 'scheduled'): ?>
+                            <?php
+                                $legSignalLabel = $legSignal !== null
+                                    ? \Seismo\Util\ParlChLegSignal::signalLabel($legSignal)
+                                    : '';
+                            ?>
+                            <?php if ($legSignalLabel !== ''): ?>
+                                <span class="entry-tag entry-tag--leg-signal"><?= e($legSignalLabel) ?></span>
+                            <?php elseif ($statusRaw !== 'scheduled'): ?>
                                 <?php
                                 $statusTagClass = $statusRaw === 'completed'
                                     ? 'entry-tag--status-completed'
@@ -271,8 +287,13 @@ $sourcesQs = 'action=leg&view=sources';
                                     <a href="<?= e($eventUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch →</a>
                                 <?php endif; ?>
                             </div>
-                            <?php if (!empty($event['event_date'])): ?>
-                                <span class="entry-date"><?= e(date('d.m.Y', strtotime((string)$event['event_date']))) ?></span>
+                            <?php
+                                $ingestLabel = $ingestDt !== null
+                                    ? seismo_format_utc($ingestDt, 'd.m.Y H:i')
+                                    : null;
+                            ?>
+                            <?php if ($ingestLabel !== null): ?>
+                                <span class="entry-date"><?= e($ingestLabel) ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
