@@ -65,13 +65,6 @@ final class EntryRepository
      */
     public const MAX_LIMIT = 200;
 
-    /**
-     * Leg / parliamentary activity (`calendar_events`) merge window on the dashboard.
-     * Rows with `event_date` older than this are omitted unless the Leg pill is
-     * excluded via {@see TimelineFilter::excludeCalendar}.
-     */
-    private const CALENDAR_MERGE_LOOKBACK_DAYS = 400;
-
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const SQL_EMAIL_VISIBLE = 'e.hidden = 0';
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
@@ -775,20 +768,20 @@ final class EntryRepository
     }
 
     /**
-     * Parliamentary activity rows merged into the main timeline.
-     * Per-family fetch is newest ingestion first; global merge re-sorts by card clock.
+     * Parliamentary activity on the dashboard — same visibility rules as the Leg page
+     * ({@see CalendarEventRepository::legFeedVisibilityWhereClause()}).
      *
      * @return array<int, array<string, mixed>>
      */
     private function fetchCalendarEvents(int $limit): array
     {
-        $days = (int)self::CALENDAR_MERGE_LOOKBACK_DAYS;
+        $cal = new CalendarEventRepository($this->pdo);
         $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
-                WHERE event_date IS NULL
-                   OR event_date >= DATE_SUB(CURDATE(), INTERVAL ' . $days . ' DAY)
-                ORDER BY created_at DESC, id DESC
+                WHERE ' . $cal->legFeedVisibilityWhereClause() . '
+                ORDER BY ' . $cal->legFeedAtOrderExpression() . '
                 LIMIT ' . (int)$limit;
-        return $this->selectOrEmpty($sql);
+
+        return $this->selectPreparedOrEmpty($sql, $cal->legFeedVisibilityBindParams());
     }
 
     // ------------------------------------------------------------------
@@ -1116,13 +1109,15 @@ final class EntryRepository
      */
     private function fetchCalendarEventsSearch(string $term, int $limit): array
     {
+        $cal = new CalendarEventRepository($this->pdo);
         $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
-                WHERE title LIKE ?
-                   OR description LIKE ?
-                   OR content LIKE ?
-                ORDER BY created_at DESC, id DESC
+                WHERE (' . $cal->legFeedVisibilityWhereClause() . ')
+                  AND (title LIKE ? OR description LIKE ? OR content LIKE ?)
+                ORDER BY ' . $cal->legFeedAtOrderExpression() . '
                 LIMIT ' . (int)$limit;
-        return $this->selectPreparedOrEmpty($sql, [$term, $term, $term]);
+        $bind = array_merge($cal->legFeedVisibilityBindParams(), [$term, $term, $term]);
+
+        return $this->selectPreparedOrEmpty($sql, $bind);
     }
 
     /**

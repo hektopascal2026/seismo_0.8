@@ -296,14 +296,34 @@ final class TimelineEntryDatetime
     }
 
     /**
-     * Leg (parliamentary activity): same ingestion rule as Lex — `event_date` on
-     * the card, `created_at` for timeline order when the official date has no time.
+     * Leg rows with `leg_signal` sort/display via `metadata.leg_feed_at` (substantive
+     * date); others fall back to Lex-style official/ingestion rules.
      *
      * @param array<string, mixed> $row
      */
     public static function calendarEventUnix(array $row): int
     {
+        $feedUnix = self::calendarEventLegFeedUnix($row);
+        if ($feedUnix > 0) {
+            return $feedUnix;
+        }
+
         return self::unixForOfficialDateOrIngestion($row, 'event_date');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function calendarEventLegFeedUnix(array $row): int
+    {
+        $meta = self::decodeRowMetadata($row);
+        $signal = $meta['leg_signal'] ?? null;
+        if ($signal !== 'new' && $signal !== 'antwort_br') {
+            return 0;
+        }
+        $feedAt = trim((string)($meta['leg_feed_at'] ?? ''));
+
+        return $feedAt !== '' ? self::storedUtcToUnix($feedAt) : 0;
     }
 
     /**
@@ -311,6 +331,10 @@ final class TimelineEntryDatetime
      */
     public static function calendarEventCardIsDateOnly(array $row): bool
     {
+        if (self::calendarEventLegFeedUnix($row) > 0) {
+            return false;
+        }
+
         return self::cardShowsDateOnly($row, 'event_date');
     }
 
@@ -362,5 +386,27 @@ final class TimelineEntryDatetime
             'calendar_event' => self::calendarEventCardIsDateOnly($row),
             default          => false,
         };
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private static function decodeRowMetadata(array $row): array
+    {
+        $raw = $row['metadata'] ?? null;
+        if (is_array($raw)) {
+            return $raw;
+        }
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Exception) {
+            return [];
+        }
+
+        return is_array($decoded) ? $decoded : [];
     }
 }

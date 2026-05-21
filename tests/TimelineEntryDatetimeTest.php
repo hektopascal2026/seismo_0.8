@@ -60,6 +60,24 @@ final class TimelineEntryDatetimeTest extends TestCase
         );
     }
 
+    public function testLegWithSignalUsesLegFeedAtForSortAndClock(): void
+    {
+        $row = [
+            'event_date'  => '2026-05-21',
+            'created_at'  => '2026-05-21 17:12:00',
+            'metadata'    => json_encode([
+                'leg_signal'  => 'antwort_br',
+                'leg_feed_at' => '2026-05-13 12:00:00',
+            ], JSON_THROW_ON_ERROR),
+        ];
+
+        self::assertSame('13.05.2026 14:00', TimelineEntryDatetime::formatCalendarEventDate($row));
+        self::assertSame(
+            TimelineEntryDatetime::storedUtcToUnix('2026-05-13 12:00:00'),
+            TimelineEntryDatetime::calendarEventUnix($row)
+        );
+    }
+
     public function testLegDateOnlyUsesCreatedAtLikeLex(): void
     {
         $row = [

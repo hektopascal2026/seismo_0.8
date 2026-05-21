@@ -376,6 +376,31 @@ final class CalendarEventRepository
     }
 
     /**
+     * WHERE clause for default Leg / dashboard calendar merge (bind params via
+     * {@see legFeedVisibilityBindParams()}).
+     */
+    public function legFeedVisibilityWhereClause(): string
+    {
+        return self::legFeedVisibilitySql();
+    }
+
+    public function legFeedAtOrderExpression(): string
+    {
+        return self::legFeedAtSqlExpression() . ' DESC, id DESC';
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function legFeedVisibilityBindParams(): array
+    {
+        return [
+            self::zurichLegAntwortBrCutoffUtc(),
+            self::zurichLegNewIngestCutoffUtc(),
+        ];
+    }
+
+    /**
      * Antwort BR uses a shorter window ({@see ParlChLegSignal::ANTWORT_BR_FEED_LOOKBACK_DAYS})
      * keyed off Stellungnahme date, not catalogue refresh time.
      */
