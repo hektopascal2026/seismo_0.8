@@ -186,7 +186,8 @@ final class LexConfigStore
                 'limit' => 100,
                 /** Matched case-insensitively to the derived category (title heuristics). Empty = skip none. */
                 'exclude_document_types' => ['Bekanntmachung'],
-                'notes' => '',
+                'content_fetch_limit' => 10,
+                'notes' => 'BGBl RSS is metadata-only. Full Regelungstext is fetched from regelungstext.pdf (requires poppler-utils / pdftotext on the server).',
             ],
             'ch_bger' => [
                 'enabled' => true,

@@ -4,6 +4,7 @@
  *
  * Usage:
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
+ *   php bin/lex-backfill-content.php --de         # fetch BGBl PDF corpus (requires pdftotext)
  *   php bin/lex-backfill-content.php --ch         # promote Fedlex CH description → content
  *   php bin/lex-backfill-content.php --eu         # fetch EUR-Lex HTML corpus
  *   php bin/lex-backfill-content.php --fr         # fetch Légifrance JORF corpus via PISTE API
@@ -68,9 +69,20 @@ if ($chOnly) {
 }
 
 if ($deOnly) {
-    $n = $service->backfillDeFromDescription($limit);
-    echo "DE description → content: {$n} row(s) updated.\n";
-    exit(0);
+    try {
+        $result = $service->backfillDeDetailed($limit, $verbose);
+    } catch (\RuntimeException $e) {
+        fwrite(STDERR, $e->getMessage() . "\n");
+        exit(1);
+    }
+    echo sprintf(
+        "DE recht.bund PDF corpus backfill: %d updated, %d skipped, %d failed (batch limit %d).\n",
+        $result['updated'],
+        $result['skipped'],
+        $result['failed'],
+        $limit,
+    );
+    exit($result['failed'] > 0 && $result['updated'] === 0 ? 1 : 0);
 }
 
 if ($frOnly) {

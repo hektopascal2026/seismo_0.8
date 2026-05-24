@@ -102,10 +102,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <tr>
                                 <td><strong>Lex Plugins</strong></td>
                                 <td>
-                                    <strong>EU:</strong> EUR-Lex via SPARQL (CELLAR endpoint).<br>
-                                    <strong>Switzerland:</strong> Fedlex via SPARQL (Federal Law & Treaties).<br>
-                                    <strong>Germany:</strong> recht.bund.de (Bundesgesetzblatt) via RSS.<br>
-                                    <strong>France:</strong> Légifrance via PISTE OAuth2 & Search API.
+                                    <strong>EU:</strong> EUR-Lex via SPARQL; full HTML corpus on ingest/backfill.<br>
+                                    <strong>Switzerland:</strong> Fedlex via SPARQL; consultation synopsis stored in <code>content</code> where available.<br>
+                                    <strong>Germany:</strong> recht.bund.de (BGBl) via RSS metadata + <strong>Regelungstext PDF</strong> extraction (<code>pdftotext</code>).<br>
+                                    <strong>France:</strong> Légifrance via PISTE OAuth2; full JORF body via <code>/consult/jorf</code> on refresh.
                                 </td>
                             </tr>
                             <tr>
@@ -211,7 +211,27 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.6.3 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.6.5 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Germany: BGBl PDF corpus extraction</div>
+                        <ul>
+                            <li><strong>Problem:</strong> recht.bund.de RSS lists title and ELI link only — no law body in the feed.</li>
+                            <li><strong>Solution:</strong> <code>LexRechtBundContentFetcher</code> resolves each publication URL to <code>regelungstext.pdf</code>, downloads it, and extracts plain text with <code>pdftotext</code> (poppler-utils).</li>
+                            <li><strong>Ingest:</strong> Lex refresh fetches PDF corpus for new DE rows (<code>content_fetch_limit</code>); backfill via <code>php bin/lex-backfill-content.php --de</code>.</li>
+                            <li><strong>Server:</strong> <code>apt install poppler-utils</code> on the mothership if <code>pdftotext</code> is missing.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.4</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Lex full-text corpus (FR / CH and Magnitu training layer)</div>
+                        <ul>
+                            <li><strong>Storage:</strong> <code>lex_items.content</code> (LONGTEXT) holds full law body; <code>description</code> stays a short synopsis for recipe scoring. Timeline reads omit heavy columns; Magnitu export ships corpus text.</li>
+                            <li><strong>France:</strong> PISTE <code>/consult/jorf</code> on forward ingest; backfill normalizes versioned <code>JORFTEXT…_01-01-2999</code> ids to bare chronical ids.</li>
+                            <li><strong>Switzerland (Fedlex):</strong> promote existing consultation synopsis into <code>content</code> where rows predate corpus storage (<code>--ch</code> backfill).</li>
+                            <li><strong>Also:</strong> EU EUR-Lex HTML backfill, Jus HTML corpus, <code>bin/lex-backfill-content.php</code> diagnostics. Schema v39.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.3</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Mail readability &amp; webview links</div>
                         <ul>
                             <li><strong>Body processors:</strong> Mail → Subscriptions can assign a named processor (e.g. Europarl “EP TODAY”) to derive a headline and normalize digest plain text; <strong>Reprocess stored mail</strong> reapplies rules without refetching Gmail.</li>
@@ -307,7 +327,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <ul>
                     <li><strong>PHP</strong> 8.2 or newer</li>
                     <li><strong>MariaDB</strong> or MySQL with <code>utf8mb4</code></li>
-                    <li><strong>Extension:</strong> <code>pdo_mysql</code> (required); <code>curl</code> recommended for some Lex paths; <code>imap</code> if you use core mail fetch</li>
+                    <li><strong>Extensions:</strong> <code>pdo_mysql</code> (required); <code>curl</code> recommended for Lex; <code>imap</code> if you use core mail fetch</li>
+                    <li><strong>DE Lex corpus:</strong> <code>pdftotext</code> from <strong>poppler-utils</strong> on the mothership (<code>apt install poppler-utils</code>)</li>
                     <li>Timestamps are handled in <strong>UTC</strong> end-to-end</li>
                 </ul>
 

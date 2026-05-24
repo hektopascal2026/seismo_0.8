@@ -7,6 +7,7 @@ namespace Seismo\Plugin\LexRechtBund;
 use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Core\Lex\LexPlainText;
+use Seismo\Core\Lex\LexRechtBundContentFetcher;
 use Seismo\Service\SourceFetcherInterface;
 use SimplePie\Item;
 use SimplePie\SimplePie;
@@ -110,6 +111,21 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
                 'work_uri' => $link,
                 'source' => 'de',
             ];
+        }
+
+        $contentLimit = max(0, min((int)($config['content_fetch_limit'] ?? 10), 50));
+        if ($contentLimit > 0 && $rows !== []) {
+            $rows = (new LexRechtBundContentFetcher())->attachContentToRows($rows, $contentLimit);
+            foreach ($rows as &$row) {
+                if (trim((string)($row['content'] ?? '')) === '') {
+                    continue;
+                }
+                $synopsis = LexPlainText::truncate((string)$row['content']);
+                if ($synopsis !== null && ($row['description'] ?? null) === null) {
+                    $row['description'] = $synopsis;
+                }
+            }
+            unset($row);
         }
 
         return $rows;
