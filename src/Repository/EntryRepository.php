@@ -37,6 +37,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
+use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
 
@@ -157,6 +158,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
+        $items = $this->deduplicateFeedItemsByLink($items);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
@@ -205,6 +207,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
+        $items = $this->deduplicateFeedItemsByLink($items);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
@@ -282,6 +285,7 @@ final class EntryRepository
         }
 
         $items = $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
+        $items = $this->deduplicateFeedItemsByLink($items);
         if (!$sortByRelevance) {
             $this->sortMergedTimeline($items, false);
             $items = array_slice($items, $offset, $limit);
@@ -451,6 +455,60 @@ final class EntryRepository
             $items,
             static fn (array $a, array $b): int => ($b['date'] ?? 0) <=> ($a['date'] ?? 0)
         );
+    }
+
+    /**
+     * Collapse duplicate RSS/scraper cards that share the same article URL (e.g. Watson
+     * topic feeds). Keeps the row with the highest relevance score when scored.
+     *
+     * @param array<int, array<string, mixed>> $items
+     * @return array<int, array<string, mixed>>
+     */
+    private function deduplicateFeedItemsByLink(array $items): array
+    {
+        /** @var array<string, int> $indexByLink */
+        $indexByLink = [];
+        $out         = [];
+
+        foreach ($items as $item) {
+            if (($item['entry_type'] ?? '') !== 'feed_item') {
+                $out[] = $item;
+                continue;
+            }
+
+            $link = trim((string)($item['data']['link'] ?? ''));
+            if ($link === '') {
+                $out[] = $item;
+                continue;
+            }
+
+            $key = ArticleLinkNormalizer::normalize($link);
+            if ($key === '') {
+                $out[] = $item;
+                continue;
+            }
+
+            if (!isset($indexByLink[$key])) {
+                $indexByLink[$key] = count($out);
+                $out[]             = $item;
+                continue;
+            }
+
+            $existingIdx = $indexByLink[$key];
+            $existing    = $out[$existingIdx];
+            $existingScore = isset($existing['score']['relevance_score'])
+                ? (float)$existing['score']['relevance_score']
+                : -1.0;
+            $newScore = isset($item['score']['relevance_score'])
+                ? (float)$item['score']['relevance_score']
+                : -1.0;
+
+            if ($newScore > $existingScore) {
+                $out[$existingIdx] = $item;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -1532,6 +1590,7 @@ final class EntryRepository
         }
         $this->attachScores($items);
         $this->attachFavourites($items);
+        $items = $this->deduplicateFeedItemsByLink($items);
 
         return $items;
     }

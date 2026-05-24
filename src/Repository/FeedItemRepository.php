@@ -7,6 +7,7 @@ namespace Seismo\Repository;
 use DateTimeImmutable;
 use PDO;
 use PDOException;
+use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 
 /**
@@ -350,14 +351,15 @@ final class FeedItemRepository
 
         $table = entryTable('feed_items');
         $sql = 'INSERT INTO ' . $table . ' (
-            feed_id, guid, title, link, description, content, author,
+            feed_id, guid, title, link, link_normalized, description, content, author,
             published_date, content_hash, hidden, cached_at
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, UTC_TIMESTAMP()
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, UTC_TIMESTAMP()
         )
         ON DUPLICATE KEY UPDATE
             title = VALUES(title),
             link = VALUES(link),
+            link_normalized = VALUES(link_normalized),
             description = VALUES(description),
             content = VALUES(content),
             author = VALUES(author),
@@ -372,6 +374,23 @@ final class FeedItemRepository
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare($sql);
+            $upgradeStmt = $this->pdo->prepare(
+                'UPDATE ' . $table . '
+                 SET title = ?,
+                     link = ?,
+                     description = ?,
+                     content = ?,
+                     author = ?,
+                     content_hash = ?,
+                     cached_at = UTC_TIMESTAMP()
+                 WHERE id = ?'
+            );
+            $findByLinkStmt = $this->pdo->prepare(
+                'SELECT id, CHAR_LENGTH(content) AS content_len
+                 FROM ' . $table . '
+                 WHERE link_normalized = ? AND hidden = 0
+                 LIMIT 1'
+            );
             $n = 0;
             foreach ($rows as $row) {
                 $guid = (string)($row['guid'] ?? '');
@@ -402,11 +421,32 @@ final class FeedItemRepository
                 if ($hash === '') {
                     $hash = substr(sha1($link . "\0" . $content), 0, 32);
                 }
+                $linkNorm = mb_substr(ArticleLinkNormalizer::normalize($link), 0, 500);
+                if ($linkNorm !== '') {
+                    $findByLinkStmt->execute([$linkNorm]);
+                    $existing = $findByLinkStmt->fetch(PDO::FETCH_ASSOC);
+                    if (is_array($existing) && (int)($existing['id'] ?? 0) > 0) {
+                        $existingLen = (int)($existing['content_len'] ?? 0);
+                        if (strlen($content) > $existingLen) {
+                            $upgradeStmt->execute([
+                                $title,
+                                $link,
+                                $desc,
+                                $content,
+                                (string)($row['author'] ?? ''),
+                                $hash,
+                                (int)$existing['id'],
+                            ]);
+                        }
+                        continue;
+                    }
+                }
                 $stmt->execute([
                     $feedId,
                     $guid,
                     $title,
                     $link,
+                    $linkNorm !== '' ? $linkNorm : null,
                     $desc,
                     $content,
                     (string)($row['author'] ?? ''),

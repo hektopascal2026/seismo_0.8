@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS feed_items (
     guid           VARCHAR(500) NOT NULL,
     title          VARCHAR(500) NOT NULL,
     link           VARCHAR(500),
+    link_normalized VARCHAR(500) DEFAULT NULL,       -- cross-feed article URL dedup
     description    TEXT,
     content        MEDIUMTEXT,                      -- widened from TEXT
     author         VARCHAR(255),
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS feed_items (
     UNIQUE KEY unique_feed_guid (feed_id, guid(255)),
     INDEX idx_feed_id   (feed_id),
     INDEX idx_guid      (guid(255)),
+    INDEX idx_link_normalized (link_normalized(255)),
     INDEX idx_published (published_date),
     FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
