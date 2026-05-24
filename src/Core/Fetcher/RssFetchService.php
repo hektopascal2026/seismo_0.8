@@ -141,6 +141,12 @@ final class RssFetchService
                 'Feed response was empty or not XML for ' . $requestUrl . self::feedFetchHint($feedUrl)
             );
         }
+        if (self::looksLikeHtmlDocument($xml)) {
+            throw new \RuntimeException(
+                'Feed URL returned an HTML page, not RSS/XML for ' . $requestUrl
+                . self::feedFetchHint($feedUrl)
+            );
+        }
 
         $final = trim($response->finalUrl);
 
@@ -160,11 +166,34 @@ final class RssFetchService
             return (string)preg_replace('#/rss\.xml$#i', '/rss.html', $feedUrl);
         }
 
+        // EEA newsroom “RSS” pages are HTML; the feed is always …/rss.xml on the same path.
+        if (preg_match(
+            '~^https?://(www\.)?eea\.europa\.eu/.+/rss-feeds/[^/?#]+$~i',
+            $feedUrl
+        ) && !preg_match('#/rss\.xml$#i', $feedUrl)) {
+            return rtrim($feedUrl, '/') . '/rss.xml';
+        }
+
         return $feedUrl;
+    }
+
+    private static function looksLikeHtmlDocument(string $body): bool
+    {
+        $head = strtolower(ltrim(substr($body, 0, 256)));
+
+        return str_starts_with($head, '<!doctype html')
+            || str_starts_with($head, '<html')
+            || (str_contains($head, '<html') && !str_contains($head, '<rss') && !str_contains($head, '<feed'));
     }
 
     private static function feedFetchHint(string $feedUrl): string
     {
+        if (preg_match('#^https?://(www\.)?eea\.europa\.eu/.+/rss-feeds/#i', $feedUrl)
+            && !preg_match('#/rss\.xml$#i', $feedUrl)) {
+            return ' Use the feed URL ending in /rss.xml (e.g. '
+                . rtrim($feedUrl, '/') . '/rss.xml).';
+        }
+
         if (!preg_match('#^https?://(www\.)?(tagesanzeiger|derbund|bazonline|24heures)\.ch#i', $feedUrl)) {
             return '';
         }
