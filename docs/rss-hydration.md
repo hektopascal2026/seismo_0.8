@@ -45,17 +45,18 @@ Lex/Leg are **not** merged into RSS; they only feel “faster” because each ru
 |-------|----------|------|
 | Schema | `feeds.extract_full_text` TINYINT, migration 024 | Per-feed toggle |
 | Admin | Feeds → edit form checkbox | Operator enables for Google News–style feeds |
-| Hydrator | `src/Core/Fetcher/RssArticleHydrator.php` | HTTP + existing `ScraperContentExtractor` |
+| Hydrator | `src/Core/Fetcher/RssArticleHydrator.php` | HTTP + `ArticlePageBodyExtractor` |
+| Extractor | `src/Core/Fetcher/ArticlePageBodyExtractor.php` | JSON-LD, Readability, meta — picks longest |
 | Orchestration | `CoreRunner` | After `RssFetchService::fetchFeedItems`, before `upsertFeedItems` |
 | Persist | `FeedItemRepository::upsertFeedItems` | SQL only — unchanged contract |
 | Export/import | `SourceConfigImportRepository` | Column preserved on JSON import |
-| Tests | `tests/RssArticleHydratorTest.php` | Caps / skip logic without live HTTP |
+| Tests | `tests/RssArticleHydratorTest.php`, `tests/ArticlePageBodyExtractorTest.php` | Caps / skip logic; best-source selection |
 
 ### Behaviour
 
 1. RSS parse unchanged (`RssFetchService`).
 2. If `extract_full_text` and plain body &lt; **400** chars → `GET` article `link` via `BaseClient` (redirects followed).
-3. Run HTML through **`ScraperContentExtractor`** (same Readability stack as Scraper).
+3. Run HTML through **`ArticlePageBodyExtractor`**: JSON-LD `articleBody`, Readability (via `ScraperContentExtractor`), `og:description`, meta `description` — store the **longest** candidate (tie-break: JSON-LD → Readability → OG → meta).
 4. On success: replace `content`; leave RSS `description` unless you later want synopsis sync.
 5. On failure: keep thin RSS text; log; do not fail the whole feed.
 6. **Cap:** max **10** hydrations per feed per refresh.
@@ -79,6 +80,7 @@ sequenceDiagram
     participant CR as CoreRunner
     participant RSS as RssFetchService
     participant H as RssArticleHydrator
+    participant APBE as ArticlePageBodyExtractor
     participant SCE as ScraperContentExtractor
     participant DB as FeedItemRepository
 
@@ -87,7 +89,10 @@ sequenceDiagram
     alt feed.extract_full_text = 1
         CR->>H: hydrateThinItems(items)
         loop max 10 thin items
-            H->>SCE: getWebPage(link) + extractReadableContent
+            H->>APBE: extractBestArticleBody(html)
+            APBE->>APBE: JSON-LD articleBody
+            APBE->>SCE: Readability + meta tags
+            APBE-->>H: longest candidate
         end
         H-->>CR: items (content filled when possible)
     end
@@ -101,7 +106,7 @@ sequenceDiagram
 | Do | Don’t |
 |----|--------|
 | HTTP + extraction in `RssArticleHydrator` | HTTP in `FeedItemRepository` |
-| Reuse `ScraperContentExtractor` | Duplicate Readability in a second wrapper |
+| Reuse `ScraperContentExtractor` inside `ArticlePageBodyExtractor` | Duplicate Readability in a second wrapper |
 | Toggle on `feeds` row | Global “hydrate everything” without cap |
 
 ---

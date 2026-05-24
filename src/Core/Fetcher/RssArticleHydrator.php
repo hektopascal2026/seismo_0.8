@@ -9,7 +9,7 @@ use Seismo\Service\Http\BaseClient;
 /**
  * Optional second step after {@see RssFetchService}: fetch publisher pages for
  * thin items and fill {@see \Seismo\Repository\FeedItemRepository} `content`
- * using the same Readability path as scraper ingest.
+ * via {@see ArticlePageBodyExtractor} (JSON-LD, Readability, meta tags).
  */
 final class RssArticleHydrator
 {
@@ -119,8 +119,7 @@ final class RssArticleHydrator
             if ($html === '') {
                 return null;
             }
-            $read    = ScraperContentExtractor::extractReadableContent($html);
-            $content = trim($read['content'] ?? '');
+            $content = ArticlePageBodyExtractor::extractBestArticleBody($html);
             if ($content === '') {
                 return null;
             }

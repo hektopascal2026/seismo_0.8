@@ -14,7 +14,7 @@ Rows are still in `feeds` / `feed_items`; only the admin UI and refresh scope di
 
 ## Ingest patterns on Media
 
-1. **Google News (thin RSS)** — add source on Media → enable **Extract full text** (resolves Google links to the publisher, then fetches the article). Prefer **direct NZZ RSS** when possible: `https://www.nzz.ch/startseite.rss`. See [rss-hydration.md](rss-hydration.md).
+1. **Google News (thin RSS)** — add source on Media → **Extract full text** is on by default for new sources (resolves Google links, fetches the publisher page, picks the best of JSON-LD / Readability / meta). Prefer **direct NZZ RSS** when possible: `https://www.nzz.ch/startseite.rss`. See [rss-hydration.md](rss-hydration.md).
 2. **Publisher listing (full HTML)** — add on **Scraper**, set category to `media` (feed row + scraper config). Items appear on Media → Items and in the timeline with `feed_category = media`.
 
 **Refresh Media** runs only `category = media` sources (RSS hydration path + media scrapers), not the whole cron RSS cycle.

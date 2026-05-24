@@ -140,11 +140,16 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                 <?php endif; ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="extract_full_text" value="0">
-                    <label><input type="checkbox" name="extract_full_text" value="1" <?= !empty($editRow['extract_full_text']) ? 'checked' : '' ?>> Extract full text (thin RSS — e.g. Google News)</label>
+                    <?php
+                    $extractDefault = !empty($editRow['extract_full_text'])
+                        || ($feedModule->isMedia() && $editRow === null);
+                    ?>
+                    <label><input type="checkbox" name="extract_full_text" value="1" <?= $extractDefault ? 'checked' : '' ?>> Extract full text (thin RSS — e.g. Google News)</label>
                 </div>
                 <div class="admin-help" style="margin-top:-0.5rem;margin-bottom:0.75rem;">
-                    When enabled, ingest fetches up to 10 publisher pages per refresh for items whose body is shorter than ~400 characters
-                    (same extractor as Scraper). <strong>Preview</strong> also fetches articles for up to <?= (int)\Seismo\Controller\FeedModuleHandler::PREVIEW_MAX_ITEMS ?> thin items when this box is checked — nothing is saved until Refresh.
+                    When enabled, ingest fetches up to 10 publisher pages per refresh for items whose body is shorter than ~400 characters.
+                    Extraction compares JSON-LD <code>articleBody</code>, Readability, and meta descriptions, then stores the longest usable result.
+                    <strong>Preview</strong> uses the same pipeline for up to <?= (int)\Seismo\Controller\FeedModuleHandler::PREVIEW_MAX_ITEMS ?> thin items — nothing is saved until Refresh.
                     Site listings use <a href="<?= e($basePath) ?>/index.php?action=scraper">Scraper</a> with category <code>media</code>. See <code>docs/rss-hydration.md</code>.
                 </div>
                 <div class="admin-form-field">

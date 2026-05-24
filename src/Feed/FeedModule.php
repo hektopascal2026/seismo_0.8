@@ -83,7 +83,7 @@ final class FeedModule
             showCategoryField: false,
             sourcesIntroHtml: '<p class="admin-intro">Media sources live in the same <code>feeds</code> table with '
                 . '<code>category = media</code>. Use <strong>RSS</strong> (e.g. Google News) with '
-                . '<strong>Extract full text</strong> for thin aggregators, or add a <strong>Scraper</strong> listing on '
+                . '<strong>Extract full text</strong> (on by default for new sources) for thin aggregators, or add a <strong>Scraper</strong> listing on '
                 . '<a href="' . htmlspecialchars($base . '/index.php?action=scraper', ENT_QUOTES, 'UTF-8') . '">Scraper</a> '
                 . 'and set its category to <code>media</code> so items appear here. See '
                 . '<code>docs/rss-hydration.md</code>.</p>',
