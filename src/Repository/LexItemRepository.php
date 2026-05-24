@@ -16,8 +16,11 @@ final class LexItemRepository
 {
     public const MAX_LIMIT = 200;
 
-    /** Lex list page sources (EU/CH/DE/FR) — not JUS; Parl MM is a `feed_item`. */
+    /** Lex Items view filter pills (EU/CH/DE/FR) — not JUS; Parl MM is a `feed_item`. */
     public const LEX_PAGE_SOURCES = ['eu', 'ch', 'de', 'fr'];
+
+    /** All Lex plugin source keys (legislation + Jus) for Sources view status. */
+    public const LEX_TRACKED_SOURCES = ['eu', 'ch', 'de', 'fr', 'ch_bger', 'ch_bge', 'ch_bvger'];
 
     public function __construct(private PDO $pdo)
     {
@@ -62,7 +65,7 @@ final class LexItemRepository
      */
     public function getLastFetchedBySources(array $sources): array
     {
-        $sources = $this->filterLexPageSources($sources);
+        $sources = $this->filterLexTrackedSources($sources);
         $out = array_fill_keys($sources, null);
         if ($sources === []) {
             return $out;
@@ -384,13 +387,24 @@ final class LexItemRepository
      */
     private function filterLexPageSources(array $sources): array
     {
-        $allowed = array_flip(self::LEX_PAGE_SOURCES);
+        return $this->filterLexTrackedSources($sources, self::LEX_PAGE_SOURCES);
+    }
+
+    /**
+     * @param list<string> $sources
+     * @param list<string>|null $allowed null = {@see LEX_TRACKED_SOURCES}
+     * @return list<string>
+     */
+    private function filterLexTrackedSources(array $sources, ?array $allowed = null): array
+    {
+        $allowed = $allowed ?? self::LEX_TRACKED_SOURCES;
+        $flip = array_flip($allowed);
         $out = [];
         foreach ($sources as $s) {
             if (!is_string($s)) {
                 continue;
             }
-            if (isset($allowed[$s])) {
+            if (isset($flip[$s])) {
                 $out[] = $s;
             }
         }

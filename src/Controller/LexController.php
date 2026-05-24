@@ -19,6 +19,9 @@ final class LexController
     public function show(): void
     {
         $csrfField = CsrfToken::field();
+        $satellite = isSatellite();
+        $viewParam = (string)($_GET['view'] ?? '');
+        $view = ($viewParam === 'sources') ? 'sources' : 'items';
 
         $lexItems = [];
         $lexCfg = [];
@@ -37,20 +40,22 @@ final class LexController
                 }
             ));
 
-            $sourcesSubmitted = isset($_GET['sources_submitted']);
-            if ($sourcesSubmitted) {
-                $activeSources = isset($_GET['sources']) ? (array)$_GET['sources'] : [];
-            } else {
-                $activeSources = $enabledLexSources;
-            }
-            $activeSources = array_values(array_intersect($activeSources, $enabledLexSources));
-
             $repo = new LexItemRepository($pdo);
-            if ($activeSources !== []) {
-                $lexItems = $repo->listBySources($activeSources, self::LIST_LIMIT, 0);
-            }
+            $lastBySource = $repo->getLastFetchedBySources(LexItemRepository::LEX_TRACKED_SOURCES);
 
-            $lastBySource = $repo->getLastFetchedBySources(LexItemRepository::LEX_PAGE_SOURCES);
+            if ($view === 'items') {
+                $sourcesSubmitted = isset($_GET['sources_submitted']);
+                if ($sourcesSubmitted) {
+                    $activeSources = isset($_GET['sources']) ? (array)$_GET['sources'] : [];
+                } else {
+                    $activeSources = $enabledLexSources;
+                }
+                $activeSources = array_values(array_intersect($activeSources, $enabledLexSources));
+
+                if ($activeSources !== []) {
+                    $lexItems = $repo->listBySources($activeSources, self::LIST_LIMIT, 0);
+                }
+            }
         } catch (\Throwable $e) {
             error_log('Seismo lex: ' . $e->getMessage());
             $pageError = 'Could not load legislation list. Check error_log for details.';
@@ -59,7 +64,6 @@ final class LexController
         $lastFetchedBySource = $lastBySource;
 
         $basePath = getBasePath();
-        $satellite = isSatellite();
         $chCfg = is_array($lexCfg['ch'] ?? null) ? $lexCfg['ch'] : [];
         $euCfg = is_array($lexCfg['eu'] ?? null) ? $lexCfg['eu'] : [];
         $deCfg = is_array($lexCfg['de'] ?? null) ? $lexCfg['de'] : [];
@@ -72,6 +76,11 @@ final class LexController
             $jusBannedWordsStr = implode(', ', array_map('strval', $lexCfg['jus_banned_words']));
         }
 
+        $showModuleRefresh       = !$satellite;
+        $moduleRefreshAction     = 'refresh_lex_all';
+        $moduleRefreshLabel      = 'Refresh Lex';
+        $moduleRefreshReturnView = $view;
+
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/lex.php';
     }
@@ -79,19 +88,19 @@ final class LexController
     public function refreshAllLex(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
@@ -103,26 +112,26 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_lex_all: ' . $e->getMessage());
             $_SESSION['error'] = 'Lex refresh failed: ' . $e->getMessage();
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
 
         RefreshAllService::applySessionFlashForAggregateResults($results, 'Lex legislation sources');
-        $this->redirectToLex();
+        $this->redirectAfterLexRefresh();
     }
 
     public function refreshFedlex(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
 
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
@@ -133,7 +142,7 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_fedlex: ' . $e->getMessage());
             $_SESSION['error'] = 'Fedlex refresh failed: ' . $e->getMessage();
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
@@ -146,20 +155,20 @@ final class LexController
             $_SESSION['error'] = 'Fedlex refresh failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectToLex();
+        $this->redirectAfterLexRefresh();
     }
 
     public function saveLexCh(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
 
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
@@ -204,7 +213,7 @@ final class LexController
             $_SESSION['error'] = 'Could not save Fedlex settings.';
         }
 
-        $this->redirectToLex();
+        $this->redirectToLex(['view' => 'sources']);
     }
 
     public function refreshLexEu(): void
@@ -240,13 +249,13 @@ final class LexController
     public function saveLexEu(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
@@ -276,19 +285,19 @@ final class LexController
             $_SESSION['error'] = 'Could not save EUR-Lex settings: ' . $e->getMessage();
         }
 
-        $this->redirectToLex();
+        $this->redirectToLex(['view' => 'sources']);
     }
 
     public function saveLexDe(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
@@ -335,19 +344,19 @@ final class LexController
             $_SESSION['error'] = 'Could not save DE settings.';
         }
 
-        $this->redirectToLex();
+        $this->redirectToLex(['view' => 'sources']);
     }
 
     public function saveLexFr(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
@@ -401,19 +410,19 @@ final class LexController
             $_SESSION['error'] = 'Could not save Légifrance settings: ' . $e->getMessage();
         }
 
-        $this->redirectToLex();
+        $this->redirectToLex(['view' => 'sources']);
     }
 
     public function saveLexJus(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectToLex(['view' => 'sources']);
 
             return;
         }
@@ -459,19 +468,19 @@ final class LexController
             $_SESSION['error'] = 'Could not save Jus settings: ' . $e->getMessage();
         }
 
-        $this->redirectToLex();
+        $this->redirectToLex(['view' => 'sources']);
     }
 
     private function runLexPluginRefresh(string $pluginId, string $label): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
         if (!CsrfToken::verifyRequest()) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
@@ -482,7 +491,7 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo refresh ' . $pluginId . ': ' . $e->getMessage());
             $_SESSION['error'] = $label . ' refresh failed: ' . $e->getMessage();
-            $this->redirectToLex();
+            $this->redirectAfterLexRefresh();
 
             return;
         }
@@ -495,7 +504,7 @@ final class LexController
             $_SESSION['error'] = $label . ' refresh failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectToLex();
+        $this->redirectAfterLexRefresh();
     }
 
     /**
@@ -517,10 +526,24 @@ final class LexController
         };
     }
 
-    private function redirectToLex(): void
+    private function redirectAfterLexRefresh(): void
     {
-        $base = getBasePath();
-        header('Location: ' . $base . '/index.php?action=lex', true, 303);
+        $v = trim((string)($_POST['return_view'] ?? ''));
+        if ($v === 'sources') {
+            $this->redirectToLex(['view' => 'sources']);
+
+            return;
+        }
+        $this->redirectToLex();
+    }
+
+    /**
+     * @param array<string, scalar|null> $query
+     */
+    private function redirectToLex(array $query = []): void
+    {
+        $q = array_merge(['action' => 'lex'], $query);
+        header('Location: ' . getBasePath() . '/index.php?' . http_build_query($q), true, 303);
         exit;
     }
 }

@@ -18,7 +18,12 @@
  * @var array<string, mixed> $jusBgeCfg
  * @var array<string, mixed> $jusBvgerCfg
  * @var string $jusBannedWordsStr
+ * @var string $view 'items'|'sources'
  * @var string $csrfField Hidden CSRF inputs (LexController)
+ * @var bool $showModuleRefresh
+ * @var string $moduleRefreshAction
+ * @var string $moduleRefreshLabel
+ * @var string $moduleRefreshReturnView
  */
 
 declare(strict_types=1);
@@ -48,6 +53,10 @@ $deExcludeStr = '';
 if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_document_types'])) {
     $deExcludeStr = implode(', ', array_map(static fn ($v): string => (string)$v, $deCfg['exclude_document_types']));
 }
+
+$itemsQs   = 'action=lex';
+$sourcesQs = 'action=lex&view=sources';
+$lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -83,15 +92,19 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
             <div class="message message-error"><?= e($pageError) ?></div>
         <?php endif; ?>
 
-        <p class="message message-info">
-            <strong>Lex refresh:</strong> Use <strong>Refresh all Lex sources</strong> below for every Lex plugin at once (EU, CH, DE, FR, Jus), or a single-source button, or <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a> / cron.
-            <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
-        </p>
+        <div class="view-toggle view-toggle-bar">
+            <span class="view-toggle-label">View:</span>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>">Sources</a>
+        </div>
 
-        <?php if ($satellite): ?>
+        <?php if ($satellite && $view === 'sources'): ?>
+            <p class="message message-info">Satellite mode: Lex sources are read-only here. Manage them on the mothership.</p>
+        <?php elseif ($satellite): ?>
             <p class="message message-info">Satellite mode: legislation rows are read from the mothership. Refresh is disabled.</p>
         <?php endif; ?>
 
+        <?php if ($view === 'items'): ?>
         <form method="get" action="<?= e($basePath) ?>/index.php" id="lex-filter-form">
             <input type="hidden" name="action" value="lex">
             <input type="hidden" name="sources_submitted" value="1">
@@ -119,41 +132,237 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
             </div>
         </form>
 
+        <div class="latest-entries-section">
+            <div class="section-title-row">
+                <h2 class="section-title">
+                    <?php
+                    $lexRefreshLineMeta = [
+                        ['key' => 'eu', 'emoji' => '🇪🇺'],
+                        ['key' => 'ch', 'emoji' => '🇨🇭'],
+                        ['key' => 'de', 'emoji' => '🇩🇪'],
+                        ['key' => 'fr', 'emoji' => '🇫🇷'],
+                    ];
+                    $refreshParts = [];
+                    foreach ($lexRefreshLineMeta as $meta) {
+                        $dtUtc = $lastFetchedBySource[$meta['key']] ?? null;
+                        $line = seismo_format_lex_refresh_utc($dtUtc);
+                        if ($line !== null && $line !== '') {
+                            $refreshParts[] = $meta['emoji'] . ' ' . $line;
+                        }
+                    }
+                    if ($refreshParts !== []):
+                    ?>
+                        Refreshed: <?= implode(' · ', array_map('e', $refreshParts)) ?>
+                    <?php else: ?>
+                        Refreshed: Never
+                    <?php endif; ?>
+                </h2>
+            </div>
+
+            <?php if ($lexItems === []): ?>
+                <div class="empty-state">
+                    <p>No legislation in this filter yet. Enable a source under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Sources</a>, or run a refresh from Diagnostics.</p>
+                </div>
+            <?php else: ?>
+                <?php
+                    $activeCount = count($activeSources);
+                    $showSourceTag = ($activeCount > 1);
+                ?>
+                <?php foreach ($lexItems as $item): ?>
+                    <?php
+                        $source = $item['source'] ?? 'eu';
+                        if ($source === 'fr') {
+                            $sourceEmoji = '🇫🇷';
+                            $sourceLabel = 'FR';
+                            $linkLabel = 'Légifrance →';
+                        } elseif ($source === 'de') {
+                            $sourceEmoji = '🇩🇪';
+                            $sourceLabel = 'DE';
+                            $linkLabel = 'recht.bund.de →';
+                        } elseif ($source === 'ch') {
+                            $sourceEmoji = '🇨🇭';
+                            $sourceLabel = 'CH';
+                            $linkLabel = 'Fedlex →';
+                        } else {
+                            $sourceEmoji = '🇪🇺';
+                            $sourceLabel = 'EU';
+                            $linkLabel = 'EUR-Lex →';
+                        }
+                        $celexRow = (string)($item['celex'] ?? '');
+                        $isParlSwissLex = (bool) preg_match('/^parl_(mm|sda):/i', $celexRow)
+                            || in_array($source, ['parl_mm', 'parl_sda'], true);
+                        if ($isParlSwissLex) {
+                            $linkLabel = 'parlament.ch →';
+                        }
+                        /** 0.4 hid CELEX / outbound link for Parl MM dossiers — keep for legacy lex rows */
+                        $hideParlMmLexFooterIds = in_array($source, ['parl_mm', 'parl_sda'], true);
+                        /** EUR-Lex: CELEX surplus to title; DE RSS synthetic key; FR JORFTEXT API id — not footer labels */
+                        $lexLexPageFooterMonoHide = ($source === 'eu' && !$isParlSwissLex)
+                            || ($source === 'de' && str_starts_with($celexRow, 'de_rss_'))
+                            || ($source === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $celexRow));
+                        $docType = (string)($item['document_type'] ?? 'Legislation');
+                        if ($source === 'eu' && function_exists('seismo_lex_eu_document_type_for_display')) {
+                            $docType = seismo_lex_eu_document_type_for_display($item);
+                        }
+                        $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
+                        if ($itemUrl === '') {
+                            $itemUrl = trim((string)($item['work_uri'] ?? ''));
+                        }
+                        $lexHasUrl = seismo_is_navigable_url($itemUrl);
+                        $lexDesc = trim((string)($item['description'] ?? ''));
+                        $lexPreview = mb_substr($lexDesc, 0, 300);
+                        if (mb_strlen($lexDesc) > 300) {
+                            $lexPreview .= '...';
+                        }
+                        $lexHasMore = mb_strlen($lexDesc) > 300;
+                        /**
+                         * 0.4 always used `$item['title']`. EUR-Lex often stores CELEX as title with real
+                         * prose in `description`; use the helper only for eu (dashboard behaviour).
+                         */
+                        if (($item['source'] ?? 'eu') === 'eu' && function_exists('seismo_lex_card_heading_title')) {
+                            $lexHeadingTitle = seismo_lex_card_heading_title($item);
+                        } else {
+                            $lexHeadingTitle = trim((string)($item['title'] ?? ''));
+                            if ($lexHeadingTitle === '' && function_exists('seismo_lex_card_heading_title')) {
+                                $lexHeadingTitle = seismo_lex_card_heading_title($item);
+                            }
+                        }
+                        $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
+                        if (function_exists('seismo_lex_bge_footer_mono_hide')) {
+                            $lexLexPageFooterMonoHide = $lexLexPageFooterMonoHide
+                                || seismo_lex_bge_footer_mono_hide($source, $celexRow, $lexHeadingTitle);
+                        }
+                    ?>
+                    <div class="entry-card">
+                        <div class="entry-header">
+                            <?php if ($source === 'ch'): ?>
+                                <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                            <?php elseif ($showSourceTag): ?>
+                                <span class="entry-tag entry-tag--lex-source">
+                                    <?= e($sourceEmoji) ?> <?= e($sourceLabel) ?>
+                                </span>
+                            <?php endif; ?>
+                            <span class="entry-tag entry-tag--lex-doc">
+                                <?= e($docType) ?>
+                            </span>
+                        </div>
+                        <h3 class="entry-title">
+                            <?php if ($lexHasUrl): ?>
+                            <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener"><?= e($lexHeadingTitle) ?></a>
+                            <?php else: ?>
+                            <?= e($lexHeadingTitle) ?>
+                            <?php endif; ?>
+                        </h3>
+                        <?php if ($lexDesc !== '' && !$lexSkipDescPreview): ?>
+                            <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
+                            <?php if ($lexHasMore): ?>
+                                <div class="entry-full-content"><?= nl2br(e($lexDesc)) ?></div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <div class="entry-actions">
+                            <div class="entry-actions-main">
+                                <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
+                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                <?php endif; ?>
+                                <?php if (!$hideParlMmLexFooterIds && !$lexLexPageFooterMonoHide): ?>
+                                    <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
+                                <?php endif; ?>
+                                <?php if ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
+                                        <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (!empty($item['document_date'])): ?>
+                                <span class="entry-date"><?= e(date('d.m.Y', strtotime((string)$item['document_date']))) ?></span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        <?php else: ?>
+        <p class="message message-info">
+            <strong>Lex refresh:</strong> Use <strong>Refresh Lex</strong> in the top bar or <strong>Refresh all Lex sources</strong> below for every plugin at once (EU, CH, DE, FR, Jus), or a single-source button, or <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a> / cron.
+            <strong>Parlament Medien</strong> (press) are <code>feed_items</code> — configure <code>parl_press</code> on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.
+        </p>
+
+        <div class="latest-entries-section module-section-spaced">
+            <h2 class="section-title">Lex sources</h2>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Enabled</th>
+                        <th>Last refreshed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php
+                    $lexSourceRows = [
+                        ['key' => 'eu', 'label' => '🇪🇺 EUR-Lex (EU)', 'cfg' => $euCfg],
+                        ['key' => 'ch', 'label' => '🇨🇭 Fedlex (CH)', 'cfg' => $chCfg],
+                        ['key' => 'de', 'label' => '🇩🇪 recht.bund.de (DE)', 'cfg' => $deCfg],
+                        ['key' => 'fr', 'label' => '🇫🇷 Légifrance (FR)', 'cfg' => $frCfg],
+                        ['key' => 'ch_bger', 'label' => 'Jus: BGer', 'cfg' => $jusBgerCfg],
+                        ['key' => 'ch_bge', 'label' => 'Jus: BGE', 'cfg' => $jusBgeCfg],
+                        ['key' => 'ch_bvger', 'label' => 'Jus: BVGer', 'cfg' => $jusBvgerCfg],
+                    ];
+                    foreach ($lexSourceRows as $row):
+                        $cfg = is_array($row['cfg']) ? $row['cfg'] : [];
+                        $refreshLine = seismo_format_lex_refresh_utc($lastFetchedBySource[$row['key']] ?? null);
+                    ?>
+                    <tr>
+                        <td><?= e($row['label']) ?></td>
+                        <td><?= !empty($cfg['enabled']) ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
+                        <td><?= $refreshLine !== null ? e($refreshLine) : '<span class="table-cell-placeholder">Never</span>' ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+
         <?php if (!$satellite): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh legislation sources</h2>
             <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_all" class="admin-inline-form" style="margin-bottom: 1rem;">
                 <?= $csrfField ?>
+                <?= $lexReturnViewHidden ?>
                 <button type="submit" class="btn btn-primary">Refresh all Lex sources</button>
             </form>
             <p class="admin-intro">Runs every enabled Lex plugin (EUR-Lex, Fedlex, DE, FR, Jus) in one request. Below: one plugin per button (same as Diagnostics).</p>
             <div class="admin-form-actions">
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh EUR-Lex (EU)</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh recht.bund (DE)</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh Légifrance (FR)</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bger" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh Jus: BGer</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bge" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh Jus: BGE</button>
                 </form>
                 <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bvger" class="admin-inline-form">
                     <?= $csrfField ?>
+                    <?= $lexReturnViewHidden ?>
                     <button type="submit" class="btn btn-primary">Refresh Jus: BVGer</button>
                 </form>
             </div>
@@ -367,154 +576,7 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
             </form>
         </div>
         <?php endif; ?>
-
-        <div class="latest-entries-section">
-            <div class="section-title-row">
-                <h2 class="section-title">
-                    <?php
-                    $lexRefreshLineMeta = [
-                        ['key' => 'eu', 'emoji' => '🇪🇺'],
-                        ['key' => 'ch', 'emoji' => '🇨🇭'],
-                        ['key' => 'de', 'emoji' => '🇩🇪'],
-                        ['key' => 'fr', 'emoji' => '🇫🇷'],
-                    ];
-                    $refreshParts = [];
-                    foreach ($lexRefreshLineMeta as $meta) {
-                        $dtUtc = $lastFetchedBySource[$meta['key']] ?? null;
-                        $line = seismo_format_lex_refresh_utc($dtUtc);
-                        if ($line !== null && $line !== '') {
-                            $refreshParts[] = $meta['emoji'] . ' ' . $line;
-                        }
-                    }
-                    if ($refreshParts !== []):
-                    ?>
-                        Refreshed: <?= implode(' · ', array_map('e', $refreshParts)) ?>
-                    <?php else: ?>
-                        Refreshed: Never
-                    <?php endif; ?>
-                </h2>
-            </div>
-
-            <?php if ($lexItems === []): ?>
-                <div class="empty-state">
-                    <p>No legislation in this filter yet. Enable a source in the settings forms above, or run a refresh.</p>
-                </div>
-            <?php else: ?>
-                <?php
-                    $activeCount = count($activeSources);
-                    $showSourceTag = ($activeCount > 1);
-                ?>
-                <?php foreach ($lexItems as $item): ?>
-                    <?php
-                        $source = $item['source'] ?? 'eu';
-                        if ($source === 'fr') {
-                            $sourceEmoji = '🇫🇷';
-                            $sourceLabel = 'FR';
-                            $linkLabel = 'Légifrance →';
-                        } elseif ($source === 'de') {
-                            $sourceEmoji = '🇩🇪';
-                            $sourceLabel = 'DE';
-                            $linkLabel = 'recht.bund.de →';
-                        } elseif ($source === 'ch') {
-                            $sourceEmoji = '🇨🇭';
-                            $sourceLabel = 'CH';
-                            $linkLabel = 'Fedlex →';
-                        } else {
-                            $sourceEmoji = '🇪🇺';
-                            $sourceLabel = 'EU';
-                            $linkLabel = 'EUR-Lex →';
-                        }
-                        $celexRow = (string)($item['celex'] ?? '');
-                        $isParlSwissLex = (bool) preg_match('/^parl_(mm|sda):/i', $celexRow)
-                            || in_array($source, ['parl_mm', 'parl_sda'], true);
-                        if ($isParlSwissLex) {
-                            $linkLabel = 'parlament.ch →';
-                        }
-                        /** 0.4 hid CELEX / outbound link for Parl MM dossiers — keep for legacy lex rows */
-                        $hideParlMmLexFooterIds = in_array($source, ['parl_mm', 'parl_sda'], true);
-                        /** EUR-Lex: CELEX surplus to title; DE RSS synthetic key; FR JORFTEXT API id — not footer labels */
-                        $lexLexPageFooterMonoHide = ($source === 'eu' && !$isParlSwissLex)
-                            || ($source === 'de' && str_starts_with($celexRow, 'de_rss_'))
-                            || ($source === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $celexRow));
-                        $docType = (string)($item['document_type'] ?? 'Legislation');
-                        if ($source === 'eu' && function_exists('seismo_lex_eu_document_type_for_display')) {
-                            $docType = seismo_lex_eu_document_type_for_display($item);
-                        }
-                        $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
-                        if ($itemUrl === '') {
-                            $itemUrl = trim((string)($item['work_uri'] ?? ''));
-                        }
-                        $lexHasUrl = seismo_is_navigable_url($itemUrl);
-                        $lexDesc = trim((string)($item['description'] ?? ''));
-                        $lexPreview = mb_substr($lexDesc, 0, 300);
-                        if (mb_strlen($lexDesc) > 300) {
-                            $lexPreview .= '...';
-                        }
-                        $lexHasMore = mb_strlen($lexDesc) > 300;
-                        /**
-                         * 0.4 always used `$item['title']`. EUR-Lex often stores CELEX as title with real
-                         * prose in `description`; use the helper only for eu (dashboard behaviour).
-                         */
-                        if (($item['source'] ?? 'eu') === 'eu' && function_exists('seismo_lex_card_heading_title')) {
-                            $lexHeadingTitle = seismo_lex_card_heading_title($item);
-                        } else {
-                            $lexHeadingTitle = trim((string)($item['title'] ?? ''));
-                            if ($lexHeadingTitle === '' && function_exists('seismo_lex_card_heading_title')) {
-                                $lexHeadingTitle = seismo_lex_card_heading_title($item);
-                            }
-                        }
-                        $lexSkipDescPreview = ($lexHeadingTitle !== '' && $lexDesc !== '' && $lexHeadingTitle === $lexDesc);
-                        if (function_exists('seismo_lex_bge_footer_mono_hide')) {
-                            $lexLexPageFooterMonoHide = $lexLexPageFooterMonoHide
-                                || seismo_lex_bge_footer_mono_hide($source, $celexRow, $lexHeadingTitle);
-                        }
-                    ?>
-                    <div class="entry-card">
-                        <div class="entry-header">
-                            <?php if ($source === 'ch'): ?>
-                                <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
-                            <?php elseif ($showSourceTag): ?>
-                                <span class="entry-tag entry-tag--lex-source">
-                                    <?= e($sourceEmoji) ?> <?= e($sourceLabel) ?>
-                                </span>
-                            <?php endif; ?>
-                            <span class="entry-tag entry-tag--lex-doc">
-                                <?= e($docType) ?>
-                            </span>
-                        </div>
-                        <h3 class="entry-title">
-                            <?php if ($lexHasUrl): ?>
-                            <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener"><?= e($lexHeadingTitle) ?></a>
-                            <?php else: ?>
-                            <?= e($lexHeadingTitle) ?>
-                            <?php endif; ?>
-                        </h3>
-                        <?php if ($lexDesc !== '' && !$lexSkipDescPreview): ?>
-                            <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
-                            <?php if ($lexHasMore): ?>
-                                <div class="entry-full-content"><?= nl2br(e($lexDesc)) ?></div>
-                            <?php endif; ?>
-                        <?php endif; ?>
-                        <div class="entry-actions">
-                            <div class="entry-actions-main">
-                                <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
-                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
-                                <?php endif; ?>
-                                <?php if (!$hideParlMmLexFooterIds && !$lexLexPageFooterMonoHide): ?>
-                                    <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
-                                <?php endif; ?>
-                                <?php if ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
-                                        <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
-                                <?php endif; ?>
-                            </div>
-                            <?php if (!empty($item['document_date'])): ?>
-                                <span class="entry-date"><?= e(date('d.m.Y', strtotime((string)$item['document_date']))) ?></span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
+        <?php endif; ?>
     </div>
 
     <script>
