@@ -11,31 +11,33 @@ use DOMElement;
 use DOMNode;
 use DOMNodeList;
 use DOMXPath;
+use fivefilters\Readability\Configuration;
+use fivefilters\Readability\Readability;
+use Symfony\Component\CssSelector\CssSelectorConverter;
+use Symfony\Component\CssSelector\Exception\ExpressionErrorException;
+use Symfony\Component\CssSelector\Exception\ParseException as CssParseException;
 
 /**
- * Readability-lite + date extraction — ported from 0.4 seismo_scraper.php behaviour
- * (see project docs / consolidation notes). Used by {@see ScraperFetchService} for
- * preview and production ingest.
+ * Article text via Readability (with 0.4 heuristic fallback) and date extraction.
+ * Used by {@see ScraperFetchService} for preview and production ingest.
  */
 final class ScraperContentExtractor
 {
+    private const MIN_READABLE_CHARS = 50;
+
+    private static ?CssSelectorConverter $cssSelector = null;
+
     /**
-     * @param string $excludeSelectors One selector per line (same limited CSS / XPath
-     *                                 grammar as the date field). Matched elements are
-     *                                 removed from the document before heuristics and
-     *                                 built-in noise stripping.
+     * @param string $excludeSelectors One selector per line (CSS or XPath;
+     *                                 see Scraper admin). Matched elements are
+     *                                 removed before extraction.
      *
      * @return array{title: string, content: string}
      */
     public static function extractReadableContent(string $html, string $excludeSelectors = ''): array
     {
-        $html = self::normaliseEncodingPrefix($html);
-        $prev  = libxml_use_internal_errors(true);
-        $dom   = new DOMDocument();
-        $loaded = $dom->loadHTML($html, LIBXML_NONET);
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
-        if (!$loaded) {
+        $dom = self::loadDom($html);
+        if ($dom === null) {
             return ['title' => '', 'content' => ''];
         }
 
@@ -43,41 +45,21 @@ final class ScraperContentExtractor
         if (trim($excludeSelectors) !== '') {
             self::removeElementsMatchingExcludeSelectors($dom, $excludeSelectors);
         }
+
+        $fromReadability = self::extractViaReadability($dom);
+        if ($fromReadability !== null) {
+            if ($fromReadability['title'] !== '') {
+                $title = $fromReadability['title'];
+            }
+
+            return [
+                'title'   => $title,
+                'content' => $fromReadability['content'],
+            ];
+        }
+
         self::removeNoiseElements($dom);
-
-        $best = '';
-        $bestLen = 0;
-        $tags  = ['article', 'main', 'div', 'section'];
-        foreach ($tags as $tag) {
-            $els = $dom->getElementsByTagName($tag);
-            for ($i = 0; $i < $els->length; $i++) {
-                $el = $els->item($i);
-                if (!($el instanceof DOMElement)) {
-                    continue;
-                }
-                $t = self::textContent($el);
-                $len = mb_strlen($t, 'UTF-8');
-                if ($len > $bestLen) {
-                    $bestLen = $len;
-                    $best = $t;
-                }
-                if ($len > 200 && $best === $t) {
-                    // Keep scanning for longest; 0.4 “stop early” = optional perf only.
-                }
-            }
-        }
-
-        if ($bestLen < 50) {
-            $bodies = $dom->getElementsByTagName('body');
-            if ($bodies->length > 0) {
-                $body = $bodies->item(0);
-                if ($body instanceof DOMElement) {
-                    $best = self::textContent($body);
-                }
-            }
-        }
-
-        $content = self::normaliseTextWhitespace($best);
+        $content = self::extractLongestBlockHeuristic($dom);
 
         return [
             'title'   => $title,
@@ -87,7 +69,7 @@ final class ScraperContentExtractor
 
     /**
      * First matching value as UTC `Y-m-d H:i:s`, or null.
-     * Selector: limited CSS, raw XPath (starts with `/`), or `//...`.
+     * Selector: CSS (full grammar via symfony/css-selector), raw XPath (`/` or `//`), or legacy forms.
      * Excludes: matched elements are removed from the document before the date node is chosen.
      */
     public static function extractPublishedDate(string $html, string $dateSelector, string $excludeSelectors = ''): ?string
@@ -97,13 +79,8 @@ final class ScraperContentExtractor
             return null;
         }
 
-        $html = self::normaliseEncodingPrefix($html);
-        $prev  = libxml_use_internal_errors(true);
-        $dom   = new DOMDocument();
-        $loaded = $dom->loadHTML($html, LIBXML_NONET);
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
-        if (!$loaded) {
+        $dom = self::loadDom($html);
+        if ($dom === null) {
             return null;
         }
 
@@ -139,6 +116,109 @@ final class ScraperContentExtractor
 
         // Selector matched nodes but none parsed — last resort on this page only.
         return self::tryGermanDateStrings($htmlForFallback);
+    }
+
+    /**
+     * @return ?array{title: string, content: string}
+     */
+    private static function extractViaReadability(DOMDocument $dom): ?array
+    {
+        $html = $dom->saveHTML();
+        if ($html === false || trim($html) === '') {
+            return null;
+        }
+
+        try {
+            $config = new Configuration();
+            $readability = new Readability($config);
+            if (!$readability->parse($html)) {
+                return null;
+            }
+            $contentHtml = $readability->getContent();
+            if ($contentHtml === null || trim($contentHtml) === '') {
+                return null;
+            }
+            $content = self::htmlFragmentToPlainText($contentHtml);
+            if (mb_strlen($content, 'UTF-8') < self::MIN_READABLE_CHARS) {
+                return null;
+            }
+            $title = trim($readability->getTitle() ?? '');
+
+            return [
+                'title'   => $title,
+                'content' => $content,
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function extractLongestBlockHeuristic(DOMDocument $dom): string
+    {
+        $best = '';
+        $bestLen = 0;
+        $tags  = ['article', 'main', 'div', 'section'];
+        foreach ($tags as $tag) {
+            $els = $dom->getElementsByTagName($tag);
+            for ($i = 0; $i < $els->length; $i++) {
+                $el = $els->item($i);
+                if (!($el instanceof DOMElement)) {
+                    continue;
+                }
+                $t = self::textContent($el);
+                $len = mb_strlen($t, 'UTF-8');
+                if ($len > $bestLen) {
+                    $bestLen = $len;
+                    $best = $t;
+                }
+            }
+        }
+
+        if ($bestLen < self::MIN_READABLE_CHARS) {
+            $bodies = $dom->getElementsByTagName('body');
+            if ($bodies->length > 0) {
+                $body = $bodies->item(0);
+                if ($body instanceof DOMElement) {
+                    $best = self::textContent($body);
+                }
+            }
+        }
+
+        return self::normaliseTextWhitespace($best);
+    }
+
+    private static function htmlFragmentToPlainText(string $html): string
+    {
+        $fragmentDom = self::loadDom($html);
+        if ($fragmentDom === null) {
+            return self::normaliseTextWhitespace(strip_tags($html));
+        }
+        $bodies = $fragmentDom->getElementsByTagName('body');
+        if ($bodies->length > 0) {
+            $body = $bodies->item(0);
+            if ($body instanceof DOMElement) {
+                return self::textContent($body);
+            }
+        }
+
+        return self::normaliseTextWhitespace(strip_tags($html));
+    }
+
+    private static function loadDom(string $html): ?DOMDocument
+    {
+        $html = self::normaliseEncodingPrefix($html);
+        $prev   = libxml_use_internal_errors(true);
+        $dom    = new DOMDocument();
+        $loaded = $dom->loadHTML($html, LIBXML_NONET);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+
+        return $loaded ? $dom : null;
+    }
+
+    private static function cssSelector(): CssSelectorConverter
+    {
+        return self::$cssSelector ??= new CssSelectorConverter();
     }
 
     private static function parseDateFromNode(DOMNode $node): ?string
@@ -196,7 +276,7 @@ final class ScraperContentExtractor
 
     /**
      * Remove all elements matched by one selector per line (empty lines and
-     * `#` line comments ignored). Reuses the same limited selector grammar as
+     * `#` line comments ignored). Reuses the same selector grammar as
      * {@see extractPublishedDate()}. Deeper nodes are removed first so parent/child
      * overlaps remain consistent.
      */
@@ -280,6 +360,22 @@ final class ScraperContentExtractor
         if (str_starts_with($s, '/') || str_starts_with($s, '(')) {
             return $s;
         }
+        if (str_starts_with($s, '//')) {
+            return $s;
+        }
+
+        try {
+            return self::cssSelector()->toXPath($s, '//');
+        } catch (ExpressionErrorException|CssParseException) {
+            return self::dateSelectorToXPathLegacy($s);
+        }
+    }
+
+    /**
+     * Limited CSS grammar kept for configs written before symfony/css-selector.
+     */
+    private static function dateSelectorToXPathLegacy(string $s): ?string
+    {
         if (str_starts_with($s, 'meta[')) {
             if (preg_match('/^meta\[property="([^"]+)"\]$/i', $s, $m)) {
                 return '//meta[@property=' . self::xpathStringLiteral($m[1]) . ']';

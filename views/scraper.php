@@ -105,11 +105,11 @@ $sourcesQs = 'action=scraper&view=sources';
                 <div class="admin-form-field">
                     <label>Date selector <input type="text" name="date_selector" class="search-input" style="width:100%;" value="<?= e((string)($editRow['date_selector'] ?? '')) ?>" placeholder="e.g. .date or //time[@datetime]"></label>
                 </div>
-                <p class="admin-hint">Date: simple CSS (tag, .class, #id, meta[…]) or raw XPath. Preview uses the same extractor as production. For SPRIND articles use <code>p.w-max.lining-nums</code> (not bare <code>p.lining-nums</code> on a listing URL). Link mode requires a <strong>non-empty</strong> link pattern (e.g. <code>/worte/magazin/</code>) — empty pattern scrapes only the page URL and dates will be wrong.</p>
+                <p class="admin-hint">Date: standard CSS (e.g. <code>article time[datetime]</code>, <code>.date</code>, <code>meta[property="article:published_time"]</code>) or raw XPath (<code>//…</code>). Preview uses the same extractor as production. For SPRIND articles use <code>p.w-max.lining-nums</code> (not bare <code>p.lining-nums</code> on a listing URL). Link mode requires a <strong>non-empty</strong> link pattern (e.g. <code>/worte/magazin/</code>) — empty pattern scrapes only the page URL and dates will be wrong.</p>
                 <div class="admin-form-field">
                     <label>Exclude selectors <textarea name="exclude_selectors" class="search-input" style="width:100%; min-height:5rem; font-family: inherit;" rows="4" placeholder="One per line: .breadcrumb, #page-footer, nav.breadcrumbs"><?= e((string)($editRow['exclude_selectors'] ?? '')) ?></textarea></label>
                 </div>
-                <p class="admin-hint">Elements matching these selectors are removed from the page <strong>before</strong> text is extracted (same CSS / XPath rules as the date field). Use for breadcrumbs, footers, and chrome that would otherwise be merged into the body. Lines starting with <code>#</code> are comments.</p>
+                <p class="admin-hint">Elements matching these selectors are removed from the page <strong>before</strong> Readability / text extraction (same CSS / XPath rules as the date field). Use for breadcrumbs, footers, and chrome that would otherwise be merged into the body. Lines starting with <code>#</code> are comments.</p>
                 <div class="admin-form-field">
                     <label>Category <input type="text" name="category" class="search-input" style="width:100%; max-width:24rem;" value="<?= e((string)($editRow['category'] ?? 'scraper')) ?>"></label>
                 </div>

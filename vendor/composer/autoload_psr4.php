@@ -7,6 +7,7 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'fivefilters\\Readability\\' => array($vendorDir . '/fivefilters/readability.php/src'),
+    'Symfony\\Component\\CssSelector\\' => array($vendorDir . '/symfony/css-selector'),
     'SimplePie\\' => array($vendorDir . '/simplepie/simplepie/src'),
     'Seismo\\Tests\\' => array($baseDir . '/tests'),
     'Seismo\\' => array($baseDir . '/src'),

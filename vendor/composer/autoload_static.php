@@ -24,6 +24,7 @@ class ComposerStaticInite275f177b6e81c4b5ddad8de641d9ff9
         ),
         'S' =>
         array (
+            'Symfony\\Component\\CssSelector\\' => 30,
             'SimplePie\\' => 10,
             'Seismo\\Tests\\' => 13,
             'Seismo\\' => 7,
@@ -73,6 +74,10 @@ class ComposerStaticInite275f177b6e81c4b5ddad8de641d9ff9
         'fivefilters\\Readability\\' =>
         array (
             0 => __DIR__ . '/..' . '/fivefilters/readability.php/src',
+        ),
+        'Symfony\\Component\\CssSelector\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/symfony/css-selector',
         ),
         'SimplePie\\' =>
         array (
