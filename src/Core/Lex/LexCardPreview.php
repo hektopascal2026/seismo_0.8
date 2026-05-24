@@ -41,11 +41,20 @@ final class LexCardPreview
         foreach (['content_excerpt', 'content'] as $key) {
             $raw = trim((string)($row[$key] ?? ''));
             if ($raw !== '') {
-                return LexPlainText::normalize($raw);
+                return self::plainExcerpt($raw);
             }
         }
 
         return '';
+    }
+
+    private static function plainExcerpt(string $raw): string
+    {
+        if (str_contains($raw, '<') && preg_match('/<[a-z][\s\S]*>/i', $raw)) {
+            return LexPlainText::fromHtml($raw);
+        }
+
+        return LexPlainText::normalize($raw);
     }
 
     private static function euPreamble(string $description, string $excerpt): string
@@ -53,6 +62,8 @@ final class LexCardPreview
         if ($excerpt === '') {
             return $description;
         }
+
+        $excerpt = self::euBodyFromExcerpt($excerpt);
 
         $cut = strlen($excerpt);
         $patterns = [
@@ -79,13 +90,193 @@ final class LexCardPreview
         return $description !== '' ? $description : self::lead($excerpt, 600);
     }
 
+    /**
+     * Drop EUR-Lex instrument title block (e.g. "COMMISSION … REGULATION (EU) … of …") before preamble.
+     */
+    private static function euBodyFromExcerpt(string $excerpt): string
+    {
+        if (!self::looksLikeEuInstrumentText($excerpt)) {
+            return $excerpt;
+        }
+
+        $start = self::euTitleBlockOffset($excerpt);
+        if ($start <= 0) {
+            return $excerpt;
+        }
+
+        $body = trim(substr($excerpt, $start));
+
+        return ($body !== '' && mb_strlen($body) >= 40) ? $body : $excerpt;
+    }
+
+    private static function looksLikeEuInstrumentText(string $excerpt): bool
+    {
+        $head = substr($excerpt, 0, 800);
+
+        return (bool) preg_match(
+            '/^(?:COMMISSION|COUNCIL|EUROPEAN PARLIAMENT|REGULATION|DIRECTIVE|DECISION)\b/ui',
+            $excerpt,
+        ) || (bool) preg_match(
+            '/\b(?:REGULATION|DIRECTIVE|DECISION)\s*\((?:EU|EC|EEC)\)\s+\d{4}\/\d+/ui',
+            $head,
+        );
+    }
+
+    private static function euTitleBlockOffset(string $excerpt): int
+    {
+        $offset = strlen($excerpt);
+        $patterns = [
+            '/\nTHE EUROPEAN COMMISSION[,]?\s*\n/ui',
+            '/\nTHE COUNCIL(?: OF THE EUROPEAN UNION)?[,]?\s*\n/ui',
+            '/\nTHE EUROPEAN PARLIAMENT(?: AND OF THE COUNCIL)?[,]?\s*\n/ui',
+            '/\nTHE EUROPEAN PARLIAMENT AND THE COUNCIL[,]?\s*\n/ui',
+            '/\nHaving regard to\b/ui',
+            '/\nWhereas:\s*\n/ui',
+            '/\nWhereas\s*\n/ui',
+            '/\nDie Europäische Kommission[,]?\s*\n/ui',
+            '/\nLa Commission européenne[,]?\s*\n/ui',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $excerpt, $match, PREG_OFFSET_CAPTURE)) {
+                $offset = min($offset, (int)$match[0][1]);
+            }
+        }
+
+        if ($offset === strlen($excerpt)
+            && preg_match('/\n(?:of|du|vom)\s+\d{1,2}\s+\p{L}+\s+\d{4}\s*\n/ui', $excerpt, $match, PREG_OFFSET_CAPTURE)
+            && (int)$match[0][1] < 1500
+        ) {
+            $offset = min($offset, (int)$match[0][1] + strlen($match[0][0]));
+        }
+
+        return $offset === strlen($excerpt) ? 0 : $offset;
+    }
+
     private static function frSummary(string $description, string $excerpt): string
     {
-        if ($description !== '') {
+        $description = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
+        if ($description !== '' && !self::looksLikeFrenchJorfBoilerplate($description)) {
             return $description;
         }
 
-        return self::lead($excerpt, 600);
+        return self::lead(self::frBodyFromExcerpt($excerpt), 600);
+    }
+
+    /**
+     * Drop JORF promulgation block, instrument title line, and travaux préparatoires footnotes.
+     */
+    private static function frBodyFromExcerpt(string $excerpt): string
+    {
+        $excerpt = self::frTrimTravauxPreparatoires($excerpt);
+        if ($excerpt === '') {
+            return '';
+        }
+
+        if (!self::looksLikeFrenchJorfText($excerpt)) {
+            return $excerpt;
+        }
+
+        $start = self::frBodyOffset($excerpt);
+        if ($start <= 0) {
+            return $excerpt;
+        }
+
+        $body = trim(substr($excerpt, $start));
+
+        return ($body !== '' && mb_strlen($body) >= 40) ? $body : $excerpt;
+    }
+
+    private static function looksLikeFrenchJorfText(string $excerpt): bool
+    {
+        $head = substr($excerpt, 0, 4000);
+
+        return (bool) preg_match(
+            '/\b(?:Assemblée nationale|promulgue la loi|Travaux préparatoires)\b/ui',
+            $head,
+        ) || (bool) preg_match(
+            '/\b(?:LOI|DÉCRET|ORDONNANCE|ARRÊTÉ)\s+n[°o]\s+\d+/ui',
+            $head,
+        );
+    }
+
+    private static function looksLikeFrenchJorfBoilerplate(string $text): bool
+    {
+        if (self::looksLikeFrenchJorfText($text)) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(?:promulgue la loi dont la teneur suit|Assemblée nationale et le Sénat)\b/ui',
+            $text,
+        );
+    }
+
+    private static function frBodyOffset(string $excerpt): int
+    {
+        $offset = strlen($excerpt);
+        $patterns = [
+            '/\n\s*Article\s+(?:1er|premier|[1](?:[\s\.]|$))/ui',
+            '/\n\s*Chapitre\s+(?:I|1\b|premier)/ui',
+            '/\n\s*Titre\s+(?:I|1\b|premier)/ui',
+            '/\n\s*Section\s+(?:I|1\b|première)/ui',
+            '/\n\s*Partie\s+(?:I|1\b|première)/ui',
+            '/\n\s*Livre\s+(?:I|1\b|premier)/ui',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $excerpt, $match, PREG_OFFSET_CAPTURE)) {
+                $offset = min($offset, (int)$match[0][1]);
+            }
+        }
+
+        if ($offset === strlen($excerpt)
+            && preg_match(
+                '/(?:promulgue la loi dont la teneur suit|promulgue l[\x{2019}\']ordonnance dont la teneur suit)\s*:\s*\n/iu',
+                $excerpt,
+                $match,
+                PREG_OFFSET_CAPTURE,
+            )
+        ) {
+            $after = (int)$match[0][1] + strlen($match[0][0]);
+            $rest = substr($excerpt, $after);
+            if (preg_match(
+                '/^(?:LOI|DÉCRET|ORDONNANCE|ARRÊTÉ)\s+n[°o]\s+\d{4}-\d+[^\n]*\n/iu',
+                $rest,
+                $titleMatch,
+            )) {
+                $after += strlen($titleMatch[0]);
+            }
+            $offset = min($offset, $after);
+        }
+
+        if ($offset === strlen($excerpt)
+            && preg_match(
+                '/\n(?:LOI|DÉCRET|ORDONNANCE|ARRÊTÉ)\s+n[°o]\s+\d{4}-\d+[^\n]*\n/iu',
+                $excerpt,
+                $match,
+                PREG_OFFSET_CAPTURE,
+            )
+            && (int)$match[0][1] < 4000
+        ) {
+            $offset = min($offset, (int)$match[0][1] + strlen($match[0][0]));
+        }
+
+        return $offset === strlen($excerpt) ? 0 : $offset;
+    }
+
+    private static function frTrimTravauxPreparatoires(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        if (preg_match('/\n\s*\(\d+\)\s*Travaux préparatoires\b/ui', $text, $match, PREG_OFFSET_CAPTURE)) {
+            $text = trim(substr($text, 0, (int)$match[0][1]));
+        } elseif (preg_match('/\n\s*Travaux préparatoires\s*:\s*\n/ui', $text, $match, PREG_OFFSET_CAPTURE)) {
+            $text = trim(substr($text, 0, (int)$match[0][1]));
+        }
+
+        return $text;
     }
 
     private static function deLead(string $description, string $excerpt): string
