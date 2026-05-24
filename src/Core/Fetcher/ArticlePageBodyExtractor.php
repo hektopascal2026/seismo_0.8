@@ -30,6 +30,26 @@ nav
 footer
 aside
 SEL,
+        'srf.ch' => <<<'SEL'
+header
+nav
+footer
+aside
+.sharing-bar
+.articlepage__sharing-bar
+.expandable-box
+.collection__teaser-list
+.js-teaser-list
+.media-caption
+.image-figure
+.articlepage__breadcrumbs
+.articlepage__topmedia
+.article-reference
+.article-author
+.articlepage__banner-container
+.button--share
+.modal-flyout
+SEL,
     ];
 
     /** Tie-break when two candidates have equal plain-text length. */
@@ -437,7 +457,92 @@ SEL,
             $candidates[] = ['source' => 'meta_description', 'content' => $meta];
         }
 
-        return self::pickBestCandidate($candidates);
+        $best = self::pickBestCandidate($candidates);
+        if ($best !== '' && self::isSrfArticleHtml($html)) {
+            $best = self::normalizeSrfArticlePlainText(self::toPlainText($best));
+        }
+
+        return $best;
+    }
+
+    private static function isSrfArticleHtml(string $html): bool
+    {
+        return str_contains($html, 'articlepage__article')
+            || str_contains($html, 'class="articlepage"');
+    }
+
+    /**
+     * Strip share chrome, expandable author/info boxes, and broadcast footers
+     * that Readability sometimes keeps on srf.ch Q&A pages.
+     */
+    public static function normalizeSrfArticlePlainText(string $plain): string
+    {
+        $plain = trim(preg_replace("/\r\n?/", "\n", $plain) ?? $plain);
+        if ($plain === '') {
+            return '';
+        }
+
+        $lines = explode("\n", $plain);
+        $out   = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            if (self::isSrfUiNoiseLine($line)) {
+                continue;
+            }
+            $out[] = $line;
+        }
+
+        while ($out !== [] && self::isSrfLeadingShareLine($out[0])) {
+            array_shift($out);
+        }
+
+        while ($out !== [] && self::isSrfTrailingBroadcastLine($out[count($out) - 1])) {
+            array_pop($out);
+        }
+
+        return trim(implode("\n\n", $out));
+    }
+
+    private static function isSrfUiNoiseLine(string $line): bool
+    {
+        static $exact = [
+            'Teilen',
+            'Schliessen',
+            'Facebook',
+            'Bluesky',
+            'LinkedIn',
+            'WhatsApp',
+            'E-Mail',
+            'Link kopieren',
+            'Legende:',
+        ];
+        if (in_array($line, $exact, true)) {
+            return true;
+        }
+
+        return preg_match(
+            '#^(Personen-Box|Box)\s+(aufklappen|zuklappen)$#ui',
+            $line
+        ) === 1
+            || preg_match('#^Auf (Facebook|Bluesky|LinkedIn|X|WhatsApp) teilen$#ui', $line) === 1
+            || preg_match('#^Per E-Mail teilen$#ui', $line) === 1
+            || preg_match('#^Hier finden Sie weitere Artikel von .+ und Informationen zu (?:seiner|ihrer) Person\.?$#ui', $line) === 1;
+    }
+
+    private static function isSrfLeadingShareLine(string $line): bool
+    {
+        return in_array($line, ['Teilen', 'Schliessen', 'Facebook', 'Bluesky', 'LinkedIn', 'X', 'WhatsApp', 'E-Mail', 'Link kopieren'], true)
+            || preg_match('#^Auf (Facebook|Bluesky|LinkedIn|X|WhatsApp) teilen$#ui', $line) === 1
+            || preg_match('#^Per E-Mail teilen$#ui', $line) === 1;
+    }
+
+    private static function isSrfTrailingBroadcastLine(string $line): bool
+    {
+        return preg_match('#^Echo der Zeit,\s+\d{2}\.\d{2}\.\d{4}#ui', $line) === 1
+            || preg_match('#^;?\s*srf/[a-z]+;#ui', $line) === 1;
     }
 
     /**
