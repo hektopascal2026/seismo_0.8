@@ -27,10 +27,8 @@ final class RssArticleHydrator
         = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
 
     public function __construct(
-        private BaseClient $http = new BaseClient(
-            BaseClient::DEFAULT_TIMEOUT,
-            ScraperFetchService::BROWSER_UA
-        ),
+        /** Default UA ({@see seismoHttpUserAgent()}) — Ringier/Blick block scraper-style Chrome UAs with 403. */
+        private BaseClient $http = new BaseClient(BaseClient::DEFAULT_TIMEOUT),
         private ?BaseClient $crawlerHttp = null,
         private GoogleNewsArticleUrlResolver $googleNewsUrls = new GoogleNewsArticleUrlResolver(),
     ) {

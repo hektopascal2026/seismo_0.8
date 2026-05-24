@@ -19,10 +19,7 @@ final class GoogleNewsArticleUrlResolver
     private const BATCHEXECUTE_URL = 'https://news.google.com/_/DotsSplashUi/data/batchexecute';
 
     public function __construct(
-        private BaseClient $http = new BaseClient(
-            BaseClient::DEFAULT_TIMEOUT,
-            ScraperFetchService::BROWSER_UA
-        ),
+        private BaseClient $http = new BaseClient(BaseClient::DEFAULT_TIMEOUT),
     ) {
     }
 

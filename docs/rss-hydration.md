@@ -57,7 +57,7 @@ Lex/Leg are **not** merged into RSS; they only feel “faster” because each ru
 ### Behaviour
 
 1. RSS parse unchanged (`RssFetchService`).
-2. If `extract_full_text` and plain body &lt; **400** chars → `GET` article `link` via `BaseClient` (redirects followed).
+2. If `extract_full_text` and plain body &lt; **400** chars → `GET` article `link` via `BaseClient` with **`seismoHttpUserAgent()`** (redirects followed). Do not use the Scraper Chrome UA here — **Blick/Ringier returns HTTP 403** for it while allowing the Seismo contact UA.
 3. Run HTML through **`ArticlePageBodyExtractor`**: JSON-LD `articleBody`, Readability (via `ScraperContentExtractor`), `og:description`, meta `description` — store the **longest** candidate (tie-break: JSON-LD → Readability → OG → meta).
 4. On success: replace `content`; leave RSS `description` unless you later want synopsis sync.
 5. On failure: keep thin RSS text; log; do not fail the whole feed.
