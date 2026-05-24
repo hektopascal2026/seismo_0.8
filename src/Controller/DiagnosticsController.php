@@ -253,7 +253,8 @@ final class DiagnosticsController
             header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
             exit;
         }
-        if (!CsrfToken::verifyRequest()) {
+        // Do not rotate: timeline AJAX refresh shares the page with favourite/hide forms.
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             if ($ajax) {
                 $this->jsonRefreshResponse(403, false, 'Session expired — please try again.', 'Session expired — please try again.');
             }

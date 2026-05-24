@@ -179,7 +179,8 @@ final class DashboardController
             header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
             exit;
         }
-        if (!CsrfToken::verifyRequest()) {
+        // Same as mothership refresh_all — do not rotate; other toolbar POSTs reuse this token.
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $msg = 'Session expired — please try again.';
             $_SESSION['error'] = $msg;
             if ($ajax) {

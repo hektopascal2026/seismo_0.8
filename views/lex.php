@@ -551,13 +551,3 @@ if (!empty($deCfg['exclude_document_types']) && is_array($deCfg['exclude_documen
     </script>
 </body>
 </html>
-le.display === 'block') {
-                collapseEntry(card, btn);
-            } else {
-                expandEntry(card, btn);
-            }
-        });
-    })();
-    </script>
-</body>
-</html>

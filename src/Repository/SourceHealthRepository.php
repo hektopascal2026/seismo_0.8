@@ -111,7 +111,7 @@ final class SourceHealthRepository
 
         $sql = "SELECT es.id, es.display_name, es.disabled, es.match_type, es.match_value,
             (
-                SELECT MAX(COALESCE(e.date_received, e.date_sent, e.created_at))
+                SELECT MAX(COALESCE(e.date_utc, e.date_received, e.date_sent, e.created_at))
                   FROM {$tEmail} e
                  WHERE e.from_email IS NOT NULL AND TRIM(e.from_email) <> ''
                    AND (
