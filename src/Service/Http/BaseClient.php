@@ -282,12 +282,10 @@ final class BaseClient
         if ($this->userAgent !== '') {
             return $this->userAgent;
         }
-        $version = defined('SEISMO_VERSION') ? SEISMO_VERSION : 'dev';
-        $contact = defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== ''
-            ? ' (+' . SEISMO_MOTHERSHIP_URL . ')'
-            : '';
 
-        return 'Seismo/' . $version . $contact;
+        return function_exists('seismoHttpUserAgent')
+            ? seismoHttpUserAgent()
+            : 'Seismo/' . (defined('SEISMO_VERSION') ? SEISMO_VERSION : 'dev') . ' (+https://hektopascal.org)';
     }
 
     /**

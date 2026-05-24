@@ -253,12 +253,11 @@ final class ParlPressFetchService
 
     private static function defaultBrowserUserAgent(): string
     {
-        $version = defined('SEISMO_VERSION') ? SEISMO_VERSION : 'dev';
-        $contact = defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== ''
-            ? ' (+' . SEISMO_MOTHERSHIP_URL . ')'
-            : '';
+        $seismo = function_exists('seismoHttpUserAgent')
+            ? seismoHttpUserAgent()
+            : 'Seismo/' . (defined('SEISMO_VERSION') ? SEISMO_VERSION : 'dev') . ' (+https://hektopascal.org)';
 
-        return 'Mozilla/5.0 (compatible; Seismo/' . $version . $contact
+        return 'Mozilla/5.0 (compatible; ' . $seismo
             . ') AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
     }
 

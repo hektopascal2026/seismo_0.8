@@ -44,6 +44,7 @@ define('SEISMO_ENTRIES_DB', 'seismo');
  * Defaults to the current request host + {@see getBasePath()} when unset.
  */
 // define('SEISMO_MOTHERSHIP_URL', 'https://seismo.live');
+// Required for cron/CLI HTTP (e.g. Blick RSS); web preview can auto-detect the current host when unset.
 
 /**
  * Optional per-desk branding override (normally taken from satellites_registry).

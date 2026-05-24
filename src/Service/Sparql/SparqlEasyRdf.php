@@ -26,15 +26,12 @@ final class SparqlEasyRdf
             return;
         }
 
-        $version = defined('SEISMO_VERSION') ? (string)SEISMO_VERSION : 'dev';
-        $contact = defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== ''
-            ? ' (+' . SEISMO_MOTHERSHIP_URL . ')'
-            : '';
-
         $http = new Http\Client();
         $http->setConfig([
-            'timeout' => 120,
-            'useragent' => 'Seismo/' . $version . $contact,
+            'timeout'   => 120,
+            'useragent' => function_exists('seismoHttpUserAgent')
+                ? seismoHttpUserAgent()
+                : 'Seismo/' . (defined('SEISMO_VERSION') ? (string) SEISMO_VERSION : 'dev') . ' (+https://hektopascal.org)',
         ]);
         Http::setDefaultHttpClient($http);
         self::$httpConfigured = true;

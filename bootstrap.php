@@ -244,6 +244,34 @@ function getBasePath(): string
 }
 
 /**
+ * Contact URL embedded in outbound HTTP User-Agent strings (RFC 9309 style).
+ * Some publishers (e.g. Ringier / Blick.ch) return 403 without a (+url) suffix.
+ */
+function seismoHttpContactUrl(): string
+{
+    if (defined('SEISMO_MOTHERSHIP_URL') && SEISMO_MOTHERSHIP_URL !== '') {
+        return rtrim((string) SEISMO_MOTHERSHIP_URL, '/');
+    }
+
+    if (PHP_SAPI !== 'cli' && !empty($_SERVER['HTTP_HOST'])) {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+        $scheme = $https ? 'https' : 'http';
+
+        return $scheme . '://' . (string) $_SERVER['HTTP_HOST'] . getBasePath();
+    }
+
+    return 'https://hektopascal.org';
+}
+
+function seismoHttpUserAgent(): string
+{
+    $version = defined('SEISMO_VERSION') ? (string) SEISMO_VERSION : 'dev';
+
+    return 'Seismo/' . $version . ' (+' . seismoHttpContactUrl() . ')';
+}
+
+/**
  * Normalised path slug (e.g. `security` for /security/). Empty on mothership.
  */
 function seismoSatelliteSlug(): string
