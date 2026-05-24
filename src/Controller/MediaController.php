@@ -6,12 +6,12 @@ namespace Seismo\Controller;
 
 use Seismo\Feed\FeedModule;
 
-/** RSS / Substack / Parl. press admin — {@see FeedModuleHandler} with {@see FeedModule::feeds()}. */
-final class FeedController
+/** Media monitoring admin — {@see FeedModuleHandler} with {@see FeedModule::media()}. */
+final class MediaController
 {
     private function handler(): FeedModuleHandler
     {
-        return new FeedModuleHandler(FeedModule::feeds());
+        return new FeedModuleHandler(FeedModule::media());
     }
 
     public function show(): void
@@ -19,7 +19,7 @@ final class FeedController
         $this->handler()->show();
     }
 
-    public function refreshFeedSources(): void
+    public function refreshMediaSources(): void
     {
         $this->handler()->refreshSources();
     }

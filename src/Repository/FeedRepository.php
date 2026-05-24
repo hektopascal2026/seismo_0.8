@@ -6,6 +6,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use Seismo\Core\Fetcher\ScraperListingUrl;
+use Seismo\Feed\FeedModule;
 
 /**
  * `feeds` table — Slice 8 module admin (Slice 8).
@@ -31,19 +32,28 @@ final class FeedRepository
      *
      * @return list<array<string, mixed>>
      */
-    public function listRssSubstackModuleSources(int $limit, int $offset): array
-    {
+    public function listRssSubstackModuleSources(
+        int $limit,
+        int $offset,
+        string $module = FeedModule::SCOPE_FEEDS
+    ): array {
         $limit  = max(1, min($limit, self::MAX_LIMIT));
         $offset = max(0, $offset);
         $f = entryTable('feeds');
         $sc = entryTable('scraper_configs');
+        $categoryFilter = $module === FeedModule::SCOPE_MEDIA
+            ? " AND IFNULL(f.category, '') = '" . FeedModule::CATEGORY_MEDIA . "' "
+            : " AND IFNULL(f.category, '') NOT IN ('scraper', '" . FeedModule::CATEGORY_MEDIA . "') ";
+        $scraperExclude = $module === FeedModule::SCOPE_MEDIA
+            ? ''
+            : ' AND NOT EXISTS (
+                  SELECT 1 FROM ' . $sc . ' sc
+                  WHERE ' . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0
+              )';
         $sql = "SELECT f.* FROM {$f} f
-            WHERE f.source_type IN ('rss', 'substack', 'parl_press')
-              AND (IFNULL(f.category, '') <> 'scraper')
-              AND NOT EXISTS (
-                  SELECT 1 FROM {$sc} sc
-                  WHERE " . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0
-              )
+            WHERE f.source_type IN ('rss', 'substack', 'parl_press', 'scraper')
+              {$categoryFilter}
+              {$scraperExclude}
             ORDER BY f.id ASC
             LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
 
@@ -78,6 +88,7 @@ final class FeedRepository
      *   link?: string|null,
      *   category?: string|null,
      *   disabled?: int|bool,
+     *   extract_full_text?: int|bool,
      * } $data
      */
     public function insert(array $data): int
@@ -92,10 +103,10 @@ final class FeedRepository
         $sourceType = $this->normaliseSourceType($sourceType);
         $t = entryTable('feeds');
         $sql = "INSERT INTO {$t} (
-            url, source_type, title, description, link, category, disabled,
+            url, source_type, title, description, link, category, disabled, extract_full_text,
             consecutive_failures, last_error, last_error_at, last_fetched
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL
+            ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL
         )";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
@@ -106,6 +117,7 @@ final class FeedRepository
             $data['link'] ?? null,
             $data['category'] ?? null,
             !empty($data['disabled']) ? 1 : 0,
+            !empty($data['extract_full_text']) ? 1 : 0,
         ]);
 
         $newId = (int)$this->pdo->lastInsertId();
@@ -123,6 +135,7 @@ final class FeedRepository
      *   category?: string|null,
      *   disabled?: int|bool,
      *   url?: string,
+     *   extract_full_text?: int|bool,
      * } $data
      */
     public function update(int $id, array $data): void
@@ -146,6 +159,9 @@ final class FeedRepository
         $disabled = array_key_exists('disabled', $data)
             ? (!empty($data['disabled']) ? 1 : 0)
             : (int)($existing['disabled'] ?? 0);
+        $extractFullText = array_key_exists('extract_full_text', $data)
+            ? (!empty($data['extract_full_text']) ? 1 : 0)
+            : (int)($existing['extract_full_text'] ?? 0);
 
         $t   = entryTable('feeds');
         $sql = "UPDATE {$t} SET
@@ -155,7 +171,8 @@ final class FeedRepository
             description = ?,
             link = ?,
             category = ?,
-            disabled = ?
+            disabled = ?,
+            extract_full_text = ?
             WHERE id = ?";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
@@ -166,6 +183,7 @@ final class FeedRepository
             $data['link'] ?? $existing['link'],
             $data['category'] ?? $existing['category'],
             $disabled,
+            $extractFullText,
             $id,
         ]);
     }

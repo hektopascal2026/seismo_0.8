@@ -1435,6 +1435,16 @@ final class EntryRepository
     }
 
     /**
+     * Media module: `feed_items` whose feed has `category = media`.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getMediaModuleTimeline(int $limit, int $offset): array
+    {
+        return $this->buildModuleFeedTimeline('media', $limit, $offset);
+    }
+
+    /**
      * Scraper-backed feed items (matches dashboard “Scraper” filter semantics).
      *
      * @return array<int, array<string, mixed>>
@@ -1536,9 +1546,11 @@ final class EntryRepository
         $sc = entryTable('scraper_configs');
         if ($mode === 'rss_substack') {
             $extra = " AND (f.source_type IN ('rss', 'substack', 'parl_press'))
-                AND (IFNULL(f.category, '') <> 'scraper')
+                AND (IFNULL(f.category, '') NOT IN ('scraper', 'media'))
                 AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE "
             . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . " AND sc.disabled = 0)";
+        } elseif ($mode === 'media') {
+            $extra = " AND IFNULL(f.category, '') = 'media' ";
         } elseif ($mode === 'scraper') {
             $extra = " AND (
                 f.source_type = 'scraper'

@@ -39,7 +39,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | Action | Purpose |
 |--------|---------|
 | `?action=index` | Dashboard timeline |
-| `?action=feeds` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only) |
+| `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only) |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
 | `?action=settings&tab=general` | UI prefs, **source config export** (JSON bundle) |

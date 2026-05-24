@@ -298,6 +298,36 @@ $router->register(
     false
 );
 $router->register(
+    'media',
+    \Seismo\Controller\MediaController::class . '::show',
+    true
+);
+$router->register(
+    'media_save',
+    \Seismo\Controller\MediaController::class . '::save',
+    false
+);
+$router->register(
+    'media_delete',
+    \Seismo\Controller\MediaController::class . '::delete',
+    false
+);
+$router->register(
+    'media_toggle_disabled',
+    \Seismo\Controller\MediaController::class . '::toggleDisabled',
+    false
+);
+$router->register(
+    'media_preview',
+    \Seismo\Controller\MediaController::class . '::preview',
+    false
+);
+$router->register(
+    'refresh_media_sources',
+    \Seismo\Controller\MediaController::class . '::refreshMediaSources',
+    false
+);
+$router->register(
     'scraper',
     \Seismo\Controller\ScraperController::class . '::show',
     true

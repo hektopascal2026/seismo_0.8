@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS feeds (
     link                 VARCHAR(500),
     category             VARCHAR(100) DEFAULT NULL,
     disabled             TINYINT(1)   DEFAULT 0,
+    extract_full_text    TINYINT(1)   NOT NULL DEFAULT 0,  -- RSS: fetch publisher page when body is thin
     consecutive_failures INT          NOT NULL DEFAULT 0,
     last_error           TEXT         DEFAULT NULL,
     last_error_at        DATETIME     DEFAULT NULL,

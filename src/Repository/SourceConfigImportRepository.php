@@ -46,6 +46,7 @@ final class SourceConfigImportRepository
                 $description = array_key_exists('description', $row) ? (string)$row['description'] : null;
                 $link = array_key_exists('link', $row) ? (string)$row['link'] : null;
                 $disabled = !empty($row['disabled']) ? 1 : 0;
+                $extractFullText = !empty($row['extract_full_text']) ? 1 : 0;
 
                 $find = $this->pdo->prepare(
                     "SELECT id FROM {$f}
@@ -60,20 +61,38 @@ final class SourceConfigImportRepository
                 if ($existingId !== false && $existingId !== null) {
                     $update = $this->pdo->prepare(
                         "UPDATE {$f}
-                         SET title = ?, description = ?, link = ?, category = ?, disabled = ?
+                         SET title = ?, description = ?, link = ?, category = ?, disabled = ?, extract_full_text = ?
                          WHERE id = ?"
                     );
-                    $update->execute([$title, $description, $link, $category !== '' ? $category : null, $disabled, (int)$existingId]);
+                    $update->execute([
+                        $title,
+                        $description,
+                        $link,
+                        $category !== '' ? $category : null,
+                        $disabled,
+                        $extractFullText,
+                        (int)$existingId,
+                    ]);
                     $stats['updated']++;
                     continue;
                 }
 
                 $insert = $this->pdo->prepare(
                     "INSERT INTO {$f}
-                    (url, source_type, title, description, link, category, disabled, consecutive_failures, last_error, last_error_at, last_fetched)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL)"
+                    (url, source_type, title, description, link, category, disabled, extract_full_text,
+                     consecutive_failures, last_error, last_error_at, last_fetched)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL)"
                 );
-                $insert->execute([$url, $sourceType, $title, $description, $link, $category !== '' ? $category : null, $disabled]);
+                $insert->execute([
+                    $url,
+                    $sourceType,
+                    $title,
+                    $description,
+                    $link,
+                    $category !== '' ? $category : null,
+                    $disabled,
+                    $extractFullText,
+                ]);
                 $stats['inserted']++;
             }
 

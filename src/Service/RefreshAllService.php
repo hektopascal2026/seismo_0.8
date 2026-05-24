@@ -128,6 +128,27 @@ final class RefreshAllService
     }
 
     /**
+     * Media page: RSS (+ hydration) and scraper sources with `feeds.category = media` only.
+     *
+     * @return array<string, PluginRunResult>
+     * @throws RefreshMutexBusyException
+     */
+    public function runMediaModuleCoreFetchers(bool $force = true): array
+    {
+        /** @var array<string, PluginRunResult> */
+        return $this->executeUnderRefreshMutex(false, function () use ($force): array {
+            $cat = \Seismo\Feed\FeedModule::CATEGORY_MEDIA;
+            $results = [
+                CoreRunner::ID_RSS . ':media'     => $this->coreRunner->runRssForCategory($cat, $force),
+                CoreRunner::ID_SCRAPER . ':media' => $this->coreRunner->runScraperForCategory($cat, $force),
+            ];
+            $this->recipeRescoreAfterIngest();
+
+            return $results;
+        });
+    }
+
+    /**
      * @return array<string, PluginRunResult>
      * @throws RefreshMutexBusyException
      */

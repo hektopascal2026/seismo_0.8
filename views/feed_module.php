@@ -1,16 +1,15 @@
 <?php
 /**
- * RSS / Substack feeds — Items | Feeds (Slice 8).
+ * Shared Feeds / Media module view ({@see \Seismo\Feed\FeedModule}).
  *
+ * @var \Seismo\Feed\FeedModule $feedModule
  * @var array<int, array<string, mixed>> $allItems
  * @var list<array<string, mixed>> $feedsList
  * @var ?array<string, mixed> $editRow
  * @var ?string $pageError
  * @var string $csrfField
- * @var float $alertThreshold
  * @var string $view 'items'|'sources'
  * @var bool $satellite
- * @var string $basePath
  * @var ?string $dashboardError
  * @var list<string> $categorySuggestions
  */
@@ -18,14 +17,16 @@
 declare(strict_types=1);
 
 $basePath = getBasePath();
-$accent     = seismoBrandAccent();
+$accent   = seismoBrandAccent();
 
-$headerTitle    = 'Feeds';
-$headerSubtitle = 'RSS & Substack';
-$activeNav      = 'feeds';
+$headerTitle    = $feedModule->pageTitle;
+$headerSubtitle = $feedModule->subtitle;
+$activeNav      = $feedModule->navKey;
 
-$itemsQs   = 'action=feeds';
-$sourcesQs = 'action=feeds&view=sources';
+$itemsQs   = 'action=' . $feedModule->action;
+$sourcesQs = 'action=' . $feedModule->action . '&view=sources';
+$sourcesHref = $basePath . '/index.php?' . $sourcesQs;
+$emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule->emptyItemsHtml);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,11 +56,11 @@ $sourcesQs = 'action=feeds&view=sources';
         <div class="view-toggle view-toggle-bar">
             <span class="view-toggle-label">View:</span>
             <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>" class="btn <?= $view === 'items' ? 'btn-primary' : 'btn-secondary' ?>">Items</a>
-            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>">Feeds</a>
+            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn <?= $view === 'sources' ? 'btn-primary' : 'btn-secondary' ?>"><?= e($feedModule->sourcesTabLabel) ?></a>
         </div>
 
         <?php if ($satellite && $view === 'sources'): ?>
-            <p class="message message-info">Satellite mode: feed definitions are read-only here. Manage sources on the mothership.</p>
+            <p class="message message-info">Satellite mode: source definitions are read-only here. Manage them on the mothership.</p>
         <?php endif; ?>
 
         <?php if ($pageError !== null): ?>
@@ -79,21 +80,30 @@ $sourcesQs = 'action=feeds&view=sources';
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">
-                    <p>No RSS or Substack items yet. Add a feed under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Feeds</a> or run a refresh from Diagnostics.</p>
+                    <p><?= $emptyItemsMessage ?></p>
                 </div>
             <?php endif; ?>
         </div>
         <?php else: ?>
         <div class="latest-entries-section">
-            <h2 class="section-title">Feed sources</h2>
+            <h2 class="section-title"><?= e($feedModule->isMedia() ? 'Media sources' : 'Feed sources') ?></h2>
+
+            <?php if ($feedModule->sourcesIntroHtml !== ''): ?>
+                <?= $feedModule->sourcesIntroHtml ?>
+            <?php endif; ?>
 
             <?php if (!$satellite): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_save" class="admin-form-card" id="feed-source-form">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($feedModule->saveAction) ?>" class="admin-form-card" id="feed-source-form">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
-                <h3><?= $editRow ? 'Edit feed' : 'Add feed' ?></h3>
+                <?php if ($feedModule->fixedCategory !== null): ?>
+                <input type="hidden" name="category" value="<?= e($feedModule->fixedCategory) ?>">
+                <?php endif; ?>
+                <h3><?= $editRow ? 'Edit source' : 'Add source' ?></h3>
                 <div class="admin-form-field">
-                    <label>URL / API endpoint <input type="text" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="https://… (RSS) or SharePoint list URL for parl_press"></label>
+                    <label>URL <?= $feedModule->isMedia() ? '(RSS / Atom)' : '/ API endpoint' ?>
+                        <input type="text" name="url" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['url'] ?? '')) ?>" placeholder="<?= $feedModule->isMedia() ? 'https://news.google.com/rss/…' : 'https://… (RSS) or SharePoint list URL for parl_press' ?>">
+                    </label>
                 </div>
                 <div class="admin-form-field">
                     <label>Title <input type="text" name="title" required class="search-input" style="width:100%;" value="<?= e((string)($editRow['title'] ?? '')) ?>"></label>
@@ -104,11 +114,13 @@ $sourcesQs = 'action=feeds&view=sources';
                             <?php $st = (string)($editRow['source_type'] ?? 'rss'); ?>
                             <option value="rss" <?= $st === 'rss' ? 'selected' : '' ?>>rss</option>
                             <option value="substack" <?= $st === 'substack' ? 'selected' : '' ?>>substack</option>
+                            <?php if ($feedModule->allowParlPress): ?>
                             <option value="parl_press" <?= $st === 'parl_press' ? 'selected' : '' ?>>parl_press (Bundeshaus Medien)</option>
+                            <?php endif; ?>
                         </select>
                     </label>
                 </div>
-                <?php if (($editRow['source_type'] ?? '') === 'parl_press'): ?>
+                <?php if ($feedModule->allowParlPress && ($editRow['source_type'] ?? '') === 'parl_press'): ?>
                 <div class="admin-help">
                     For <strong>parl_press</strong>, set the SharePoint list <code>…/items</code> OData URL per stream and a clear <strong>Title</strong> (that title becomes the dashboard filter pill). Ingest uses list OData GET only (no search API). <strong>Medienmitteilungen</strong> (<code>guid_prefix</code> <code>parl_mm</code>): <code>https://www.parlament.ch/press-releases/_api/web/lists/getByTitle('Pages')/items</code>. <strong>SDA-Meldungen</strong> (<code>guid_prefix</code> <code>parl_sda</code>): <code>https://www.parlament.ch/de/services/news/_api/web/lists/getByTitle('Seiten')/items</code>. Example Medien JSON: <code>{"lookback_days":90,"limit":50,"language":"de"}</code>. Example SDA JSON: <code>{"lookback_days":365,"limit":80,"language":"de","guid_prefix":"parl_sda"}</code>.
                 </div>
@@ -119,17 +131,27 @@ $sourcesQs = 'action=feeds&view=sources';
                 <div class="admin-form-field">
                     <label>Site link <input type="text" name="link" class="search-input" style="width:100%;" value="<?= e((string)($editRow['link'] ?? '')) ?>"></label>
                 </div>
+                <?php if ($feedModule->showCategoryField): ?>
                 <?php
                 $categoryValue = (string)($editRow['category'] ?? '');
                 $datalistId = 'feed-category-suggestions';
                 require __DIR__ . '/partials/category_field.php';
                 ?>
+                <?php endif; ?>
+                <div class="admin-form-field">
+                    <input type="hidden" name="extract_full_text" value="0">
+                    <label><input type="checkbox" name="extract_full_text" value="1" <?= !empty($editRow['extract_full_text']) ? 'checked' : '' ?>> Extract full text (thin RSS — e.g. Google News)</label>
+                </div>
+                <div class="admin-help" style="margin-top:-0.5rem;margin-bottom:0.75rem;">
+                    When enabled, ingest fetches up to 10 publisher pages per refresh for items whose body is shorter than ~400 characters.
+                    Uses the same article extractor as Scraper. Preview stays RSS-only. See <code>docs/rss-hydration.md</code>.
+                </div>
                 <div class="admin-form-field">
                     <input type="hidden" name="disabled" value="0">
                     <label><input type="checkbox" name="disabled" value="1" <?= !empty($editRow['disabled']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
                 <div class="admin-form-actions">
-                    <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add feed' ?></button>
+                    <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add' ?></button>
                     <button type="button" class="btn btn-secondary" id="feed-preview-btn">Preview (dry run)</button>
                     <?php if ($editRow): ?>
                         <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
@@ -150,6 +172,7 @@ $sourcesQs = 'action=feeds&view=sources';
                         <th>ID</th>
                         <th>Title</th>
                         <th>Type</th>
+                        <?php if ($feedModule->isMedia()): ?><th>Full text</th><?php endif; ?>
                         <th>Active</th>
                         <th>URL</th>
                         <th></th>
@@ -162,26 +185,29 @@ $sourcesQs = 'action=feeds&view=sources';
                         <td><?= (int)$row['id'] ?></td>
                         <td><?= e((string)$row['title']) ?></td>
                         <td><?= e((string)($row['source_type'] ?? '')) ?></td>
+                        <?php if ($feedModule->isMedia()): ?>
+                        <td><?= !empty($row['extract_full_text']) ? '<span class="pill pill-on">hydrate</span>' : '<span class="pill pill-off">rss only</span>' ?></td>
+                        <?php endif; ?>
                         <td><?= $feedActive ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
                         <td class="data-table-url"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
-                                <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <a href="<?= e($basePath) ?>/index.php?action=<?= e($feedModule->action) ?>&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
                                 <?php if ($feedActive): ?>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_toggle_disabled" class="admin-inline-form">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($feedModule->toggleAction) ?>" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
-                                    <button type="submit" class="btn btn-warning btn-sm" title="Stop fetching this feed until re-enabled">Disable</button>
+                                    <button type="submit" class="btn btn-warning btn-sm" title="Stop fetching until re-enabled">Disable</button>
                                 </form>
                                 <?php else: ?>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_toggle_disabled" class="admin-inline-form">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($feedModule->toggleAction) ?>" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
                                     <button type="submit" class="btn btn-success btn-sm">Enable</button>
                                 </form>
                                 <?php endif; ?>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=feed_delete" class="admin-inline-form" onsubmit="return confirm('Delete this feed and its items?');">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($feedModule->deleteAction) ?>" class="admin-inline-form" onsubmit="return confirm('Delete this source and its items?');">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
@@ -194,7 +220,7 @@ $sourcesQs = 'action=feeds&view=sources';
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($feedsList === []): ?>
-                    <tr class="data-table-empty"><td colspan="6">No feeds defined.</td></tr>
+                    <tr class="data-table-empty"><td colspan="<?= $feedModule->isMedia() ? 7 : 6 ?>">No sources defined.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
@@ -210,7 +236,7 @@ $sourcesQs = 'action=feeds&view=sources';
         var outCards = document.getElementById('feed-preview-cards');
         var outErr = document.getElementById('feed-preview-error');
         var outWarn = document.getElementById('feed-preview-warnings');
-        var previewUrl = <?= json_encode($basePath . '/index.php?action=feed_preview', JSON_UNESCAPED_SLASHES) ?>;
+        var previewUrl = <?= json_encode($basePath . '/index.php?action=' . $feedModule->previewAction, JSON_UNESCAPED_SLASHES) ?>;
 
         if (form && btnPreview && panel) {
             btnPreview.addEventListener('click', function() {

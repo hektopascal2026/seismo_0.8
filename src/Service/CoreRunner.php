@@ -11,6 +11,7 @@ use Seismo\Core\Mail\GmailApiInboxClient;
 use Seismo\Core\Mail\GmailOAuthService;
 use Seismo\Core\Mail\MailConfigKeys;
 use Seismo\Core\Fetcher\ParlPressFetchService;
+use Seismo\Core\Fetcher\RssArticleHydrator;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Repository\EmailIngestRepository;
@@ -90,6 +91,7 @@ final class CoreRunner
         private SystemConfigRepository $magnituConfig,
         private EmailIngestRepository $emailIngest,
         private RssFetchService $rss = new RssFetchService(),
+        private RssArticleHydrator $rssHydrator = new RssArticleHydrator(),
         private ScraperFetchService $scraper = new ScraperFetchService(),
         private ParlPressFetchService $parlPress = new ParlPressFetchService(),
         private ImapMailFetchService $imapMail = new ImapMailFetchService(),
@@ -169,8 +171,7 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $items = $this->rss->fetchFeedItems($url);
-                        $n = $this->feeds->upsertFeedItems($id, $items);
+                        $n = $this->ingestRssFeed($feed);
                         $total += $n;
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
@@ -239,8 +240,7 @@ final class CoreRunner
                 $maxId = max($maxId, $id);
                 $attempted++;
                 try {
-                    $items = $this->rss->fetchFeedItems($url);
-                    $n = $this->feeds->upsertFeedItems($id, $items);
+                    $n = $this->ingestRssFeed($feed);
                     $total += $n;
                     $this->feeds->touchFeedSuccess($id);
                 } catch (\Throwable $e) {
@@ -849,6 +849,162 @@ final class CoreRunner
         $this->record(self::ID_SCRAPER, $r, $duration);
 
         return $r;
+    }
+
+    /**
+     * Single-pass RSS refresh for one `feeds.category` (Media module button).
+     */
+    public function runRssForCategory(string $category, bool $force): PluginRunResult
+    {
+        if (isSatellite()) {
+            $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
+            $this->record(self::ID_RSS, $r, 0);
+
+            return $r;
+        }
+
+        $category = trim($category);
+        if ($category === '') {
+            return PluginRunResult::error('Category is required for targeted RSS refresh.');
+        }
+
+        $start = (int)(microtime(true) * 1000);
+        $total = 0;
+        $attempted = 0;
+        $failed = 0;
+        try {
+            $offset = 0;
+            $page   = 200;
+            while (true) {
+                $batch = $this->feeds->listFeedsForRssRefreshInCategory($category, $page, $offset);
+                if ($batch === []) {
+                    break;
+                }
+                foreach ($batch as $feed) {
+                    $id = (int)($feed['id'] ?? 0);
+                    if ($id <= 0) {
+                        continue;
+                    }
+                    $attempted++;
+                    try {
+                        $total += $this->ingestRssFeed($feed);
+                        $this->feeds->touchFeedSuccess($id);
+                    } catch (\Throwable $e) {
+                        $failed++;
+                        error_log('Seismo core:rss:' . $category . ' feed ' . $id . ': ' . $e->getMessage());
+                        $this->feeds->touchFeedFailure($id, $e->getMessage());
+                    }
+                }
+                if (count($batch) < $page) {
+                    break;
+                }
+                $offset += $page;
+            }
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+        } catch (\Throwable $e) {
+            error_log('Seismo core:rss:' . $category . ': ' . $e->getMessage());
+            $r = PluginRunResult::error($e->getMessage());
+        }
+        $duration = max(0, (int)(microtime(true) * 1000) - $start);
+        $this->record(self::ID_RSS, $r, $duration);
+
+        return $r;
+    }
+
+    /**
+     * Single-pass scraper refresh for one `feeds.category` (Media module button).
+     */
+    public function runScraperForCategory(string $category, bool $force): PluginRunResult
+    {
+        if (isSatellite()) {
+            $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
+            $this->record(self::ID_SCRAPER, $r, 0);
+
+            return $r;
+        }
+
+        $category = trim($category);
+        if ($category === '') {
+            return PluginRunResult::error('Category is required for targeted scraper refresh.');
+        }
+
+        $this->backfillScraperFeedsSafely();
+
+        $start = (int)(microtime(true) * 1000);
+        $total = 0;
+        $attempted = 0;
+        $failed = 0;
+        try {
+            $offset = 0;
+            $page   = 50;
+            while (true) {
+                $batch = $this->feeds->listFeedsForScraperRefreshInCategory($category, $page, $offset);
+                if ($batch === []) {
+                    break;
+                }
+                foreach ($batch as $feed) {
+                    $id = (int)($feed['id'] ?? 0);
+                    $url = trim((string)($feed['url'] ?? ''));
+                    if ($id <= 0 || $url === '') {
+                        continue;
+                    }
+                    $attempted++;
+                    try {
+                        $out = $this->scraper->fetchScraperFeedItems(
+                            $url,
+                            trim((string)($feed['scraper_link_pattern'] ?? '')),
+                            trim((string)($feed['scraper_date_selector'] ?? '')),
+                            trim((string)($feed['scraper_exclude_selectors'] ?? '')),
+                            ScraperFetchService::PRODUCTION_MAX_ARTICLES,
+                            true
+                        );
+                        if ($out['fatal_error'] !== null) {
+                            throw new \RuntimeException((string)$out['fatal_error']);
+                        }
+                        foreach ($out['warnings'] as $w) {
+                            error_log('Seismo core:scraper:' . $category . ' feed ' . $id . ': ' . $w);
+                        }
+                        $total += $this->feeds->upsertFeedItems($id, $out['items']);
+                        $this->feeds->touchFeedSuccess($id);
+                    } catch (\Throwable $e) {
+                        $failed++;
+                        error_log('Seismo core:scraper:' . $category . ' feed ' . $id . ': ' . $e->getMessage());
+                        $this->feeds->touchFeedFailure($id, $e->getMessage());
+                    }
+                }
+                if (count($batch) < $page) {
+                    break;
+                }
+                $offset += $page;
+            }
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+        } catch (\Throwable $e) {
+            error_log('Seismo core:scraper:' . $category . ': ' . $e->getMessage());
+            $r = PluginRunResult::error($e->getMessage());
+        }
+        $duration = max(0, (int)(microtime(true) * 1000) - $start);
+        $this->record(self::ID_SCRAPER, $r, $duration);
+
+        return $r;
+    }
+
+    /**
+     * @param array<string, mixed> $feed Row from {@see FeedItemRepository::listFeedsForRssRefresh()}
+     */
+    private function ingestRssFeed(array $feed): int
+    {
+        $id  = (int)($feed['id'] ?? 0);
+        $url = trim((string)($feed['url'] ?? ''));
+        if ($id <= 0 || $url === '') {
+            return 0;
+        }
+
+        $items = $this->rss->fetchFeedItems($url);
+        if ((int)($feed['extract_full_text'] ?? 0) === 1) {
+            $items = $this->rssHydrator->hydrateThinItems($items, true);
+        }
+
+        return $this->feeds->upsertFeedItems($id, $items);
     }
 
     /**
