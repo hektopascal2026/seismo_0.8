@@ -32,7 +32,8 @@ Rows are still in `feeds` / `feed_items`; only the admin UI and refresh scope di
 | Media routes | `MediaController`, `?action=media_*` |
 | View | `views/feed_module.php` |
 | Timeline SQL | `EntryRepository::getMediaModuleTimeline()` |
-| Targeted refresh | `CoreRunner::runRssForCategory()` / `runScraperForCategory()` |
+| Targeted refresh | `CoreRunner::runRssForCategory()` / `runScraperForCategory()` — logged as `core:rss:media` / `core:scraper:media` |
+| Diagnostics | Settings → Diagnostics → **Media module** (separate cards + Refresh now) |
 
 ## Satellite impact
 

@@ -14,6 +14,7 @@ use Seismo\Core\Fetcher\ParlPressFetchService;
 use Seismo\Core\Fetcher\RssArticleHydrator;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Core\Fetcher\ScraperFetchService;
+use Seismo\Feed\FeedModule;
 use Seismo\Repository\EmailIngestRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\PluginRunLogRepository;
@@ -36,12 +37,18 @@ final class CoreRunner
     public const ID_SCRAPER    = 'core:scraper';
     public const ID_MAIL       = 'core:mail';
 
+    /** Targeted refresh for {@see FeedModule::CATEGORY_MEDIA} only (Media module / Diagnostics). */
+    public const ID_RSS_MEDIA     = 'core:rss:media';
+    public const ID_SCRAPER_MEDIA = 'core:scraper:media';
+
     /** @var array<string, int> seconds between successful runs when not forced */
     private const THROTTLE_SECONDS = [
-        self::ID_RSS         => 900,
-        self::ID_PARL_PRESS  => 900,
-        self::ID_SCRAPER     => 1800,
-        self::ID_MAIL        => 900,
+        self::ID_RSS            => 900,
+        self::ID_PARL_PRESS     => 900,
+        self::ID_SCRAPER        => 1800,
+        self::ID_MAIL           => 900,
+        self::ID_RSS_MEDIA      => 900,
+        self::ID_SCRAPER_MEDIA  => 1800,
     ];
 
     /**
@@ -856,14 +863,16 @@ final class CoreRunner
      */
     public function runRssForCategory(string $category, bool $force): PluginRunResult
     {
+        $category = trim($category);
+        $logId    = self::pluginLogIdForCategoryRss($category);
+
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
-            $this->record(self::ID_RSS, $r, 0);
+            $this->record($logId, $r, 0);
 
             return $r;
         }
 
-        $category = trim($category);
         if ($category === '') {
             return PluginRunResult::error('Category is required for targeted RSS refresh.');
         }
@@ -906,7 +915,7 @@ final class CoreRunner
             $r = PluginRunResult::error($e->getMessage());
         }
         $duration = max(0, (int)(microtime(true) * 1000) - $start);
-        $this->record(self::ID_RSS, $r, $duration);
+        $this->record($logId, $r, $duration);
 
         return $r;
     }
@@ -916,14 +925,16 @@ final class CoreRunner
      */
     public function runScraperForCategory(string $category, bool $force): PluginRunResult
     {
+        $category = trim($category);
+        $logId    = self::pluginLogIdForCategoryScraper($category);
+
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
-            $this->record(self::ID_SCRAPER, $r, 0);
+            $this->record($logId, $r, 0);
 
             return $r;
         }
 
-        $category = trim($category);
         if ($category === '') {
             return PluginRunResult::error('Category is required for targeted scraper refresh.');
         }
@@ -983,9 +994,23 @@ final class CoreRunner
             $r = PluginRunResult::error($e->getMessage());
         }
         $duration = max(0, (int)(microtime(true) * 1000) - $start);
-        $this->record(self::ID_SCRAPER, $r, $duration);
+        $this->record($logId, $r, $duration);
 
         return $r;
+    }
+
+    private static function pluginLogIdForCategoryRss(string $category): string
+    {
+        return trim($category) === FeedModule::CATEGORY_MEDIA
+            ? self::ID_RSS_MEDIA
+            : self::ID_RSS . ':' . trim($category);
+    }
+
+    private static function pluginLogIdForCategoryScraper(string $category): string
+    {
+        return trim($category) === FeedModule::CATEGORY_MEDIA
+            ? self::ID_SCRAPER_MEDIA
+            : self::ID_SCRAPER . ':' . trim($category);
     }
 
     /**

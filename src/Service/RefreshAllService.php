@@ -139,8 +139,8 @@ final class RefreshAllService
         return $this->executeUnderRefreshMutex(false, function () use ($force): array {
             $cat = \Seismo\Feed\FeedModule::CATEGORY_MEDIA;
             $results = [
-                CoreRunner::ID_RSS . ':media'     => $this->coreRunner->runRssForCategory($cat, $force),
-                CoreRunner::ID_SCRAPER . ':media' => $this->coreRunner->runScraperForCategory($cat, $force),
+                CoreRunner::ID_RSS_MEDIA     => $this->coreRunner->runRssForCategory($cat, $force),
+                CoreRunner::ID_SCRAPER_MEDIA => $this->coreRunner->runScraperForCategory($cat, $force),
             ];
             $this->recipeRescoreAfterIngest();
 
@@ -504,6 +504,27 @@ final class RefreshAllService
         /** @var PluginRunResult */
         return $this->executeUnderRefreshMutex($refreshMutexHeldExternally || !$chunkStateCore, function () use ($coreId, $force): PluginRunResult {
             $result = $this->coreRunner->runOne($coreId, $force);
+            $this->recipeRescoreAfterIngest();
+
+            return $result;
+        });
+    }
+
+    /**
+     * Media Diagnostics / module refresh: one of {@see CoreRunner::ID_RSS_MEDIA} or {@see CoreRunner::ID_SCRAPER_MEDIA}.
+     *
+     * @throws RefreshMutexBusyException
+     */
+    public function runMediaCoreFetcher(string $coreId, bool $force = true): PluginRunResult
+    {
+        /** @var PluginRunResult */
+        return $this->executeUnderRefreshMutex(false, function () use ($coreId, $force): PluginRunResult {
+            $cat = \Seismo\Feed\FeedModule::CATEGORY_MEDIA;
+            $result = match ($coreId) {
+                CoreRunner::ID_RSS_MEDIA     => $this->coreRunner->runRssForCategory($cat, $force),
+                CoreRunner::ID_SCRAPER_MEDIA => $this->coreRunner->runScraperForCategory($cat, $force),
+                default                      => PluginRunResult::error('Unknown media core fetcher id: ' . $coreId),
+            };
             $this->recipeRescoreAfterIngest();
 
             return $result;

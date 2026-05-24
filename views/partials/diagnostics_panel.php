@@ -6,6 +6,7 @@
  * @var string $basePath
  * @var array<string, array<string, mixed>> $diagStatus
  * @var array<string, array<string, mixed>> $diagCoreStatus
+ * @var array<string, array<string, mixed>> $diagMediaStatus
  * @var ?string $diagLoadError
  * @var ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>} $diagTestResult
  * @var array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>> $diagRunHistory
@@ -54,6 +55,7 @@ $diagSourceHealthStatus = static function (string $status): array {
     };
 };
 
+$diagMediaStatus = $diagMediaStatus ?? [];
 $diagSourceHealthFeeds = $diagSourceHealthFeeds ?? [];
 $diagSourceHealthMail = $diagSourceHealthMail ?? [];
 $diagSourceHealthStaleDays = (int)($diagSourceHealthStaleDays ?? 14);
@@ -194,68 +196,42 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
         </div>
         <?php endif; ?>
 
-        <?php if ($diagCoreStatus !== []): ?>
-        <div class="latest-entries-section module-section-spaced">
-            <h2 class="section-title">Core fetchers (<?= count($diagCoreStatus) ?>)</h2>
-            <p class="admin-intro">RSS (incl. Substack), Parliament press (<code>core:parl_press</code>), scraper, and mail runs share <code>plugin_run_log</code> under synthetic ids (<code>core:*</code>). They run automatically with “Refresh all now” and CLI cron. For RSS / Parl. press / scraper, the card is <strong>green</strong> only when every enabled source in that batch succeeded; <strong>yellow</strong> (<em>partial</em>) when some failed; <strong>red</strong> when all tried sources failed (or the runner threw).</p>
-                <?php foreach ($diagCoreStatus as $id => $s): ?>
-                <?php
-                    $cardClass = $diagCardClass($s['last']);
-                    $lastStatus = $s['last'] === null ? 'never run' : (string)($s['last']['status'] ?? '');
-                    $lastStatusLabel = $s['last'] === null ? 'never run' : $diagRunStatusLabel($lastStatus);
-                    $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
-                    $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
-                ?>
-                <div class="entry-card <?= e($cardClass) ?>">
-                    <div class="entry-header">
-                        <span class="entry-tag entry-tag--surface">
-                            <strong><?= e($s['label']) ?></strong>
-                            <span class="entry-muted">(<?= e($s['id']) ?>)</span>
-                        </span>
-                        <span class="entry-tag entry-tag--meta">family: <?= e((string)$s['entry_type']) ?></span>
-                        <span class="entry-tag entry-tag--meta">
-                            throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
-                        </span>
-                        <span class="entry-tag entry-tag--surface entry-tag--emphasis">last: <?= e($lastStatusLabel) ?></span>
-                        <?php if ($s['is_throttled']): ?>
-                            <span class="entry-tag entry-tag--warn-pill">throttled</span>
-                        <?php endif; ?>
-                    </div>
-                    <div class="entry-content entry-content--mono-sm">
-                        <?php if ($s['last'] === null): ?>
-                            Never run.
-                        <?php else: ?>
-                            last_run: <?= e((string)$lastWhen) ?>
-                            · items: <?= (int)$s['last']['item_count'] ?>
-                            · duration: <?= (int)$s['last']['duration_ms'] ?> ms
-                            <?php if ($nextWhen !== null): ?>
-                                · next allowed: <?= e($nextWhen) ?>
-                            <?php endif; ?>
-                        <?php endif; ?>
-                        <?php if (!empty($s['last']['error_message'])): ?>
-                            <?php
-                            $isPartialRun = (($s['last']['status'] ?? '') === 'warn');
-                            $runMsgClass = $isPartialRun ? 'diag-inline-warn' : 'diag-inline-error';
-                            $runMsgLabel = $isPartialRun ? 'partial' : 'error';
-                            ?>
-                            <div class="<?= e($runMsgClass) ?>"><?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="entry-actions diag-actions">
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form">
-                            <?= $csrfField ?>
-                            <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
-                            <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
-                        </form>
-                    </div>
-                    <?php
-                    $hist = $diagRunHistory[$id] ?? [];
-                    require __DIR__ . '/plugin_recent_runs.php';
-                    ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
+        <?php
+        $diagFetcherSectionVars = static fn (
+            string $title,
+            string $introHtml,
+            array $cards,
+        ): array => [
+            'sectionTitle'        => $title,
+            'sectionIntroHtml'    => $introHtml,
+            'diagCards'           => $cards,
+            'diagRunHistory'      => $diagRunHistory,
+            'csrfField'           => $csrfField,
+            'basePath'            => $basePath,
+            'satellite'           => $satellite,
+            'diagCardClass'       => $diagCardClass,
+            'diagRunStatusLabel'  => $diagRunStatusLabel,
+        ];
+        extract($diagFetcherSectionVars(
+            'Media module',
+            'Targeted refresh for <code>feeds.category = media</code> only (RSS with optional hydration + media scrapers). '
+            . 'Same as <a href="' . e($basePath) . '/index.php?action=media&amp;view=sources">Media → Refresh</a>; '
+            . 'does not run general Feeds or full <code>core:rss</code> / <code>core:scraper</code> cycles. '
+            . 'Logged under <code>core:rss:media</code> and <code>core:scraper:media</code>.',
+            $diagMediaStatus,
+        ));
+        require __DIR__ . '/diagnostics_fetcher_section.php';
+
+        extract($diagFetcherSectionVars(
+            'Core fetchers',
+            'RSS (incl. Substack, excluding <code>category = media</code>), Parliament press (<code>core:parl_press</code>), '
+            . 'scraper (non-media listings), and mail share <code>plugin_run_log</code> under <code>core:*</code>. '
+            . 'They run with “Refresh all now” and CLI cron. Cards are <strong>green</strong> when every source in the batch succeeded; '
+            . '<strong>yellow</strong> (<em>partial</em>) when some failed; <strong>red</strong> when all failed or the runner threw.',
+            $diagCoreStatus,
+        ));
+        require __DIR__ . '/diagnostics_fetcher_section.php';
+        ?>
 
         <div class="latest-entries-section">
             <h2 class="section-title">Plugins (<?= count($diagStatus) ?>)</h2>

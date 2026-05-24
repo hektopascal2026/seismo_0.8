@@ -56,6 +56,7 @@ final class DiagnosticsController
      * @return array{
      *   diagStatus: array<string, array<string, mixed>>,
      *   diagCoreStatus: array<string, array<string, mixed>>,
+     *   diagMediaStatus: array<string, array<string, mixed>>,
      *   diagLoadError: ?string,
      *   diagTestResult: ?array{id: string, count: int, error: ?string, items: list<array<string, mixed>>},
      *   diagRunHistory: array<string, list<array{run_at: \DateTimeImmutable, status: string, item_count: int, error_message: ?string, duration_ms: int}>>,
@@ -77,16 +78,30 @@ final class DiagnosticsController
             CoreRunner::ID_MAIL        => ['label' => 'Mail (IMAP)', 'min_interval' => 900, 'entry_type' => 'emails'],
         ];
 
-        $status     = [];
-        $coreStatus = [];
-        $loadError  = null;
-        $runHistory = [];
-        $pdo        = null;
+        $mediaMeta = [
+            CoreRunner::ID_RSS_MEDIA     => [
+                'label'        => 'Media — RSS & hydration',
+                'min_interval' => 1800,
+                'entry_type'   => 'feed_items',
+            ],
+            CoreRunner::ID_SCRAPER_MEDIA => [
+                'label'        => 'Media — scraper listings',
+                'min_interval' => 3600,
+                'entry_type'   => 'feed_items',
+            ],
+        ];
+
+        $status      = [];
+        $coreStatus  = [];
+        $mediaStatus = [];
+        $loadError   = null;
+        $runHistory  = [];
+        $pdo         = null;
 
         try {
             $pdo        = getDbConnection();
             $log        = new PluginRunLogRepository($pdo);
-            $ids        = array_merge(array_keys($coreMeta), array_keys($plugins));
+            $ids        = array_merge(array_keys($coreMeta), array_keys($mediaMeta), array_keys($plugins));
             $latest     = $log->latestPerPlugin($ids);
             $runHistory = $log->recentForPlugins($ids, 8);
         } catch (\Throwable $e) {
@@ -98,28 +113,8 @@ final class DiagnosticsController
 
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 
-        foreach ($coreMeta as $id => $meta) {
-            $row = $latest[$id] ?? null;
-            $minInterval = (int)$meta['min_interval'];
-            $nextAllowed = null;
-            if ($row !== null && $minInterval > 0) {
-                if (in_array($row['status'], ['ok', 'warn'], true)
-                    || ($id === CoreRunner::ID_MAIL && $row['status'] === 'error')) {
-                    $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
-                }
-            }
-            $coreStatus[$id] = [
-                'id'           => $id,
-                'label'        => $meta['label'],
-                'entry_type'   => $meta['entry_type'],
-                'config_key'   => '—',
-                'min_interval' => $minInterval,
-                'last'         => $row,
-                'next_allowed' => $nextAllowed,
-                'is_throttled' => $nextAllowed !== null && $nextAllowed > $now,
-                'is_core'      => true,
-            ];
-        }
+        $coreStatus  = self::buildFetcherStatusMap($coreMeta, $latest, $now, mailErrorCountsAsThrottle: true);
+        $mediaStatus = self::buildFetcherStatusMap($mediaMeta, $latest, $now, mailErrorCountsAsThrottle: false);
 
         foreach ($plugins as $id => $plugin) {
             $row = $latest[$id] ?? null;
@@ -165,6 +160,7 @@ final class DiagnosticsController
         return [
             'diagStatus'              => $status,
             'diagCoreStatus'          => $coreStatus,
+            'diagMediaStatus'         => $mediaStatus,
             'diagLoadError'           => $loadError,
             'diagTestResult'          => is_array($testResult) ? $testResult : null,
             'diagRunHistory'          => $runHistory,
@@ -398,8 +394,12 @@ final class DiagnosticsController
 
         $id = trim((string)($_POST['plugin_id'] ?? ''));
         $coreIds = [CoreRunner::ID_RSS, CoreRunner::ID_PARL_PRESS, CoreRunner::ID_SCRAPER, CoreRunner::ID_MAIL];
+        $mediaCoreIds = [CoreRunner::ID_RSS_MEDIA, CoreRunner::ID_SCRAPER_MEDIA];
         $registry = new PluginRegistry();
-        if ($id === '' || (!in_array($id, $coreIds, true) && !$registry->has($id))) {
+        if ($id === ''
+            || (!in_array($id, $coreIds, true)
+                && !in_array($id, $mediaCoreIds, true)
+                && !$registry->has($id))) {
             $_SESSION['error'] = 'Unknown plugin or core fetcher id.';
             $this->redirectToDiagnostics();
 
@@ -409,9 +409,13 @@ final class DiagnosticsController
         try {
             $pdo = getDbConnection();
             $refresh = RefreshAllService::boot($pdo);
-            $result = in_array($id, $coreIds, true)
-                ? $refresh->runCoreFetcher($id, true)
-                : $refresh->runPlugin($id, true);
+            if (in_array($id, $mediaCoreIds, true)) {
+                $result = $refresh->runMediaCoreFetcher($id, true);
+            } elseif (in_array($id, $coreIds, true)) {
+                $result = $refresh->runCoreFetcher($id, true);
+            } else {
+                $result = $refresh->runPlugin($id, true);
+            }
         } catch (RefreshMutexBusyException $e) {
             $_SESSION['error'] = $e->getMessage();
             $this->redirectToDiagnostics();
@@ -549,5 +553,44 @@ final class DiagnosticsController
     {
         header('Location: ' . getBasePath() . '/index.php?action=settings&tab=diagnostics', true, 303);
         exit;
+    }
+
+    /**
+     * @param array<string, array{label: string, min_interval: int, entry_type: string}> $metaById
+     * @param array<string, ?array{status: string, run_at: \DateTimeImmutable, item_count: int, error_message: ?string, duration_ms: int}> $latest
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private static function buildFetcherStatusMap(
+        array $metaById,
+        array $latest,
+        DateTimeImmutable $now,
+        bool $mailErrorCountsAsThrottle,
+    ): array {
+        $out = [];
+        foreach ($metaById as $id => $meta) {
+            $row = $latest[$id] ?? null;
+            $minInterval = (int)$meta['min_interval'];
+            $nextAllowed = null;
+            if ($row !== null && $minInterval > 0) {
+                if (in_array($row['status'], ['ok', 'warn'], true)
+                    || ($mailErrorCountsAsThrottle && $id === CoreRunner::ID_MAIL && $row['status'] === 'error')) {
+                    $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+                }
+            }
+            $out[$id] = [
+                'id'           => $id,
+                'label'        => $meta['label'],
+                'entry_type'   => $meta['entry_type'],
+                'config_key'   => '—',
+                'min_interval' => $minInterval,
+                'last'         => $row,
+                'next_allowed' => $nextAllowed,
+                'is_throttled' => $nextAllowed !== null && $nextAllowed > $now,
+                'is_core'      => true,
+            ];
+        }
+
+        return $out;
     }
 }

@@ -225,7 +225,8 @@ final class SettingsController
             try {
                 $diagBundle     = DiagnosticsController::prepareViewData();
                 $diagStatus     = $diagBundle['diagStatus'];
-                $diagCoreStatus = $diagBundle['diagCoreStatus'];
+                $diagCoreStatus  = $diagBundle['diagCoreStatus'];
+                $diagMediaStatus = $diagBundle['diagMediaStatus'];
                 $diagLoadError  = $diagBundle['diagLoadError'];
                 $diagTestResult = $diagBundle['diagTestResult'];
                 $diagRunHistory            = $diagBundle['diagRunHistory'];
