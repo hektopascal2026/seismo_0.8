@@ -99,8 +99,8 @@ Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed
 
 **Not `parl_press`:**
 
-1. If `source_category` is non-empty and ≠ `unsortiert` → pill text = **category** (e.g. “NZZ”).
-2. Else → pill text = **`source_name` / feed title**.
+1. If `source_category` is non-empty and is an **outlet bucket** (not `unsortiert`, `media`, or `scraper`) → pill text = **category** (e.g. “NZZ”).
+2. Else → pill text = **`source_name` / feed title** (Media module sources always use the feed title).
 3. Truncate at **32 characters** + `…`.
 
 **`parl_press`:** two pills (see below). Uses `feed_items.guid` and `feeds.category` on the dashboard; `guid` is not in the current Magnitu export — coordinate if Magnitu needs SDA vs MM without heuristics.

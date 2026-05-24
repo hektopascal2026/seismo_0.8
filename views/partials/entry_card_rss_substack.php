@@ -44,21 +44,7 @@ $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-subs
                                     <span class="entry-tag entry-tag--parl"><?= $parlIsSda ? '🇨🇭 Parl SDA' : '🇨🇭 Parl MM' ?></span>
                                     <span class="entry-tag entry-tag--meta"><?= htmlspecialchars($parlMetaLabel) ?></span>
                                 <?php else: ?>
-                                    <?php
-                                        $feedCategory = trim((string)($item['feed_category'] ?? ''));
-                                        $feedLabel = '';
-                                        if ($feedCategory !== '' && $feedCategory !== 'unsortiert') {
-                                            $feedLabel = $feedCategory;
-                                        } else {
-                                            $feedLabel = trim((string)($item['feed_title'] ?? ''));
-                                            if ($feedLabel === '') {
-                                                $feedLabel = trim((string)($item['feed_name'] ?? ''));
-                                            }
-                                        }
-                                        if (mb_strlen($feedLabel) > 32) {
-                                            $feedLabel = mb_substr($feedLabel, 0, 32) . '…';
-                                        }
-                                    ?>
+                                    <?php $feedLabel = seismo_feed_item_pill_label($item); ?>
                                     <?php if ($feedLabel !== ''): ?>
                                         <span class="entry-tag <?= $feedCatTagClass ?>"><?= htmlspecialchars($feedLabel) ?></span>
                                     <?php endif; ?>
