@@ -233,17 +233,18 @@ final class LexContentBackfillService
                 continue;
             }
 
-            $textCid = LexLegifranceContentFetcher::textCidFromRow($row);
-            if ($textCid === null) {
+            $consultId = LexLegifranceContentFetcher::consultIdFromRow($row);
+            if ($consultId === null) {
                 $skipped++;
                 $this->noteReason($reasons, 'no_jorf_text_cid');
                 continue;
             }
 
-            $content = $fetcher->fetchPlainTextForTextCid($textCid);
+            $reason = null;
+            $content = $fetcher->fetchPlainTextForConsultId($consultId, $reason);
             if ($content === null || $content === '') {
                 $skipped++;
-                $this->noteReason($reasons, 'empty_corpus');
+                $this->noteReason($reasons, $reason ?? 'empty_corpus');
                 continue;
             }
 

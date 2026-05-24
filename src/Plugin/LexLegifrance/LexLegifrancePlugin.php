@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Core\Lex\LexLegifranceApiClient;
 use Seismo\Core\Lex\LexLegifranceContentFetcher;
+use Seismo\Core\Lex\LexLegifranceSearchTextExtractor;
 use Seismo\Core\Lex\LexPlainText;
 use Seismo\Service\SourceFetcherInterface;
 
@@ -130,6 +131,10 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
                 }
                 $mapped = $this->mapSearchHit($hit, $allowedNatures);
                 if ($mapped !== null) {
+                    $searchCorpus = LexLegifranceSearchTextExtractor::corpusFromSearchHit($hit);
+                    if ($searchCorpus !== null) {
+                        $mapped['content'] = $searchCorpus;
+                    }
                     $rows[] = $mapped;
                 }
                 if (count($rows) >= $limitTotal) {
@@ -213,17 +218,14 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
         }
         $titles = $hit['titles'] ?? [];
         $titleStr = '';
-        $id = '';
         if (is_array($titles) && $titles !== []) {
             $first = $titles[0];
             if (is_array($first)) {
                 $titleStr = trim((string)($first['title'] ?? ''));
-                $id = trim((string)($first['id'] ?? ''));
             }
         }
-        if ($id === '') {
-            $id = trim((string)($hit['jorfText'] ?? $hit['nor'] ?? ''));
-        }
+
+        $id = LexLegifranceContentFetcher::jorfTextCidFromSearchHit($hit);
         if ($id === '') {
             return null;
         }

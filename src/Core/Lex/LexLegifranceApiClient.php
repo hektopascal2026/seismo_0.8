@@ -40,10 +40,24 @@ final class LexLegifranceApiClient
         );
     }
 
-  /**
-   * @param array<string, mixed> $body
-   */
+    /**
+     * @param array<string, mixed> $body
+     */
     public function postJson(string $path, array $body): mixed
+    {
+        $result = $this->postJsonResponse($path, $body);
+        if ($result['status'] >= 400) {
+            throw new \RuntimeException($result['error'] ?? ('HTTP ' . $result['status']));
+        }
+
+        return $result['decoded'];
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     * @return array{status: int, decoded: mixed, error: ?string}
+     */
+    public function postJsonResponse(string $path, array $body): array
     {
         $path = '/' . ltrim($path, '/');
         $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -51,7 +65,7 @@ final class LexLegifranceApiClient
             throw new \RuntimeException('Failed to encode Légifrance request JSON.');
         }
 
-        return $this->httpRequest('POST', $this->apiBase . $path, [
+        return $this->httpRequestResponse('POST', $this->apiBase . $path, [
             'Authorization: Bearer ' . $this->getAccessToken(),
             'Content-Type: application/json',
             'Accept: application/json',
@@ -71,12 +85,13 @@ final class LexLegifranceApiClient
             'scope' => 'openid',
         ], '', '&', PHP_QUERY_RFC3986);
 
-        $decoded = $this->httpRequest('POST', $this->tokenUrl, [
+        $result = $this->httpRequestResponse('POST', $this->tokenUrl, [
             'Content-Type: application/x-www-form-urlencoded',
             'Accept: application/json',
         ], $payload);
 
-        if (!is_array($decoded) || empty($decoded['access_token']) || !is_string($decoded['access_token'])) {
+        $decoded = $result['decoded'];
+        if ($result['status'] >= 400 || !is_array($decoded) || empty($decoded['access_token']) || !is_string($decoded['access_token'])) {
             throw new \RuntimeException('Légifrance OAuth token response missing access_token.');
         }
 
@@ -88,8 +103,9 @@ final class LexLegifranceApiClient
 
     /**
      * @param list<string> $headers
+     * @return array{status: int, decoded: mixed, error: ?string}
      */
-    private function httpRequest(string $method, string $url, array $headers, string $body): mixed
+    private function httpRequestResponse(string $method, string $url, array $headers, string $body): array
     {
         if (!function_exists('curl_init')) {
             throw new \RuntimeException('PHP curl extension is required for Légifrance API calls.');
@@ -112,12 +128,23 @@ final class LexLegifranceApiClient
         $err = curl_error($ch);
         curl_close($ch);
         if ($raw === false) {
-            throw new \RuntimeException('HTTP request failed for ' . $url . ($err !== '' ? ': ' . $err : ''));
-        }
-        if ($status >= 400) {
-            throw new \RuntimeException('HTTP ' . $status . ' from ' . $url . ': ' . mb_substr((string)$raw, 0, 500));
+            return [
+                'status' => 0,
+                'decoded' => null,
+                'error' => 'HTTP request failed for ' . $url . ($err !== '' ? ': ' . $err : ''),
+            ];
         }
 
-        return json_decode((string)$raw, true);
+        $decoded = json_decode((string)$raw, true);
+        $error   = null;
+        if ($status >= 400) {
+            $error = 'HTTP ' . $status . ' from ' . $url . ': ' . mb_substr((string)$raw, 0, 500);
+        }
+
+        return [
+            'status' => $status,
+            'decoded' => $decoded,
+            'error' => $error,
+        ];
     }
 }
