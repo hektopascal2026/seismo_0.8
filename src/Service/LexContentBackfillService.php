@@ -241,7 +241,12 @@ final class LexContentBackfillService
             }
 
             $reason = null;
-            $content = $fetcher->fetchPlainTextForConsultId($consultId, $reason);
+            $title  = trim((string)($row['title'] ?? ''));
+            $content = $fetcher->fetchPlainTextForConsultId(
+                $consultId,
+                $reason,
+                $title !== '' ? $title : null,
+            );
             if ($content === null || $content === '') {
                 $skipped++;
                 $this->noteReason($reasons, $reason ?? 'empty_corpus');

@@ -151,7 +151,7 @@ final class LexItemRepository
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $table = entryTable('lex_items');
         $ph    = implode(',', array_fill(0, count($sources), '?'));
-        $sql   = "SELECT id, celex, work_uri, eurlex_url, source, description
+        $sql   = "SELECT id, celex, work_uri, eurlex_url, source, title, description
                     FROM {$table}
                    WHERE source IN ({$ph})
                      AND (content IS NULL OR TRIM(content) = '')

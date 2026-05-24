@@ -39,7 +39,11 @@ final class LexLegifranceContentFetcher
             if ($consultId === null) {
                 continue;
             }
-            $content = $this->fetchPlainTextForConsultId($consultId);
+            $content = $this->fetchPlainTextForConsultId(
+                $consultId,
+                null,
+                trim((string)($row['title'] ?? '')) !== '' ? trim((string)$row['title']) : null,
+            );
             if ($content === null) {
                 continue;
             }
@@ -56,7 +60,7 @@ final class LexLegifranceContentFetcher
         return $this->fetchPlainTextForConsultId($textCid, $failureReason);
     }
 
-    public function fetchPlainTextForConsultId(string $consultId, ?string &$failureReason = null): ?string
+    public function fetchPlainTextForConsultId(string $consultId, ?string &$failureReason = null, ?string $titleHint = null): ?string
     {
         $consultId = trim($consultId);
         if ($consultId === '') {
@@ -65,29 +69,34 @@ final class LexLegifranceContentFetcher
             return null;
         }
 
-        if (self::isJorfTextCid($consultId)) {
-            $plain = $this->fetchFromJorfConsult($consultId, $failureReason);
-            if ($plain !== null) {
-                return $plain;
-            }
-        } elseif (str_starts_with($consultId, 'LEGITEXT')) {
-            $textId = explode('_', $consultId)[0];
-            $plain  = $this->fetchFromLegiPart($textId, $failureReason);
-            if ($plain !== null) {
-                return $plain;
-            }
-        }
-
-        $hit = $this->searchHitByConsultId($consultId);
+        // Search works on PISTE plans that block /consult/* (HTTP 403).
+        $hit = $this->searchHitByConsultId($consultId, $titleHint);
         if ($hit !== null) {
             $plain = LexLegifranceSearchTextExtractor::corpusFromSearchHit($hit);
             if ($plain !== null && $plain !== '') {
                 return $plain;
             }
+            $failureReason = 'empty_corpus';
+        }
+
+        $consultFailure = null;
+        if (self::isJorfTextCid($consultId)) {
+            $plain = $this->fetchFromJorfConsult($consultId, $consultFailure);
+            if ($plain !== null) {
+                return $plain;
+            }
+        } elseif (str_starts_with(strtoupper($consultId), 'LEGITEXT')) {
+            $textId = explode('_', $consultId)[0];
+            $plain  = $this->fetchFromLegiPart($textId, $consultFailure);
+            if ($plain !== null) {
+                return $plain;
+            }
         }
 
         if ($failureReason === null) {
-            $failureReason = 'empty_corpus';
+            $failureReason = ($hit === null && $consultFailure === 'api_error')
+                ? 'search_miss'
+                : ($consultFailure ?? 'search_miss');
         }
 
         return null;
@@ -235,20 +244,71 @@ final class LexLegifranceContentFetcher
     /**
      * @return array<string, mixed>|null
      */
-    private function searchHitByConsultId(string $consultId): ?array
+    private function searchHitByConsultId(string $consultId, ?string $titleHint = null): ?array
     {
-        $typeChamp = 'ALL';
-        $value     = $consultId;
-        if (preg_match('/^[A-Z]{4}\d{9}[A-Z]$/', strtoupper($consultId)) === 1) {
-            $typeChamp = 'NOR';
-            $value     = strtoupper($consultId);
+        $consultId = strtoupper(trim($consultId));
+        $queries   = $this->searchQueriesForConsultId($consultId, $titleHint);
+
+        foreach ($queries as $query) {
+            $hits = $this->searchHits(
+                (string)$query['typeChamp'],
+                (string)$query['typeRecherche'],
+                (string)$query['valeur'],
+                (int)$query['pageSize'],
+            );
+            foreach ($hits as $hit) {
+                if ($this->hitMatchesConsultId($hit, $consultId)) {
+                    return $hit;
+                }
+            }
+            if (($query['typeChamp'] ?? '') === 'NOR' && count($hits) === 1) {
+                return $hits[0];
+            }
         }
 
+        return null;
+    }
+
+    /**
+     * @return list<array{typeChamp: string, typeRecherche: string, valeur: string, pageSize: int}>
+     */
+    private function searchQueriesForConsultId(string $consultId, ?string $titleHint): array
+    {
+        $queries = [];
+
+        if (preg_match('/^[A-Z]{4}\d{9}[A-Z]$/', $consultId) === 1) {
+            $queries[] = ['typeChamp' => 'NOR', 'typeRecherche' => 'EXACTE', 'valeur' => $consultId, 'pageSize' => 5];
+        }
+
+        if (self::isJorfTextCid($consultId)) {
+            $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'EXACTE', 'valeur' => $consultId, 'pageSize' => 10];
+            $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'UN_DES_MOTS', 'valeur' => $consultId, 'pageSize' => 10];
+            if (preg_match('/JORFTEXT0*(\d+)$/i', $consultId, $m)) {
+                $queries[] = ['typeChamp' => 'NUM', 'typeRecherche' => 'EXACTE', 'valeur' => $m[1], 'pageSize' => 10];
+            }
+        } elseif (str_starts_with($consultId, 'LEGITEXT')) {
+            $textId = explode('_', $consultId)[0];
+            $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'EXACTE', 'valeur' => $textId, 'pageSize' => 10];
+        }
+
+        $titleHint = trim((string)$titleHint);
+        if ($titleHint !== '' && mb_strlen($titleHint) >= 12) {
+            $queries[] = ['typeChamp' => 'TITLE', 'typeRecherche' => 'UN_DES_MOTS', 'valeur' => $titleHint, 'pageSize' => 10];
+        }
+
+        return $queries;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function searchHits(string $typeChamp, string $typeRecherche, string $valeur, int $pageSize): array
+    {
         $body = [
             'fond' => 'JORF',
             'recherche' => [
                 'pageNumber' => 1,
-                'pageSize' => 1,
+                'pageSize' => max(1, min($pageSize, 20)),
                 'sort' => 'SIGNATURE_DATE_DESC',
                 'typePagination' => 'DEFAUT',
                 'operateur' => 'ET',
@@ -256,9 +316,9 @@ final class LexLegifranceContentFetcher
                     'typeChamp' => $typeChamp,
                     'operateur' => 'ET',
                     'criteres' => [[
-                        'typeRecherche' => 'EXACTE',
+                        'typeRecherche' => $typeRecherche,
                         'operateur' => 'ET',
-                        'valeur' => $value,
+                        'valeur' => $valeur,
                     ]],
                 ]],
             ],
@@ -266,14 +326,43 @@ final class LexLegifranceContentFetcher
 
         $resp = $this->client->postJsonResponse('/search', $body);
         if ($resp['status'] >= 400 || !is_array($resp['decoded'])) {
-            return null;
+            return [];
         }
         $results = $resp['decoded']['results'] ?? [];
-        if (!is_array($results) || !is_array($results[0] ?? null)) {
-            return null;
+
+        return is_array($results) ? array_values(array_filter($results, 'is_array')) : [];
+    }
+
+    /**
+     * @param array<string, mixed> $hit
+     */
+    private function hitMatchesConsultId(array $hit, string $consultId): bool
+    {
+        $want = strtoupper(trim($consultId));
+
+        $jorfText = strtoupper(trim((string)($hit['jorfText'] ?? '')));
+        if ($jorfText !== '' && ($jorfText === $want || str_contains($want, $jorfText) || str_contains($jorfText, $want))) {
+            return true;
         }
 
-        return $results[0];
+        $nor = strtoupper(trim((string)($hit['nor'] ?? '')));
+        if ($nor !== '' && $nor === $want) {
+            return true;
+        }
+
+        foreach ((array)($hit['titles'] ?? []) as $titleRow) {
+            if (!is_array($titleRow)) {
+                continue;
+            }
+            foreach (['id', 'cid'] as $key) {
+                $candidate = strtoupper(trim((string)($titleRow[$key] ?? '')));
+                if ($candidate !== '' && $candidate === $want) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
