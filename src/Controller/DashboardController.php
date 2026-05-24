@@ -27,20 +27,6 @@ final class DashboardController
      */
     private const MAX_OFFSET = 5000;
 
-    /**
-     * Session cache for the three `SELECT DISTINCT` queries that feed the
-     * filter pills on the dashboard. Per `consolidation-plan.md` the option
-     * list changes at most once per refresh cycle, so a one-minute cache is
-     * ample and removes three queries from the hot path.
-     *
-     * Kept in the controller (not the repository) so {@see EntryRepository}
-     * stays SQL-only; the cache degrades gracefully when the session isn't
-     * active (e.g. CLI or an error in early session bootstrap).
-     */
-    private const FILTER_PILL_CACHE_KEY = '_seismo_filter_pill_opts_v4';
-    private const FILTER_PILL_CACHE_AT  = '_seismo_filter_pill_at';
-    private const FILTER_PILL_CACHE_TTL = 60;
-
     /** Session key for timeline newest vs favourites-only view. */
     private const SESSION_TIMELINE_VIEW = '_seismo_timeline_view';
 
@@ -64,7 +50,7 @@ final class DashboardController
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
-            $pillOpts        = $this->getFilterPillOptionsCached($repo);
+            $pillOpts        = $repo->getFilterPillOptions();
             $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
@@ -124,7 +110,7 @@ final class DashboardController
         try {
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
-            $pillOpts        = $this->getFilterPillOptionsCached($repo);
+            $pillOpts        = $repo->getFilterPillOptions();
             $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
@@ -457,40 +443,6 @@ final class DashboardController
         }
 
         return self::DEFAULT_LIMIT_FALLBACK;
-    }
-
-    /**
-     * One-minute memo of `$repo->getFilterPillOptions()` in `$_SESSION`.
-     * Falls through to the raw repo call when the session isn't writable.
-     *
-     * @return array{
-     *   feed_categories: list<string>,
-     *   feed_category_labels?: array<string, string>,
-     *   lex_sources: list<string>,
-     *   lex_source_labels?: array<string, string>,
-     *   email_tags: list<string>
-     * }
-     */
-    private function getFilterPillOptionsCached(EntryRepository $repo): array
-    {
-        if (session_status() === PHP_SESSION_ACTIVE
-            && isset($_SESSION[self::FILTER_PILL_CACHE_KEY], $_SESSION[self::FILTER_PILL_CACHE_AT])
-            && (time() - (int)$_SESSION[self::FILTER_PILL_CACHE_AT]) < self::FILTER_PILL_CACHE_TTL
-        ) {
-            /** @var array{feed_categories: list<string>, feed_category_labels?: array<string, string>, lex_sources: list<string>, lex_source_labels?: array<string, string>, email_tags: list<string>} $cached */
-            $cached = $_SESSION[self::FILTER_PILL_CACHE_KEY];
-
-            return $cached;
-        }
-
-        $options = $repo->getFilterPillOptions();
-
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            $_SESSION[self::FILTER_PILL_CACHE_KEY] = $options;
-            $_SESSION[self::FILTER_PILL_CACHE_AT]  = time();
-        }
-
-        return $options;
     }
 
     private function clampOffset(mixed $raw): int

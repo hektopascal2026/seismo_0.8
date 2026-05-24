@@ -10,7 +10,3 @@ fetcher/mail/config.php
 fetcher/.DS_Store
 .DS_Store
 /logs/
-newsbridge/config.json
-newsbridge/config.local.php
-newsbridge/data
-newsbridge/feeds/*.xml

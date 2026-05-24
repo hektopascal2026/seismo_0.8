@@ -59,7 +59,6 @@ views/            PHP templates
 assets/           CSS, images
 docs/             db-schema.sql (mothership), db-schema-local.sql (satellite scores DB)
 vendor/           Composer dependencies (committed for deploy without Composer on host)
-newsbridge/       Optional RSS bridge sidecar
 tests/            PHPUnit
 ```
 

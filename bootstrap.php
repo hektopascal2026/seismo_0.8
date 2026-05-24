@@ -257,7 +257,7 @@ function seismoNormaliseSatelliteSlug(string $slug): string
 function seismoReservedSatelliteSlugs(): array
 {
     return [
-        'assets', 'vendor', 'src', 'config', 'docs', 'tests', 'newsbridge', 'storage',
+        'assets', 'vendor', 'src', 'config', 'docs', 'tests', 'storage',
         'logs', 'bin', 'views', 'migrate', 'index', 'health',
     ];
 }
