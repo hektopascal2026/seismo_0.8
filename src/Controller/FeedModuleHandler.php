@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Core\Fetcher\RssArticleHydrator;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Feed\FeedModule;
 use Seismo\Http\CsrfToken;
@@ -20,7 +21,7 @@ final class FeedModuleHandler
 {
     private const LIST_LIMIT = 50;
 
-    private const PREVIEW_MAX_ITEMS = 5;
+    public const PREVIEW_MAX_ITEMS = 5;
 
     public function __construct(private readonly FeedModule $module)
     {
@@ -273,12 +274,28 @@ final class FeedModuleHandler
         $rows     = array_slice($rows, 0, self::PREVIEW_MAX_ITEMS);
         $loopType = $sourceType === 'substack' ? 'substack' : 'feed';
 
+        $warnings = [];
+        $hydrate  = ((string)($_POST['extract_full_text'] ?? '0')) === '1';
+        if ($hydrate) {
+            $hydrator = new RssArticleHydrator();
+            $rows     = $hydrator->hydrateThinItems($rows, true, self::PREVIEW_MAX_ITEMS);
+            foreach ($rows as $row) {
+                if (!$hydrator->needsHydration($row)) {
+                    continue;
+                }
+                $title = trim((string)($row['title'] ?? ''));
+                $warnings[] = $title !== ''
+                    ? 'Still thin after article fetch: ' . $title
+                    : 'Still thin after article fetch for one preview item.';
+            }
+        }
+
         $html = $this->renderRssPreviewCards($rows, $feedTitle, $category, $loopType, $url, $sourceType);
         echo json_encode(
             [
                 'ok'       => true,
                 'html'     => $html,
-                'warnings' => [],
+                'warnings' => $warnings,
             ],
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         );
