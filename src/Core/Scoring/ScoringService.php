@@ -98,13 +98,8 @@ final class ScoringService
     /**
      * @param array<string, mixed> $recipe
      *
-     * Lex items rarely carry a real body in `lex_items` (no full document text
-     * stored), so we prefer `description` when the fetcher populated one:
-     * Légifrance `resumePrincipal`, RechtBund RSS body, Fedlex draft consultation
-     * lines, and EU EuroVoc subject synopsis. Falls back to the categorical
-     * `document_type` string for sources that still don't fill description
-     * (Fedlex consolidated acts, Jus). Pre-existing recipe scores are not
-     * touched — only rows surfaced by {@see EntryScoreRepository::getUnscoredLexItems()}.
+     * Lex: recipe scoring uses `description` (synopsis) only — full document text
+     * lives in `content` for Magnitu export once fetchers populate it.
      */
     private function rescoreLexItems(array $recipe, int $version): int
     {
@@ -173,9 +168,11 @@ final class ScoringService
         $rows = $this->scores->getUnscoredCalendarEvents(self::BATCH_LIMIT);
         $done = 0;
         foreach ($rows as $row) {
-            $body = (string)(($row['content'] !== null && $row['content'] !== '')
-                ? $row['content']
-                : ($row['description'] ?? ''));
+            // Recipe scoring uses synopsis only — full `content` is for Magnitu export.
+            $body = trim((string)($row['description'] ?? ''));
+            if ($body === '') {
+                $body = (string)($row['event_type'] ?? '');
+            }
             $sourceType = 'calendar_' . (string)($row['source'] ?? 'unknown');
             $result = RecipeScorer::score($recipe, (string)($row['title'] ?? ''), $body, $sourceType);
             if ($result === null) {

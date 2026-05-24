@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS lex_items (
     id            INT AUTO_INCREMENT PRIMARY KEY,
     celex         VARCHAR(255) NOT NULL UNIQUE,
     title         TEXT,
-    description   TEXT         DEFAULT NULL,
+    description   TEXT         DEFAULT NULL,        -- short synopsis (UI + recipe scoring)
+    content       LONGTEXT     DEFAULT NULL,        -- full document text (Magnitu export)
     document_date DATE         DEFAULT NULL,
     document_type VARCHAR(100) DEFAULT NULL,
     eurlex_url    VARCHAR(500) DEFAULT NULL,
@@ -202,7 +203,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     external_id    VARCHAR(255) DEFAULT NULL,
     title          TEXT,
     description    TEXT,
-    content        TEXT,
+    content        LONGTEXT,
     event_date     DATE         DEFAULT NULL,
     event_end_date DATE         DEFAULT NULL,
     event_type     VARCHAR(50)  DEFAULT NULL,

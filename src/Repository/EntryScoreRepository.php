@@ -349,7 +349,7 @@ final class EntryScoreRepository
     public function getUnscoredCalendarEvents(int $limit): array
     {
         $limit = $this->clampLimit($limit);
-        $sql = 'SELECT ce.id, ce.title, ce.description, ce.content, ce.source, ce.event_type
+        $sql = 'SELECT ce.id, ce.title, ce.description, ce.source, ce.event_type
                   FROM ' . entryTable('calendar_events') . ' ce
                  WHERE NOT EXISTS (
                        SELECT 1 FROM entry_scores es

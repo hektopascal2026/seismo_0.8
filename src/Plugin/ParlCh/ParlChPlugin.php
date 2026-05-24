@@ -177,9 +177,9 @@ final class ParlChPlugin implements SourceFetcherInterface
             $out[] = [
                 'source'         => 'parliament_ch',
                 'external_id'    => $externalId,
-                'title'          => mb_substr($title, 0, 65535),
-                'description'    => mb_substr($description, 0, 65535),
-                'content'        => mb_substr($content, 0, 65535),
+                'title'          => $title,
+                'description'    => $description,
+                'content'        => $content,
                 'event_date'     => $eventDate,
                 'event_end_date' => null,
                 'event_type'     => $eventType,

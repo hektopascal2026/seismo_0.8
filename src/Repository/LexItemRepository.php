@@ -108,12 +108,13 @@ final class LexItemRepository
 
         $table = entryTable('lex_items');
         $sql = 'INSERT INTO ' . $table . ' (
-                celex, title, description, document_date, document_type,
+                celex, title, description, content, document_date, document_type,
                 eurlex_url, work_uri, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
                 description = VALUES(description),
+                content = COALESCE(VALUES(content), content),
                 document_date = VALUES(document_date),
                 document_type = VALUES(document_type),
                 eurlex_url = VALUES(eurlex_url),
@@ -131,10 +132,17 @@ final class LexItemRepository
                 } else {
                     $desc = null;
                 }
+                $content = $row['content'] ?? null;
+                if ($content !== null && $content !== '') {
+                    $content = (string)$content;
+                } else {
+                    $content = null;
+                }
                 $stmt->execute([
                     (string)$row['celex'],
                     (string)($row['title'] ?? ''),
                     $desc,
+                    $content,
                     $this->normalizeDate($row['document_date'] ?? null),
                     (string)($row['document_type'] ?? ''),
                     (string)($row['eurlex_url'] ?? ''),

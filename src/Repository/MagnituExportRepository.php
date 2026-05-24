@@ -148,7 +148,7 @@ final class MagnituExportRepository
     public function listLexItemsSince(?string $since, int $limit): array
     {
         $limit = $this->clampLimit($limit);
-        $sql = 'SELECT id, celex, title, description, document_date, document_type, eurlex_url, source
+        $sql = 'SELECT id, celex, title, description, content, document_date, document_type, eurlex_url, source
                   FROM ' . entryTable('lex_items');
         $params = [];
         if ($since !== null && $since !== '') {
@@ -330,8 +330,8 @@ final class MagnituExportRepository
     }
 
     /**
-     * Lightweight lex_items for the labelling queue. Same columns as the
-     * sync method — lex rows are already small, only `$offset` is new.
+     * Lightweight lex_items for the labelling queue. Skips `content` (corpus).
+     * Same synopsis columns as {@see listLexItemsSince()} minus the body field.
      *
      * @return array<int, array<string, mixed>>
      */

@@ -17,7 +17,7 @@ use Seismo\Repository\SystemConfigRepository;
 final class MigrationRunner
 {
     /** Highest schema version shipped by built-in migrations. */
-    public const LATEST_VERSION = Migration022ReenableScraperFeeds::VERSION;
+    public const LATEST_VERSION = Migration023LexContentLongtext::VERSION;
 
     private SystemConfigRepository $systemConfig;
 
@@ -127,6 +127,7 @@ final class MigrationRunner
             Migration020EmailsHidden::VERSION => new Migration020EmailsHidden(),
             Migration021ScraperListingUrlCanonical::VERSION => new Migration021ScraperListingUrlCanonical(),
             Migration022ReenableScraperFeeds::VERSION => new Migration022ReenableScraperFeeds(),
+            Migration023LexContentLongtext::VERSION => new Migration023LexContentLongtext(),
         ];
 
         ksort($migrations, SORT_NUMERIC);

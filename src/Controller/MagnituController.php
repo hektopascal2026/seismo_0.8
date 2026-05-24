@@ -434,14 +434,18 @@ final class MagnituController
         if ($desc === '') {
             $desc = trim((string)($row['document_type'] ?? '') . ' | ' . (string)($row['celex'] ?? ''), ' |');
         }
+        $content = trim((string)($row['content'] ?? ''));
+        if ($content === '') {
+            $content = (string)($row['description'] ?? '') !== ''
+                ? (string)$row['description']
+                : (string)($row['title'] ?? '');
+        }
         return [
             'entry_type'      => 'lex_item',
             'entry_id'        => (int)$row['id'],
             'title'           => (string)($row['title'] ?? ''),
             'description'     => $desc,
-            'content'         => (string)($row['description'] ?? '') !== ''
-                                    ? (string)$row['description']
-                                    : (string)($row['title'] ?? ''),
+            'content'         => $content,
             'link'            => (string)($row['eurlex_url'] ?? ''),
             'author'          => '',
             'published_date'  => $row['document_date'] ?? null,

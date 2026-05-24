@@ -48,20 +48,48 @@ final class EntryRepository
         'ch_bvger' => 'BVGE',
     ];
 
+    /** Max body characters loaded into PHP for dashboard cards (emails + feeds). */
+    private const TIMELINE_BODY_CHARS = 2000;
+
     /**
      * Explicit feed_items column list for JOIN queries — never `fi.*` so joined
      * `feeds` columns can never collide with item fields in associative fetchers.
+     *
+     * `content` is SUBSTRINGed so a MEDIUMTEXT newsletter body cannot OOM the
+     * dashboard merge (see {@see TIMELINE_BODY_CHARS}).
      */
-    private const SQL_FEED_ITEMS_JOIN_SELECT = 'fi.id, fi.feed_id, fi.guid, fi.title, fi.link, fi.description, fi.content, fi.author,
-            fi.published_date, fi.content_hash, fi.hidden, fi.cached_at';
+    private const SQL_FEED_ITEMS_JOIN_SELECT = 'fi.id, fi.feed_id, fi.guid, fi.title, fi.link, fi.description,
+            SUBSTRING(fi.content, 1, ' . self::TIMELINE_BODY_CHARS . ') AS content,
+            fi.author, fi.published_date, fi.content_hash, fi.hidden, fi.cached_at';
+
+    /**
+     * Dashboard / search reads for lex_items — omits `content` (Magnitu corpus).
+     */
+    private const SQL_LEX_ITEMS_TIMELINE_SELECT = 'id, celex, title, description, document_date, document_type,
+            eurlex_url, work_uri, source, fetched_at, created_at';
+
+    /**
+     * Dashboard / search reads for calendar_events — omits full `content` corpus.
+     */
+    private const SQL_CALENDAR_EVENTS_TIMELINE_SELECT = 'id, source, external_id, title, description, event_date,
+            event_end_date, event_type, status, council, url, metadata, fetched_at, created_at';
+
+    /** @var array<int, string> */
+    private const EMAIL_TIMELINE_BODY_COLUMNS = ['text_body', 'html_body', 'body_text', 'body_html'];
+
+    /** @var array<int, string> */
+    private const EMAIL_TIMELINE_SCALAR_COLUMNS = [
+        'id', 'subject', 'derived_title', 'from_email', 'from_name', 'from_addr',
+        'metadata', 'hidden', 'date_utc', 'date_received', 'date_sent', 'created_at',
+    ];
 
     /**
      * Hard cap on the final timeline size.
      *
      * Per-source queries each take up to {@see mergePerSourceFetchCap()}
-     * ({@see MAX_LIMIT} rows each) before merge+sort, so worst-case memory stays roughly
-     *   5 families × MAX_LIMIT rows × ~10 KB/row ≈ 10 MB
-     * — comfortably under the 128 MB shared-hosting default.
+     * ({@see MAX_LIMIT} rows each) before merge+sort. Heavy columns (`content`,
+     * email bodies) are truncated or omitted in SQL so worst-case PHP memory stays
+     * bounded on a 128 MB shared host.
      */
     public const MAX_LIMIT = 200;
 
@@ -75,6 +103,9 @@ final class EntryRepository
      * @var array<string, array<int, string>>
      */
     private array $cachedEmailDateColumns = [];
+
+    /** Memo for {@see sqlEmailTimelineSelect()}. */
+    private ?string $cachedEmailTimelineSelect = null;
 
     public function __construct(private PDO $pdo)
     {
@@ -674,7 +705,7 @@ final class EntryRepository
         if ($emailTags !== []) {
             $st   = entryTable('sender_tags');
             $ph   = implode(',', array_fill(0, count($emailTags), '?'));
-            $sql  = 'SELECT e.*, (
+            $sql  = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -703,7 +734,7 @@ final class EntryRepository
         if ($excludedTags !== []) {
             $st   = entryTable('sender_tags');
             $ph   = implode(',', array_fill(0, count($excludedTags), '?'));
-            $sql  = 'SELECT e.*, (
+            $sql  = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -725,7 +756,7 @@ final class EntryRepository
         }
 
         $st  = entryTable('sender_tags');
-        $sql = 'SELECT e.*, (
+        $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                 SELECT st0.tag FROM ' . $st . ' st0
                 WHERE st0.from_email = e.from_email
                   AND st0.removed_at IS NULL
@@ -764,7 +795,7 @@ final class EntryRepository
             }
         }
         $where = $clauses === [] ? '' : ' WHERE ' . implode(' AND ', $clauses);
-        $sql   = 'SELECT * FROM ' . entryTable('lex_items') . $where . '
+        $sql   = 'SELECT ' . self::SQL_LEX_ITEMS_TIMELINE_SELECT . ' FROM ' . entryTable('lex_items') . $where . '
                 ORDER BY document_date DESC, created_at DESC
                 LIMIT ' . (int)$limit;
 
@@ -790,7 +821,7 @@ final class EntryRepository
     private function fetchCalendarEvents(int $limit): array
     {
         $cal = new CalendarEventRepository($this->pdo);
-        $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
+        $sql = 'SELECT ' . self::SQL_CALENDAR_EVENTS_TIMELINE_SELECT . ' FROM ' . entryTable('calendar_events') . '
                 WHERE ' . $cal->legFeedVisibilityWhereClause() . '
                 ORDER BY ' . $cal->legFeedAtOrderExpression() . '
                 LIMIT ' . (int)$limit;
@@ -954,7 +985,7 @@ final class EntryRepository
         if ($emailTags !== []) {
             $st  = entryTable('sender_tags');
             $ph  = implode(',', array_fill(0, count($emailTags), '?'));
-            $sql = 'SELECT e.*, (
+            $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -984,7 +1015,7 @@ final class EntryRepository
         if ($excludedTags !== []) {
             $st  = entryTable('sender_tags');
             $ph  = implode(',', array_fill(0, count($excludedTags), '?'));
-            $sql = 'SELECT e.*, (
+            $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -1008,7 +1039,7 @@ final class EntryRepository
         }
 
         $st  = entryTable('sender_tags');
-        $sql = 'SELECT e.*, (
+        $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                 SELECT st0.tag FROM ' . $st . ' st0
                 WHERE st0.from_email = e.from_email
                   AND st0.removed_at IS NULL
@@ -1094,7 +1125,7 @@ final class EntryRepository
         if ($filter !== null && $filter->excludeAllLexItems) {
             return [];
         }
-        $params   = [$term, $term];
+        $params   = [$term, $term, $term];
         $lexWhere = '';
         if ($filter !== null && $filter->lexSources !== []) {
             $ph        = implode(',', array_fill(0, count($filter->lexSources), '?'));
@@ -1109,8 +1140,8 @@ final class EntryRepository
                 $params    = array_merge($params, $excl);
             }
         }
-        $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
-                WHERE (title LIKE ? OR description LIKE ?)
+        $sql = 'SELECT ' . self::SQL_LEX_ITEMS_TIMELINE_SELECT . ' FROM ' . entryTable('lex_items') . '
+                WHERE (title LIKE ? OR description LIKE ? OR content LIKE ?)
                 ' . $lexWhere . '
                 ORDER BY document_date DESC, created_at DESC
                 LIMIT ' . (int)$limit;
@@ -1124,7 +1155,7 @@ final class EntryRepository
     private function fetchCalendarEventsSearch(string $term, int $limit): array
     {
         $cal = new CalendarEventRepository($this->pdo);
-        $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
+        $sql = 'SELECT ' . self::SQL_CALENDAR_EVENTS_TIMELINE_SELECT . ' FROM ' . entryTable('calendar_events') . '
                 WHERE (' . $cal->legFeedVisibilityWhereClause() . ')
                   AND (title LIKE ? OR description LIKE ? OR content LIKE ?)
                 ORDER BY ' . $cal->legFeedAtOrderExpression() . '
@@ -1173,7 +1204,7 @@ final class EntryRepository
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
             $st  = entryTable('sender_tags');
-            $sql = 'SELECT e.*, (
+            $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -1203,7 +1234,7 @@ final class EntryRepository
         $out = [];
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            $sql = 'SELECT * FROM ' . entryTable('lex_items') . '
+            $sql = 'SELECT ' . self::SQL_LEX_ITEMS_TIMELINE_SELECT . ' FROM ' . entryTable('lex_items') . '
                     WHERE id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;
@@ -1224,7 +1255,7 @@ final class EntryRepository
         $out = [];
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
-            $sql = 'SELECT * FROM ' . entryTable('calendar_events') . '
+            $sql = 'SELECT ' . self::SQL_CALENDAR_EVENTS_TIMELINE_SELECT . ' FROM ' . entryTable('calendar_events') . '
                     WHERE id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;
@@ -1551,7 +1582,7 @@ final class EntryRepository
             $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
         }
         $st = entryTable('sender_tags');
-        $sql = 'SELECT e.*, st.tag AS sender_tag
+        $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', st.tag AS sender_tag
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
@@ -1604,7 +1635,7 @@ final class EntryRepository
             $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
         }
         $st  = entryTable('sender_tags');
-        $sql = 'SELECT e.*, st.tag AS sender_tag
+        $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', st.tag AS sender_tag
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
@@ -2375,6 +2406,54 @@ final class EntryRepository
     // ------------------------------------------------------------------
     // Infrastructure.
     // ------------------------------------------------------------------
+
+    /**
+     * Lightweight email column list for dashboard timelines — SUBSTRINGs body
+     * columns and skips `raw_headers` so LONGTEXT newsletters cannot OOM PHP.
+     */
+    private function sqlEmailTimelineSelect(): string
+    {
+        if ($this->cachedEmailTimelineSelect !== null) {
+            return $this->cachedEmailTimelineSelect;
+        }
+
+        $table = getEmailTableName();
+        $candidates = array_merge(self::EMAIL_TIMELINE_SCALAR_COLUMNS, self::EMAIL_TIMELINE_BODY_COLUMNS);
+        $placeholders = implode(', ', array_fill(0, count($candidates), '?'));
+        $sql = 'SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME IN (' . $placeholders . ')';
+        $params = array_merge([$table], $candidates);
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $present = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            return $this->cachedEmailTimelineSelect = 'e.*';
+        }
+
+        $presentSet = array_flip(array_map('strval', $present));
+        $parts = [];
+        foreach (self::EMAIL_TIMELINE_SCALAR_COLUMNS as $col) {
+            if (isset($presentSet[$col])) {
+                $parts[] = 'e.`' . $col . '`';
+            }
+        }
+        $bodyChars = self::TIMELINE_BODY_CHARS;
+        foreach (self::EMAIL_TIMELINE_BODY_COLUMNS as $col) {
+            if (isset($presentSet[$col])) {
+                $parts[] = 'SUBSTRING(e.`' . $col . '`, 1, ' . $bodyChars . ') AS `' . $col . '`';
+            }
+        }
+
+        if ($parts === []) {
+            return $this->cachedEmailTimelineSelect = 'e.*';
+        }
+
+        return $this->cachedEmailTimelineSelect = implode(', ', $parts);
+    }
 
     /**
      * Subset of EMAIL_DATE_COLUMNS that physically exist on the resolved
