@@ -6,6 +6,7 @@ namespace Seismo\Plugin\LexRechtBund;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Seismo\Core\Lex\LexPlainText;
 use Seismo\Service\SourceFetcherInterface;
 use SimplePie\Item;
 use SimplePie\SimplePie;
@@ -82,10 +83,13 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
             $descRaw = trim((string)$item->get_description());
             $contentRaw = trim((string)$item->get_content());
             $body = $contentRaw !== '' ? $contentRaw : $descRaw;
-            $description = $body !== '' ? trim(html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8')) : null;
-            if ($description === '') {
-                $description = null;
-            }
+            $plain = $body !== ''
+                ? LexPlainText::normalize(trim(html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8')))
+                : '';
+            $content = $plain !== '' ? $plain : null;
+            $description = $content !== null
+                ? LexPlainText::truncate($content, LexPlainText::DEFAULT_SYNOPSIS_CHARS)
+                : null;
 
             $celex = 'de_rss_' . substr(hash('sha256', $link), 0, 40);
             $docDate = $pub !== null ? $pub->format('Y-m-d') : null;
@@ -99,6 +103,7 @@ final class LexRechtBundPlugin implements SourceFetcherInterface
                 'celex' => $celex,
                 'title' => $title,
                 'description' => $description,
+                'content' => $content,
                 'document_date' => $docDate,
                 'document_type' => $docType,
                 'eurlex_url' => $link,

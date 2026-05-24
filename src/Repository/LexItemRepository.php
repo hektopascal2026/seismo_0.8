@@ -7,6 +7,7 @@ namespace Seismo\Repository;
 use DateTimeImmutable;
 use PDO;
 use PDOException;
+use Seismo\Core\Lex\LexPlainText;
 
 /**
  * Lex family table — bounded reads, transactional upserts, satellite-safe entryTable().
@@ -89,6 +90,118 @@ final class LexItemRepository
         }
 
         return $out;
+    }
+
+    /**
+     * Rows missing a corpus body — used by {@see LexContentBackfillService}.
+     *
+     * @param list<string> $sources
+     * @return list<array<string, mixed>>
+     */
+    public function listMissingContentBySources(array $sources, int $limit): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::listMissingContentBySources must not run on a satellite.');
+        }
+
+        $sources = array_values(array_unique(array_filter(
+            array_map(static fn ($s) => is_string($s) ? trim($s) : '', $sources),
+            static fn (string $s): bool => $s !== '',
+        )));
+        if ($sources === []) {
+            return [];
+        }
+
+        $limit = max(1, min($limit, self::MAX_LIMIT));
+        $table = entryTable('lex_items');
+        $ph    = implode(',', array_fill(0, count($sources), '?'));
+        $sql   = "SELECT id, celex, work_uri, source, description
+                    FROM {$table}
+                   WHERE source IN ({$ph})
+                     AND (content IS NULL OR TRIM(content) = '')
+                   ORDER BY document_date DESC, id DESC
+                   LIMIT " . (int)$limit;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($sources);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Write corpus text for one row. Updates `description` only when a synopsis is supplied.
+     */
+    public function updateCorpus(int $id, string $content, ?string $description = null): bool
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::updateCorpus must not run on a satellite.');
+        }
+        if ($id <= 0 || trim($content) === '') {
+            return false;
+        }
+
+        $table = entryTable('lex_items');
+        if ($description !== null && trim($description) !== '') {
+            $sql = 'UPDATE ' . $table . ' SET content = ?, description = ?, fetched_at = CURRENT_TIMESTAMP WHERE id = ?';
+            $params = [trim($content), trim($description), $id];
+        } else {
+            $sql = 'UPDATE ' . $table . ' SET content = ?, fetched_at = CURRENT_TIMESTAMP WHERE id = ?';
+            $params = [trim($content), $id];
+        }
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return false;
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * One-shot helper: copy existing RSS synopsis bodies into `content` for DE rows.
+     */
+    public function promoteDescriptionToContent(string $source, int $limit): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::promoteDescriptionToContent must not run on a satellite.');
+        }
+
+        $limit  = max(1, min($limit, 5000));
+        $table  = entryTable('lex_items');
+        $sql    = 'UPDATE ' . $table . '
+                      SET content = description,
+                          description = LEFT(description, ' . LexPlainText::DEFAULT_SYNOPSIS_CHARS . '),
+                          fetched_at = CURRENT_TIMESTAMP
+                    WHERE source = ?
+                      AND description IS NOT NULL
+                      AND TRIM(description) <> \'\'
+                      AND (content IS NULL OR TRIM(content) = \'\')
+                    ORDER BY document_date DESC, id DESC
+                    LIMIT ' . (int)$limit;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$source]);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
     }
 
     /**

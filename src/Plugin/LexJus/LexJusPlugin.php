@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Plugin\LexJus;
 
+use Seismo\Core\Lex\LexJusDecisionMapper;
 use Seismo\Service\Http\BaseClient;
 use Seismo\Service\Http\HttpClientException;
 use Seismo\Service\SourceFetcherInterface;
@@ -153,10 +154,18 @@ final class LexJusPlugin implements SourceFetcherInterface
 
                 $workUri = $baseUrl . '/docs/' . ltrim($filePath, '/');
 
+                $htmlBody = null;
+                $htmlFile = LexJusDecisionMapper::htmlFileFromDecision($decision);
+                if ($htmlFile !== null) {
+                    $htmlBody = $this->fetchHtmlBody($baseUrl, $htmlFile);
+                }
+                $corpus = LexJusDecisionMapper::corpusFieldsFromDecision($decision, $htmlBody);
+
                 $rows[] = [
                     'celex'         => $slug,
                     'title'         => mb_substr($title, 0, 65535),
-                    'description'   => null,
+                    'description'   => $corpus['description'],
+                    'content'       => $corpus['content'],
                     'document_date' => $docDate,
                     'document_type' => mb_substr($docType, 0, 100),
                     'eurlex_url'    => mb_substr($eurlexUrl, 0, 500),
@@ -395,6 +404,22 @@ final class LexJusPlugin implements SourceFetcherInterface
         $url = $baseUrl . '/docs/' . ltrim($filePath, '/');
         $data = $this->getJson($url, 15);
         return is_array($data) ? $data : null;
+    }
+
+    private function fetchHtmlBody(string $baseUrl, string $htmlFile): ?string
+    {
+        $url = rtrim($baseUrl, '/') . '/docs/' . ltrim($htmlFile, '/');
+        try {
+            $resp = new BaseClient(20);
+            $r = $resp->get($url, ['Accept' => 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8']);
+        } catch (HttpClientException) {
+            return null;
+        }
+        if (!$r->isOk() || $r->body === '') {
+            return null;
+        }
+
+        return $r->body;
     }
 
     /**
