@@ -284,9 +284,17 @@ final class FeedModuleHandler
                     continue;
                 }
                 $title = trim((string)($row['title'] ?? ''));
-                $warnings[] = $title !== ''
-                    ? 'Still thin after article fetch: ' . $title
-                    : 'Still thin after article fetch for one preview item.';
+                $itemLink = trim((string)($row['link'] ?? ''));
+                if (str_contains($itemLink, 'news.google.com')) {
+                    $warnings[] = $title !== ''
+                        ? 'Could not resolve Google News link to publisher URL: ' . $title
+                            . ' — use direct outlet RSS (e.g. nzz.ch/startseite.rss) or Scraper.'
+                        : 'Could not resolve Google News link — use direct outlet RSS or Scraper.';
+                } else {
+                    $warnings[] = $title !== ''
+                        ? 'Still thin after article fetch: ' . $title
+                        : 'Still thin after article fetch for one preview item.';
+                }
             }
         }
 

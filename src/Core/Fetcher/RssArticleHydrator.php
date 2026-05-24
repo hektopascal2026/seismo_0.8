@@ -27,6 +27,7 @@ final class RssArticleHydrator
             BaseClient::DEFAULT_TIMEOUT,
             ScraperFetchService::BROWSER_UA
         ),
+        private GoogleNewsArticleUrlResolver $googleNewsUrls = new GoogleNewsArticleUrlResolver(),
     ) {
     }
 
@@ -55,6 +56,8 @@ final class RssArticleHydrator
             if ($url === '' || !preg_match('#^https?://#i', $url)) {
                 continue;
             }
+            $url = $this->googleNewsUrls->resolve($url);
+            $row['link'] = mb_substr($url, 0, 500);
 
             $host = parse_url($url, PHP_URL_HOST);
             $hostKey = is_string($host) ? strtolower($host) : '';

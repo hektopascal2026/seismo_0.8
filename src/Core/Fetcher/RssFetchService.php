@@ -49,6 +49,12 @@ final class RssFetchService
             if ($link === '' || !$this->isNavigableHttpUrl($link)) {
                 continue;
             }
+            if (str_contains($link, 'news.google.com')) {
+                $link = (new GoogleNewsArticleUrlResolver())->resolve($link);
+                if (!$this->isNavigableHttpUrl($link)) {
+                    continue;
+                }
+            }
             $descRaw = trim((string)$item->get_description());
             $contentRaw = trim((string)$item->get_content());
             if ($contentRaw === '' && $descRaw !== '') {

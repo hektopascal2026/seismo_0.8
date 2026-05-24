@@ -65,8 +65,10 @@ Lex/Leg are **not** merged into RSS; they only feel “faster” because each ru
 
 - Lowering `CoreRunner` RSS throttle / larger chunks (**PR 2**).
 - Backfill script for existing `feed_items` rows.
-- Full **Scraper** preview on the Scraper page (Media preview only hydrates RSS rows when **Extract full text** is checked).
-- Google News–specific redirect logic beyond `BaseClient` redirects.
+
+### Google News RSS
+
+Topic feeds (`news.google.com/rss/...`) point at Google wrapper URLs. Hydration resolves them to the publisher (e.g. `nzz.ch`) before article fetch. If resolution fails, add **direct outlet RSS** (e.g. `https://www.nzz.ch/startseite.rss`) on Media instead of a Google News search feed.
 
 ---
 
