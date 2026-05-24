@@ -58,14 +58,11 @@ final class LexContentBackfillService
                 continue;
             }
 
-            $jsonUrl = LexJusDecisionMapper::resolveDecisionJsonUrl($celex, $workUri);
-            if ($jsonUrl === null) {
-                $skipped++;
-                $this->noteReason($reasons, 'no_json_url');
-                continue;
-            }
-
-            $corpus = LexJusDecisionMapper::fetchCorpusFromWorkUri($this->http, $jsonUrl);
+            $corpus = LexJusDecisionMapper::fetchCorpusForRow(
+                $this->http,
+                $celex,
+                $workUri !== '' ? $workUri : null,
+            );
             if ($corpus === null) {
                 $failed++;
                 $this->noteReason($reasons, 'fetch_failed');
@@ -105,6 +102,18 @@ final class LexContentBackfillService
         }
 
         return $result;
+    }
+
+    /**
+     * Promote existing Fedlex consultation text from `description` into `content`.
+     */
+    public function backfillChFromDescription(int $limit = 500): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        return $this->lex->promoteDescriptionToContent('ch', max(1, min($limit, 5000)));
     }
 
     /**

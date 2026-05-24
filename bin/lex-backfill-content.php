@@ -4,7 +4,7 @@
  *
  * Usage:
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
- *   php bin/lex-backfill-content.php --de         # promote DE RSS description → content
+ *   php bin/lex-backfill-content.php --ch         # promote Fedlex CH description → content
  *   php bin/lex-backfill-content.php --limit=100
  *   php bin/lex-backfill-content.php --stats      # show per-source missing counts
  *   php bin/lex-backfill-content.php --verbose    # print skip/fail reason breakdown
@@ -23,6 +23,7 @@ use Seismo\Service\LexContentBackfillService;
 
 $limit = LexContentBackfillService::DEFAULT_BATCH;
 $deOnly = in_array('--de', $argv, true);
+$chOnly = in_array('--ch', $argv, true);
 $stats  = in_array('--stats', $argv, true);
 $verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 foreach ($argv as $arg) {
@@ -49,11 +50,17 @@ if ($stats) {
             (int)($row['has_description'] ?? 0),
         );
     }
-    if (!$deOnly && !in_array('--stats-only', $argv, true)) {
+    if (!$deOnly && !$chOnly && !in_array('--stats-only', $argv, true)) {
         echo "\n";
     } else {
         exit(0);
     }
+}
+
+if ($chOnly) {
+    $n = $service->backfillChFromDescription($limit);
+    echo "CH description → content: {$n} row(s) updated.\n";
+    exit(0);
 }
 
 if ($deOnly) {
