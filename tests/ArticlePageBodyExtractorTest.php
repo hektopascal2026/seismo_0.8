@@ -229,5 +229,56 @@ final class ArticlePageBodyExtractorTest extends TestCase
             ArticlePageBodyExtractor::excludeSelectorsForHost('www.golem.de')
         );
         self::assertNotSame('', ArticlePageBodyExtractor::excludeSelectorsForHost('www.golem.de'));
+        self::assertSame(
+            ArticlePageBodyExtractor::excludeSelectorsForHost('srf.ch'),
+            ArticlePageBodyExtractor::excludeSelectorsForHost('www.srf.ch')
+        );
+        self::assertStringContainsString('.expandable-box', ArticlePageBodyExtractor::excludeSelectorsForHost('www.srf.ch'));
+    }
+
+    public function testExtractBestArticleBodyStripsSrfExpandableBoxAndShareChrome(): void
+    {
+        $html = <<<'HTML'
+        <!DOCTYPE html>
+        <html><head><title>SRF Q&amp;A</title></head><body>
+        <div class="articlepage">
+        <motion class="modal-flyout modal-flyout--in-content">
+            <span>Teilen</span><span>Auf Facebook teilen</span><span>Facebook</span>
+        </motion>
+        <motion class="articlepage__article-content">
+            <p class="article-paragraph">Die Erwartungen an die Verhandlungen waren bescheiden. Noch bescheidener ist das Resultat.</p>
+            <motion class="expandable-box js-expandable-box">
+                <span>Personen-Box aufklappen</span>
+                <p class="article-paragraph">Fredy Gsteiger ist Korrespondent bei Radio SRF mit langer Biografie und weiteren Links zur Personenseite.</p>
+            </motion>
+            <h2 class="article-heading">Verändert sich die Haltung?</h2>
+            <p class="article-paragraph">Ja, und zwar in völlig gegensätzlicher Richtung. Gerade weil die weltpolitische Lage konfliktreich ist, fordert eine Mehrheit ein Verbot aller Nuklearwaffen.</p>
+            <p class="article-reference">Echo der Zeit, 23.05.2026, 18:00 Uhr ; srf/busr;odem</p>
+        </motion>
+        </motion></div></body></html>
+        HTML;
+
+        $best = ArticlePageBodyExtractor::extractBestArticleBody(
+            $html,
+            ArticlePageBodyExtractor::excludeSelectorsForHost('www.srf.ch')
+        );
+
+        self::assertStringContainsString('Die Erwartungen an die Verhandlungen waren bescheiden.', $best);
+        self::assertStringContainsString('Verändert sich die Haltung?', $best);
+        self::assertStringContainsString('Ja, und zwar in völlig gegensätzlicher Richtung.', $best);
+        self::assertStringNotContainsString('Personen-Box', $best);
+        self::assertStringNotContainsString('Fredy Gsteiger ist Korrespondent', $best);
+        self::assertStringNotContainsString('Auf Facebook teilen', $best);
+        self::assertStringNotContainsString('Echo der Zeit', $best);
+        self::assertStringNotContainsString('srf/busr', $best);
+    }
+
+    public function testNormalizeSrfArticlePlainTextRemovesUiLines(): void
+    {
+        $plain = "Teilen\n\nPersonen-Box aufklappen\n\nLead paragraph with enough substance.\n\nEcho der Zeit, 23.05.2026, 18:00 Uhr\n;srf/busr;odem";
+
+        $clean = ArticlePageBodyExtractor::normalizeSrfArticlePlainText($plain);
+
+        self::assertSame('Lead paragraph with enough substance.', $clean);
     }
 }
