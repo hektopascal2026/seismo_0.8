@@ -220,6 +220,7 @@ final class LexConfigStore
                 'natures' => ['LOI', 'ORDONNANCE', 'DECRET'],
                 'lookback_days' => 90,
                 'limit' => 100,
+                'content_fetch_limit' => 10,
                 'notes' => '',
             ],
             'jus_banned_words' => [],

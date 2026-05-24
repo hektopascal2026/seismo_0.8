@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Seismo\Service;
 
+use Seismo\Config\LexConfigStore;
 use Seismo\Core\Lex\LexEurLexContentFetcher;
 use Seismo\Core\Lex\LexJusDecisionMapper;
+use Seismo\Core\Lex\LexLegifranceApiClient;
+use Seismo\Core\Lex\LexLegifranceContentFetcher;
 use Seismo\Repository\LexItemRepository;
 use Seismo\Repository\TimelineFilter;
 use Seismo\Service\Http\BaseClient;
@@ -181,6 +184,92 @@ final class LexContentBackfillService
     {
         $reasons = [];
         $result  = $this->backfillEuFromEurlex($limit, $reasons);
+        $result['reasons'] = $reasons;
+
+        if ($verbose && $reasons !== []) {
+            foreach ($reasons as $reason => $count) {
+                fwrite(STDOUT, "  {$reason}: {$count}\n");
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Fetch JORF full text via PISTE /consult/jorf for stored FR rows.
+     *
+     * @return array{updated: int, skipped: int, failed: int}
+     */
+    public function backfillFrFromLegifrance(int $limit = self::DEFAULT_BATCH, ?array &$reasons = null): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        if ($reasons !== null) {
+            $reasons = [];
+        }
+
+        $frCfg = (new LexConfigStore())->load()['fr'] ?? [];
+        if (!is_array($frCfg)) {
+            throw new \RuntimeException('Légifrance configuration block is missing.');
+        }
+
+        $client  = LexLegifranceApiClient::fromConfig($frCfg);
+        $fetcher = new LexLegifranceContentFetcher($client);
+
+        $limit = max(1, min($limit, LexItemRepository::MAX_LIMIT));
+        $rows  = $this->lex->listMissingContentBySources(['fr'], $limit);
+
+        $updated = 0;
+        $skipped = 0;
+        $failed  = 0;
+
+        foreach ($rows as $row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id <= 0) {
+                $skipped++;
+                $this->noteReason($reasons, 'invalid_row');
+                continue;
+            }
+
+            $textCid = LexLegifranceContentFetcher::textCidFromRow($row);
+            if ($textCid === null) {
+                $skipped++;
+                $this->noteReason($reasons, 'no_jorf_text_cid');
+                continue;
+            }
+
+            $content = $fetcher->fetchPlainTextForTextCid($textCid);
+            if ($content === null || $content === '') {
+                $skipped++;
+                $this->noteReason($reasons, 'empty_corpus');
+                continue;
+            }
+
+            $description = trim((string)($row['description'] ?? ''));
+            if ($description === '') {
+                $description = null;
+            }
+
+            if ($this->lex->updateCorpus($id, $content, $description)) {
+                $updated++;
+            } else {
+                $failed++;
+                $this->noteReason($reasons, 'db_update_failed');
+            }
+        }
+
+        return ['updated' => $updated, 'skipped' => $skipped, 'failed' => $failed];
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, failed: int, reasons: array<string, int>}
+     */
+    public function backfillFrDetailed(int $limit = self::DEFAULT_BATCH, bool $verbose = false): array
+    {
+        $reasons = [];
+        $result  = $this->backfillFrFromLegifrance($limit, $reasons);
         $result['reasons'] = $reasons;
 
         if ($verbose && $reasons !== []) {
