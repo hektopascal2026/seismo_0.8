@@ -22,11 +22,16 @@ final class RssArticleHydrator
 
     public const MAX_CONTENT_CHARS = 50_000;
 
+    /** Retry UA when publishers serve a cookie wall to desktop browsers (e.g. golem.de). */
+    public const CRAWLER_FALLBACK_UA
+        = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+
     public function __construct(
         private BaseClient $http = new BaseClient(
             BaseClient::DEFAULT_TIMEOUT,
             ScraperFetchService::BROWSER_UA
         ),
+        private ?BaseClient $crawlerHttp = null,
         private GoogleNewsArticleUrlResolver $googleNewsUrls = new GoogleNewsArticleUrlResolver(),
     ) {
     }
@@ -111,27 +116,56 @@ final class RssArticleHydrator
     private function fetchArticlePlainText(string $url): ?string
     {
         try {
-            $res = $this->http->getWebPage($url);
-            if (!$res->isOk()) {
-                return null;
-            }
-            $html = trim($res->body);
-            if ($html === '') {
-                return null;
-            }
-            $content = ArticlePageBodyExtractor::extractBestArticleBody($html);
-            if ($content === '') {
-                return null;
-            }
-            if (mb_strlen($content, 'UTF-8') > self::MAX_CONTENT_CHARS) {
-                $content = mb_substr($content, 0, self::MAX_CONTENT_CHARS);
+            $host    = parse_url($url, PHP_URL_HOST);
+            $exclude = ArticlePageBodyExtractor::excludeSelectorsForHost(is_string($host) ? $host : '');
+
+            $content = $this->fetchAndExtract($url, $this->http, $exclude);
+            if ($content !== null) {
+                return $content;
             }
 
-            return $content;
+            return $this->fetchAndExtract($url, $this->crawlerHttpClient(), $exclude);
         } catch (\Throwable $e) {
             error_log('Seismo RssArticleHydrator: ' . $url . ': ' . $e->getMessage());
 
             return null;
         }
+    }
+
+    private function crawlerHttpClient(): BaseClient
+    {
+        return $this->crawlerHttp ??= new BaseClient(BaseClient::DEFAULT_TIMEOUT, self::CRAWLER_FALLBACK_UA);
+    }
+
+    private function fetchAndExtract(string $url, BaseClient $http, string $excludeSelectors): ?string
+    {
+        $res = $http->getWebPage($url);
+        if (!$res->isOk()) {
+            return null;
+        }
+
+        $html = trim($res->body);
+        if ($html === '') {
+            return null;
+        }
+
+        if (ArticlePageBodyExtractor::looksLikeConsentWall($html, $res->finalUrl)) {
+            return null;
+        }
+
+        $content = ArticlePageBodyExtractor::extractBestArticleBody($html, $excludeSelectors);
+        if ($content === '') {
+            return null;
+        }
+
+        if (ArticlePageBodyExtractor::looksLikeConsentBody(ArticlePageBodyExtractor::toPlainText($content))) {
+            return null;
+        }
+
+        if (mb_strlen($content, 'UTF-8') > self::MAX_CONTENT_CHARS) {
+            $content = mb_substr($content, 0, self::MAX_CONTENT_CHARS);
+        }
+
+        return $content;
     }
 }

@@ -14,6 +14,24 @@ final class ArticlePageBodyExtractor
 {
     private const MIN_CANDIDATE_PLAIN = 50;
 
+    /**
+     * Per-host DOM selectors stripped before Readability during RSS hydration.
+     * Keys are lowercase hostnames (with or without leading www.).
+     *
+     * @var array<string, string>
+     */
+    private const HOST_EXCLUDE_SELECTORS = [
+        'golem.de' => <<<'SEL'
+header
+nav
+.go-toolbar
+.go-teaser-block
+.go-ad-slot
+footer
+aside
+SEL,
+    ];
+
     /** Tie-break when two candidates have equal plain-text length. */
     private const SOURCE_PRIORITY = [
         'json_ld'          => 4,
@@ -36,6 +54,105 @@ final class ArticlePageBodyExtractor
     /**
      * @param string $excludeSelectors Passed through to {@see ScraperContentExtractor}.
      */
+    public static function excludeSelectorsForHost(string $host): string
+    {
+        $host = strtolower(trim($host));
+        if ($host === '') {
+            return '';
+        }
+
+        if (isset(self::HOST_EXCLUDE_SELECTORS[$host])) {
+            return self::HOST_EXCLUDE_SELECTORS[$host];
+        }
+
+        if (str_starts_with($host, 'www.')) {
+            $bare = substr($host, 4);
+
+            return self::HOST_EXCLUDE_SELECTORS[$bare] ?? '';
+        }
+
+        return self::HOST_EXCLUDE_SELECTORS['www.' . $host] ?? '';
+    }
+
+    /**
+     * True when the fetched HTML/URL looks like a cookie or CMP interstitial,
+     * not a publisher article page.
+     */
+    public static function looksLikeConsentWall(string $html, string $url = ''): bool
+    {
+        $urlLower = strtolower(trim($url));
+        if ($urlLower !== '' && preg_match(
+            '#/(zustimmung|consent|cookie-consent|cookie_choice|gdpr-consent|cookie-notice)(/|$|\?)#i',
+            $urlLower
+        )) {
+            return true;
+        }
+
+        if ($html === '') {
+            return false;
+        }
+
+        if (str_contains($html, 'GolemConsent')
+            || (str_contains($html, 'cmp-cdn.golem.de') && preg_match('#Cookies zustimmen#ui', $html))) {
+            return true;
+        }
+
+        $hasNoindex = (bool)preg_match(
+            '#<meta[^>]+name\s*=\s*(["\'])robots\1[^>]+content\s*=\s*(["\'])[^"\']*noindex#i',
+            $html
+        );
+        if (!$hasNoindex) {
+            return false;
+        }
+
+        $consentPhrases = 0;
+        foreach ([
+            'Cookies zustimmen',
+            'Cookie-Einstellungen',
+            'Alle Cookies akzeptieren',
+            'Accept all cookies',
+            'Privacy Center',
+            'Willkommen auf Golem.de',
+        ] as $phrase) {
+            if (preg_match('#' . preg_quote($phrase, '#') . '#ui', $html)) {
+                $consentPhrases++;
+            }
+        }
+
+        return $consentPhrases >= 2;
+    }
+
+    /**
+     * Safety net after extraction — rejects bodies that are still CMP boilerplate.
+     */
+    public static function looksLikeConsentBody(string $plain): bool
+    {
+        $plain = mb_strtolower(trim($plain), 'UTF-8');
+        if ($plain === '') {
+            return false;
+        }
+
+        $snippet = mb_substr($plain, 0, 800, 'UTF-8');
+        $hits    = 0;
+        foreach ([
+            'cookies zustimmen',
+            'nutzung aller cookies',
+            'cookie-einstellungen',
+            'accept all cookies',
+            'alle cookies akzeptieren',
+            'privacy center',
+            'willkommen auf golem.de',
+            'golem pur bestellen',
+            'zustimmungs-dialog',
+        ] as $needle) {
+            if (str_contains($snippet, $needle)) {
+                $hits++;
+            }
+        }
+
+        return $hits >= 2;
+    }
+
     public static function extractBestArticleBody(string $html, string $excludeSelectors = ''): string
     {
         $candidates = [];

@@ -128,4 +128,60 @@ final class ArticlePageBodyExtractorTest extends TestCase
 
         self::assertStringContainsString('Acceptable teaser length', $best);
     }
+
+    public function testLooksLikeConsentWallDetectsGolemInterstitial(): void
+    {
+        $html = <<<'HTML'
+        <!DOCTYPE html>
+        <html><head>
+        <title>Golem</title>
+        <meta name="robots" content="noindex">
+        <link href="//cmp-cdn.golem.de" rel="dns-prefetch">
+        </head><body>
+        <h2>Cookies zustimmen</h2>
+        <p>Besuchen Sie Golem.de wie gewohnt mit Werbung und Tracking,
+            indem Sie der Nutzung aller Cookies zustimmen.
+            Details zum Tracking finden Sie im Privacy Center.</p>
+        </body></html>
+        HTML;
+
+        self::assertTrue(ArticlePageBodyExtractor::looksLikeConsentWall(
+            $html,
+            'https://www.golem.de/sonstiges/zustimmung/auswahl.html?from=https%3A%2F%2Fwww.golem.de%2Fnews%2Fexample.html'
+        ));
+    }
+
+    public function testLooksLikeConsentWallFalseForNormalArticle(): void
+    {
+        $html = <<<'HTML'
+        <!DOCTYPE html>
+        <html><head>
+        <title>Example headline - Publisher</title>
+        <meta name="robots" content="max-image-preview:large">
+        <meta property="og:description" content="A normal article teaser.">
+        </head><body><article><p>Article body with enough text to be useful for monitoring.</p></article></body></html>
+        HTML;
+
+        self::assertFalse(ArticlePageBodyExtractor::looksLikeConsentWall(
+            $html,
+            'https://example.com/news/story.html'
+        ));
+    }
+
+    public function testLooksLikeConsentBodyDetectsBoilerplateSnippet(): void
+    {
+        $plain = 'Cookies zustimmen Besuchen Sie Golem.de wie gewohnt mit Werbung und Tracking, '
+            . 'indem Sie der Nutzung aller Cookies zustimmen. Details zum Tracking finden Sie im Privacy Center.';
+
+        self::assertTrue(ArticlePageBodyExtractor::looksLikeConsentBody($plain));
+    }
+
+    public function testExcludeSelectorsForHostNormalisesWww(): void
+    {
+        self::assertSame(
+            ArticlePageBodyExtractor::excludeSelectorsForHost('golem.de'),
+            ArticlePageBodyExtractor::excludeSelectorsForHost('www.golem.de')
+        );
+        self::assertNotSame('', ArticlePageBodyExtractor::excludeSelectorsForHost('www.golem.de'));
+    }
 }
