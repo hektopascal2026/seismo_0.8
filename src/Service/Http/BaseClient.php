@@ -46,12 +46,12 @@ final class BaseClient
      */
     public function get(string $url, array $headers = []): Response
     {
-        return $this->request('GET', $url, $headers, null, false);
+        return $this->request('GET', $url, $headers, null);
     }
 
     /**
-     * HTML document fetch: modern desktop Accept* headers, optional Accept-Encoding
-     * negotiation on cURL (automatic decompression). Use for scraping only.
+     * HTML document fetch: modern desktop Accept* headers. cURL negotiates gzip/br
+     * automatically ({@see CURLOPT_ENCODING}) on all requests, same as {@see get()}.
      */
     /**
      * @param bool $sessionCookies When true, use a per-request cookie jar so publishers
@@ -67,7 +67,7 @@ final class BaseClient
             'Upgrade-Insecure-Requests' => '1',
         ];
 
-        return $this->request('GET', $url, $headers, null, true, $sessionCookies);
+        return $this->request('GET', $url, $headers, null, $sessionCookies);
     }
 
     /**
@@ -78,7 +78,7 @@ final class BaseClient
     {
         $headers = array_merge(['Content-Type' => 'application/x-www-form-urlencoded'], $headers);
 
-        return $this->request('POST', $url, $headers, http_build_query($fields), false);
+        return $this->request('POST', $url, $headers, http_build_query($fields));
     }
 
     /**
@@ -92,7 +92,7 @@ final class BaseClient
             $headers
         );
 
-        return $this->request('POST', $url, $headers, (string)json_encode($payload, JSON_THROW_ON_ERROR), false);
+        return $this->request('POST', $url, $headers, (string)json_encode($payload, JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -103,14 +103,13 @@ final class BaseClient
         string $url,
         array $headers,
         ?string $body,
-        bool $curlWebEncoding,
         bool $sessionCookies = false,
     ): Response {
-        $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
+        $response = $this->execute($method, $url, $headers, $body, $sessionCookies);
 
         if ($response->status === 429 || $response->status === 503) {
             usleep(self::RETRY_SLEEP_MS * 1000);
-            $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
+            $response = $this->execute($method, $url, $headers, $body, $sessionCookies);
         }
 
         return $response;
@@ -124,14 +123,13 @@ final class BaseClient
         string $url,
         array $headers,
         ?string $body,
-        bool $curlWebEncoding,
         bool $sessionCookies = false,
     ): Response {
         $ua = $this->effectiveUserAgent();
         $headers = array_merge(['User-Agent' => $ua], $headers);
 
         if (function_exists('curl_init')) {
-            return $this->executeCurl($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
+            return $this->executeCurl($method, $url, $headers, $body, $sessionCookies);
         }
 
         return $this->executeStream($method, $url, $headers, $body);
@@ -145,7 +143,6 @@ final class BaseClient
         string $url,
         array $headers,
         ?string $body,
-        bool $webEncoding,
         bool $sessionCookies = false,
     ): Response {
         $ch = curl_init();
@@ -190,9 +187,8 @@ final class BaseClient
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeoutSeconds),
             CURLOPT_HEADERFUNCTION => $headerCallback,
         ];
-        if ($webEncoding) {
-            $opts[CURLOPT_ENCODING] = '';
-        }
+        // Negotiate gzip/br and transparently decompress (required for feeds such as news.un.org).
+        $opts[CURLOPT_ENCODING] = '';
         if ($cookieFile !== null) {
             $opts[CURLOPT_COOKIEJAR]  = $cookieFile;
             $opts[CURLOPT_COOKIEFILE] = $cookieFile;
@@ -274,7 +270,9 @@ final class BaseClient
             }
         }
 
-        return new Response($status, (string)$responseBody, $parsed, $url);
+        $decodedBody = CompressedBodyDecoder::decode((string)$responseBody, $parsed);
+
+        return new Response($status, $decodedBody, $parsed, $url);
     }
 
     private function effectiveUserAgent(): string

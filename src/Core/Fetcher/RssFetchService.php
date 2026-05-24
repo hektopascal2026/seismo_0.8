@@ -7,6 +7,7 @@ namespace Seismo\Core\Fetcher;
 use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Service\Http\BaseClient;
+use Seismo\Service\Http\CompressedBodyDecoder;
 use Seismo\Service\Http\HttpClientException;
 use SimplePie\SimplePie;
 
@@ -128,8 +129,14 @@ final class RssFetchService
             );
         }
 
-        $xml = trim($response->body);
+        $xml = trim(CompressedBodyDecoder::decode($response->body, $response->headers));
         if ($xml === '' || !str_contains($xml, '<')) {
+            if (str_starts_with($response->body, "\x1f\x8b")) {
+                throw new \RuntimeException(
+                    'Feed response was gzip-compressed but could not be decoded for ' . $requestUrl
+                    . self::feedFetchHint($feedUrl)
+                );
+            }
             throw new \RuntimeException(
                 'Feed response was empty or not XML for ' . $requestUrl . self::feedFetchHint($feedUrl)
             );
@@ -138,7 +145,7 @@ final class RssFetchService
         $final = trim($response->finalUrl);
 
         return [
-            'xml'       => $response->body,
+            'xml'       => $xml,
             'final_url' => $final !== '' ? $final : $requestUrl,
         ];
     }
