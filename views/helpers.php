@@ -163,6 +163,18 @@ if (!function_exists('seismo_lex_bge_footer_mono_hide')) {
     }
 }
 
+if (!function_exists('seismo_lex_card_preview_text')) {
+    /**
+     * Card body for Lex rows: EU preamble excerpt, FR synopsis, DE corpus lead, etc.
+     *
+     * @param array<string, mixed> $lexItem
+     */
+    function seismo_lex_card_preview_text(array $lexItem): string
+    {
+        return \Seismo\Core\Lex\LexCardPreview::previewText($lexItem);
+    }
+}
+
 if (!function_exists('seismo_lex_card_heading_title')) {
     /**
      * Primary heading for Lex cards. EU rows often stored CELEX as `title` when

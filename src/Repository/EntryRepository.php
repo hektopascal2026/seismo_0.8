@@ -38,6 +38,7 @@ namespace Seismo\Repository;
 use PDO;
 use PDOException;
 use Seismo\Core\Fetcher\ScraperListingUrl;
+use Seismo\Core\Lex\LexCardPreview;
 
 final class EntryRepository
 {
@@ -63,10 +64,11 @@ final class EntryRepository
             fi.author, fi.published_date, fi.content_hash, fi.hidden, fi.cached_at';
 
     /**
-     * Dashboard / search reads for lex_items — omits `content` (Magnitu corpus).
+     * Dashboard / search reads for lex_items — corpus excerpt only (not full LONGTEXT).
      */
     private const SQL_LEX_ITEMS_TIMELINE_SELECT = 'id, celex, title, description, document_date, document_type,
-            eurlex_url, work_uri, source, fetched_at, created_at';
+            eurlex_url, work_uri, source, fetched_at, created_at,
+            SUBSTRING(content, 1, ' . LexCardPreview::TIMELINE_EXCERPT_CHARS . ') AS content_excerpt';
 
     /**
      * Dashboard / search reads for calendar_events — omits full `content` corpus.

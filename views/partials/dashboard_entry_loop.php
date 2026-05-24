@@ -187,7 +187,9 @@ $entryLoopIndex                 = 0;
                                 $lexLinkLabel = 'parlament.ch →';
                             }
 
-                            $lexDesc = trim($lexItem['description'] ?? '');
+                            $lexDesc = function_exists('seismo_lex_card_preview_text')
+                                ? seismo_lex_card_preview_text($lexItem)
+                                : trim((string)($lexItem['description'] ?? ''));
                             $lexPreview = mb_substr($lexDesc, 0, 300);
                             if (mb_strlen($lexDesc) > 300) $lexPreview .= '...';
                             $lexHasMore = mb_strlen($lexDesc) > 300;

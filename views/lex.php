@@ -209,7 +209,9 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                             $itemUrl = trim((string)($item['work_uri'] ?? ''));
                         }
                         $lexHasUrl = seismo_is_navigable_url($itemUrl);
-                        $lexDesc = trim((string)($item['description'] ?? ''));
+                        $lexDesc = function_exists('seismo_lex_card_preview_text')
+                            ? seismo_lex_card_preview_text($item)
+                            : trim((string)($item['description'] ?? ''));
                         $lexPreview = mb_substr($lexDesc, 0, 300);
                         if (mb_strlen($lexDesc) > 300) {
                             $lexPreview .= '...';

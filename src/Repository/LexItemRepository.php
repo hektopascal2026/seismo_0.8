@@ -7,6 +7,7 @@ namespace Seismo\Repository;
 use DateTimeImmutable;
 use PDO;
 use PDOException;
+use Seismo\Core\Lex\LexCardPreview;
 use Seismo\Core\Lex\LexPlainText;
 
 /**
@@ -42,7 +43,10 @@ final class LexItemRepository
 
         $table = entryTable('lex_items');
         $placeholders = implode(',', array_fill(0, count($sources), '?'));
-        $sql = "SELECT * FROM {$table} WHERE source IN ({$placeholders}) ORDER BY document_date DESC LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+        $cols = 'id, celex, title, description, document_date, document_type, eurlex_url, work_uri, source,'
+            . ' fetched_at, created_at, SUBSTRING(content, 1, ' . LexCardPreview::TIMELINE_EXCERPT_CHARS . ') AS content_excerpt';
+        $sql = "SELECT {$cols} FROM {$table} WHERE source IN ({$placeholders})"
+            . ' ORDER BY document_date DESC LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 
         try {
             $stmt = $this->pdo->prepare($sql);
