@@ -221,7 +221,7 @@ final class MagnituLabelUiController
         if ($filter === 'all' || $filter === 'lex_item') {
             $cap = $filter === 'all' ? $lim : $one;
             foreach ($export->listLexItemsForLabeling($cap, $offset) as $row) {
-                $entries[] = MagnituController::shapeLexItem($row);
+                $entries[] = MagnituController::shapeLexItemForDisplay($row);
             }
         }
         if ($filter === 'all') {

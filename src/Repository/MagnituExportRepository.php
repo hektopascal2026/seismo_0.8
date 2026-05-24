@@ -28,6 +28,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
+use Seismo\Core\Lex\LexCardPreview;
 
 final class MagnituExportRepository
 {
@@ -330,8 +331,8 @@ final class MagnituExportRepository
     }
 
     /**
-     * Lightweight lex_items for the labelling queue. Skips `content` (corpus).
-     * Same synopsis columns as {@see listLexItemsSince()} minus the body field.
+     * Lightweight lex_items for the labelling queue. Skips full `content` corpus;
+     * includes a bounded excerpt for {@see LexCardPreview} on the Label page.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -339,8 +340,9 @@ final class MagnituExportRepository
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
-        $sql = 'SELECT id, celex, title, description, document_date, document_type, eurlex_url, source
-                  FROM ' . entryTable('lex_items') . '
+        $cols = 'id, celex, title, description, document_date, document_type, eurlex_url, source,'
+            . ' SUBSTRING(content, 1, ' . LexCardPreview::TIMELINE_EXCERPT_CHARS . ') AS content_excerpt';
+        $sql = 'SELECT ' . $cols . ' FROM ' . entryTable('lex_items') . '
                  ORDER BY document_date DESC
                  LIMIT ' . $limit . ' OFFSET ' . $offset;
 

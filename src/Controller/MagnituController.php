@@ -456,6 +456,25 @@ final class MagnituController
     }
 
     /**
+     * Label UI and other card surfaces: same preview text as the dashboard Lex cards.
+     *
+     * @param array<string, mixed> $row DB row (may include content_excerpt)
+     * @return array<string, mixed>
+     */
+    public static function shapeLexItemForDisplay(array $row): array
+    {
+        $shaped = self::shapeLexItem($row);
+        if (function_exists('seismo_lex_card_preview_text')) {
+            $preview = seismo_lex_card_preview_text($row);
+            if ($preview !== '') {
+                $shaped['description'] = $preview;
+            }
+        }
+
+        return $shaped;
+    }
+
+    /**
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
