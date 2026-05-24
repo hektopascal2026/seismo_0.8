@@ -203,6 +203,7 @@ Each satellite desk has its own `api_key` and training labels in `seismo_<slug>`
 
 ## Deploy notes
 
+- **PHP memory:** `bootstrap.php` raises `memory_limit` to **512M** when php.ini/FPM is lower (scraper, lex backfill). Optional pool override: `php_admin_value[memory_limit] = 512M`. Timeline page size stays capped by `EntryRepository::MAX_LIMIT` (200).
 - **Nginx:** pass `Authorization` to PHP-FPM so Magnitu/export Bearer APIs work; set `fastcgi_param HTTPS` / `X-Forwarded-Proto` when TLS terminates in front of PHP. **One server block** for the app root — path desks need no extra vhost.
 - **Cron:** mothership only — `php /var/www/seismo/refresh_cron.php` (CLI only). Overlapping runs skipped via MySQL advisory lock.
 - **Migrations:** `php migrate.php` on the entries DB; per-desk `php migrate.php --scores-db=seismo_<slug>` when local scoring tables change (provision runs this for new desks). See [Deploying code changes](#deploying-code-changes) under Path satellites.

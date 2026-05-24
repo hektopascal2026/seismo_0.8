@@ -34,6 +34,42 @@ define('SEISMO_ROOT', __DIR__);
 date_default_timezone_set('UTC');
 
 // ---------------------------------------------------------------------------
+// 0b. Memory floor (VPS scraper, lex backfill, exports). Raises only when
+//     php.ini / FPM is lower; never overrides a higher admin setting.
+//     Timeline row cap stays EntryRepository::MAX_LIMIT (200).
+// ---------------------------------------------------------------------------
+if (!function_exists('seismoEnsureMinMemoryLimit')) {
+    function seismoEnsureMinMemoryLimit(string $minimum = '512M'): void
+    {
+        if (!function_exists('ini_set')) {
+            return;
+        }
+        $current = ini_get('memory_limit');
+        if (!is_string($current) || $current === '' || $current === '-1') {
+            return;
+        }
+        $toBytes = static function (string $val): int {
+            $val = trim($val);
+            if ($val === '') {
+                return 0;
+            }
+            $last = strtolower($val[strlen($val) - 1]);
+            $num  = (int)$val;
+            return match ($last) {
+                'g'     => $num * 1024 * 1024 * 1024,
+                'm'     => $num * 1024 * 1024,
+                'k'     => $num * 1024,
+                default => (int)$val,
+            };
+        };
+        if ($toBytes($current) < $toBytes($minimum)) {
+            ini_set('memory_limit', $minimum);
+        }
+    }
+}
+seismoEnsureMinMemoryLimit();
+
+// ---------------------------------------------------------------------------
 // 1. Local credentials
 // ---------------------------------------------------------------------------
 $__seismoLocalConfig = __DIR__ . '/config.local.php';
