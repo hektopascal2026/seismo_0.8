@@ -1,4 +1,4 @@
-# Seismo 0.6.5
+# Seismo 0.6.6
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.6.6** | **Media module** — admin at `?action=media` for news monitoring (`feeds.category = media`), separate from Feeds. **RSS full-text hydration:** per-feed **Extract full text** (migration 024), **`RssArticleHydrator`** + **`ArticlePageBodyExtractor`** (JSON-LD, Readability, meta), **`GoogleNewsArticleUrlResolver`** for Google News wrappers. **Refresh Media** runs only media-category RSS + scrapers. Docs: `docs/media-module.md`, `docs/rss-hydration.md`. |
 | **0.6.5** | **DE BGBl PDF corpus** — recht.bund.de RSS is metadata-only; **`LexRechtBundContentFetcher`** downloads `regelungstext.pdf` and extracts plain text via **`pdftotext`** (poppler-utils). Forward ingest on Lex refresh + **`php bin/lex-backfill-content.php --de`**. Requires `apt install poppler-utils` on the mothership. |
 | **0.6.4** | **Lex full-text corpus** — `lex_items.content` (LONGTEXT) for Magnitu training; timeline reads stay lightweight. **FR:** Légifrance PISTE **`/consult/jorf`** on ingest/backfill (versioned `JORFTEXT…` id normalization). **CH:** Fedlex synopsis → `content` promote path. **EU:** EUR-Lex HTML backfill; **Jus:** entscheidsuche HTML corpus. Recipe scoring uses synopsis only (`description`). **`bin/lex-backfill-content.php`** (`--fr`, `--eu`, `--ch`, `--de` promote legacy). Schema v39. |
 | **0.6.3** | **Mail readability** — optional per-subscription body processors (e.g. Europarl “EP TODAY” digests: derived headline, cleaner plain text); **View in browser →** on cards when the message HTML includes a webview link (all senders); **Reprocess stored mail** on Mail → Subscriptions. Extract webview URLs before boilerplate stripping. Schema v33 (`body_processor`, `derived_title`). |
@@ -39,7 +40,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | Action | Purpose |
 |--------|---------|
 | `?action=index` | Dashboard timeline |
-| `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only) |
+| `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
 | `?action=settings&tab=general` | UI prefs, **source config export** (JSON bundle) |

@@ -80,7 +80,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
             <!-- II. Architecture & sources -->
             <section class="settings-section about-card dashboard-section">
                 <h2>II. Architecture &amp; data sources</h2>
-                <p>Everything you track merges into a single stream. Tune sources from Feeds, Mail, Scraper, Lex, and Leg.</p>
+                <p>Everything you track merges into a single stream. Tune sources from Feeds, Media, Mail, Scraper, Lex, and Leg.</p>
 
                 <div class="table-responsive">
                     <table class="styleguide-table">
@@ -94,7 +94,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <tr>
                                 <td><strong>Direct Ingest</strong></td>
                                 <td>
-                                    <strong>Feeds:</strong> RSS/Atom and Substack publications.<br>
+                                    <strong>Feeds:</strong> RSS/Atom, Substack, and Parliament press (general desk).<br>
+                                    <strong>Media:</strong> News monitoring — Google News or outlet RSS with optional <strong>Extract full text</strong> (publisher fetch + JSON-LD / Readability / meta); listing pages via Scraper with <code>category = media</code>.<br>
                                     <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; optional body processors for digest senders; <strong>View in browser →</strong> when a webview link is present.<br>
                                     <strong>Scraper:</strong> Scheduled fetches of complex web pages.
                                 </td>
@@ -211,7 +212,17 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.6.5 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.6.6 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Media module &amp; RSS full-text hydration</div>
+                        <ul>
+                            <li><strong>Media admin:</strong> <code>?action=media</code> for news sources (<code>feeds.category = media</code>), partitioned from Feeds; timeline pills show your source <strong>Title</strong>, not the routing category.</li>
+                            <li><strong>Thin RSS:</strong> per-feed <strong>Extract full text</strong> (schema migration 024) — after RSS parse, up to 10 publisher pages per refresh via <code>RssArticleHydrator</code>.</li>
+                            <li><strong>Extraction:</strong> <code>ArticlePageBodyExtractor</code> picks the longest of JSON-LD <code>articleBody</code>, Readability, and meta descriptions; <code>GoogleNewsArticleUrlResolver</code> unwraps Google News RSS links before fetch.</li>
+                            <li><strong>Refresh:</strong> <strong>Refresh Media</strong> runs only media-category RSS and scrapers; preview hydrates when the checkbox is on. See <code>docs/media-module.md</code> and <code>docs/rss-hydration.md</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.5</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Germany: BGBl PDF corpus extraction</div>
                         <ul>
                             <li><strong>Problem:</strong> recht.bund.de RSS lists title and ELI link only — no law body in the feed.</li>
@@ -406,7 +417,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </table>
                 </div>
 
-                <p class="meta-text" style="margin-top: 1rem;"><strong>Feeds</strong>, <strong>Scraper</strong>, and <strong>Mail</strong> each have a top-bar refresh (same corner as the timeline). The <strong>Lex</strong> page lists per-plugin actions and &ldquo;Refresh all Lex sources.&rdquo;</p>
+                <p class="meta-text" style="margin-top: 1rem;"><strong>Feeds</strong>, <strong>Media</strong>, <strong>Scraper</strong>, and <strong>Mail</strong> each have a top-bar refresh (same corner as the timeline). <strong>Media</strong> refresh is scoped to <code>category = media</code> only. The <strong>Lex</strong> page lists per-plugin actions and &ldquo;Refresh all Lex sources.&rdquo;</p>
                 <p class="meta-text">Throttle numbers and last-run status: <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=diagnostics">Settings → Diagnostics</a><?= $satellite ? ' (mothership only)' : '' ?>.</p>
             </section>
 

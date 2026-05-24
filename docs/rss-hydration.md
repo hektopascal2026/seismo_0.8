@@ -1,5 +1,7 @@
 # RSS full-text hydration
 
+**Shipped in Seismo 0.6.6** (Media module + `feeds.extract_full_text`, migration 024).
+
 Reference map for thin RSS feeds (e.g. Google News) and how they relate to Lex, Leg, Scraper, and the **Media** module.
 
 For the Media admin page (`?action=media`), see [media-module.md](media-module.md).
@@ -136,7 +138,7 @@ sequenceDiagram
 |------|------------|
 | Publisher blocks VPS IP | Cap + per-host delay; keep RSS snippet on failure |
 | Cron runtime grows | 10 fetches max per feed per tick |
-| Paywall / consent pages | No body extracted; headline remains |
+| Paywall / consent pages | Detect CMP interstitials; retry with crawler UA; keep RSS snippet on failure |
 | `content_hash` changes when body fills | Expected; `published_date` preserved when hash unchanged per upsert rule |
 
 **Satellite impact:** none — ingest runs on mothership only.
