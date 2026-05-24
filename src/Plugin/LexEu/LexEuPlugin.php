@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Plugin\LexEu;
 
 use EasyRdf\Sparql\Client;
+use Seismo\Core\Lex\LexEurLexContentFetcher;
 use Seismo\Service\SourceFetcherInterface;
 use Seismo\Service\Sparql\SparqlEasyRdf;
 
@@ -212,6 +213,11 @@ final class LexEuPlugin implements SourceFetcherInterface
         // cannot collapse the main legislation feed. Failure is logged and
         // items are still returned without a description.
         $rows = self::enrichWithEurovocSubjects($sparql, $rows, $lang);
+
+        $contentLimit = max(0, min((int)($config['content_fetch_limit'] ?? 15), 50));
+        if ($contentLimit > 0) {
+            $rows = (new LexEurLexContentFetcher())->attachContentToRows($rows, $contentLimit);
+        }
 
         return $rows;
     }

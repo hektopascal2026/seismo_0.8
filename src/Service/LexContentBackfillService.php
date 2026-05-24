@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Service;
 
+use Seismo\Core\Lex\LexEurLexContentFetcher;
 use Seismo\Core\Lex\LexJusDecisionMapper;
 use Seismo\Repository\LexItemRepository;
 use Seismo\Repository\TimelineFilter;
@@ -19,12 +20,17 @@ final class LexContentBackfillService
     public function __construct(
         private LexItemRepository $lex,
         private BaseClient $http = new BaseClient(30),
+        private LexEurLexContentFetcher $eurLex = new LexEurLexContentFetcher(),
     ) {
     }
 
     public static function boot(\PDO $pdo): self
     {
-        return new self(new LexItemRepository($pdo));
+        return new self(
+            new LexItemRepository($pdo),
+            new BaseClient(30),
+            new LexEurLexContentFetcher(new BaseClient(45)),
+        );
     }
 
     /**
@@ -114,6 +120,88 @@ final class LexContentBackfillService
         }
 
         return $this->lex->promoteDescriptionToContent('ch', max(1, min($limit, 5000)));
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, failed: int}
+     */
+    public function backfillEuFromEurlex(int $limit = self::DEFAULT_BATCH, ?array &$reasons = null): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        if ($reasons !== null) {
+            $reasons = [];
+        }
+
+        $limit = max(1, min($limit, LexItemRepository::MAX_LIMIT));
+        $rows  = $this->lex->listMissingContentBySources(['eu'], $limit);
+
+        $updated = 0;
+        $skipped = 0;
+        $failed  = 0;
+
+        foreach ($rows as $row) {
+            $id  = (int)($row['id'] ?? 0);
+            $url = trim((string)($row['eurlex_url'] ?? ''));
+            if ($id <= 0 || $url === '') {
+                $skipped++;
+                $this->noteReason($reasons, 'no_eurlex_url');
+                continue;
+            }
+
+            $content = $this->eurLex->fetchPlainTextFromUrl($url);
+            if ($content === null || $content === '') {
+                $skipped++;
+                $this->noteReason($reasons, 'empty_corpus');
+                continue;
+            }
+
+            $description = trim((string)($row['description'] ?? ''));
+            if ($description === '') {
+                $description = null;
+            }
+
+            if ($this->lex->updateCorpus($id, $content, $description)) {
+                $updated++;
+            } else {
+                $failed++;
+                $this->noteReason($reasons, 'db_update_failed');
+            }
+        }
+
+        return ['updated' => $updated, 'skipped' => $skipped, 'failed' => $failed];
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, failed: int, reasons: array<string, int>}
+     */
+    public function backfillEuDetailed(int $limit = self::DEFAULT_BATCH, bool $verbose = false): array
+    {
+        $reasons = [];
+        $result  = $this->backfillEuFromEurlex($limit, $reasons);
+        $result['reasons'] = $reasons;
+
+        if ($verbose && $reasons !== []) {
+            foreach ($reasons as $reason => $count) {
+                fwrite(STDOUT, "  {$reason}: {$count}\n");
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Promote Légifrance synopsis already stored in `description` into `content`.
+     */
+    public function backfillFrFromDescription(int $limit = 500): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        return $this->lex->promoteDescriptionToContent('fr', max(1, min($limit, 5000)));
     }
 
     /**

@@ -5,6 +5,8 @@
  * Usage:
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
  *   php bin/lex-backfill-content.php --ch         # promote Fedlex CH description → content
+ *   php bin/lex-backfill-content.php --eu         # fetch EUR-Lex HTML corpus
+ *   php bin/lex-backfill-content.php --fr         # promote Légifrance description → content
  *   php bin/lex-backfill-content.php --limit=100
  *   php bin/lex-backfill-content.php --stats      # show per-source missing counts
  *   php bin/lex-backfill-content.php --verbose    # print skip/fail reason breakdown
@@ -24,6 +26,8 @@ use Seismo\Service\LexContentBackfillService;
 $limit = LexContentBackfillService::DEFAULT_BATCH;
 $deOnly = in_array('--de', $argv, true);
 $chOnly = in_array('--ch', $argv, true);
+$euOnly = in_array('--eu', $argv, true);
+$frOnly = in_array('--fr', $argv, true);
 $stats  = in_array('--stats', $argv, true);
 $verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 foreach ($argv as $arg) {
@@ -50,7 +54,7 @@ if ($stats) {
             (int)($row['has_description'] ?? 0),
         );
     }
-    if (!$deOnly && !$chOnly && !in_array('--stats-only', $argv, true)) {
+    if (!$deOnly && !$chOnly && !$euOnly && !$frOnly && !in_array('--stats-only', $argv, true)) {
         echo "\n";
     } else {
         exit(0);
@@ -67,6 +71,24 @@ if ($deOnly) {
     $n = $service->backfillDeFromDescription($limit);
     echo "DE description → content: {$n} row(s) updated.\n";
     exit(0);
+}
+
+if ($frOnly) {
+    $n = $service->backfillFrFromDescription($limit);
+    echo "FR description → content: {$n} row(s) updated.\n";
+    exit(0);
+}
+
+if ($euOnly) {
+    $result = $service->backfillEuDetailed($limit, $verbose);
+    echo sprintf(
+        "EU EUR-Lex corpus backfill: %d updated, %d skipped, %d failed (batch limit %d).\n",
+        $result['updated'],
+        $result['skipped'],
+        $result['failed'],
+        $limit,
+    );
+    exit($result['failed'] > 0 && $result['updated'] === 0 ? 1 : 0);
 }
 
 $result = $service->backfillJusDetailed($limit, $verbose);
