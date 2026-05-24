@@ -22,9 +22,11 @@ use Seismo\Repository\SystemConfigRepository;
  * Core upstreams (RSS, scraper, mail) — not SourceFetcherInterface plugins.
  * Writes {@see PluginRunResult}s under synthetic ids {@see self::CORE_IDS}.
  *
- * RSS and scraper default to **chunked** refresh (cursor + per-cron batch) so
- * shared hosts stay within time limits; legacy single-pass mode is opt-in via
- * {@see self::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH} in Settings → General.
+ * RSS and scraper default to **chunked** refresh (cursor + per-cron batch).
+ * Scraper uses a shorter cron time budget than RSS so a two-minute master cron tick
+ * stays under ~2 minutes (article fetches include deliberate inter-request delay).
+ * Legacy single-pass mode is opt-in via {@see self::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH}
+ * in Settings → General.
  */
 final class CoreRunner
 {
@@ -48,7 +50,7 @@ final class CoreRunner
     public const CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH = 'ui:legacy_rss_scraper_refresh';
 
     private const CHUNK_RSS_FEEDS     = 12;
-    private const CHUNK_SCRAPER_FEEDS = 8;
+    private const CHUNK_SCRAPER_FEEDS = 4;
 
     /**
      * Wall-clock seconds for forced (web) chunked RSS/scraper loops before yielding.
@@ -57,10 +59,17 @@ final class CoreRunner
     private const CHUNK_WEB_TIME_BUDGET_SEC = 120;
 
     /**
-     * CLI cron: advance multiple chunks per tick when not throttled (mutex-held whole script).
-     * Leave headroom in a 2-minute cron schedule slot for parl press, mail, plugins, retention.
+     * CLI cron RSS budget: advance multiple chunks per tick when not throttled (mutex-held
+     * whole script). Leave headroom in a 2-minute cron schedule slot for parl press, mail,
+     * plugins, retention.
      */
     private const CHUNK_CRON_TIME_BUDGET_SEC = 240;
+
+    /**
+     * CLI cron scraper budget: lower than RSS — each source may fetch many article pages
+     * with production inter-request delay. Yields mid-cycle via cursor when exceeded.
+     */
+    private const CHUNK_SCRAPER_CRON_TIME_BUDGET_SEC = 90;
 
     /** Safety cap on chunk iterations per budgeted RSS/scraper run. */
     private const CHUNK_MAX_LOOPS = 80;
@@ -427,6 +436,8 @@ final class CoreRunner
     {
         return $this->runChunkedCoreWithBudget(
             $force,
+            self::CHUNK_WEB_TIME_BUDGET_SEC,
+            self::CHUNK_CRON_TIME_BUDGET_SEC,
             fn (bool $f): PluginRunResult => $this->runRssChunkedOnce($f),
             'RSS'
         );
@@ -436,6 +447,8 @@ final class CoreRunner
     {
         return $this->runChunkedCoreWithBudget(
             $force,
+            self::CHUNK_WEB_TIME_BUDGET_SEC,
+            self::CHUNK_SCRAPER_CRON_TIME_BUDGET_SEC,
             fn (bool $f): PluginRunResult => $this->runScraperChunkedOnce($f),
             'scraper'
         );
@@ -444,9 +457,14 @@ final class CoreRunner
     /**
      * @param callable(bool): PluginRunResult $runOnce
      */
-    private function runChunkedCoreWithBudget(bool $force, callable $runOnce, string $label): PluginRunResult
-    {
-        $budgetSec = $force ? self::CHUNK_WEB_TIME_BUDGET_SEC : self::CHUNK_CRON_TIME_BUDGET_SEC;
+    private function runChunkedCoreWithBudget(
+        bool $force,
+        int $webBudgetSec,
+        int $cronBudgetSec,
+        callable $runOnce,
+        string $label
+    ): PluginRunResult {
+        $budgetSec = $force ? $webBudgetSec : $cronBudgetSec;
         $deadline  = microtime(true) + $budgetSec;
         $chunkItemSum = 0;
         $last         = PluginRunResult::ok(0);
