@@ -6,6 +6,8 @@
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
  *   php bin/lex-backfill-content.php --de         # promote DE RSS description → content
  *   php bin/lex-backfill-content.php --limit=100
+ *   php bin/lex-backfill-content.php --stats      # show per-source missing counts
+ *   php bin/lex-backfill-content.php --verbose    # print skip/fail reason breakdown
  */
 
 declare(strict_types=1);
@@ -21,6 +23,8 @@ use Seismo\Service\LexContentBackfillService;
 
 $limit = LexContentBackfillService::DEFAULT_BATCH;
 $deOnly = in_array('--de', $argv, true);
+$stats  = in_array('--stats', $argv, true);
+$verbose = in_array('--verbose', $argv, true) || in_array('-v', $argv, true);
 foreach ($argv as $arg) {
     if (str_starts_with($arg, '--limit=')) {
         $limit = max(1, (int)substr($arg, strlen('--limit=')));
@@ -34,13 +38,31 @@ if (isSatellite()) {
 
 $service = LexContentBackfillService::boot(getDbConnection());
 
+if ($stats) {
+    echo "lex_items missing content by source:\n";
+    foreach ($service->contentBackfillStats() as $row) {
+        echo sprintf(
+            "  %-10s missing=%d no_work_uri=%d has_description=%d\n",
+            (string)($row['source'] ?? '?'),
+            (int)($row['missing'] ?? 0),
+            (int)($row['no_work_uri'] ?? 0),
+            (int)($row['has_description'] ?? 0),
+        );
+    }
+    if (!$deOnly && !in_array('--stats-only', $argv, true)) {
+        echo "\n";
+    } else {
+        exit(0);
+    }
+}
+
 if ($deOnly) {
     $n = $service->backfillDeFromDescription($limit);
     echo "DE description → content: {$n} row(s) updated.\n";
     exit(0);
 }
 
-$result = $service->backfillJus($limit);
+$result = $service->backfillJusDetailed($limit, $verbose);
 echo sprintf(
     "Jus corpus backfill: %d updated, %d skipped, %d failed (batch limit %d).\n",
     $result['updated'],

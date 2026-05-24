@@ -93,6 +93,39 @@ final class LexItemRepository
     }
 
     /**
+     * Per-source counts for rows still missing `content` (diagnostics for backfill CLI).
+     *
+     * @return array<int, array{source: string, missing: int, no_work_uri: int, has_description: int}>
+     */
+    public function contentBackfillStatsBySource(): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::contentBackfillStatsBySource must not run on a satellite.');
+        }
+
+        $table = entryTable('lex_items');
+        $sql   = "SELECT source,
+                         COUNT(*) AS missing,
+                         SUM(CASE WHEN work_uri IS NULL OR TRIM(work_uri) = '' THEN 1 ELSE 0 END) AS no_work_uri,
+                         SUM(CASE WHEN description IS NOT NULL AND TRIM(description) <> '' THEN 1 ELSE 0 END) AS has_description
+                    FROM {$table}
+                   WHERE content IS NULL OR TRIM(content) = ''
+                   GROUP BY source
+                   ORDER BY missing DESC";
+
+        try {
+            $stmt = $this->pdo->query($sql);
+
+            return $stmt === false ? [] : ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * Rows missing a corpus body — used by {@see LexContentBackfillService}.
      *
      * @param list<string> $sources

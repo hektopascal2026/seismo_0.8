@@ -31,7 +31,7 @@ final class PluginRegistry
             'legifrance'  => new LexLegifrancePlugin(),
             'jus_bger'    => new LexJusPlugin('jus_bger', 'Jus: BGer', 'ch_bger', 'CH_BGer'),
             'jus_bge'     => new LexJusPlugin('jus_bge', 'Jus: BGE', 'ch_bge', 'CH_BGE'),
-            'jus_bvger'   => new LexJusPlugin('jus_bvger', 'Jus: BVGer', 'ch_bvger', 'CH_BVGer'),
+            'jus_bvger'   => new LexJusPlugin('jus_bvger', 'Jus: BVGer', 'ch_bvger', 'CH_BVGE'),
             'parl_ch'     => new ParlChPlugin(),
         ];
     }

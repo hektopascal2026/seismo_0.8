@@ -28,12 +28,17 @@ final class LexContentBackfillService
     }
 
     /**
+     * @param array<string, int>|null $reasons
      * @return array{updated: int, skipped: int, failed: int}
      */
-    public function backfillJus(int $limit = self::DEFAULT_BATCH): array
+    public function backfillJus(int $limit = self::DEFAULT_BATCH, ?array &$reasons = null): array
     {
         if (isSatellite()) {
             throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        if ($reasons !== null) {
+            $reasons = [];
         }
 
         $limit = max(1, min($limit, LexItemRepository::MAX_LIMIT));
@@ -45,20 +50,31 @@ final class LexContentBackfillService
 
         foreach ($rows as $row) {
             $id      = (int)($row['id'] ?? 0);
+            $celex   = trim((string)($row['celex'] ?? ''));
             $workUri = trim((string)($row['work_uri'] ?? ''));
-            if ($id <= 0 || $workUri === '') {
+            if ($id <= 0) {
                 $skipped++;
+                $this->noteReason($reasons, 'invalid_row');
                 continue;
             }
 
-            $corpus = LexJusDecisionMapper::fetchCorpusFromWorkUri($this->http, $workUri);
+            $jsonUrl = LexJusDecisionMapper::resolveDecisionJsonUrl($celex, $workUri);
+            if ($jsonUrl === null) {
+                $skipped++;
+                $this->noteReason($reasons, 'no_json_url');
+                continue;
+            }
+
+            $corpus = LexJusDecisionMapper::fetchCorpusFromWorkUri($this->http, $jsonUrl);
             if ($corpus === null) {
                 $failed++;
+                $this->noteReason($reasons, 'fetch_failed');
                 continue;
             }
             $content = trim((string)($corpus['content'] ?? ''));
             if ($content === '') {
                 $skipped++;
+                $this->noteReason($reasons, 'empty_corpus');
                 continue;
             }
 
@@ -66,10 +82,29 @@ final class LexContentBackfillService
                 $updated++;
             } else {
                 $failed++;
+                $this->noteReason($reasons, 'db_update_failed');
             }
         }
 
         return ['updated' => $updated, 'skipped' => $skipped, 'failed' => $failed];
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, failed: int, reasons: array<string, int>}
+     */
+    public function backfillJusDetailed(int $limit = self::DEFAULT_BATCH, bool $verbose = false): array
+    {
+        $reasons = [];
+        $result  = $this->backfillJus($limit, $reasons);
+        $result['reasons'] = $reasons;
+
+        if ($verbose && $reasons !== []) {
+            foreach ($reasons as $reason => $count) {
+                fwrite(STDOUT, "  {$reason}: {$count}\n");
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -82,5 +117,28 @@ final class LexContentBackfillService
         }
 
         return $this->lex->promoteDescriptionToContent('de', max(1, min($limit, 5000)));
+    }
+
+    /**
+     * @return array<int, array{source: string, missing: int, no_work_uri: int, has_description: int}>
+     */
+    public function contentBackfillStats(): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill stats must run on the mothership.');
+        }
+
+        return $this->lex->contentBackfillStatsBySource();
+    }
+
+    /**
+     * @param array<string, int>|null $reasons
+     */
+    private function noteReason(?array &$reasons, string $key): void
+    {
+        if ($reasons === null) {
+            return;
+        }
+        $reasons[$key] = ($reasons[$key] ?? 0) + 1;
     }
 }
