@@ -9,7 +9,6 @@ use DateTimeZone;
 use Seismo\Core\Lex\LexLegifranceApiClient;
 use Seismo\Core\Lex\LexLegifranceContentFetcher;
 use Seismo\Core\Lex\LexLegifranceSearchTextExtractor;
-use Seismo\Core\Lex\LexPlainText;
 use Seismo\Service\SourceFetcherInterface;
 
 /**
@@ -65,6 +64,13 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
         $allowedNatures = self::allowedNaturesFromConfig($config);
 
         $limitTotal = max(1, min((int)($config['limit'] ?? 100), 200));
+        $consultEnabled = !array_key_exists('consult_content_enabled', $config)
+            || (bool)$config['consult_content_enabled'];
+        $contentLimit = (int)($config['content_fetch_limit'] ?? 0);
+        if ($contentLimit <= 0) {
+            $contentLimit = $limitTotal;
+        }
+        $contentLimit = max(0, min($contentLimit, $limitTotal, 50));
 
         $filtres = [
             [
@@ -83,6 +89,9 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
         $rows = [];
         $page = 1;
         $pageSize = min(100, $limitTotal);
+        $contentFetcher = new LexLegifranceContentFetcher($client);
+        $consultAttempts = 0;
+        $consultBlocked = false;
 
         while (count($rows) < $limitTotal && $page <= 20) {
             $remaining = $limitTotal - count($rows);
@@ -130,13 +139,21 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
                     continue;
                 }
                 $mapped = $this->mapSearchHit($hit, $allowedNatures);
-                if ($mapped !== null) {
-                    $searchCorpus = LexLegifranceSearchTextExtractor::corpusFromSearchHit($hit);
-                    if ($searchCorpus !== null) {
-                        $mapped['content'] = $searchCorpus;
-                    }
-                    $rows[] = $mapped;
+                if ($mapped === null) {
+                    continue;
                 }
+
+                $mapped = $this->attachCorpusToRow(
+                    $contentFetcher,
+                    $hit,
+                    $mapped,
+                    $consultEnabled,
+                    $contentLimit,
+                    $consultAttempts,
+                    $consultBlocked,
+                );
+
+                $rows[] = $mapped;
                 if (count($rows) >= $limitTotal) {
                     break 2;
                 }
@@ -149,12 +166,51 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
             ++$page;
         }
 
-        $contentLimit = max(0, min((int)($config['content_fetch_limit'] ?? 10), 30));
-        if ($contentLimit > 0 && $rows !== []) {
-            $rows = (new LexLegifranceContentFetcher($client))->attachContentToRows($rows, $contentLimit);
+        if ($consultBlocked) {
+            error_log(
+                'Seismo Légifrance: /consult/jorf failed during ingest — storing search extracts only.',
+            );
         }
 
         return $rows;
+    }
+
+    /**
+     * @param array<string, mixed> $hit
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function attachCorpusToRow(
+        LexLegifranceContentFetcher $fetcher,
+        array $hit,
+        array $row,
+        bool $consultEnabled,
+        int $contentLimit,
+        int &$consultAttempts,
+        bool &$consultBlocked,
+    ): array {
+        $textCid = LexLegifranceContentFetcher::jorfTextCidFromSearchHit($hit);
+
+        if ($consultEnabled && $consultAttempts < $contentLimit && $textCid !== '') {
+            ++$consultAttempts;
+            $reason = null;
+            $consultCorpus = $fetcher->fetchJorfConsultCorpus($textCid, $reason);
+            if ($consultCorpus !== null && $consultCorpus !== '') {
+                $row['content'] = $consultCorpus;
+
+                return $row;
+            }
+            if ($reason === 'api_error') {
+                $consultBlocked = true;
+            }
+        }
+
+        $searchBody = LexLegifranceSearchTextExtractor::bodyFromSearchHit($hit);
+        if ($searchBody !== null && $searchBody !== '') {
+            $row['content'] = $searchBody;
+        }
+
+        return $row;
     }
 
     /**
@@ -236,15 +292,7 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
         $dateRaw = (string)($hit['dateSignature'] ?? $hit['datePublication'] ?? $hit['date'] ?? '');
         $docDate = $this->normaliseApiDate($dateRaw);
 
-        $descParts = [];
-        if (!empty($hit['resumePrincipal']) && is_array($hit['resumePrincipal'])) {
-            $descParts = array_merge($descParts, array_map('strval', $hit['resumePrincipal']));
-        }
-        $html = (string)($hit['descriptionFusionHtml'] ?? '');
-        if ($html !== '') {
-            $descParts[] = trim(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        }
-        $description = LexPlainText::truncate(trim(implode("\n\n", array_filter($descParts))));
+        $description = LexLegifranceSearchTextExtractor::synopsisFromSearchHit($hit);
         if ($description === null || $description === '') {
             $description = null;
         }

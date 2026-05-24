@@ -10,18 +10,13 @@ namespace Seismo\Core\Lex;
 final class LexLegifranceSearchTextExtractor
 {
     /**
+     * Synopsis fields for `description` (recipe scoring) — not full act text.
+     *
      * @param array<string, mixed> $hit
      */
-    public static function corpusFromSearchHit(array $hit): ?string
+    public static function synopsisFromSearchHit(array $hit): ?string
     {
         $parts = [];
-
-        foreach (['text', 'exposeMotif', 'visa'] as $key) {
-            $value = trim((string)($hit[$key] ?? ''));
-            if ($value !== '') {
-                $parts[] = LexPlainText::normalize($value);
-            }
-        }
 
         if (!empty($hit['resumePrincipal']) && is_array($hit['resumePrincipal'])) {
             $resume = trim(implode("\n\n", array_map('strval', $hit['resumePrincipal'])));
@@ -33,6 +28,27 @@ final class LexLegifranceSearchTextExtractor
         $html = (string)($hit['descriptionFusionHtml'] ?? '');
         if ($html !== '') {
             $parts[] = LexPlainText::fromHtml($html);
+        }
+
+        $plain = trim(implode("\n\n", array_filter($parts)));
+
+        return $plain !== '' ? LexPlainText::truncate($plain) : null;
+    }
+
+    /**
+     * Best-effort body from /search when /consult is unavailable (section extracts, not full act).
+     *
+     * @param array<string, mixed> $hit
+     */
+    public static function bodyFromSearchHit(array $hit): ?string
+    {
+        $parts = [];
+
+        foreach (['text', 'exposeMotif', 'visa'] as $key) {
+            $value = trim((string)($hit[$key] ?? ''));
+            if ($value !== '') {
+                $parts[] = LexPlainText::normalize($value);
+            }
         }
 
         foreach ((array)($hit['sections'] ?? []) as $section) {
@@ -60,6 +76,32 @@ final class LexLegifranceSearchTextExtractor
             }
         }
 
+        return self::finalizeCorpus($parts);
+    }
+
+    /**
+     * @param array<string, mixed> $hit
+     */
+    public static function corpusFromSearchHit(array $hit): ?string
+    {
+        $parts = [];
+        $synopsis = self::synopsisFromSearchHit($hit);
+        if ($synopsis !== null && $synopsis !== '') {
+            $parts[] = $synopsis;
+        }
+        $body = self::bodyFromSearchHit($hit);
+        if ($body !== null && $body !== '') {
+            $parts[] = $body;
+        }
+
+        return self::finalizeCorpus($parts);
+    }
+
+    /**
+     * @param list<string> $parts
+     */
+    private static function finalizeCorpus(array $parts): ?string
+    {
         $parts = array_values(array_unique(array_filter($parts)));
         if ($parts === []) {
             return null;

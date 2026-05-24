@@ -55,6 +55,21 @@ final class LexLegifranceContentFetcher
         return $rows;
     }
 
+    /**
+     * Full JORF body via /consult/jorf only (use during ingest when the search hit is already known).
+     */
+    public function fetchJorfConsultCorpus(string $textCid, ?string &$failureReason = null): ?string
+    {
+        $textCid = self::normalizeConsultId(trim($textCid));
+        if (!self::isPlainJorfTextCid($textCid)) {
+            $failureReason = 'no_jorf_text_cid';
+
+            return null;
+        }
+
+        return $this->fetchFromJorfConsult($textCid, $failureReason);
+    }
+
     public function fetchPlainTextForTextCid(string $textCid, ?string &$failureReason = null): ?string
     {
         return $this->fetchPlainTextForConsultId($textCid, $failureReason);
@@ -62,14 +77,26 @@ final class LexLegifranceContentFetcher
 
     public function fetchPlainTextForConsultId(string $consultId, ?string &$failureReason = null, ?string $titleHint = null): ?string
     {
-        $consultId = trim($consultId);
+        $consultId = self::normalizeConsultId(trim($consultId));
         if ($consultId === '') {
             $failureReason = 'no_jorf_text_cid';
 
             return null;
         }
 
-        // Search works on PISTE plans that block /consult/* (HTTP 403).
+        $consultFailure = null;
+        if (self::isPlainJorfTextCid($consultId)) {
+            $plain = $this->fetchFromJorfConsult($consultId, $consultFailure);
+            if ($plain !== null && $plain !== '') {
+                return $plain;
+            }
+        } elseif (str_starts_with($consultId, 'LEGITEXT')) {
+            $plain = $this->fetchFromLegiPart($consultId, $consultFailure);
+            if ($plain !== null && $plain !== '') {
+                return $plain;
+            }
+        }
+
         $hit = $this->searchHitByConsultId($consultId, $titleHint);
         if ($hit !== null) {
             $plain = LexLegifranceSearchTextExtractor::corpusFromSearchHit($hit);
@@ -77,26 +104,12 @@ final class LexLegifranceContentFetcher
                 return $plain;
             }
             $failureReason = 'empty_corpus';
-        }
 
-        $consultFailure = null;
-        if (self::isJorfTextCid($consultId)) {
-            $plain = $this->fetchFromJorfConsult($consultId, $consultFailure);
-            if ($plain !== null) {
-                return $plain;
-            }
-        } elseif (str_starts_with(strtoupper($consultId), 'LEGITEXT')) {
-            $textId = explode('_', $consultId)[0];
-            $plain  = $this->fetchFromLegiPart($textId, $consultFailure);
-            if ($plain !== null) {
-                return $plain;
-            }
+            return null;
         }
 
         if ($failureReason === null) {
-            $failureReason = ($hit === null && $consultFailure === 'api_error')
-                ? 'search_miss'
-                : ($consultFailure ?? 'search_miss');
+            $failureReason = $consultFailure ?? 'search_miss';
         }
 
         return null;
@@ -145,8 +158,11 @@ final class LexLegifranceContentFetcher
     public static function consultIdFromRow(array $row): ?string
     {
         $celex = trim((string)($row['celex'] ?? ''));
-        if ($celex !== '' && self::isConsultId($celex)) {
-            return $celex;
+        if ($celex !== '') {
+            $normalized = self::normalizeConsultId($celex);
+            if (self::isConsultId($normalized)) {
+                return $normalized;
+            }
         }
 
         foreach (['work_uri', 'eurlex_url'] as $key) {
@@ -155,16 +171,42 @@ final class LexLegifranceContentFetcher
                 continue;
             }
             if (preg_match('#/jorf/id/(JORFTEXT[0-9A-Z]+)#i', $url, $m)) {
-                return strtoupper($m[1]);
+                return self::normalizeConsultId($m[1]);
             }
         }
 
         return null;
     }
 
+    /**
+     * Strip Légifrance version suffixes (e.g. {@code _01-01-2999}) from stored ids.
+     *
+     * /consult/jorf expects the bare chronical id ({@code JORFTEXT000053981016}), not the
+     * versioned {@code titles[].id} value persisted in older ingests.
+     */
+    public static function normalizeConsultId(string $id): string
+    {
+        $id = strtoupper(trim($id));
+        if (preg_match('/^(JORFTEXT\d+)(?:_\d{2}-\d{2}-\d{4})?$/', $id, $m)) {
+            return $m[1];
+        }
+        if (preg_match('/^(LEGITEXT\d+)(?:_.*)?$/', $id, $m)) {
+            return $m[1];
+        }
+
+        return $id;
+    }
+
     public static function isJorfTextCid(string $id): bool
     {
-        return $id !== '' && str_starts_with(strtoupper($id), 'JORFTEXT');
+        return self::isPlainJorfTextCid($id)
+            || (str_starts_with(strtoupper(trim($id)), 'JORFTEXT')
+                && preg_match('/^JORFTEXT\d+(?:_\d{2}-\d{2}-\d{4})?$/i', trim($id)) === 1);
+    }
+
+    public static function isPlainJorfTextCid(string $id): bool
+    {
+        return preg_match('/^JORFTEXT\d+$/i', trim($id)) === 1;
     }
 
     public static function isConsultId(string $id): bool
@@ -181,32 +223,33 @@ final class LexLegifranceContentFetcher
      */
     public static function jorfTextCidFromSearchHit(array $hit): string
     {
-        $jorfText = trim((string)($hit['jorfText'] ?? ''));
-        if (self::isJorfTextCid($jorfText)) {
-            return strtoupper($jorfText);
-        }
-
         $titles = $hit['titles'] ?? [];
         if (is_array($titles) && $titles !== []) {
             $first = $titles[0];
             if (is_array($first)) {
-                foreach (['id', 'cid'] as $key) {
-                    $candidate = trim((string)($first[$key] ?? ''));
-                    if (self::isJorfTextCid($candidate)) {
-                        return strtoupper($candidate);
+                foreach (['cid', 'id'] as $key) {
+                    $candidate = self::normalizeConsultId(trim((string)($first[$key] ?? '')));
+                    if (self::isPlainJorfTextCid($candidate)) {
+                        return $candidate;
                     }
                 }
             }
         }
 
+        $jorfText = self::normalizeConsultId(trim((string)($hit['jorfText'] ?? '')));
+        if (self::isPlainJorfTextCid($jorfText)) {
+            return $jorfText;
+        }
+
         $nor = trim((string)($hit['nor'] ?? ''));
 
-        return $jorfText !== '' ? $jorfText : $nor;
+        return $nor;
     }
 
     private function fetchFromJorfConsult(string $textCid, ?string &$failureReason): ?string
     {
-        $resp = $this->client->postJsonResponse('/consult/jorf', ['textCid' => strtoupper($textCid)]);
+        $textCid = self::normalizeConsultId($textCid);
+        $resp = $this->client->postJsonResponse('/consult/jorf', ['textCid' => $textCid]);
         if ($resp['status'] >= 400) {
             $failureReason = 'api_error';
 
@@ -246,7 +289,7 @@ final class LexLegifranceContentFetcher
      */
     private function searchHitByConsultId(string $consultId, ?string $titleHint = null): ?array
     {
-        $consultId = strtoupper(trim($consultId));
+        $consultId = self::normalizeConsultId($consultId);
         $queries   = $this->searchQueriesForConsultId($consultId, $titleHint);
 
         foreach ($queries as $query) {
@@ -280,15 +323,14 @@ final class LexLegifranceContentFetcher
             $queries[] = ['typeChamp' => 'NOR', 'typeRecherche' => 'EXACTE', 'valeur' => $consultId, 'pageSize' => 5];
         }
 
-        if (self::isJorfTextCid($consultId)) {
+        if (self::isPlainJorfTextCid($consultId)) {
             $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'EXACTE', 'valeur' => $consultId, 'pageSize' => 10];
             $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'UN_DES_MOTS', 'valeur' => $consultId, 'pageSize' => 10];
             if (preg_match('/JORFTEXT0*(\d+)$/i', $consultId, $m)) {
                 $queries[] = ['typeChamp' => 'NUM', 'typeRecherche' => 'EXACTE', 'valeur' => $m[1], 'pageSize' => 10];
             }
         } elseif (str_starts_with($consultId, 'LEGITEXT')) {
-            $textId = explode('_', $consultId)[0];
-            $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'EXACTE', 'valeur' => $textId, 'pageSize' => 10];
+            $queries[] = ['typeChamp' => 'ALL', 'typeRecherche' => 'EXACTE', 'valeur' => $consultId, 'pageSize' => 10];
         }
 
         $titleHint = trim((string)$titleHint);
@@ -338,12 +380,7 @@ final class LexLegifranceContentFetcher
      */
     private function hitMatchesConsultId(array $hit, string $consultId): bool
     {
-        $want = strtoupper(trim($consultId));
-
-        $jorfText = strtoupper(trim((string)($hit['jorfText'] ?? '')));
-        if ($jorfText !== '' && ($jorfText === $want || str_contains($want, $jorfText) || str_contains($jorfText, $want))) {
-            return true;
-        }
+        $want = self::normalizeConsultId($consultId);
 
         $nor = strtoupper(trim((string)($hit['nor'] ?? '')));
         if ($nor !== '' && $nor === $want) {
@@ -354,8 +391,8 @@ final class LexLegifranceContentFetcher
             if (!is_array($titleRow)) {
                 continue;
             }
-            foreach (['id', 'cid'] as $key) {
-                $candidate = strtoupper(trim((string)($titleRow[$key] ?? '')));
+            foreach (['cid', 'id'] as $key) {
+                $candidate = self::normalizeConsultId((string)($titleRow[$key] ?? ''));
                 if ($candidate !== '' && $candidate === $want) {
                     return true;
                 }

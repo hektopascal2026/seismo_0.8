@@ -220,8 +220,9 @@ final class LexConfigStore
                 'natures' => ['LOI', 'ORDONNANCE', 'DECRET'],
                 'lookback_days' => 90,
                 'limit' => 100,
-                'content_fetch_limit' => 10,
-                'notes' => '',
+                'consult_content_enabled' => true,
+                'content_fetch_limit' => 0,
+                'notes' => 'Full law body requires PISTE consult scope (/consult/jorf). content_fetch_limit=0 fetches consult for every row in the refresh batch (max 50).',
             ],
             'jus_banned_words' => [],
         ];
