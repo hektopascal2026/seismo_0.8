@@ -52,7 +52,7 @@ final class RssFetchService
         $out = [];
         foreach ($pie->get_items(0, 200) as $item) {
             $title = trim((string)$item->get_title());
-            if ($title === '') {
+            if ($title === '' || RssFeedItemFilter::shouldSkip($feedUrl, $title)) {
                 continue;
             }
             $link = trim((string)$item->get_permalink());
