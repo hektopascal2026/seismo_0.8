@@ -194,7 +194,8 @@ $entryLoopIndex                 = 0;
                             if (mb_strlen($lexDesc) > 300) $lexPreview .= '...';
                             $lexHasMore = mb_strlen($lexDesc) > 300;
                             $isEuLexCard = ($lexSource === 'eu' && !$isParlSwissLex);
-                            $useLexJurisdictionHeader = $isParlSwissLex || $isEuLexCard;
+                            $isChFedlexCard = ($lexSource === 'ch' && !$isParlSwissLex);
+                            $useLexJurisdictionHeader = $isParlSwissLex || $isEuLexCard || $isChFedlexCard;
                             $lexHeadingTitle = function_exists('seismo_lex_card_heading_title')
                                 ? seismo_lex_card_heading_title($lexItem)
                                 : trim((string)($lexItem['title'] ?? ''));
@@ -209,10 +210,10 @@ $entryLoopIndex                 = 0;
                             <?php if ($useLexJurisdictionHeader): ?>
                             <div class="entry-header entry-header--lex-eu">
                                 <div class="entry-header--lex-eu-left">
-                                    <?php if ($isParlSwissLex): ?>
-                                    <span class="entry-lex-ch-mark" title="Bundeshaus Medien (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
-                                    <?php else: ?>
+                                    <?php if ($isEuLexCard): ?>
                                     <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                    <?php else: ?>
+                                    <span class="entry-lex-ch-mark" title="<?= $isParlSwissLex ? 'Bundeshaus Medien (Schweiz)' : 'Fedlex (Schweiz)' ?>"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
                                     <?php endif; ?>
                                     <span class="entry-lex-eu-doc-type"><?= htmlspecialchars($lexDocType) ?></span>
                                 </div>
@@ -222,11 +223,7 @@ $entryLoopIndex                 = 0;
                             </div>
                             <?php else: ?>
                             <div class="entry-header">
-                                <?php if ($lexSource === 'ch'): ?>
-                                    <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
-                                <?php else: ?>
-                                    <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
-                                <?php endif; ?>
+                                <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>

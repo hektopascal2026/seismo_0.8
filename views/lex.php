@@ -236,10 +236,16 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                         }
                     ?>
                     <div class="entry-card">
-                        <div class="entry-header">
-                            <?php if ($source === 'ch'): ?>
+                        <?php if ($source === 'ch'): ?>
+                        <div class="entry-header entry-header--lex-eu">
+                            <div class="entry-header--lex-eu-left">
                                 <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
-                            <?php elseif ($showSourceTag): ?>
+                                <span class="entry-lex-eu-doc-type"><?= e($docType) ?></span>
+                            </div>
+                        </div>
+                        <?php else: ?>
+                        <div class="entry-header">
+                            <?php if ($showSourceTag): ?>
                                 <span class="entry-tag entry-tag--lex-source">
                                     <?= e($sourceEmoji) ?> <?= e($sourceLabel) ?>
                                 </span>
@@ -248,6 +254,7 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                                 <?= e($docType) ?>
                             </span>
                         </div>
+                        <?php endif; ?>
                         <h3 class="entry-title">
                             <?php if ($lexHasUrl): ?>
                             <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener"><?= e($lexHeadingTitle) ?></a>
