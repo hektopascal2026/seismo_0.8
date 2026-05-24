@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Core\Fetcher\ArticlePageBodyExtractor;
 use Seismo\Core\Fetcher\RssArticleHydrator;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Feed\FeedModule;
@@ -290,6 +291,11 @@ final class FeedModuleHandler
                         ? 'Could not resolve Google News link to publisher URL: ' . $title
                             . ' — use direct outlet RSS (e.g. nzz.ch/startseite.rss) or Scraper.'
                         : 'Could not resolve Google News link — use direct outlet RSS or Scraper.';
+                } elseif (ArticlePageBodyExtractor::isPaywalledPublisherUrl($itemLink)) {
+                    $warnings[] = $title !== ''
+                        ? 'Paywalled (Tamedia): could not load public preview (lead/quote/In Kürze) — RSS teaser only: '
+                            . $title
+                        : 'Paywalled (Tamedia): could not load public preview — RSS teaser only.';
                 } else {
                     $warnings[] = $title !== ''
                         ? 'Still thin after article fetch: ' . $title

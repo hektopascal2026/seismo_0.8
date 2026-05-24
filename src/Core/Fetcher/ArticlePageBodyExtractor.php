@@ -40,6 +40,26 @@ SEL,
         'meta_description' => 1,
     ];
 
+    /**
+     * Swiss/German subscription publishers: RSS {@code description} is usually the
+     * only anonymous text; article HTML is paywalled for bots.
+     *
+     * @var list<string>
+     */
+    private const PAYWALLED_PUBLISHER_HOST_SUFFIXES = [
+        'tagesanzeiger.ch',
+        'derbund.ch',
+        'bazonline.ch',
+        '24heures.ch',
+        'bilan.ch',
+    ];
+
+    /** Below {@see RssArticleHydrator::MIN_PLAIN_CHARS} but enough for timeline cards. */
+    public const PAYWALL_TEASER_MIN_PLAIN = 120;
+
+    /** Minimum plain length to treat a paywalled page fetch as successful (lead + quote + «In Kürze»). */
+    public const PAYWALL_PREVIEW_MIN_PLAIN = 200;
+
     private const ARTICLE_JSON_LD_TYPES = [
         'NewsArticle',
         'Article',
@@ -125,6 +145,61 @@ SEL,
     /**
      * Safety net after extraction — rejects bodies that are still CMP boilerplate.
      */
+    public static function isPaywalledPublisherUrl(string $url): bool
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+
+        return is_string($host) && self::isPaywalledPublisherHost($host);
+    }
+
+    public static function isPaywalledPublisherHost(string $host): bool
+    {
+        $host = strtolower(trim($host));
+        if ($host === '') {
+            return false;
+        }
+        if (str_starts_with($host, 'www.')) {
+            $host = substr($host, 4);
+        }
+
+        foreach (self::PAYWALLED_PUBLISHER_HOST_SUFFIXES as $suffix) {
+            if ($host === $suffix || str_ends_with($host, '.' . $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Rejects login/paywall chrome that Readability sometimes scores as "content".
+     */
+    public static function looksLikePaywallBody(string $plain): bool
+    {
+        $plain = mb_strtolower(trim($plain), 'UTF-8');
+        if ($plain === '') {
+            return false;
+        }
+
+        $snippet = mb_substr($plain, 0, 1200, 'UTF-8');
+        $hits    = 0;
+        foreach ([
+            'kein aktives abo',
+            'unterstützen sie qualitätsjournalismus',
+            'abo abschliessen',
+            'sie haben kein aktives abo',
+            'zum aboshop',
+            'melden sie sich an',
+            'jetzt abonnieren',
+        ] as $needle) {
+            if (str_contains($snippet, $needle)) {
+                $hits++;
+            }
+        }
+
+        return $hits >= 2;
+    }
+
     public static function looksLikeConsentBody(string $plain): bool
     {
         $plain = mb_strtolower(trim($plain), 'UTF-8');
@@ -153,8 +228,192 @@ SEL,
         return $hits >= 2;
     }
 
+    /**
+     * Public preview on paywalled Tamedia article pages (what Safari Reader shows):
+     * kicker, pull quote, lead paragraph, and «In Kürze» bullets from embedded JSON.
+     */
+    public static function extractPaywalledPublisherPreview(string $html): string
+    {
+        if (!self::isTamediaArticleHtml($html)) {
+            return '';
+        }
+
+        $embedded = self::extractTamediaEmbeddedArticleFields($html);
+        $parts    = [];
+
+        if ($embedded['titleHeader'] !== '') {
+            $parts[] = $embedded['titleHeader'];
+        }
+        if ($embedded['title'] !== '' && !self::textsAreNearDuplicate($embedded['title'], $embedded['lead'])) {
+            $parts[] = $embedded['title'];
+        }
+        if ($embedded['lead'] !== '') {
+            $parts[] = $embedded['lead'];
+        }
+
+        $summary = self::extractTamediaSummaryListData($html);
+        if ($summary !== '') {
+            $parts[] = $summary;
+        }
+
+        if ($parts === []) {
+            $fallback = trim(self::extractJsonLdArticleBody($html));
+            if ($fallback !== '') {
+                $parts[] = $fallback;
+            }
+        }
+
+        return self::mergeUniquePreviewParts($parts);
+    }
+
+    private static function isTamediaArticleHtml(string $html): bool
+    {
+        return str_contains($html, 'summary-list-data')
+            || str_contains($html, '"tenantKey":"tagesanzeiger"')
+            || str_contains($html, 'partner-feeds.publishing.tamedia.ch');
+    }
+
+    /**
+     * @return array{title: string, titleHeader: string, lead: string}
+     */
+    private static function extractTamediaEmbeddedArticleFields(string $html): array
+    {
+        $best = ['title' => '', 'titleHeader' => '', 'lead' => ''];
+
+        if (!preg_match_all('#<script[^>]+type=(["\'])application/json\1[^>]*>(.*?)</script>#is', $html, $matches)) {
+            return $best;
+        }
+
+        foreach ($matches[2] as $raw) {
+            $raw = trim(html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if ($raw === '') {
+                continue;
+            }
+
+            try {
+                $data = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                continue;
+            }
+
+            if (!is_array($data)) {
+                continue;
+            }
+
+            if (isset($data['lead']) && is_string($data['lead'])) {
+                $lead = trim($data['lead']);
+                if (mb_strlen($lead, 'UTF-8') > mb_strlen($best['lead'], 'UTF-8')) {
+                    $best['lead'] = $lead;
+                }
+            }
+            if (isset($data['title']) && is_string($data['title'])) {
+                $title = trim($data['title']);
+                if (mb_strlen($title, 'UTF-8') > mb_strlen($best['title'], 'UTF-8')) {
+                    $best['title'] = $title;
+                }
+            }
+            if (isset($data['titleHeader']) && is_string($data['titleHeader'])) {
+                $header = trim($data['titleHeader']);
+                if ($header !== '') {
+                    $best['titleHeader'] = $header;
+                }
+            }
+        }
+
+        return $best;
+    }
+
+    public static function extractTamediaSummaryListData(string $html): string
+    {
+        if (!preg_match('#<script id="summary-list-data"[^>]*>(.*?)</script>#s', $html, $match)) {
+            return '';
+        }
+
+        try {
+            $blocks = json_decode(trim($match[1]), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return '';
+        }
+
+        if (!is_array($blocks)) {
+            return '';
+        }
+
+        $lines = [];
+        foreach ($blocks as $block) {
+            if (!is_array($block)) {
+                continue;
+            }
+            $items = $block['items'] ?? null;
+            if (!is_array($items)) {
+                continue;
+            }
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $text = trim((string)($item['htmlText'] ?? ''));
+                if ($text === '') {
+                    continue;
+                }
+                $text = self::toPlainText($text);
+                if ($text !== '') {
+                    $lines[] = $text;
+                }
+            }
+        }
+
+        if ($lines === []) {
+            return '';
+        }
+
+        return "In Kürze:\n" . implode("\n", array_map(static fn (string $line): string => '• ' . $line, $lines));
+    }
+
+    /**
+     * @param list<string> $parts
+     */
+    private static function mergeUniquePreviewParts(array $parts): string
+    {
+        $out   = [];
+        $seen  = [];
+
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            $key = mb_strtolower(preg_replace('/\s+/u', ' ', $part) ?? $part, 'UTF-8');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[]      = $part;
+        }
+
+        return implode("\n\n", $out);
+    }
+
+    private static function textsAreNearDuplicate(string $a, string $b): bool
+    {
+        $a = mb_strtolower(trim($a), 'UTF-8');
+        $b = mb_strtolower(trim($b), 'UTF-8');
+        if ($a === '' || $b === '') {
+            return false;
+        }
+
+        return $a === $b || str_contains($a, $b) || str_contains($b, $a);
+    }
+
     public static function extractBestArticleBody(string $html, string $excludeSelectors = ''): string
     {
+        if (self::isTamediaArticleHtml($html)) {
+            $preview = self::extractPaywalledPublisherPreview($html);
+            if (mb_strlen(self::toPlainText($preview), 'UTF-8') >= self::PAYWALL_PREVIEW_MIN_PLAIN) {
+                return $preview;
+            }
+        }
+
         $candidates = [];
 
         $jsonLd = self::extractJsonLdArticleBody($html);

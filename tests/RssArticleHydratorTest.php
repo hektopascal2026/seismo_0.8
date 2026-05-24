@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Seismo\Core\Fetcher\ArticlePageBodyExtractor;
 use Seismo\Core\Fetcher\RssArticleHydrator;
 
 final class RssArticleHydratorTest extends TestCase
@@ -36,6 +37,18 @@ final class RssArticleHydratorTest extends TestCase
             ['title' => 'A', 'link' => 'https://example.com/a', 'content' => 'x'],
         ];
         self::assertSame($items, $hydrator->hydrateThinItems($items, false));
+    }
+
+    public function testNeedsHydrationTrueForTamediaRssTeaserOnly(): void
+    {
+        $hydrator = new RssArticleHydrator();
+        $teaser   = 'Frontalangriff: Urs Wietlisbach wirft dem Bundesrat vor, die Folgen des EU-Pakets zu verharmlosen.';
+        self::assertTrue($hydrator->needsHydration([
+            'title'       => 'Kompassinitiative',
+            'link'        => 'https://www.tagesanzeiger.ch/kompassinitiative-urs-wietlisbach-greift-bundesrat-an-998823266029',
+            'content'     => '',
+            'description' => $teaser,
+        ]));
     }
 
     public function testHydrateThinItemsSkipsRowsThatAlreadyHaveBody(): void

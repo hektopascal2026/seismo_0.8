@@ -176,6 +176,52 @@ final class ArticlePageBodyExtractorTest extends TestCase
         self::assertTrue(ArticlePageBodyExtractor::looksLikeConsentBody($plain));
     }
 
+    public function testExtractPaywalledPublisherPreviewFromTamediaEmbeddedJson(): void
+    {
+        $html = <<<'HTML'
+        <!DOCTYPE html><html><head></head><body>
+        <script type="application/json">{"title":"«Ist das direkte Demokratie, wenn wir mit dem Revolver an der Stirn entscheiden müssen?»","titleHeader":"Interview zu EU-Verträgen","lead":"Frontalangriff: Urs Wietlisbach wirft dem Bundesrat vor, die Folgen des EU-Pakets zu verharmlosen."}</script>
+        <script id="summary-list-data" type="application/json">[{"type":"textBlockArray","items":[{"type":"htmlTextItem","htmlText":"Wietlisbach wirft dem Bundesrat vor, die Folgen der EU-Verträge zu verharmlosen."}]},{"type":"textBlockArray","items":[{"type":"htmlTextItem","htmlText":"Mit der Kompassinitiative verlangt er ein Ständemehr."}]}]</script>
+        </body></html>
+        HTML;
+
+        $preview = ArticlePageBodyExtractor::extractPaywalledPublisherPreview($html);
+        self::assertStringContainsString('Interview zu EU-Verträgen', $preview);
+        self::assertStringContainsString('Revolver', $preview);
+        self::assertStringContainsString('Frontalangriff:', $preview);
+        self::assertStringContainsString('In Kürze:', $preview);
+        self::assertStringContainsString('Ständemehr', $preview);
+        self::assertGreaterThanOrEqual(
+            ArticlePageBodyExtractor::PAYWALL_PREVIEW_MIN_PLAIN,
+            mb_strlen(ArticlePageBodyExtractor::toPlainText($preview), 'UTF-8')
+        );
+    }
+
+    public function testExtractTamediaSummaryListData(): void
+    {
+        $html = <<<'HTML'
+        <script id="summary-list-data" type="application/json">[{"type":"textBlockArray","items":[{"type":"htmlTextItem","htmlText":"First point."}]},{"type":"textBlockArray","items":[{"type":"htmlTextItem","htmlText":"Second point."}]}]</script>
+        HTML;
+
+        $summary = ArticlePageBodyExtractor::extractTamediaSummaryListData($html);
+        self::assertStringContainsString('In Kürze:', $summary);
+        self::assertStringContainsString('First point.', $summary);
+        self::assertStringContainsString('Second point.', $summary);
+    }
+
+    public function testLooksLikePaywallBodyDetectsTamediaLoginChrome(): void
+    {
+        $plain = 'Hallo, Login Sie haben kein aktives Abo Unterstützen Sie Qualitätsjournalismus und erhalten Sie Zugriff auf alle Inhalte. Abo abschliessen';
+
+        self::assertTrue(ArticlePageBodyExtractor::looksLikePaywallBody($plain));
+    }
+
+    public function testIsPaywalledPublisherHostForTagesanzeiger(): void
+    {
+        self::assertTrue(ArticlePageBodyExtractor::isPaywalledPublisherHost('www.tagesanzeiger.ch'));
+        self::assertFalse(ArticlePageBodyExtractor::isPaywalledPublisherHost('www.20min.ch'));
+    }
+
     public function testExcludeSelectorsForHostNormalisesWww(): void
     {
         self::assertSame(

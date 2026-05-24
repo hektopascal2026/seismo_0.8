@@ -17,7 +17,7 @@ Rows are still in `feeds` / `feed_items`; only the admin UI and refresh scope di
 ## Ingest patterns on Media
 
 1. **Google News (thin RSS)** — add source on Media → **Extract full text** is on by default for new sources (resolves Google links, fetches the publisher page, picks the best of JSON-LD / Readability / meta). Prefer **direct NZZ RSS** when possible: `https://www.nzz.ch/startseite.rss`. See [rss-hydration.md](rss-hydration.md).
-2. **Tamedia (TA, Der Bund, …)** — do **not** use `…/rss.xml` (302 loop). Use section feeds, e.g. `https://www.tagesanzeiger.ch/ausland/rss.html` (308 → `https://partner-feeds.publishing.tamedia.ch/rss/tagesanzeiger/ausland`). Same pattern for `wirtschaft`, `schweiz`, etc. **20 Minuten:** `https://partner-feeds.20min.ch/rss/20minuten/ausland`.
+2. **Tamedia (TA, Der Bund, …)** — do **not** use `…/rss.xml` (302 loop). Use section feeds, e.g. `https://www.tagesanzeiger.ch/ausland/rss.html` (308 → `https://partner-feeds.publishing.tamedia.ch/rss/tagesanzeiger/ausland`). **Extract full text on** pulls the same public preview as Safari Reader: kicker (`titleHeader`), pull quote (`title`), lead paragraph (`lead`), and «In Kürze» bullets (`summary-list-data`) — not the full Abo article. **20 Minuten:** `https://partner-feeds.20min.ch/rss/20minuten/ausland`.
 3. **Publisher listing (full HTML)** — add on **Scraper**, set category to `media` (feed row + scraper config). Items appear on Media → Items and in the timeline with `feed_category = media`.
 
 **Refresh Media** runs only `category = media` sources (RSS hydration path + media scrapers), not the whole cron RSS cycle.

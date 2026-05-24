@@ -53,7 +53,11 @@ final class BaseClient
      * HTML document fetch: modern desktop Accept* headers, optional Accept-Encoding
      * negotiation on cURL (automatic decompression). Use for scraping only.
      */
-    public function getWebPage(string $url): Response
+    /**
+     * @param bool $sessionCookies When true, use a per-request cookie jar so publishers
+     *                             that 302 once to set {@code entitlementToken} (Tamedia) return HTML.
+     */
+    public function getWebPage(string $url, bool $sessionCookies = false): Response
     {
         $headers = [
             'Accept'            => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -63,7 +67,7 @@ final class BaseClient
             'Upgrade-Insecure-Requests' => '1',
         ];
 
-        return $this->request('GET', $url, $headers, null, true);
+        return $this->request('GET', $url, $headers, null, true, $sessionCookies);
     }
 
     /**
@@ -94,13 +98,19 @@ final class BaseClient
     /**
      * @param array<string, string> $headers
      */
-    private function request(string $method, string $url, array $headers, ?string $body, bool $curlWebEncoding): Response
-    {
-        $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding);
+    private function request(
+        string $method,
+        string $url,
+        array $headers,
+        ?string $body,
+        bool $curlWebEncoding,
+        bool $sessionCookies = false,
+    ): Response {
+        $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
 
         if ($response->status === 429 || $response->status === 503) {
             usleep(self::RETRY_SLEEP_MS * 1000);
-            $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding);
+            $response = $this->execute($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
         }
 
         return $response;
@@ -109,13 +119,19 @@ final class BaseClient
     /**
      * @param array<string, string> $headers
      */
-    private function execute(string $method, string $url, array $headers, ?string $body, bool $curlWebEncoding): Response
-    {
+    private function execute(
+        string $method,
+        string $url,
+        array $headers,
+        ?string $body,
+        bool $curlWebEncoding,
+        bool $sessionCookies = false,
+    ): Response {
         $ua = $this->effectiveUserAgent();
         $headers = array_merge(['User-Agent' => $ua], $headers);
 
         if (function_exists('curl_init')) {
-            return $this->executeCurl($method, $url, $headers, $body, $curlWebEncoding);
+            return $this->executeCurl($method, $url, $headers, $body, $curlWebEncoding, $sessionCookies);
         }
 
         return $this->executeStream($method, $url, $headers, $body);
@@ -124,11 +140,25 @@ final class BaseClient
     /**
      * @param array<string, string> $headers
      */
-    private function executeCurl(string $method, string $url, array $headers, ?string $body, bool $webEncoding): Response
-    {
+    private function executeCurl(
+        string $method,
+        string $url,
+        array $headers,
+        ?string $body,
+        bool $webEncoding,
+        bool $sessionCookies = false,
+    ): Response {
         $ch = curl_init();
         if ($ch === false) {
             throw new HttpClientException('curl_init failed.');
+        }
+
+        $cookieFile = null;
+        if ($sessionCookies) {
+            $cookieFile = tempnam(sys_get_temp_dir(), 'seismo_ck_');
+            if ($cookieFile === false) {
+                throw new HttpClientException('Could not create temporary cookie jar.');
+            }
         }
 
         $flatHeaders = [];
@@ -163,6 +193,10 @@ final class BaseClient
         if ($webEncoding) {
             $opts[CURLOPT_ENCODING] = '';
         }
+        if ($cookieFile !== null) {
+            $opts[CURLOPT_COOKIEJAR]  = $cookieFile;
+            $opts[CURLOPT_COOKIEFILE] = $cookieFile;
+        }
         $share = self::curlShareHandle();
         if ($share !== null) {
             $opts[CURLOPT_SHARE] = $share;
@@ -173,18 +207,23 @@ final class BaseClient
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
 
-        $responseBody = curl_exec($ch);
-        if ($responseBody === false) {
-            $err = curl_error($ch) ?: 'unknown curl error';
+        try {
+            $responseBody = curl_exec($ch);
+            if ($responseBody === false) {
+                $err = curl_error($ch) ?: 'unknown curl error';
+                throw new HttpClientException('HTTP transport failure: ' . $err);
+            }
+
+            $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $finalUrl = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+
+            return new Response($status, (string)$responseBody, $responseHeaders, $finalUrl !== '' ? $finalUrl : $url);
+        } finally {
             curl_close($ch);
-            throw new HttpClientException('HTTP transport failure: ' . $err);
+            if ($cookieFile !== null && is_file($cookieFile)) {
+                unlink($cookieFile);
+            }
         }
-
-        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $finalUrl = (string)curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
-        curl_close($ch);
-
-        return new Response($status, (string)$responseBody, $responseHeaders, $finalUrl !== '' ? $finalUrl : $url);
     }
 
     /**

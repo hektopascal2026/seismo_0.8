@@ -139,7 +139,8 @@ final class RssArticleHydrator
 
     private function fetchAndExtract(string $url, BaseClient $http, string $excludeSelectors): ?string
     {
-        $res = $http->getWebPage($url);
+        $sessionCookies = ArticlePageBodyExtractor::isPaywalledPublisherUrl($url);
+        $res            = $http->getWebPage($url, $sessionCookies);
         if (!$res->isOk()) {
             return null;
         }
@@ -153,12 +154,24 @@ final class RssArticleHydrator
             return null;
         }
 
+        if ($sessionCookies) {
+            $preview = ArticlePageBodyExtractor::extractPaywalledPublisherPreview($html);
+            $plain   = ArticlePageBodyExtractor::toPlainText($preview);
+            if (mb_strlen($plain, 'UTF-8') >= ArticlePageBodyExtractor::PAYWALL_PREVIEW_MIN_PLAIN) {
+                return $preview;
+            }
+        }
+
         $content = ArticlePageBodyExtractor::extractBestArticleBody($html, $excludeSelectors);
         if ($content === '') {
             return null;
         }
 
         if (ArticlePageBodyExtractor::looksLikeConsentBody(ArticlePageBodyExtractor::toPlainText($content))) {
+            return null;
+        }
+
+        if (ArticlePageBodyExtractor::looksLikePaywallBody(ArticlePageBodyExtractor::toPlainText($content))) {
             return null;
         }
 
