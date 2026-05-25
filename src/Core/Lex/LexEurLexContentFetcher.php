@@ -173,12 +173,43 @@ final class LexEurLexContentFetcher
         }
 
         $fragment = $this->extractMainContentHtml($html);
-        $plain = LexPlainText::fromHtml($fragment !== '' ? $fragment : $html);
+        $fragment = $this->trimHtmlFromOperativeStart($fragment !== '' ? $fragment : $html);
+        $plain = LexPlainText::fromHtml($fragment);
+        $plain = self::stripCoverPageFromPlainText($plain);
         if ($plain === '') {
             return null;
         }
         if (strlen($plain) > self::MAX_CONTENT_BYTES) {
             $plain = substr($plain, 0, self::MAX_CONTENT_BYTES) . "\n\n[truncated]";
+        }
+
+        return $plain;
+    }
+
+    /**
+     * Drop Cellar / EUR-Lex cover sheets (institution letterhead, COM reference, duplicate titles).
+     * Corpus should start at the operative preamble (Having regard / Whereas / first recital).
+     */
+    public static function stripCoverPageFromPlainText(string $plain): string
+    {
+        $plain = trim($plain);
+        if ($plain === '') {
+            return '';
+        }
+
+        $patterns = [
+            '/(?:\n\s*|^)Having regard to\b/ui',
+            '/(?:\n\s*|^)Whereas:\s*(?:\n|$)/ui',
+            '/(?:\n\s*|^)\(1\)[A-Za-zÀ-ÿ]/u',
+            '/(?:\n\s*|^)Article\s+1\b/ui',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $plain, $m, PREG_OFFSET_CAPTURE)) {
+                $trimmed = trim(mb_substr($plain, $m[0][1] + 1));
+                if ($trimmed !== '') {
+                    return $trimmed;
+                }
+            }
         }
 
         return $plain;
@@ -234,7 +265,8 @@ final class LexEurLexContentFetcher
             $queries = [
                 "//*[contains(concat(' ', normalize-space(@class), ' '), ' eli-container ')]",
                 "//*[contains(concat(' ', normalize-space(@class), ' '), ' contentWrapper ')]",
-                "//*[contains(concat(' ', normalize-space(@class), ' '), ' content ')]",
+                "//*[@class='content' or contains(concat(' ', normalize-space(@class), ' '), ' content ')"
+                . " and not(contains(concat(' ', normalize-space(@class), ' '), ' contentWrapper '))]",
             ];
             foreach ($queries as $query) {
                 $nodes = $xpath->query($query);
@@ -254,6 +286,83 @@ final class LexEurLexContentFetcher
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($prev);
+        }
+    }
+
+    /**
+     * Remove cover-page nodes from Cellar COM-style XHTML before plain-text conversion.
+     */
+    private function trimHtmlFromOperativeStart(string $html): string
+    {
+        $prev = libxml_use_internal_errors(true);
+        try {
+            $dom = new \DOMDocument();
+            if (@$dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR) === false) {
+                return $html;
+            }
+            $xpath = new \DOMXPath($dom);
+            $contentNodes = $xpath->query(
+                "//*[@class='content' or contains(concat(' ', normalize-space(@class), ' '), ' content ')"
+                . " and not(contains(concat(' ', normalize-space(@class), ' '), ' contentWrapper '))]",
+            );
+            if ($contentNodes === false || $contentNodes->length === 0) {
+                return $html;
+            }
+            $content = $contentNodes->item(0);
+            if (!$content instanceof \DOMElement) {
+                return $html;
+            }
+
+            $startQueries = [
+                ".//p[contains(normalize-space(.), 'Having regard to')][1]",
+                ".//p[contains(normalize-space(.), 'Whereas:')][1]",
+                ".//*[contains(concat(' ', normalize-space(@class), ' '), ' ManualConsidrant ')][1]",
+                ".//*[contains(concat(' ', normalize-space(@class), ' '), ' Formuledadoption ')][1]",
+            ];
+            $start = null;
+            foreach ($startQueries as $query) {
+                $found = $xpath->query($query, $content);
+                if ($found !== false && $found->length > 0) {
+                    $start = $found->item(0);
+                    break;
+                }
+            }
+            if ($start === null) {
+                return $html;
+            }
+
+            $this->removeNodesBefore($content, $start);
+
+            return $dom->saveHTML($content) ?: $html;
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+        }
+    }
+
+    private function removeNodesBefore(\DOMNode $ancestor, \DOMNode $target): void
+    {
+        $path = [];
+        for ($node = $target; $node !== null; $node = $node->parentNode) {
+            $path[] = $node;
+            if ($node === $ancestor) {
+                break;
+            }
+        }
+        if ($path === [] || end($path) !== $ancestor) {
+            return;
+        }
+
+        $cursor = $ancestor;
+        for ($i = count($path) - 2; $i >= 0; $i--) {
+            $mark = $path[$i];
+            if (!$cursor instanceof \DOMElement) {
+                return;
+            }
+            while ($cursor->firstChild !== null && $cursor->firstChild !== $mark) {
+                $cursor->removeChild($cursor->firstChild);
+            }
+            $cursor = $mark;
         }
     }
 }
