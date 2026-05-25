@@ -31,6 +31,15 @@ final class AiBriefingController
     /** Saved system prompt in local `system_config` (per mothership or satellite desk). */
     public const CONFIG_KEY_SYSTEM_PROMPT = 'briefing:system_prompt';
 
+    /** Named prompt library (`system_config` JSON list, per desk). */
+    public const CONFIG_KEY_PROMPT_LIBRARY = 'ai_briefing_prompts';
+
+    private const PROMPT_LIBRARY_SEED_NAME = 'Default';
+
+    private const MAX_PROMPT_LIBRARY = 50;
+
+    private const MAX_PROMPT_NAME_LEN = 80;
+
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
 SYSTEM INSTRUCTIONS:
 Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz. Deine Zielgruppe sind Entscheidungsträger (CEOs, Verwaltungsräte, Verbandskader), die unter Informationsüberflutung leiden. Du lieferst strategische "Intelligence" und filterst das Tagesrauschen rigoros.
@@ -95,20 +104,17 @@ PROMPT;
         $basePath  = getBasePath();
 
         $geminiConfigured = false;
+        $systemPrompt     = self::DEFAULT_SYSTEM_PROMPT;
+        $savedPrompts     = [];
+
         try {
             $config = new SystemConfigRepository(getDbConnection());
             $key    = $config->get(SettingsController::KEY_GEMINI_API_KEY);
             $geminiConfigured = $key !== null && trim($key) !== '';
+            $systemPrompt     = self::resolveStoredSystemPrompt($config);
+            $savedPrompts     = self::ensurePromptLibrarySeeded($config, $systemPrompt);
         } catch (\Throwable $e) {
             error_log('Seismo briefing_builder show: ' . $e->getMessage());
-        }
-
-        $systemPrompt = self::DEFAULT_SYSTEM_PROMPT;
-        try {
-            $config       = new SystemConfigRepository(getDbConnection());
-            $systemPrompt = self::resolveStoredSystemPrompt($config);
-        } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder show prompt: ' . $e->getMessage());
         }
 
         $defaultLookbackDays = self::DEFAULT_LOOKBACK_DAYS;
@@ -274,6 +280,158 @@ PROMPT;
         }
     }
 
+    public function savePromptLibrary(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $name    = $this->parsePromptLibraryName($_POST['name'] ?? null);
+            $content = $this->parseSystemPrompt($_POST['content'] ?? null);
+            $config  = new SystemConfigRepository(getDbConnection());
+            $library = self::loadPromptLibrary($config);
+            if (count($library) >= self::MAX_PROMPT_LIBRARY) {
+                throw new \InvalidArgumentException(
+                    'Prompt library is full (maximum ' . self::MAX_PROMPT_LIBRARY . ' prompts). Delete one first.'
+                );
+            }
+            $library[] = [
+                'id'      => bin2hex(random_bytes(8)),
+                'name'    => $name,
+                'content' => $content,
+            ];
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            echo json_encode(['ok' => true, 'prompts' => $library], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo save_briefing_prompt: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not save prompt to library.'], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public function deletePromptLibrary(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $id = trim((string)($_POST['id'] ?? ''));
+            if ($id === '') {
+                throw new \InvalidArgumentException('Prompt id is required.');
+            }
+            $config  = new SystemConfigRepository(getDbConnection());
+            $library = self::loadPromptLibrary($config);
+            $before  = count($library);
+            $library = array_values(array_filter(
+                $library,
+                static fn(array $row): bool => ($row['id'] ?? '') !== $id
+            ));
+            if (count($library) === $before) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Prompt not found.'], JSON_UNESCAPED_UNICODE);
+
+                return;
+            }
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo delete_briefing_prompt: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not delete prompt.'], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    /**
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    public static function ensurePromptLibrarySeeded(
+        SystemConfigRepository $config,
+        string $systemPrompt,
+    ): array {
+        $library = self::loadPromptLibrary($config);
+        if ($library !== []) {
+            return $library;
+        }
+
+        $library = [[
+            'id'      => bin2hex(random_bytes(8)),
+            'name'    => self::PROMPT_LIBRARY_SEED_NAME,
+            'content' => $systemPrompt,
+        ]];
+        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+
+        return $library;
+    }
+
+    /**
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    public static function loadPromptLibrary(SystemConfigRepository $config): array
+    {
+        $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
+        if (!array_is_list($raw)) {
+            if ($raw !== []) {
+                error_log('Seismo ai_briefing_prompts: expected JSON array, got object');
+            }
+
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id      = trim((string)($row['id'] ?? ''));
+            $name    = trim((string)($row['name'] ?? ''));
+            $content = (string)($row['content'] ?? '');
+            if ($id === '' || $name === '' || $content === '') {
+                continue;
+            }
+            $out[] = ['id' => $id, 'name' => $name, 'content' => $content];
+        }
+
+        return $out;
+    }
+
     public static function resolveStoredSystemPrompt(SystemConfigRepository $config): string
     {
         $stored = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
@@ -302,6 +460,24 @@ PROMPT;
         }
 
         return $systemPrompt;
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    private function parsePromptLibraryName(mixed $raw): string
+    {
+        $name = trim((string)$raw);
+        if ($name === '') {
+            throw new \InvalidArgumentException('Prompt name is required.');
+        }
+        if (strlen($name) > self::MAX_PROMPT_NAME_LEN) {
+            throw new \InvalidArgumentException(
+                'Prompt name is too long (maximum ' . self::MAX_PROMPT_NAME_LEN . ' characters).'
+            );
+        }
+
+        return $name;
     }
 
     /**

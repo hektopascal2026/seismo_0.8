@@ -6,6 +6,7 @@
  * @var string $basePath
  * @var bool $geminiConfigured
  * @var string $systemPrompt
+ * @var list<array{id: string, name: string, content: string}> $savedPrompts
  * @var int $defaultLookbackDays
  * @var int $defaultLimit
  * @var int $maxLimit
@@ -19,8 +20,10 @@ $headerTitle    = 'AI Briefing';
 $headerSubtitle = 'Executive Briefing (Politik & Wirtschaft)';
 $activeNav      = 'briefing_builder';
 
-$generateUrl   = $basePath . '/index.php?action=briefing_builder_generate';
-$savePromptUrl = $basePath . '/index.php?action=briefing_builder_save_prompt';
+$generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
+$savePromptUrl      = $basePath . '/index.php?action=briefing_builder_save_prompt';
+$saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
+$deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
 
 $moduleOptions = [
     ['key' => 'feeds', 'label' => 'Feeds'],
@@ -68,6 +71,9 @@ $moduleOptions = [
         color: #b91c1c;
         font-weight: 600;
     }
+    .briefing-summary-block {
+        max-width: 40rem;
+    }
     .briefing-summary-toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -78,6 +84,12 @@ $moduleOptions = [
     }
     .briefing-summary-toolbar .section-title {
         margin: 0;
+    }
+    #briefing-copy-btn {
+        display: none;
+    }
+    #briefing-copy-btn.briefing-copy-btn--visible {
+        display: inline-block;
     }
     </style>
 </head>
@@ -147,6 +159,23 @@ $moduleOptions = [
 
                 <div class="admin-form-field">
                     <label for="briefing_system_prompt">System prompt</label>
+                    <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
+                        <?php foreach ($savedPrompts as $i => $sp): ?>
+                        <div class="prompt-tab-wrap">
+                            <button type="button" class="prompt-tab<?= $i === 0 ? ' is-active' : '' ?>"
+                                    role="tab"
+                                    data-id="<?= e($sp['id']) ?>"
+                                    aria-selected="<?= $i === 0 ? 'true' : 'false' ?>">
+                                <span class="prompt-tab__label"><?= e($sp['name']) ?></span>
+                            </button>
+                            <button type="button" class="prompt-tab-delete"
+                                    data-id="<?= e($sp['id']) ?>"
+                                    aria-label="Delete prompt <?= e($sp['name']) ?>"
+                                    title="Delete">×</button>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <span id="prompt-library-msg" class="admin-intro" style="margin:0.25rem 0 0;" hidden></span>
                     <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
                               style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
                 </div>
@@ -154,20 +183,24 @@ $moduleOptions = [
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
                     <button type="submit" class="btn btn-success" id="briefing-generate-btn"
                             <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
-                    <button type="button" class="btn btn-secondary" id="briefing-save-prompt-btn">Save prompt</button>
+                    <button type="button" class="btn btn-secondary" id="briefing-save-prompt-btn"
+                            title="Save as the default prompt for this instance">Save prompt (default)</button>
+                    <button type="button" class="btn btn-secondary" id="save-prompt-library-btn"
+                            title="Add the current textarea as a named prompt in the library">Save to library</button>
                     <span id="briefing-prompt-save-msg" class="admin-intro" style="margin:0;" hidden></span>
                 </div>
             </form>
         </div>
 
-        <div class="latest-entries-section module-section-spaced">
+        <div class="latest-entries-section module-section-spaced briefing-summary-block">
             <div class="briefing-summary-toolbar">
                 <h2 class="section-title">Summary</h2>
-                <button type="button" class="btn btn-secondary" id="briefing-copy-btn" hidden>Copy to clipboard</button>
+                <button type="button" class="btn btn-secondary" id="briefing-copy-btn"
+                        hidden aria-hidden="true" tabindex="-1">Copy to clipboard</button>
             </div>
             <div id="briefing-output-error" class="message message-error" hidden></div>
             <div id="briefing-output-warning" class="message message-warning" hidden></div>
-            <div id="briefing-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem;">
+            <div id="briefing-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
                 <p class="admin-intro" id="briefing-output-placeholder">Generated text will appear here.</p>
             </div>
         </div>
@@ -197,8 +230,16 @@ $moduleOptions = [
         var csrfWrap = document.querySelector('.label-hidden-csrf');
         var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
         var savePromptUrl = <?= json_encode($savePromptUrl, JSON_UNESCAPED_SLASHES) ?>;
+        var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_UNESCAPED_SLASHES) ?>;
+        var deleteLibraryUrl = <?= json_encode($deleteLibraryUrl, JSON_UNESCAPED_SLASHES) ?>;
+        var savedPrompts = <?= json_encode($savedPrompts, JSON_UNESCAPED_UNICODE) ?>;
         var savePromptBtn = document.getElementById('briefing-save-prompt-btn');
         var savePromptMsg = document.getElementById('briefing-prompt-save-msg');
+        var saveLibraryBtn = document.getElementById('save-prompt-library-btn');
+        var promptTabsEl = document.getElementById('prompt-tabs');
+        var promptLibraryMsg = document.getElementById('prompt-library-msg');
+        var promptTextarea = document.getElementById('briefing_system_prompt');
+        var activePromptId = savedPrompts.length ? savedPrompts[0].id : null;
         var copyBtn = document.getElementById('briefing-copy-btn');
         var lastBriefingText = '';
         var COPY_BTN_LABEL = 'Copy to clipboard';
@@ -325,15 +366,25 @@ $moduleOptions = [
             lastBriefingText = '';
             if (copyBtn) {
                 copyBtn.hidden = true;
+                copyBtn.classList.remove('briefing-copy-btn--visible');
+                copyBtn.setAttribute('aria-hidden', 'true');
+                copyBtn.tabIndex = -1;
                 copyBtn.textContent = COPY_BTN_LABEL;
             }
         }
 
         function showCopyBtn(text) {
             lastBriefingText = text || '';
-            if (copyBtn) {
-                copyBtn.hidden = lastBriefingText.trim() === '';
-                copyBtn.textContent = COPY_BTN_LABEL;
+            if (!copyBtn) return;
+            var ready = lastBriefingText.trim() !== '';
+            copyBtn.textContent = COPY_BTN_LABEL;
+            if (ready) {
+                copyBtn.hidden = false;
+                copyBtn.classList.add('briefing-copy-btn--visible');
+                copyBtn.setAttribute('aria-hidden', 'false');
+                copyBtn.tabIndex = 0;
+            } else {
+                hideCopyBtn();
             }
         }
 
@@ -386,6 +437,190 @@ $moduleOptions = [
                 }
             });
         });
+
+        function showPromptLibraryMsg(text, isError) {
+            if (!promptLibraryMsg) return;
+            promptLibraryMsg.textContent = text;
+            promptLibraryMsg.classList.toggle('message-error', !!isError);
+            promptLibraryMsg.hidden = text === '';
+        }
+
+        function setActivePromptTab(id) {
+            if (!promptTabsEl) return;
+            promptTabsEl.querySelectorAll('.prompt-tab').forEach(function(tab) {
+                var on = tab.getAttribute('data-id') === id;
+                tab.classList.toggle('is-active', on);
+                tab.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            activePromptId = id;
+        }
+
+        function renderPromptTabs(prompts) {
+            savedPrompts = prompts || [];
+            if (!promptTabsEl) return;
+            promptTabsEl.innerHTML = '';
+            if (!savedPrompts.length) {
+                activePromptId = null;
+                return;
+            }
+            var keepActive = activePromptId;
+            var hasActive = savedPrompts.some(function(p) { return p.id === keepActive; });
+            if (!hasActive) {
+                keepActive = savedPrompts[0].id;
+            }
+            savedPrompts.forEach(function(p) {
+                var wrap = document.createElement('div');
+                wrap.className = 'prompt-tab-wrap';
+
+                var tab = document.createElement('button');
+                tab.type = 'button';
+                tab.className = 'prompt-tab' + (p.id === keepActive ? ' is-active' : '');
+                tab.setAttribute('role', 'tab');
+                tab.setAttribute('data-id', p.id);
+                tab.setAttribute('aria-selected', p.id === keepActive ? 'true' : 'false');
+                var label = document.createElement('span');
+                label.className = 'prompt-tab__label';
+                label.textContent = p.name;
+                tab.appendChild(label);
+
+                var del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'prompt-tab-delete';
+                del.setAttribute('data-id', p.id);
+                del.setAttribute('aria-label', 'Delete prompt ' + p.name);
+                del.setAttribute('title', 'Delete');
+                del.textContent = '\u00d7';
+
+                wrap.appendChild(tab);
+                wrap.appendChild(del);
+                promptTabsEl.appendChild(wrap);
+            });
+            activePromptId = keepActive;
+            bindPromptTabEvents();
+        }
+
+        function bindPromptTabEvents() {
+            if (!promptTabsEl) return;
+            promptTabsEl.querySelectorAll('.prompt-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var id = tab.getAttribute('data-id');
+                    var row = savedPrompts.find(function(p) { return p.id === id; });
+                    if (!row || !promptTextarea) return;
+                    promptTextarea.value = row.content;
+                    setActivePromptTab(id);
+                    showPromptLibraryMsg('', false);
+                });
+            });
+            promptTabsEl.querySelectorAll('.prompt-tab-delete').forEach(function(btn) {
+                btn.addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    var id = btn.getAttribute('data-id');
+                    var row = savedPrompts.find(function(p) { return p.id === id; });
+                    var label = row ? row.name : 'this prompt';
+                    if (!confirm('Delete prompt "' + label + '"?')) return;
+                    var fd = new FormData();
+                    fd.set('id', id);
+                    fd.set('_csrf', getCsrf());
+                    btn.disabled = true;
+                    fetch(deleteLibraryUrl, {
+                        method: 'POST',
+                        body: fd,
+                        credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json' }
+                    })
+                    .then(function(r) {
+                        return r.text().then(function(t) {
+                            return { status: r.status, body: t };
+                        });
+                    })
+                    .then(function(res) {
+                        var data;
+                        try {
+                            data = JSON.parse(res.body);
+                        } catch (e) {
+                            showPromptLibraryMsg('Invalid response (HTTP ' + res.status + ').', true);
+                            return;
+                        }
+                        if (!data.ok) {
+                            showPromptLibraryMsg(data.error || 'Could not delete prompt.', true);
+                            return;
+                        }
+                        savedPrompts = savedPrompts.filter(function(p) { return p.id !== id; });
+                        if (activePromptId === id) {
+                            activePromptId = savedPrompts.length ? savedPrompts[0].id : null;
+                        }
+                        renderPromptTabs(savedPrompts);
+                        showPromptLibraryMsg('', false);
+                    })
+                    .catch(function() {
+                        showPromptLibraryMsg('Network error — could not reach the server.', true);
+                    })
+                    .finally(function() {
+                        btn.disabled = false;
+                    });
+                });
+            });
+        }
+
+        bindPromptTabEvents();
+
+        if (saveLibraryBtn && saveLibraryUrl && promptTextarea) {
+            saveLibraryBtn.addEventListener('click', function() {
+                var name = window.prompt('Prompt name');
+                if (name === null) return;
+                name = name.trim();
+                if (name === '') return;
+                showPromptLibraryMsg('', false);
+                var fd = new FormData();
+                fd.set('name', name);
+                fd.set('content', promptTextarea.value);
+                fd.set('_csrf', getCsrf());
+                saveLibraryBtn.disabled = true;
+                var prevLabel = saveLibraryBtn.textContent;
+                saveLibraryBtn.textContent = 'Saving…';
+                fetch(saveLibraryUrl, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(function(r) {
+                    return r.text().then(function(t) {
+                        return { status: r.status, body: t };
+                    });
+                })
+                .then(function(res) {
+                    var data;
+                    try {
+                        data = JSON.parse(res.body);
+                    } catch (e) {
+                        showPromptLibraryMsg('Invalid response (HTTP ' + res.status + ').', true);
+                        return;
+                    }
+                    if (!data.ok || !data.prompts) {
+                        showPromptLibraryMsg(data.error || 'Could not save prompt to library.', true);
+                        return;
+                    }
+                    var newId = null;
+                    if (data.prompts.length) {
+                        newId = data.prompts[data.prompts.length - 1].id;
+                    }
+                    activePromptId = newId;
+                    renderPromptTabs(data.prompts);
+                    if (newId) {
+                        setActivePromptTab(newId);
+                    }
+                    showPromptLibraryMsg('Prompt saved to library.', false);
+                })
+                .catch(function() {
+                    showPromptLibraryMsg('Network error — could not reach the server.', true);
+                })
+                .finally(function() {
+                    saveLibraryBtn.disabled = false;
+                    saveLibraryBtn.textContent = prevLabel;
+                });
+            });
+        }
 
         if (savePromptBtn && savePromptUrl) {
             savePromptBtn.addEventListener('click', function() {

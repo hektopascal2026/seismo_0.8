@@ -100,6 +100,16 @@ $router->register(
     false
 );
 $router->register(
+    'save_briefing_prompt',
+    \Seismo\Controller\AiBriefingController::class . '::savePromptLibrary',
+    false
+);
+$router->register(
+    'delete_briefing_prompt',
+    \Seismo\Controller\AiBriefingController::class . '::deletePromptLibrary',
+    false
+);
+$router->register(
     'label',
     \Seismo\Controller\MagnituLabelUiController::class . '::show',
     true

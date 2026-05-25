@@ -17,7 +17,8 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Labels | **Always `investigation_lead`**; optional checkbox **“Also include important”** |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
-| Saved prompt | `system_config` key **`briefing:system_prompt`** via **Save prompt** on the page (per desk on satellites) |
+| Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
+| Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
 
 ### Why six toggles (not four `entry_type` values)
 
@@ -162,6 +163,8 @@ Do **not** put Gemini HTTP or SQL in the controller.
 $router->register('briefing_builder', AiBriefingController::class . '::show', true);
 $router->register('briefing_builder_generate', AiBriefingController::class . '::generate', false);
 $router->register('briefing_builder_save_prompt', AiBriefingController::class . '::savePrompt', false);
+$router->register('save_briefing_prompt', AiBriefingController::class . '::savePromptLibrary', false);
+$router->register('delete_briefing_prompt', AiBriefingController::class . '::deletePromptLibrary', false);
 ```
 
 **`src/Http/Router.php`**

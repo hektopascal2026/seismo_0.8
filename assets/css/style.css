@@ -2868,3 +2868,74 @@ main.about-modern-layout ul:not(.about-history) {
     margin-top: 0.75rem;
 }
 
+/* AI Briefing Builder — prompt library tabs */
+.prompt-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    overflow-x: auto;
+    max-width: 40rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.15rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.prompt-tab-wrap {
+    display: flex;
+    flex-shrink: 0;
+    align-items: stretch;
+    border: 0.0625rem solid #000000;
+    background: #ffffff;
+}
+
+.prompt-tab {
+    display: inline-flex;
+    align-items: center;
+    max-width: 14rem;
+    padding: 0.35rem 0.55rem;
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    color: inherit;
+}
+
+.prompt-tab__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prompt-tab.is-active {
+    font-weight: 700;
+    background: var(--seismo-accent, #e8e8e8);
+}
+
+.prompt-tab:focus-visible {
+    outline: 0.125rem solid var(--seismo-accent, #2563eb);
+    outline-offset: -0.125rem;
+}
+
+.prompt-tab-delete {
+    flex-shrink: 0;
+    width: 1.65rem;
+    padding: 0;
+    border: none;
+    border-left: 0.0625rem solid #000000;
+    background: #f0f0f0;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    color: inherit;
+}
+
+.prompt-tab-delete:hover {
+    background: #e0e0e0;
+}
+
+.prompt-tab-delete:focus-visible {
+    outline: 0.125rem solid var(--seismo-accent, #2563eb);
+    outline-offset: -0.125rem;
+}
+
