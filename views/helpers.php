@@ -128,6 +128,40 @@ if (!function_exists('seismo_feed_item_pill_label')) {
     }
 }
 
+if (!function_exists('seismo_feed_filter_pill_text_class')) {
+    /**
+     * CSS modifier for a filter-page feed pill (`filter-pill-text--*`).
+     *
+     * @param string $kind rss|substack|media|scraper
+     */
+    function seismo_feed_filter_pill_text_class(string $kind): string
+    {
+        return match ($kind) {
+            'substack' => 'filter-pill-text--feed-substack',
+            'media'    => 'filter-pill-text--feed-media',
+            'scraper'  => 'filter-pill-text--scraper',
+            default    => 'filter-pill-text--feed',
+        };
+    }
+}
+
+if (!function_exists('seismo_feed_item_entry_tag_class')) {
+    /**
+     * CSS modifier for a timeline feed_item source pill (`entry-tag--*`).
+     *
+     * @param array<string, mixed> $item Feed row (`feed_source_type`, `feed_category`, …)
+     * @param string               $wrapperType `rss` or `substack` from {@see EntryRepository::wrapFeedItem()}.
+     */
+    function seismo_feed_item_entry_tag_class(array $item, string $wrapperType = 'rss'): string
+    {
+        if (seismo_feed_item_is_timeline_media($item)) {
+            return 'entry-tag--feed-media';
+        }
+
+        return $wrapperType === 'substack' ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
+    }
+}
+
 if (!function_exists('seismo_feed_item_is_timeline_media')) {
     /** True when the feed row is routed to the Media module (`feeds.category = media`). */
     function seismo_feed_item_is_timeline_media(array $item): bool

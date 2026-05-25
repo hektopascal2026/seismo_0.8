@@ -27,7 +27,7 @@ if (mb_strlen($fullContent) > 200) {
     $contentPreview .= '...';
 }
 $hasMore = mb_strlen($fullContent) > 200;
-$feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
+$feedCatTagClass = seismo_feed_item_entry_tag_class($item, (string)($itemWrapper['type'] ?? 'rss'));
 $isTimelineMediaEntry = !empty($itemWrapper['timeline_media']);
 $timelineMediaCardClass = '';
 $timelineMediaDataAttr  = '';

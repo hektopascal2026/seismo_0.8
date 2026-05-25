@@ -7,6 +7,7 @@
  * @var array{
  *   feed_categories: list<string>,
  *   feed_category_labels?: array<string, string>,
+ *   feed_pill_kinds?: array<string, string>,
  *   lex_sources: list<string>,
  *   lex_source_labels?: array<string, string>,
  *   email_tags: list<string>
@@ -98,6 +99,7 @@ $mailOn = static function (string $tg) use ($timelineFilter): bool {
 $legOn = !$timelineFilter->excludeCalendar;
 
 $feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
+$feedPillKinds      = $filterPillOptions['feed_pill_kinds'] ?? [];
 $lexSourceLabels    = $filterPillOptions['lex_source_labels'] ?? [];
 
 $formAction = $basePath . '/index.php';
@@ -166,10 +168,10 @@ $formAction = $basePath . '/index.php';
                     <span class="filter-toolbar__hint">Feed</span>
                     <?php foreach ($filterPillOptions['feed_categories'] as $cat): ?>
                         <?php
-                        $isScraperToken = str_starts_with($cat, 'sc:') || str_starts_with($cat, 'sf:');
-                        $fcClass        = $isScraperToken ? 'filter-pill-text--scraper' : 'filter-pill-text--feed';
-                        $cid            = 'df-feed-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $cat);
-                        $feedLabel      = $feedCategoryLabels[$cat] ?? $cat;
+                        $pillKind  = $feedPillKinds[$cat] ?? (str_starts_with($cat, 'sc:') ? 'scraper' : 'rss');
+                        $fcClass   = seismo_feed_filter_pill_text_class($pillKind);
+                        $cid       = 'df-feed-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $cat);
+                        $feedLabel = $feedCategoryLabels[$cat] ?? $cat;
                         ?>
                         <label class="filter-pill-label" for="<?= e($cid) ?>">
                             <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"

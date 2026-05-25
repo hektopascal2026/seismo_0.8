@@ -108,8 +108,9 @@ Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed
 
 | Condition | CSS class | Background | Pill text |
 |-----------|-----------|------------|-----------|
-| `source_type === 'substack'` | `entry-tag entry-tag--feed-substack` | `#C5B4D1` | feed title |
-| `source_type === 'scraper'` | `entry-tag entry-tag--scraper` | `#FFDBBB` | `🌐 ` + feed title (default “Scraper”) |
+| `source_type === 'substack'` | `entry-tag entry-tag--feed-substack` | `#c5b4d1` | feed title |
+| `feeds.category === 'media'` | `entry-tag entry-tag--feed-media` | `#fff7f7` | feed title |
+| `source_type === 'scraper'` | `entry-tag entry-tag--scraper` | `#add8e6` | `🌐 ` + feed title (default “Scraper”) |
 | `source_type === 'rss'` (and other non-special) | `entry-tag entry-tag--feed-rss` | `#add8e6` | feed title |
 | `source_type === 'parl_press'` | see Parl table | | |
 
@@ -244,23 +245,24 @@ Council codes from Parlament.ch (e.g. `NR` → Nationalrat, `SR` → Ständerat,
 
 ---
 
-## Colour quick reference (timeline cards only)
+## Colour quick reference (cards + filter page)
 
 | CSS class | Hex | Used for |
 |-----------|-----|----------|
-| `entry-tag--feed-rss` | `#add8e6` | RSS / default feeds |
-| `entry-tag--feed-substack` | `#C5B4D1` | Substack |
-| `entry-tag--scraper` | `#FFDBBB` | Scraper (`🌐` prefix in UI) |
-| `entry-tag--email-sender` | `#FFDBBB` | Email |
+| `entry-tag--feed-rss` / `filter-pill-text--feed` | `#add8e6` | RSS / default feeds |
+| `entry-tag--feed-substack` / `filter-pill-text--feed-substack` | `#c5b4d1` | Substack |
+| `entry-tag--feed-media` / `filter-pill-text--feed-media` | `#fff7f7` | Media module |
+| `entry-tag--scraper` / `filter-pill-text--scraper` | `#add8e6` | Scraper (`🌐` prefix in UI) |
+| `entry-tag--email-sender` / `filter-pill-text--mail` | `#ffdbbb` | Email |
 | `entry-tag--parl` | `#f5f562` | Parl press primary |
-| `entry-tag--lex-source` | `#f5f562` | Lex jurisdiction (non-EU/CH-mark) |
+| `entry-tag--lex-source` / `filter-pill-text--lex` | `#f5f562` | Lex jurisdiction (non-EU/CH-mark) |
 | `entry-tag--meta` | `#f5f5f5` | Secondary grey pills |
 | `entry-tag--lex-doc` | `#f5f5f5` | Lex document type |
-| `entry-tag--leg-type` | `#d4edda` | Leg event type |
+| `entry-tag--leg-type` / `filter-pill-text--leg` | `#d4edda` | Leg event type |
 | `entry-tag--leg-council` | `#e2e3f1` | Leg council |
 | `entry-lex-eu-mark` / `entry-lex-ch-mark` | `#fff2a8` | EU/CH jurisdiction chip |
 
-**Note:** Dashboard **filter** pills use slightly different hues (e.g. scraper filter `#c9b8e8` vs card `#FFDBBB`). Use the table above for **entry cards**.
+Filter pills use the same `--seismo-pill-*` tokens; they are square like cards but stay compact on `?action=filter`.
 
 ---
 
@@ -295,10 +297,14 @@ function feedPill(entry) {
     };
   }
   const label = truncateLabel(entry.source_name || '');
-  const css =
-    st === 'substack'
+  const isMedia = (entry.source_category || '').toLowerCase() === 'media';
+  const css = isMedia
+    ? 'entry-tag entry-tag--feed-media'
+    : st === 'substack'
       ? 'entry-tag entry-tag--feed-substack'
-      : 'entry-tag entry-tag--feed-rss';
+      : st === 'scraper'
+        ? 'entry-tag entry-tag--scraper'
+        : 'entry-tag entry-tag--feed-rss';
   return { css, text: label };
 }
 

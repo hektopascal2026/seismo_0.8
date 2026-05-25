@@ -28,6 +28,17 @@ body {
 /* medium = 0.875rem (14px) — body text, card content, inputs, descriptions */
 /* small  = 0.75rem (12px)  — tags, pills, dates, status lines              */
 
+/* ═══ Source pill colours (timeline cards + filter page) ═══ */
+:root {
+    --seismo-pill-feed-rss: #add8e6;
+    --seismo-pill-feed-substack: #c5b4d1;
+    --seismo-pill-feed-media: #fff7f7;
+    --seismo-pill-scraper: #add8e6;
+    --seismo-pill-lex: #f5f562;
+    --seismo-pill-leg: #d4edda;
+    --seismo-pill-mail: #ffdbbb;
+}
+
 /* ═══ Logo ═══ */
 .logo-icon {
     display: inline-block;
@@ -684,23 +695,23 @@ textarea.search-input.setup-code-preview {
 }
 
 .filter-pill--feed.filter-pill--active {
-    background-color: #add8e6;
+    background-color: var(--seismo-pill-feed-rss);
 }
 
 .filter-pill--scraper.filter-pill--active {
-    background-color: #c9b8e8;
+    background-color: var(--seismo-pill-scraper);
 }
 
 .filter-pill--lex.filter-pill--active {
-    background-color: #f5e6a8;
+    background-color: var(--seismo-pill-lex);
 }
 
 .filter-pill--mail.filter-pill--active {
-    background-color: #ffd4b8;
+    background-color: var(--seismo-pill-mail);
 }
 
 .filter-pill--leg.filter-pill--active {
-    background-color: #c8e6c9;
+    background-color: var(--seismo-pill-leg);
 }
 
 .filter-toolbar__row {
@@ -757,44 +768,57 @@ textarea.search-input.setup-code-preview {
 .filter-pill-text {
     display: inline-block;
     padding: 0.25rem 0.625rem;
-    border: 0.0625rem solid #666666;
-    border-radius: 0.25rem;
+    border: 0.125rem solid #000000;
+    border-radius: 0;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: #000000;
     background-color: #ffffff;
     line-height: 1.3;
-    opacity: 0.42;
+    opacity: 0.5;
+}
+
+.filter-pill-text--feed,
+.filter-pill-text--feed-rss {
+    background-color: var(--seismo-pill-feed-rss);
+}
+
+.filter-pill-text--feed-substack {
+    background-color: var(--seismo-pill-feed-substack);
+}
+
+.filter-pill-text--feed-media {
+    background-color: var(--seismo-pill-feed-media);
+}
+
+.filter-pill-text--scraper {
+    background-color: var(--seismo-pill-scraper);
+}
+
+.filter-pill-text--lex {
+    background-color: var(--seismo-pill-lex);
+}
+
+.filter-pill-text--mail {
+    background-color: var(--seismo-pill-mail);
+}
+
+.filter-pill-text--leg {
+    background-color: var(--seismo-pill-leg);
 }
 
 .filter-pill-label:hover .filter-pill-text {
-    border-color: #000000;
+    opacity: 0.72;
 }
 
 .filter-pill-input:checked + .filter-pill-text {
     opacity: 1;
-    border-color: #000000;
     box-shadow: 0.0625rem 0.0625rem 0 #000000;
 }
 
-.filter-pill-input:checked + .filter-pill-text--feed {
-    background-color: #add8e6;
-}
-
-.filter-pill-input:checked + .filter-pill-text--scraper {
-    background-color: #c9b8e8;
-}
-
-.filter-pill-input:checked + .filter-pill-text--lex {
-    background-color: #f5e6a8;
-}
-
-.filter-pill-input:checked + .filter-pill-text--mail {
-    background-color: #ffd4b8;
-}
-
-.filter-pill-input:checked + .filter-pill-text--leg {
-    background-color: #c8e6c9;
+.filter-pill-input:focus-visible + .filter-pill-text {
+    outline: 0.125rem solid #000000;
+    outline-offset: 0.125rem;
 }
 
 /* ═══ Entry row internals ═══ */
@@ -836,22 +860,27 @@ textarea.search-input.setup-code-preview {
 }
 
 .entry-tag--feed-rss {
-    background-color: #add8e6;
+    background-color: var(--seismo-pill-feed-rss);
     border-color: #000000;
 }
 
 .entry-tag--feed-substack {
-    background-color: #C5B4D1;
+    background-color: var(--seismo-pill-feed-substack);
+    border-color: #000000;
+}
+
+.entry-tag--feed-media {
+    background-color: var(--seismo-pill-feed-media);
     border-color: #000000;
 }
 
 .entry-tag--scraper {
-    background-color: #FFDBBB;
+    background-color: var(--seismo-pill-scraper);
     border-color: #000000;
 }
 
 .entry-tag--lex-source {
-    background-color: #f5f562;
+    background-color: var(--seismo-pill-lex);
     border-color: #000000;
 }
 
@@ -955,7 +984,7 @@ textarea.search-input.setup-code-preview {
 }
 
 .entry-tag--leg-type {
-    background-color: #d4edda;
+    background-color: var(--seismo-pill-leg);
     border-color: #000000;
 }
 
@@ -965,7 +994,7 @@ textarea.search-input.setup-code-preview {
 }
 
 .entry-tag--email-sender {
-    background-color: #FFDBBB;
+    background-color: var(--seismo-pill-mail);
     border-color: #000000;
 }
 

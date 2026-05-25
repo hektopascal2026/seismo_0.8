@@ -43,41 +43,60 @@ $activeNav = 'styleguide';
         <div class="message message-error">Error</div>
         <div class="message message-info">Info</div>
 
-        <h2 class="section-title module-section-spaced">Dashboard filter pills</h2>
+        <h2 class="section-title module-section-spaced">Source pill colours</h2>
         <p class="admin-intro">
-            On <code>?action=index</code>, <strong>Selection: All | None</strong> (next to View) is a shortcut: <strong>All</strong> clears exclusions (<code>efc</code> / <code>elx</code> / <code>eet</code>) and shows Leg+Jus again; <strong>None</strong> excludes every pill token plus Leg and Jus so the timeline is empty until you turn sources back on.
-            With Selection <strong>All</strong>, pills default to on; clicking turns one <strong>off</strong> via exclusions <code>efc</code>, <code>elx</code>, <code>eet</code>.
-            After <strong>None</strong>, the first pill you click uses <strong>inclusion</strong> (<code>fc</code> / <code>lx</code> / <code>etag</code>): only that pill is on until you add more or reset.
-            <strong>Leg</strong> toggles <code>ecal=1</code> to hide calendar rows. Swiss case-law sources (BGer / BGE / BVGE) are separate Lex-row pills (<code>filters[lex][]</code>); legacy <code>ejus=1</code> still hides all three. Colours: feeds blue, scraper violet, Lex yellow, mail peach, Leg green.
+            Timeline cards and the filter page (<code>?action=filter</code>) share the same square pills: <strong>2px black border</strong>, <strong>no border-radius</strong>, <strong>0.75rem</strong> text.
+            Filter pills keep the compact padding (<code>0.25rem 0.625rem</code>); card pills use the same size via <code>.entry-tag</code>.
+            Colours are defined once in <code>:root</code> as <code>--seismo-pill-*</code> in <code>assets/css/style.css</code>.
         </p>
-        <div class="tag-pills-section filter-toolbar">
-            <div class="filter-toolbar__head">
-                <span class="filter-toolbar__label">Filters</span>
-                <a href="#" class="filter-toolbar__clear-all" onclick="return false;">Reset all</a>
-            </div>
-            <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Feed</span>
-                <span class="filter-pill filter-pill--feed filter-pill--active">Bund</span>
-                <span class="filter-pill filter-pill--feed">SRF</span>
-                <span class="filter-pill filter-pill--scraper filter-pill--active">scraper</span>
-            </div>
-            <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Lex</span>
-                <span class="filter-pill filter-pill--lex">ch</span>
-                <span class="filter-pill filter-pill--lex filter-pill--active">eu</span>
-            </div>
-            <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Email tag</span>
-                <span class="filter-pill filter-pill--mail filter-pill--active">Bund</span>
-                <span class="filter-pill filter-pill--mail">Blick Wirtschaft</span>
-            </div>
-            <div class="filter-toolbar__row">
-                <span class="filter-toolbar__hint">Leg / Jus</span>
-                <span class="filter-pill filter-pill--leg filter-pill--active">Leg</span>
-                <span class="filter-pill filter-pill--lex filter-pill--active">Jus</span>
+        <table class="data-table" style="max-width:36rem;margin-bottom:1rem;">
+            <thead>
+                <tr><th>Source</th><th>CSS (card)</th><th>CSS (filter)</th><th>Background</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>RSS / default feed</td><td><code>entry-tag--feed-rss</code></td><td><code>filter-pill-text--feed</code></td><td><code>#add8e6</code></td></tr>
+                <tr><td>Substack</td><td><code>entry-tag--feed-substack</code></td><td><code>filter-pill-text--feed-substack</code></td><td><code>#c5b4d1</code></td></tr>
+                <tr><td>Scraper</td><td><code>entry-tag--scraper</code></td><td><code>filter-pill-text--scraper</code></td><td><code>#add8e6</code> (blue)</td></tr>
+                <tr><td>Media</td><td><code>entry-tag--feed-media</code></td><td><code>filter-pill-text--feed-media</code></td><td><code>#fff7f7</code></td></tr>
+                <tr><td>Lex</td><td><code>entry-tag--lex-source</code></td><td><code>filter-pill-text--lex</code></td><td><code>#f5f562</code></td></tr>
+                <tr><td>Leg</td><td><code>entry-tag--leg-type</code></td><td><code>filter-pill-text--leg</code></td><td><code>#d4edda</code></td></tr>
+                <tr><td>Email</td><td><code>entry-tag--email-sender</code></td><td><code>filter-pill-text--mail</code></td><td><code>#ffdbbb</code></td></tr>
+            </tbody>
+        </table>
+
+        <h3 class="section-title" style="margin-top:0;">Timeline card pills</h3>
+        <p class="admin-intro">Always show full source colour on the card (no on/off state).</p>
+        <div class="entry-card" style="margin-bottom:0.75rem;">
+            <div class="entry-header">
+                <span class="entry-tag entry-tag--feed-rss">RSS feed</span>
+                <span class="entry-tag entry-tag--feed-substack">Substack</span>
+                <span class="entry-tag entry-tag--feed-media">Media</span>
+                <span class="entry-tag entry-tag--scraper">🌐 Scraper</span>
+                <span class="entry-tag entry-tag--lex-source">🇪🇺 Lex</span>
+                <span class="entry-tag entry-tag--leg-type">Leg</span>
+                <span class="entry-tag entry-tag--email-sender">Email</span>
             </div>
         </div>
-        <p class="admin-intro">Classes: <code>filter-pill</code> + <code>filter-pill--feed|scraper|lex|mail|leg</code>; active state <code>filter-pill--active</code>. Live dashboard filters: <code>views/dashboard_filters.php</code> (<code>filter-pill-label</code> + hidden checkbox + <code>filter-pill-text</code>); rules: <code>assets/css/style.css</code>.</p>
+
+        <h3 class="section-title" style="margin-top:1rem;">Filter page pills</h3>
+        <p class="admin-intro">Same colours and square shape; unchecked pills use 50% opacity, checked pills are fully opaque with a light offset shadow.</p>
+        <div class="tag-pills-section filter-toolbar">
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Feed</span>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--feed">RSS on</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" disabled><span class="filter-pill-text filter-pill-text--feed">RSS off</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--feed-substack">Substack</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--feed-media">Media</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--scraper">Scraper</span></label>
+            </div>
+            <div class="filter-toolbar__row">
+                <span class="filter-toolbar__hint">Lex / Leg / Mail</span>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--lex">Lex</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--leg">Leg</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--mail">Mail</span></label>
+            </div>
+        </div>
+        <p class="admin-intro">Live markup: <code>views/dashboard_filters.php</code> (<code>filter-pill-label</code> + <code>filter-pill-input</code> + <code>filter-pill-text</code>). Card partials: <code>entry_card_rss_substack.php</code>, <code>entry_card_scraper.php</code>.</p>
 
         <h2 class="section-title module-section-spaced">Tag inputs (Settings)</h2>
         <p class="admin-intro">
@@ -132,8 +151,7 @@ $activeNav = 'styleguide';
         <h2 class="section-title module-section-spaced">Entry card sample</h2>
         <div class="entry-card">
             <div class="entry-header">
-                <span class="entry-tag entry-tag--meta">feed_item</span>
-                <span class="entry-tag">investigation_lead</span>
+                <span class="entry-tag entry-tag--feed-rss">Sample outlet</span>
             </div>
             <div class="entry-content">
                 <p>Card body — expand/collapse pattern matches the dashboard.</p>

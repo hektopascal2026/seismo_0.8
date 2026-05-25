@@ -2253,6 +2253,7 @@ final class EntryRepository
      * @return array{
      *   feed_categories: list<string>,
      *   feed_category_labels: array<string, string>,
+     *   feed_pill_kinds: array<string, string>,
      *   lex_sources: list<string>,
      *   lex_source_labels: array<string, string>,
      *   email_tags: list<string>,
@@ -2261,25 +2262,35 @@ final class EntryRepository
     public function getFilterPillOptions(): array
     {
         $labels = [];
+        $kinds  = [];
         foreach ($this->selectRssSubstackFeedFilterEntries() as $row) {
             $labels[$row['token']] = $row['label'];
+            $kinds[$row['token']]  = $row['kind'];
         }
         foreach ($this->selectMediaFeedFilterEntries() as $row) {
             $labels[$row['token']] = $row['label'];
+            $kinds[$row['token']]  = $row['kind'];
         }
         foreach ($this->selectScraperConfigFilterEntries() as $row) {
             $labels[$row['token']] = $row['label'];
+            $kinds[$row['token']]  = $row['kind'];
         }
         foreach ($this->selectOrphanScraperFeedEntries() as $row) {
             $labels[$row['token']] = $row['label'];
+            $kinds[$row['token']]  = $row['kind'];
         }
         foreach ($this->selectParlPressFeedFilterEntries() as $row) {
             $labels[$row['token']] = $row['label'];
+            $kinds[$row['token']]  = $row['kind'];
         }
         if ($labels !== []) {
             uasort($labels, static fn (string $a, string $b): int => strcasecmp($a, $b));
         }
         $tokens = array_keys($labels);
+        $sortedKinds = [];
+        foreach ($tokens as $token) {
+            $sortedKinds[$token] = $kinds[$token] ?? 'rss';
+        }
 
         $lex = $this->selectDistinctLexSources();
         foreach (TimelineFilter::JUS_LEX_SOURCES as $jusSrc) {
@@ -2296,6 +2307,7 @@ final class EntryRepository
         return [
             'feed_categories'       => $tokens,
             'feed_category_labels'  => $labels,
+            'feed_pill_kinds'       => $sortedKinds,
             'lex_sources'           => $lex,
             'lex_source_labels'     => $lexLabels,
             'email_tags'            => $this->selectDistinctEmailTags(),
@@ -2305,13 +2317,14 @@ final class EntryRepository
     /**
      * Feeds-module RSS + Substack sources (excludes Media, scraper-linked, Parl. press).
      *
-     * @return list<array{token: string, label: string}>
+     * @return list<array{token: string, label: string, kind: string}>
      */
     private function selectRssSubstackFeedFilterEntries(): array
     {
         $f  = entryTable('feeds');
         $sc = entryTable('scraper_configs');
         $sql = 'SELECT f.id,
+                       f.source_type,
                        TRIM(COALESCE(NULLIF(f.title, \'\'), CONCAT(\'Feed \', f.id))) AS display_label
                 FROM ' . $f . ' f
                 WHERE f.disabled = 0
@@ -2323,13 +2336,13 @@ final class EntryRepository
                   )
                 ORDER BY display_label ASC';
 
-        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql), null);
     }
 
     /**
      * Media-module sources (`feeds.category = media`).
      *
-     * @return list<array{token: string, label: string}>
+     * @return list<array{token: string, label: string, kind: string}>
      */
     private function selectMediaFeedFilterEntries(): array
     {
@@ -2342,14 +2355,15 @@ final class EntryRepository
                   AND f.source_type IN (\'rss\', \'substack\')
                 ORDER BY display_label ASC';
 
-        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql), 'media');
     }
 
     /**
      * @param list<array<string, mixed>> $rows
-     * @return list<array{token: string, label: string}>
+     * @param ?string                    $fixedKind When set, every row uses this kind; else `source_type` → rss|substack.
+     * @return list<array{token: string, label: string, kind: string}>
      */
-    private function mapFeedFilterEntryRows(array $rows): array
+    private function mapFeedFilterEntryRows(array $rows, ?string $fixedKind): array
     {
         $out = [];
         foreach ($rows as $r) {
@@ -2361,14 +2375,20 @@ final class EntryRepository
             if ($label === '') {
                 $label = 'Feed ' . $id;
             }
-            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
+            if ($fixedKind !== null) {
+                $kind = $fixedKind;
+            } else {
+                $st   = strtolower(trim((string)($r['source_type'] ?? 'rss')));
+                $kind = $st === 'substack' ? 'substack' : 'rss';
+            }
+            $out[] = ['token' => 'sf:' . $id, 'label' => $label, 'kind' => $kind];
         }
 
         return $out;
     }
 
     /**
-     * @return list<array{token: string, label: string}>
+     * @return list<array{token: string, label: string, kind: string}>
      */
     private function selectScraperConfigFilterEntries(): array
     {
@@ -2389,7 +2409,7 @@ final class EntryRepository
             if ($label === '') {
                 $label = 'Scraper ' . $id;
             }
-            $out[] = ['token' => 'sc:' . $id, 'label' => $label];
+            $out[] = ['token' => 'sc:' . $id, 'label' => $label, 'kind' => 'scraper'];
         }
 
         return $out;
@@ -2398,7 +2418,7 @@ final class EntryRepository
     /**
      * Scraper-type feeds with no matching `scraper_configs` row (same URL).
      *
-     * @return list<array{token: string, label: string}>
+     * @return list<array{token: string, label: string, kind: string}>
      */
     private function selectOrphanScraperFeedEntries(): array
     {
@@ -2415,13 +2435,13 @@ final class EntryRepository
                   )
                 ORDER BY display_label ASC';
 
-        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql), 'scraper');
     }
 
     /**
      * Dashboard pills: one `sf:<feeds.id>` per enabled `parl_press` feed ({@see feeds.title}).
      *
-     * @return list<array{token: string, label: string}>
+     * @return list<array{token: string, label: string, kind: string}>
      */
     private function selectParlPressFeedFilterEntries(): array
     {
@@ -2433,7 +2453,7 @@ final class EntryRepository
                   AND f.source_type = \'parl_press\'
                 ORDER BY display_label ASC';
 
-        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql), 'rss');
     }
 
     /**
