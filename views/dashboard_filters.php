@@ -10,7 +10,8 @@
  *   feed_pill_kinds?: array<string, string>,
  *   lex_sources: list<string>,
  *   lex_source_labels?: array<string, string>,
- *   email_tags: list<string>
+ *   email_tags: list<string>,
+ *   email_tag_labels?: array<string, string>,
  * } $filterPillOptions
  * @var \Seismo\Repository\TimelineFilter $timelineFilter
  * @var array<int, array<string, mixed>> $allItems
@@ -100,6 +101,7 @@ $legOn = !$timelineFilter->excludeCalendar;
 
 $feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
 $feedPillKinds      = $filterPillOptions['feed_pill_kinds'] ?? [];
+$emailTagLabels     = $filterPillOptions['email_tag_labels'] ?? [];
 
 $formAction = $basePath . '/index.php';
 ?>
@@ -202,14 +204,17 @@ $formAction = $basePath . '/index.php';
 
                 <?php if ($filterPillOptions['email_tags'] !== []): ?>
                 <div class="filter-toolbar__row">
-                    <span class="filter-toolbar__hint">Email tag</span>
+                    <span class="filter-toolbar__hint">Mail</span>
                     <?php foreach ($filterPillOptions['email_tags'] as $tg): ?>
-                        <?php $cid = 'df-mail-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $tg); ?>
+                        <?php
+                        $cid       = 'df-mail-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $tg);
+                        $mailLabel = $emailTagLabels[$tg] ?? $tg;
+                        ?>
                         <label class="filter-pill-label" for="<?= e($cid) ?>">
                             <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"
                                    name="filters[email][]" value="<?= e($tg) ?>"
                                 <?= $mailOn($tg) ? ' checked' : '' ?>>
-                            <span class="filter-pill-text filter-pill-text--mail"><?= e($tg) ?></span>
+                            <span class="filter-pill-text filter-pill-text--mail"><?= e($mailLabel) ?></span>
                         </label>
                     <?php endforeach; ?>
                 </div>

@@ -785,38 +785,34 @@ final class EntryRepository
         }
 
         if ($emailTags !== []) {
+            $tagFrag = $this->emailTagFilterWhereClause($emailTags, false);
+            if ($tagFrag === null) {
+                return [];
+            }
             $st   = entryTable('sender_tags');
-            $ph   = implode(',', array_fill(0, count($emailTags), '?'));
             $sql  = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
-                      AND st0.tag IN (' . $ph . ')
                     ORDER BY st0.tag ASC
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 WHERE ' . self::SQL_EMAIL_VISIBLE . '
-                  AND EXISTS (
-                    SELECT 1 FROM ' . $st . ' stf
-                    WHERE stf.from_email = e.from_email
-                      AND stf.removed_at IS NULL
-                      AND stf.tag IN (' . $ph . ')
-                )
+                  AND ' . $tagFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
-            $params = array_merge($emailTags, $emailTags);
 
-            return $this->selectPreparedOrEmpty($sql, $params);
+            return $this->selectPreparedOrEmpty($sql, $tagFrag['params']);
         }
 
         $excludedTags = $filter !== null && $filter->excludedEmailTags !== []
             ? $filter->excludedEmailTags
             : [];
         if ($excludedTags !== []) {
-            $st   = entryTable('sender_tags');
-            $ph   = implode(',', array_fill(0, count($excludedTags), '?'));
-            $sql  = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
+            $tagFrag = $this->emailTagFilterWhereClause($excludedTags, true);
+            $st      = entryTable('sender_tags');
+            $sql     = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -825,16 +821,11 @@ final class EntryRepository
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 WHERE ' . self::SQL_EMAIL_VISIBLE . '
-                  AND NOT EXISTS (
-                    SELECT 1 FROM ' . $st . ' x
-                    WHERE x.from_email = e.from_email
-                      AND x.removed_at IS NULL
-                      AND x.tag IN (' . $ph . ')
-                )
+                ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
 
-            return $this->selectPreparedOrEmpty($sql, $excludedTags);
+            return $this->selectPreparedOrEmpty($sql, $tagFrag !== null ? $tagFrag['params'] : []);
         }
 
         $st  = entryTable('sender_tags');
@@ -1072,28 +1063,25 @@ final class EntryRepository
             : [];
 
         if ($emailTags !== []) {
+            $tagFrag = $this->emailTagFilterWhereClause($emailTags, false);
+            if ($tagFrag === null) {
+                return [];
+            }
             $st  = entryTable('sender_tags');
-            $ph  = implode(',', array_fill(0, count($emailTags), '?'));
             $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
-                      AND st0.tag IN (' . $ph . ')
                     ORDER BY st0.tag ASC
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 WHERE ' . self::SQL_EMAIL_VISIBLE . '
-                  AND EXISTS (
-                    SELECT 1 FROM ' . $st . ' stf
-                    WHERE stf.from_email = e.from_email
-                      AND stf.removed_at IS NULL
-                      AND stf.tag IN (' . $ph . ')
-                )
+                  AND ' . $tagFrag['sql'] . '
                 AND ' . $where . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
-            $params = array_merge($emailTags, $emailTags, $params);
+            $params = array_merge($tagFrag['params'], $params);
 
             return $this->selectPreparedOrEmpty($sql, $params);
         }
@@ -1102,9 +1090,9 @@ final class EntryRepository
             ? $filter->excludedEmailTags
             : [];
         if ($excludedTags !== []) {
-            $st  = entryTable('sender_tags');
-            $ph  = implode(',', array_fill(0, count($excludedTags), '?'));
-            $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
+            $tagFrag = $this->emailTagFilterWhereClause($excludedTags, true);
+            $st      = entryTable('sender_tags');
+            $sql     = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', (
                     SELECT st0.tag FROM ' . $st . ' st0
                     WHERE st0.from_email = e.from_email
                       AND st0.removed_at IS NULL
@@ -1113,16 +1101,11 @@ final class EntryRepository
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
                 WHERE ' . self::SQL_EMAIL_VISIBLE . '
-                  AND NOT EXISTS (
-                    SELECT 1 FROM ' . $st . ' x
-                    WHERE x.from_email = e.from_email
-                      AND x.removed_at IS NULL
-                      AND x.tag IN (' . $ph . ')
-                )
+                ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 AND ' . $where . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
-            $params = array_merge($excludedTags, $params);
+            $params = $tagFrag !== null ? array_merge($tagFrag['params'], $params) : $params;
 
             return $this->selectPreparedOrEmpty($sql, $params);
         }
@@ -2206,13 +2189,12 @@ final class EntryRepository
             }
         }
         if ($filter->emailTags !== [] && $et === 'email') {
-            if (!in_array((string)($data['sender_tag'] ?? ''), $filter->emailTags, true)) {
+            if (!$this->emailItemMatchesFilterTokens($data, $filter->emailTags)) {
                 return false;
             }
         }
         if ($filter->emailTags === [] && $filter->excludedEmailTags !== [] && $et === 'email') {
-            $tg = (string)($data['sender_tag'] ?? '');
-            if ($tg !== '' && in_array($tg, $filter->excludedEmailTags, true)) {
+            if ($this->emailItemMatchesFilterTokens($data, $filter->excludedEmailTags)) {
                 return false;
             }
         }
@@ -2261,6 +2243,7 @@ final class EntryRepository
      *   lex_sources: list<string>,
      *   lex_source_labels: array<string, string>,
      *   email_tags: list<string>,
+     *   email_tag_labels: array<string, string>,
      * }
      */
     public function getFilterPillOptions(): array
@@ -2308,13 +2291,23 @@ final class EntryRepository
             $lexLabels[$src] = self::LEX_SOURCE_LABELS[$src] ?? $src;
         }
 
+        $emailLabels = [];
+        foreach ($this->selectEmailSubscriptionFilterEntries() as $row) {
+            $emailLabels[$row['token']] = $row['label'];
+        }
+        if ($emailLabels !== []) {
+            uasort($emailLabels, static fn (string $a, string $b): int => strcasecmp($a, $b));
+        }
+        $emailTokens = array_keys($emailLabels);
+
         return [
             'feed_categories'       => $tokens,
             'feed_category_labels'  => $labels,
             'feed_pill_kinds'       => $sortedKinds,
             'lex_sources'           => $lex,
             'lex_source_labels'     => $lexLabels,
-            'email_tags'            => $this->selectDistinctEmailTags(),
+            'email_tags'            => $emailTokens,
+            'email_tag_labels'      => $emailLabels,
         ];
     }
 
@@ -2485,28 +2478,204 @@ final class EntryRepository
     }
 
     /**
-     * @return list<string>
+     * Mail filter pills: one `em:<email_subscriptions.id>` per confirmed subscription.
+     *
+     * @return list<array{token: string, label: string}>
      */
-    private function selectDistinctEmailTags(): array
+    private function selectEmailSubscriptionFilterEntries(): array
     {
-        $sql = 'SELECT DISTINCT tag FROM ' . entryTable('sender_tags') . '
-            WHERE tag IS NOT NULL
-              AND tag != \'\'
-              AND tag != \'unclassified\'
-              AND (removed_at IS NULL)
-            ORDER BY tag ASC
-            LIMIT 50';
+        $t   = entryTable('email_subscriptions');
+        $sql = 'SELECT id,
+                       TRIM(COALESCE(NULLIF(display_name, \'\'), CONCAT(\'Subscription \', id))) AS display_label
+                FROM ' . $t . '
+                WHERE removed_at IS NULL
+                  AND IFNULL(disabled, 0) = 0
+                  AND IFNULL(auto_detected, 0) = 0
+                ORDER BY display_label ASC';
 
         $rows = $this->selectOrEmpty($sql);
         $out  = [];
         foreach ($rows as $r) {
-            $t = trim((string)($r['tag'] ?? ''));
-            if ($t !== '') {
-                $out[] = $t;
+            $id = (int)($r['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
             }
+            $label = trim((string)($r['display_label'] ?? ''));
+            if ($label === '') {
+                $label = 'Subscription ' . $id;
+            }
+            $out[] = ['token' => 'em:' . $id, 'label' => $label];
         }
 
         return $out;
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return list<array<string, mixed>>
+     */
+    private function selectEmailSubscriptionsByIds(array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0));
+        if ($ids === []) {
+            return [];
+        }
+        $t  = entryTable('email_subscriptions');
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $sql = 'SELECT id, match_type, match_value, display_name
+                FROM ' . $t . '
+                WHERE removed_at IS NULL
+                  AND IFNULL(disabled, 0) = 0
+                  AND IFNULL(auto_detected, 0) = 0
+                  AND id IN (' . $ph . ')';
+
+        return $this->selectPreparedOrEmpty($sql, $ids);
+    }
+
+    /**
+     * @param list<string> $tokens `em:<id>` plus legacy `sender_tags.tag` strings.
+     * @return array{em_ids: list<int>, legacy_tags: list<string>}
+     */
+    private static function partitionEmailFilterTokens(array $tokens): array
+    {
+        $emIds  = [];
+        $legacy = [];
+        foreach ($tokens as $raw) {
+            if (!is_string($raw)) {
+                continue;
+            }
+            $t = trim($raw);
+            if ($t === '') {
+                continue;
+            }
+            if (preg_match('/^em:(\d+)$/', $t, $m)) {
+                $n = (int)$m[1];
+                if ($n > 0) {
+                    $emIds[] = $n;
+                }
+
+                continue;
+            }
+            $legacy[] = $t;
+        }
+
+        return [
+            'em_ids'      => array_values(array_unique($emIds)),
+            'legacy_tags' => array_values(array_unique($legacy)),
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $subscriptionRows
+     * @return array{sql: string, params: list<mixed>}
+     */
+    private function emailSqlSubscriptionMatchOrClause(array $subscriptionRows): array
+    {
+        $parts  = [];
+        $params = [];
+        foreach ($subscriptionRows as $row) {
+            $mt = strtolower(trim((string)($row['match_type'] ?? '')));
+            $mv = trim((string)($row['match_value'] ?? ''));
+            if ($mv === '') {
+                continue;
+            }
+            if ($mt === 'email') {
+                $parts[]  = 'LOWER(TRIM(COALESCE(e.from_email, \'\'))) = ?';
+                $params[] = strtolower($mv);
+
+                continue;
+            }
+            if ($mt !== 'domain') {
+                continue;
+            }
+            $param = strtolower(ltrim($mv, '@'));
+            if ($param === '') {
+                continue;
+            }
+            $hostExpr = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1)))';
+            $parts[]  = '(' . $hostExpr . ' = ? OR ' . $hostExpr . ' LIKE CONCAT(\'%.\', ?))';
+            $params[] = $param;
+            $params[] = $param;
+        }
+        if ($parts === []) {
+            return ['sql' => '', 'params' => []];
+        }
+
+        return ['sql' => '(' . implode(' OR ', $parts) . ')', 'params' => $params];
+    }
+
+    /**
+     * @param list<string> $tokens
+     * @return array{sql: string, params: list<mixed>}|null null when tokens match nothing.
+     */
+    private function emailTagFilterWhereClause(array $tokens, bool $exclude): ?array
+    {
+        $p         = self::partitionEmailFilterTokens($tokens);
+        $matchParts = [];
+        $params    = [];
+
+        if ($p['legacy_tags'] !== []) {
+            $st = entryTable('sender_tags');
+            $ph = implode(',', array_fill(0, count($p['legacy_tags']), '?'));
+            $matchParts[] = 'EXISTS (
+                SELECT 1 FROM ' . $st . ' stf
+                WHERE stf.from_email = e.from_email
+                  AND stf.removed_at IS NULL
+                  AND stf.tag IN (' . $ph . ')
+            )';
+            $params = array_merge($params, $p['legacy_tags']);
+        }
+
+        if ($p['em_ids'] !== []) {
+            $subs = $this->selectEmailSubscriptionsByIds($p['em_ids']);
+            $frag = $this->emailSqlSubscriptionMatchOrClause($subs);
+            if ($frag['sql'] !== '') {
+                $matchParts[] = $frag['sql'];
+                $params       = array_merge($params, $frag['params']);
+            }
+        }
+
+        if ($matchParts === []) {
+            return null;
+        }
+
+        $inner = count($matchParts) === 1
+            ? $matchParts[0]
+            : '(' . implode(' OR ', $matchParts) . ')';
+
+        return [
+            'sql'    => $exclude ? 'NOT (' . $inner . ')' : $inner,
+            'params' => $params,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data Wrapped email row (`from_email`, `sender_tag`, …).
+     * @param list<string>         $tokens
+     */
+    private function emailItemMatchesFilterTokens(array $data, array $tokens): bool
+    {
+        $p    = self::partitionEmailFilterTokens($tokens);
+        $from = trim((string)($data['from_email'] ?? ''));
+        if ($p['em_ids'] !== [] && $from !== '') {
+            foreach ($this->selectEmailSubscriptionsByIds($p['em_ids']) as $row) {
+                if (EmailSubscriptionRepository::matchesAddress(
+                    $from,
+                    (string)($row['match_type'] ?? ''),
+                    (string)($row['match_value'] ?? '')
+                )) {
+                    return true;
+                }
+            }
+        }
+        if ($p['legacy_tags'] !== []) {
+            $tg = (string)($data['sender_tag'] ?? '');
+            if ($tg !== '' && in_array($tg, $p['legacy_tags'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ------------------------------------------------------------------
