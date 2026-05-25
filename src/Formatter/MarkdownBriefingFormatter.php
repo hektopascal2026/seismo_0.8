@@ -24,6 +24,9 @@ final class MarkdownBriefingFormatter
 {
     public const CONTENT_TYPE = 'text/markdown; charset=utf-8';
 
+    /** Max characters of entry body text included per item (content, else description). */
+    public const ENTRY_BODY_MAX_CHARS = 1000;
+
     /**
      * @param array<int, array<string, mixed>> $entries Shaped Magnitu-contract rows.
      * @param array<string, array<string, mixed>> $scoresByKey "type:id" → score row.
@@ -102,17 +105,33 @@ final class MarkdownBriefingFormatter
                     $lines[] = '  - ' . implode(' · ', $bits);
                 }
 
-                $desc = trim((string)($e['description'] ?? ''));
-                if ($desc !== '') {
-                    $desc = (string)preg_replace('/\s+/', ' ', $desc);
-                    $desc = mb_substr($desc, 0, 600);
-                    $lines[] = '  - ' . $desc;
+                $body = self::formatEntryBody($e);
+                if ($body !== '') {
+                    $lines[] = '  - ' . $body;
                 }
                 $lines[] = '';
             }
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<string, mixed> $entry Shaped Magnitu-contract row.
+     */
+    private static function formatEntryBody(array $entry): string
+    {
+        $body = trim((string)($entry['content'] ?? ''));
+        if ($body === '') {
+            $body = trim((string)($entry['description'] ?? ''));
+        }
+        if ($body === '') {
+            return '';
+        }
+
+        $body = (string)preg_replace('/\s+/', ' ', $body);
+
+        return mb_substr($body, 0, self::ENTRY_BODY_MAX_CHARS);
     }
 
     /**

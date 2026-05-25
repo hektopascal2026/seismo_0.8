@@ -82,7 +82,8 @@ $moduleOptions = [
                 Entries are scored labels from Magnitu or the recipe scorer.
                 Only <strong>investigation lead</strong> rows are included by default; optionally add <strong>important</strong>.
                 Each enabled module loads up to the entry limit below (default <?= (int)$defaultLimit ?>, maximum <?= (int)$maxLimit ?>).
-                The full entry text is sent to Gemini in one pass so detail is preserved.
+                Up to <?= (int)\Seismo\Formatter\MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS ?> characters of each entry body
+                (full content when stored, otherwise the summary) is sent to Gemini in one pass.
             </p>
 
             <form id="briefing-builder-form" class="admin-form-card">

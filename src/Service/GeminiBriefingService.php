@@ -13,7 +13,7 @@ use Seismo\Service\Http\Response;
 /**
  * Calls Google Gemini `generateContent` for the AI Briefing Builder.
  *
- * Single-pass only: full entry markdown is sent so the model can use granular source detail.
+ * Single-pass only: entry markdown includes up to {@see MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS} chars of body per item.
  */
 final class GeminiBriefingService
 {
