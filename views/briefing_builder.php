@@ -1109,7 +1109,16 @@ $moduleOptions = [
                             parts.push(String(payload.meta.cited_entry_count) + ' cited');
                         }
                         if (payload.meta.two_pass) {
-                            parts.push('two-pass');
+                            parts.push(payload.meta.auto_two_pass ? 'two-pass (auto)' : 'two-pass');
+                        }
+                        if (payload.meta.batched_selection && payload.meta.selection_batches) {
+                            parts.push('batched selection (' + payload.meta.selection_batches + ' batches)');
+                        }
+                        if (payload.meta.context_truncated) {
+                            parts.push(payload.meta.context_truncated + ' entries capped (max ' + payload.meta.max_context_entries + ')');
+                        }
+                        if (payload.meta.rate_limit_fallback) {
+                            parts.push('rate-limit auto-retry');
                         }
                         if (payload.meta.markdown_chars !== undefined) {
                             parts.push(Math.round(payload.meta.markdown_chars / 1024) + ' KB source context');

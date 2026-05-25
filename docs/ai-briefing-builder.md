@@ -15,6 +15,9 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::MAX_LIMIT` (2000)** per enabled feed-family query (same ceiling as export) |
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
+| Gemini context cap | **`briefing:max_context_entries`** (default **100**) — only the top entries by sort order are sent to Gemini; UI warns when rows are dropped. |
+| Gemini batching | **`briefing:selection_batch_size`** (default **35**) — with **≥ 48** entries, generation auto-enables **two-pass**; with **≥ 40** entries in the pool, **selection** runs in batches (5s pause between calls) then one **summary** pass. Reduces 429 rate-limit errors vs one huge request. |
+| Rate-limit fallback | On **HTTP 429**, waits **12s**, caps context to **`rateLimitFallbackMaxEntries()`** (default ≤ **50**), forces **two-pass + batched selection** (batch **20**, **8s** pause), and retries **once**. UI meta: `rate_limit_fallback`. |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |

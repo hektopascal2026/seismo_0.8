@@ -14,6 +14,7 @@ use Seismo\Repository\SystemConfigRepository;
 use Seismo\Core\MagnituScoreBands;
 use Seismo\Service\BriefingEntryCardPresenter;
 use Seismo\Service\BriefingEntryGatherer;
+use Seismo\Service\BriefingGeminiContext;
 use Seismo\Service\BriefingScoreFilter;
 use Seismo\Service\BriefingSourceSelection;
 use Seismo\Service\GeminiBriefingException;
@@ -201,6 +202,10 @@ PROMPT;
             if ($gathered['contextWarning'] !== null) {
                 $meta['context_warning'] = $gathered['contextWarning'];
             }
+            if ($gathered['contextTruncated'] > 0) {
+                $meta['context_truncated'] = $gathered['contextTruncated'];
+                $meta['max_context_entries'] = $gathered['maxContextEntries'];
+            }
 
             echo json_encode(['ok' => true, 'meta' => $meta], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
@@ -351,9 +356,19 @@ PROMPT;
                 'citation_slots'   => $citationSlots,
                 'two_pass'         => $twoPass,
             ];
-            $meta = array_merge($meta, $attributionMeta);
+            $meta = array_merge($meta, $attributionMeta, $gemini->lastGenerationMeta());
             if ($contextWarning !== null) {
                 $meta['context_warning'] = $contextWarning;
+            }
+            if (isset($gathered['contextTruncated']) && $gathered['contextTruncated'] > 0) {
+                $meta['context_truncated'] = $gathered['contextTruncated'];
+                $meta['max_context_entries'] = $gathered['maxContextEntries'];
+            }
+            if (!empty($meta['rate_limit_fallback'])) {
+                $fallbackNote = 'Retried automatically after a Gemini rate limit (smaller batched context).';
+                $meta['context_warning'] = isset($meta['context_warning'])
+                    ? $meta['context_warning'] . ' ' . $fallbackNote
+                    : $fallbackNote;
             }
 
             echo json_encode([
@@ -836,7 +851,9 @@ PROMPT;
      *     markdown: string,
      *     markdownChars: int,
      *     contextWarning: ?string,
-     *     gatherStats: ?array{entries_before_score_filter: int, entries_after_score_filter: int}
+     *     gatherStats: ?array{entries_before_score_filter: int, entries_after_score_filter: int},
+     *     contextTruncated: int,
+     *     maxContextEntries: int
      * }
      */
     private function gatherBriefingContext(PDO $pdo, array $filters): array
@@ -857,6 +874,11 @@ PROMPT;
             $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
         }
 
+        $geminiContext   = new BriefingGeminiContext(new SystemConfigRepository($pdo));
+        $capped          = $geminiContext->capEntries($entries);
+        $entries         = $capped['entries'];
+        $contextTruncated = $capped['truncated'];
+
         // XML entries with <id> for Gemini extraction; export path stays markdown.
         $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
             'since'          => $filters['since'],
@@ -866,14 +888,27 @@ PROMPT;
         ], true, MarkdownBriefingFormatter::FORMAT_XML);
 
         $markdownChars = strlen($markdown);
+        $contextWarning = $this->contextSizeWarning($markdownChars);
+        if ($contextTruncated > 0) {
+            $capNote = $contextTruncated . ' additional '
+                . ($contextTruncated === 1 ? 'entry was' : 'entries were')
+                . ' omitted from the Gemini context cap (max '
+                . $geminiContext->maxContextEntries()
+                . ' by sort order).';
+            $contextWarning = $contextWarning !== null
+                ? $contextWarning . ' ' . $capNote
+                : $capNote;
+        }
 
         return [
-            'entries'        => $entries,
-            'scoresByKey'    => $scoresByKey,
-            'markdown'       => $markdown,
-            'markdownChars'  => $markdownChars,
-            'contextWarning' => $this->contextSizeWarning($markdownChars),
-            'gatherStats'    => $gatherer->lastGatherStats(),
+            'entries'           => $entries,
+            'scoresByKey'       => $scoresByKey,
+            'markdown'          => $markdown,
+            'markdownChars'     => $markdownChars,
+            'contextWarning'    => $contextWarning,
+            'gatherStats'       => $gatherer->lastGatherStats(),
+            'contextTruncated'  => $contextTruncated,
+            'maxContextEntries' => $geminiContext->maxContextEntries(),
         ];
     }
 

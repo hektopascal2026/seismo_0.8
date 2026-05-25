@@ -9,6 +9,18 @@ namespace Seismo\Service;
  */
 final class GeminiBriefingException extends \RuntimeException
 {
+    public function __construct(
+        string $message,
+        public readonly ?int $httpStatus = null,
+    ) {
+        parent::__construct($message);
+    }
+
+    public function isRateLimitExceeded(): bool
+    {
+        return $this->httpStatus === 429;
+    }
+
     public static function missingApiKey(): self
     {
         return new self('Gemini API key is not configured. Add it under Settings → General.');
@@ -17,7 +29,8 @@ final class GeminiBriefingException extends \RuntimeException
     public static function invalidApiKey(): self
     {
         return new self(
-            'Gemini rejected the API key. Renew the key in Google AI Studio and update Settings → General.'
+            'Gemini rejected the API key. Renew the key in Google AI Studio and update Settings → General.',
+            403,
         );
     }
 
@@ -43,13 +56,15 @@ final class GeminiBriefingException extends \RuntimeException
     {
         return match (true) {
             $status === 403 => new self(
-                'Gemini rejected the API key (403). Enable the Generative Language API for your Google Cloud project and check key restrictions.'
+                'Gemini rejected the API key (403). Enable the Generative Language API for your Google Cloud project and check key restrictions.',
+                403,
             ),
-            $status === 429 => new self('Gemini rate limit exceeded. Try again in a few minutes.'),
-            $status >= 500 => new self('Gemini service is temporarily unavailable. Try again later.'),
+            $status === 429 => new self('Gemini rate limit exceeded. Try again in a few minutes.', 429),
+            $status >= 500 => new self('Gemini service is temporarily unavailable. Try again later.', $status),
             default => new self(
                 'Gemini request failed'
-                . ($status > 0 ? ' (HTTP ' . $status . ').' : '.')
+                . ($status > 0 ? ' (HTTP ' . $status . ').' : '.'),
+                $status > 0 ? $status : null,
             ),
         };
     }
@@ -63,7 +78,7 @@ final class GeminiBriefingException extends \RuntimeException
             $msg .= ' Try gemini-2.5-flash or set system_config gemini:model.';
         }
 
-        return new self($msg);
+        return new self($msg, 404);
     }
 
     public static function fromApiMessage(int $status, string $apiMessage): self
@@ -75,7 +90,7 @@ final class GeminiBriefingException extends \RuntimeException
             return self::fromHttpStatus(429);
         }
 
-        return new self(self::truncateForUi($apiMessage));
+        return new self(self::truncateForUi($apiMessage), $status > 0 ? $status : null);
     }
 
     private static function truncateForUi(string $message): string
