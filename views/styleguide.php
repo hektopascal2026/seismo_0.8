@@ -17,7 +17,7 @@ $activeNav = 'styleguide';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Styleguide — <?= e(seismoBrandTitle()) ?></title>
-    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css?v=<?= e(SEISMO_VERSION) ?>">
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
@@ -57,7 +57,7 @@ $activeNav = 'styleguide';
                 <tr><td>RSS / default feed</td><td><code>entry-tag--feed-rss</code></td><td><code>filter-pill-text--feed</code></td><td><code>#add8e6</code></td></tr>
                 <tr><td>Substack</td><td><code>entry-tag--feed-substack</code></td><td><code>filter-pill-text--feed-substack</code></td><td><code>#c5b4d1</code></td></tr>
                 <tr><td>Scraper</td><td><code>entry-tag--scraper</code></td><td><code>filter-pill-text--scraper</code></td><td><code>#add8e6</code> (blue)</td></tr>
-                <tr><td>Media</td><td><code>entry-tag--feed-media</code></td><td><code>filter-pill-text--feed-media</code></td><td><code>#fff7f7</code></td></tr>
+                <tr><td>Media</td><td><code>entry-tag--feed-media</code></td><td><code>filter-pill-text--feed-media</code></td><td><code>#ffdede</code> (light red)</td></tr>
                 <tr><td>Lex</td><td><code>entry-tag--lex-source</code></td><td><code>filter-pill-text--lex</code></td><td><code>#f5f562</code></td></tr>
                 <tr><td>Leg</td><td><code>entry-tag--leg-type</code></td><td><code>filter-pill-text--leg</code></td><td><code>#d4edda</code></td></tr>
                 <tr><td>Email</td><td><code>entry-tag--email-sender</code></td><td><code>filter-pill-text--mail</code></td><td><code>#ffdbbb</code></td></tr>
@@ -79,7 +79,7 @@ $activeNav = 'styleguide';
         </div>
 
         <h3 class="section-title" style="margin-top:1rem;">Filter page pills</h3>
-        <p class="admin-intro">Same colours and square shape; unchecked pills use 50% opacity, checked pills are fully opaque with a light offset shadow.</p>
+        <p class="admin-intro">Same colours and square shape as card pills (<code>border-radius: 0</code>, <code>0.125rem</code> border). Unchecked filters use a grey border; checked filters use a black border and offset shadow.</p>
         <div class="tag-pills-section filter-toolbar">
             <div class="filter-toolbar__row">
                 <span class="filter-toolbar__hint">Feed</span>

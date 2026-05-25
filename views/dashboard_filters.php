@@ -110,7 +110,7 @@ $formAction = $basePath . '/index.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Filters — <?= e(seismoBrandTitle()) ?></title>
-    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css?v=<?= e(SEISMO_VERSION) ?>">
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
