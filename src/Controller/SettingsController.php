@@ -156,10 +156,8 @@ final class SettingsController
                 $adminPasswordPasteBlock = $_SESSION['settings_admin_password_paste'];
                 unset($_SESSION['settings_admin_password_paste']);
             }
-            if (!$satellite) {
-                $geminiKey = $config->get(self::KEY_GEMINI_API_KEY);
-                $geminiApiKeyOnFile = $geminiKey !== null && trim($geminiKey) !== '';
-            }
+            $geminiKey = $config->get(self::KEY_GEMINI_API_KEY);
+            $geminiApiKeyOnFile = $geminiKey !== null && trim($geminiKey) !== '';
         }
 
         if ($tab === 'mail') {
@@ -394,11 +392,11 @@ final class SettingsController
                 if ($oldLegacy !== $newLegacy) {
                     CoreRunner::clearChunkedFeedRefreshState($config);
                 }
+            }
 
-                $geminiApiKey = trim((string)($_POST['gemini_api_key'] ?? ''));
-                if ($geminiApiKey !== '') {
-                    $config->set(self::KEY_GEMINI_API_KEY, $geminiApiKey);
-                }
+            $geminiApiKey = trim((string)($_POST['gemini_api_key'] ?? ''));
+            if ($geminiApiKey !== '') {
+                $config->set(self::KEY_GEMINI_API_KEY, $geminiApiKey);
             }
 
             $_SESSION['success'] = 'Settings saved.';

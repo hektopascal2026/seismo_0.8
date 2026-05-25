@@ -11,7 +11,7 @@
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn
  * @var bool $legacyRssScraperRefresh
- * @var bool $geminiApiKeyOnFile Mothership: Gemini key stored in system_config
+ * @var bool $geminiApiKeyOnFile Gemini key stored in local system_config
  */
 
 declare(strict_types=1);
@@ -47,18 +47,16 @@ declare(strict_types=1);
                     </p>
                 </div>
                 <?php endif; ?>
-                <?php if (empty($satellite)): ?>
                 <div class="admin-form-field">
                     <label for="gemini_api_key">Gemini API key (AI Briefing Builder)</label>
                     <input type="password" id="gemini_api_key" name="gemini_api_key" class="search-input" style="width:100%; max-width:28rem;"
                            value="" placeholder="Leave blank to keep current key" autocomplete="off">
                     <?php if (!empty($geminiApiKeyOnFile)): ?>
-                        <div class="magnitu-field-hint">A Gemini API key is already stored. Used server-side only for <code>?action=briefing_builder</code>.</div>
+                        <div class="magnitu-field-hint">A Gemini API key is already stored. Used server-side only for <code>?action=briefing_builder</code><?= !empty($satellite) ? ' on this desk' : '' ?>.</div>
                     <?php else: ?>
                         <div class="magnitu-field-hint">Required for the AI Briefing Builder page. Create a key in <a href="https://aistudio.google.com/apikey" rel="noopener noreferrer">Google AI Studio</a>.</div>
                     <?php endif; ?>
                 </div>
-                <?php endif; ?>
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success">Save</button>
                 </div>

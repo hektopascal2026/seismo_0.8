@@ -157,9 +157,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?<?= e($filterNavQs) ?>" class="nav-link<?= $activeNav === 'filter' ? ' active' : '' ?>">Filter</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
-            <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=briefing_builder" class="nav-link<?= $activeNav === 'briefing_builder' ? ' active' : '' ?>">Briefing</a>
-            <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=label" class="nav-link<?= $activeNav === 'label' ? ' active' : '' ?>">Label</a>
             <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>

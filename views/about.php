@@ -233,7 +233,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="v-header"><strong>v0.7.0</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">AI Briefing Builder (Gemini)</div>
                         <ul>
-                            <li><strong>Page:</strong> <code>?action=briefing_builder</code> on the mothership — nav link after Highlights.</li>
+                            <li><strong>Page:</strong> <code>?action=briefing_builder</code> — nav link after Highlights (mothership and path satellites; satellites filter/sort by local Magnitu scores).</li>
                             <li><strong>Pipeline:</strong> <code>BriefingEntryGatherer</code> + Magnitu labels, markdown context (up to 1000 chars of body per entry), single-pass <code>GeminiBriefingService</code> with JSON (<code>briefing_markdown</code>).</li>
                             <li><strong>Filters:</strong> six module toggles (Feeds, Media, Scraper, Mail, Lex, Leg), lookback window, per-module cap; default <strong>investigation lead</strong> (+ optional important).</li>
                             <li><strong>Config:</strong> <code>gemini:api_key</code> in Settings → General. See <code>docs/ai-briefing-builder.md</code>.</li>
@@ -360,7 +360,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                 <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for briefings, n8n, Raycast, or custom scripts:</p>
                 <ul>
-                    <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters and source-card attribution (mothership only).</li>
+                    <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters and source-card attribution (mothership and path satellites).</li>
                     <li><code>?action=export_briefing</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                     <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                 </ul>

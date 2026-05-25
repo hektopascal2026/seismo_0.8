@@ -10,13 +10,13 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 
 | Topic | Decision |
 |--------|----------|
-| Deploy scope | **Mothership only** — register routes in `routes_mothership.inc.php` only |
+| Deploy scope | **Mothership + path satellites** — routes in `routes_mothership.inc.php` and `routes_satellite.inc.php`; satellites use local `entry_scores` / `system_config` |
 | Source toggles | **Six nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, Lex, Leg |
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::MAX_LIMIT` (2000)** per enabled feed-family query (same ceiling as export) |
 | Labels | **Always `investigation_lead`**; optional checkbox **“Also include important”** |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
-| API key | `system_config` key **`gemini:api_key`** via Settings → General |
+| API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 
 ### Why six toggles (not four `entry_type` values)
 
@@ -155,7 +155,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - Pipeline: gatherer → `MarkdownBriefingFormatter::format()` → `GeminiBriefingService`
 - Response: `{ "ok": true, "text": "...", "meta": { "entry_count", "since", "modules", "labels" } }` or `{ "ok": false, "error": "..." }`
 
-**Routes** (`routes_mothership.inc.php`)
+**Routes** (`routes_mothership.inc.php` and `routes_satellite.inc.php`)
 
 ```php
 $router->register('briefing_builder', AiBriefingController::class . '::show', true);
@@ -194,7 +194,7 @@ $router->register('briefing_builder_generate', AiBriefingController::class . '::
 
 **Edit:** `views/partials/site_header.php`
 
-- Nav link after Highlights: `?action=briefing_builder` (mothership block only)
+- Nav link after Highlights: `?action=briefing_builder` (mothership and satellites)
 
 **Acceptance**
 

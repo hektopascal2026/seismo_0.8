@@ -84,7 +84,7 @@ $moduleOptions = [
         <div class="latest-entries-section">
             <h2 class="section-title">Filters</h2>
             <p class="admin-intro">
-                Entries are scored labels from Magnitu or the recipe scorer.
+                Entries are scored labels from Magnitu or the recipe scorer on this instance<?= isSatellite() ? ' (desk scores, not mothership)' : '' ?>.
                 Only <strong>investigation lead</strong> rows are included by default; optionally add <strong>important</strong>.
                 Each enabled module loads up to the entry limit below (default <?= (int)$defaultLimit ?>, maximum <?= (int)$maxLimit ?>).
                 Up to <?= (int)\Seismo\Formatter\MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS ?> characters of each entry body

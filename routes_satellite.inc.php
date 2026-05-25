@@ -2,8 +2,8 @@
 /**
  * Satellite-only route table — UI nav (drawer) is Timeline, Highlights, Label, Settings;
  * the Filter view remains registered and reachable by URL but is hidden from the nav on
- * satellites. In-app: highlights, in-app Label training, settings (General + Magnitu), Magnitu
- * Bearer API, remote “refresh mothership” POST, auth, health.
+ * satellites. In-app: highlights, AI Briefing Builder, in-app Label training, settings (General +
+ * Magnitu), Magnitu Bearer API, remote “refresh mothership” POST, auth, health.
  * No feeds, Lex/Leg admin, Settings → Diagnostics tab, retention, exports, or other
  * mothership-only surfaces.
  *
@@ -83,6 +83,16 @@ $router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
     true
+);
+$router->register(
+    'briefing_builder',
+    \Seismo\Controller\AiBriefingController::class . '::show',
+    true
+);
+$router->register(
+    'briefing_builder_generate',
+    \Seismo\Controller\AiBriefingController::class . '::generate',
+    false
 );
 $router->register(
     'label',

@@ -45,7 +45,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 |--------|---------|
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
-| `?action=briefing_builder` | AI Briefing Builder — Gemini executive briefing (mothership only) |
+| `?action=briefing_builder` | AI Briefing Builder — Gemini executive briefing (mothership + satellites; satellites use local Magnitu scores) |
 | `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |

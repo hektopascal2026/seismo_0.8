@@ -17,7 +17,11 @@ use Seismo\Service\GeminiBriefingException;
 use Seismo\Service\GeminiBriefingService;
 
 /**
- * AI Briefing Builder — session UI + Gemini summary (mothership).
+ * AI Briefing Builder — session UI + Gemini summary.
+ *
+ * On path satellites, {@see getDbConnection()} is the desk catalog (`seismo_<slug>`);
+ * entry rows still come from the mothership via {@see entryTable()}, while Magnitu
+ * labels and relevance use local `entry_scores`.
  */
 final class AiBriefingController
 {
