@@ -301,12 +301,12 @@ $moduleOptions = [
         var sourcesCards = document.getElementById('briefing-sources-cards');
         var sourcesIntro = document.getElementById('briefing-sources-intro');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
-        var prepareUrl = <?= json_encode($prepareUrl, JSON_UNESCAPED_SLASHES) ?>;
-        var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
-        var savePromptUrl = <?= json_encode($savePromptUrl, JSON_UNESCAPED_SLASHES) ?>;
-        var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_UNESCAPED_SLASHES) ?>;
-        var deleteLibraryUrl = <?= json_encode($deleteLibraryUrl, JSON_UNESCAPED_SLASHES) ?>;
-        var savedPrompts = <?= json_encode($savedPrompts, JSON_UNESCAPED_UNICODE) ?>;
+        var prepareUrl = <?= json_encode($prepareUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var generateUrl = <?= json_encode($generateUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var savePromptUrl = <?= json_encode($savePromptUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var deleteLibraryUrl = <?= json_encode($deleteLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var savedPrompts = <?= json_encode($savedPrompts, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
         var savePromptBtn = document.getElementById('briefing-save-prompt-btn');
         var savePromptMsg = document.getElementById('briefing-prompt-save-msg');
         var saveLibraryBtn = document.getElementById('save-prompt-library-btn');
@@ -321,6 +321,44 @@ $moduleOptions = [
         var moduleCbs = document.querySelectorAll('.briefing-module-cb');
         var btnAll = document.getElementById('briefing-modules-all');
         var btnNone = document.getElementById('briefing-modules-none');
+
+        function syncModulePill(cb) {
+            var pill = cb.closest('.tag-filter-pill');
+            if (pill) {
+                pill.classList.toggle('tag-filter-pill-active', cb.checked);
+            }
+        }
+
+        function setModuleChecked(on) {
+            moduleCbs.forEach(function(cb) {
+                cb.checked = on;
+                syncModulePill(cb);
+            });
+        }
+
+        function initBriefingModuleToggles() {
+            if (btnAll) {
+                btnAll.addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    setModuleChecked(true);
+                });
+            }
+            if (btnNone) {
+                btnNone.addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    setModuleChecked(false);
+                });
+            }
+            moduleCbs.forEach(function(cb) {
+                syncModulePill(cb);
+                cb.addEventListener('change', function() {
+                    syncModulePill(cb);
+                });
+            });
+        }
+
+        initBriefingModuleToggles();
+
         var statusTimerIds = [];
         var STATUS_STEPS_SINGLE = [
             { id: 'send', label: 'Sending request to the server' },
@@ -574,26 +612,6 @@ $moduleOptions = [
         if (copyBtn) {
             copyBtn.addEventListener('click', copyBriefingToClipboard);
         }
-
-        function setModuleChecked(on) {
-            moduleCbs.forEach(function(cb) { cb.checked = on; });
-        }
-
-        if (btnAll) {
-            btnAll.addEventListener('click', function() { setModuleChecked(true); });
-        }
-        if (btnNone) {
-            btnNone.addEventListener('click', function() { setModuleChecked(false); });
-        }
-
-        moduleCbs.forEach(function(cb) {
-            cb.addEventListener('change', function() {
-                var pill = cb.closest('.tag-filter-pill');
-                if (pill) {
-                    pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                }
-            });
-        });
 
         function showPromptLibraryMsg(text, isError) {
             if (!promptLibraryMsg) return;
