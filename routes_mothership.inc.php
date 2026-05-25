@@ -403,6 +403,11 @@ $router->register(
     false
 );
 $router->register(
+    'briefing_builder_save_prompt',
+    \Seismo\Controller\AiBriefingController::class . '::savePrompt',
+    false
+);
+$router->register(
     'label',
     \Seismo\Controller\MagnituLabelUiController::class . '::show',
     true

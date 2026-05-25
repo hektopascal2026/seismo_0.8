@@ -5,7 +5,7 @@
  * @var string $csrfField
  * @var string $basePath
  * @var bool $geminiConfigured
- * @var string $defaultSystemPrompt
+ * @var string $systemPrompt
  * @var int $defaultLookbackDays
  * @var int $defaultLimit
  * @var int $maxLimit
@@ -19,7 +19,8 @@ $headerTitle    = 'AI Briefing';
 $headerSubtitle = 'Executive Briefing (Politik & Wirtschaft)';
 $activeNav      = 'briefing_builder';
 
-$generateUrl = $basePath . '/index.php?action=briefing_builder_generate';
+$generateUrl   = $basePath . '/index.php?action=briefing_builder_generate';
+$savePromptUrl = $basePath . '/index.php?action=briefing_builder_save_prompt';
 
 $moduleOptions = [
     ['key' => 'feeds', 'label' => 'Feeds'],
@@ -66,6 +67,17 @@ $moduleOptions = [
         margin: 0;
         color: #b91c1c;
         font-weight: 600;
+    }
+    .briefing-summary-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    .briefing-summary-toolbar .section-title {
+        margin: 0;
     }
     </style>
 </head>
@@ -136,18 +148,23 @@ $moduleOptions = [
                 <div class="admin-form-field">
                     <label for="briefing_system_prompt">System prompt</label>
                     <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
-                              style="width:100%; max-width:40rem;"><?= e($defaultSystemPrompt) ?></textarea>
+                              style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
                 </div>
 
-                <div class="admin-form-actions">
+                <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
                     <button type="submit" class="btn btn-success" id="briefing-generate-btn"
                             <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
+                    <button type="button" class="btn btn-secondary" id="briefing-save-prompt-btn">Save prompt</button>
+                    <span id="briefing-prompt-save-msg" class="admin-intro" style="margin:0;" hidden></span>
                 </div>
             </form>
         </div>
 
         <div class="latest-entries-section module-section-spaced">
-            <h2 class="section-title">Summary</h2>
+            <div class="briefing-summary-toolbar">
+                <h2 class="section-title">Summary</h2>
+                <button type="button" class="btn btn-secondary" id="briefing-copy-btn" hidden>Copy to clipboard</button>
+            </div>
             <div id="briefing-output-error" class="message message-error" hidden></div>
             <div id="briefing-output-warning" class="message message-warning" hidden></div>
             <div id="briefing-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem;">
@@ -179,6 +196,12 @@ $moduleOptions = [
         var sourcesIntro = document.getElementById('briefing-sources-intro');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
         var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
+        var savePromptUrl = <?= json_encode($savePromptUrl, JSON_UNESCAPED_SLASHES) ?>;
+        var savePromptBtn = document.getElementById('briefing-save-prompt-btn');
+        var savePromptMsg = document.getElementById('briefing-prompt-save-msg');
+        var copyBtn = document.getElementById('briefing-copy-btn');
+        var lastBriefingText = '';
+        var COPY_BTN_LABEL = 'Copy to clipboard';
         var moduleCbs = document.querySelectorAll('.briefing-module-cb');
         var btnAll = document.getElementById('briefing-modules-all');
         var btnNone = document.getElementById('briefing-modules-none');
@@ -280,6 +303,7 @@ $moduleOptions = [
         }
 
         function restoreOutputPlaceholder() {
+            hideCopyBtn();
             hideProcessingStatus();
             if (!out.querySelector('#briefing-output-placeholder') && !out.textContent.trim()) {
                 out.style.whiteSpace = 'pre-wrap';
@@ -295,6 +319,52 @@ $moduleOptions = [
         function getCsrf() {
             var input = csrfWrap ? csrfWrap.querySelector('input[name="_csrf"]') : null;
             return input ? input.value : '';
+        }
+
+        function hideCopyBtn() {
+            lastBriefingText = '';
+            if (copyBtn) {
+                copyBtn.hidden = true;
+                copyBtn.textContent = COPY_BTN_LABEL;
+            }
+        }
+
+        function showCopyBtn(text) {
+            lastBriefingText = text || '';
+            if (copyBtn) {
+                copyBtn.hidden = lastBriefingText.trim() === '';
+                copyBtn.textContent = COPY_BTN_LABEL;
+            }
+        }
+
+        function copyBriefingToClipboard() {
+            if (!copyBtn || lastBriefingText.trim() === '') return;
+            function copied() {
+                copyBtn.textContent = 'Copied';
+                setTimeout(function() { copyBtn.textContent = COPY_BTN_LABEL; }, 2000);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(lastBriefingText).then(copied).catch(fallbackCopy);
+                return;
+            }
+            fallbackCopy();
+            function fallbackCopy() {
+                var ta = document.createElement('textarea');
+                ta.value = lastBriefingText;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    if (document.execCommand('copy')) copied();
+                } catch (e) { /* ignore */ }
+                document.body.removeChild(ta);
+            }
+        }
+
+        if (copyBtn) {
+            copyBtn.addEventListener('click', copyBriefingToClipboard);
         }
 
         function setModuleChecked(on) {
@@ -317,10 +387,77 @@ $moduleOptions = [
             });
         });
 
+        if (savePromptBtn && savePromptUrl) {
+            savePromptBtn.addEventListener('click', function() {
+                var promptEl = document.getElementById('briefing_system_prompt');
+                if (!promptEl) return;
+                if (savePromptMsg) {
+                    savePromptMsg.hidden = true;
+                    savePromptMsg.textContent = '';
+                    savePromptMsg.classList.remove('message-error');
+                }
+                var fd = new FormData();
+                fd.set('system_prompt', promptEl.value);
+                fd.set('_csrf', getCsrf());
+                savePromptBtn.disabled = true;
+                var prevSaveLabel = savePromptBtn.textContent;
+                savePromptBtn.textContent = 'Saving…';
+                fetch(savePromptUrl, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(function(r) {
+                    return r.text().then(function(t) {
+                        return { status: r.status, body: t };
+                    });
+                })
+                .then(function(res) {
+                    var data;
+                    try {
+                        data = JSON.parse(res.body);
+                    } catch (e) {
+                        if (savePromptMsg) {
+                            savePromptMsg.textContent = 'Invalid response (HTTP ' + res.status + ').';
+                            savePromptMsg.classList.add('message-error');
+                            savePromptMsg.hidden = false;
+                        }
+                        return;
+                    }
+                    if (!data.ok) {
+                        if (savePromptMsg) {
+                            savePromptMsg.textContent = data.error || 'Could not save prompt.';
+                            savePromptMsg.classList.add('message-error');
+                            savePromptMsg.hidden = false;
+                        }
+                        return;
+                    }
+                    if (savePromptMsg) {
+                        savePromptMsg.textContent = 'Prompt saved for this instance.';
+                        savePromptMsg.classList.remove('message-error');
+                        savePromptMsg.hidden = false;
+                    }
+                })
+                .catch(function() {
+                    if (savePromptMsg) {
+                        savePromptMsg.textContent = 'Network error — could not reach the server.';
+                        savePromptMsg.classList.add('message-error');
+                        savePromptMsg.hidden = false;
+                    }
+                })
+                .finally(function() {
+                    savePromptBtn.disabled = false;
+                    savePromptBtn.textContent = prevSaveLabel;
+                });
+            });
+        }
+
         if (!form || !btn || !out) return;
 
         form.addEventListener('submit', function(ev) {
             ev.preventDefault();
+            hideCopyBtn();
             if (errEl) {
                 errEl.hidden = true;
                 errEl.textContent = '';
@@ -370,10 +507,12 @@ $moduleOptions = [
                         errEl.textContent = 'Invalid response (HTTP ' + res.status + ').';
                         errEl.hidden = false;
                     }
+                    hideCopyBtn();
                     restoreOutputPlaceholder();
                     return;
                 }
                 if (!data.ok) {
+                    hideCopyBtn();
                     var errMsg = data.error || 'Generation failed.';
                     if (errEl) {
                         errEl.textContent = errMsg;
@@ -404,6 +543,7 @@ $moduleOptions = [
                 hideProcessingStatus();
                 out.style.whiteSpace = 'pre-wrap';
                 out.textContent = data.text || '';
+                showCopyBtn(data.text || '');
                 if (data.meta) {
                     var note = document.createElement('p');
                     note.className = 'admin-intro';
@@ -451,6 +591,7 @@ $moduleOptions = [
                 }
             })
             .catch(function() {
+                hideCopyBtn();
                 if (errEl) {
                     errEl.textContent = 'Network error — could not reach the server.';
                     errEl.hidden = false;

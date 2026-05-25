@@ -28,6 +28,9 @@ final class AiBriefingController
     /** Placeholder substituted with formatted entry markdown before the Gemini call. */
     public const MARKDOWN_CONTEXT_PLACEHOLDER = '{markdownContext}';
 
+    /** Saved system prompt in local `system_config` (per mothership or satellite desk). */
+    public const CONFIG_KEY_SYSTEM_PROMPT = 'briefing:system_prompt';
+
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
 SYSTEM INSTRUCTIONS:
 Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz. Deine Zielgruppe sind Entscheidungsträger (CEOs, Verwaltungsräte, Verbandskader), die unter Informationsüberflutung leiden. Du lieferst strategische "Intelligence" und filterst das Tagesrauschen rigoros.
@@ -100,7 +103,14 @@ PROMPT;
             error_log('Seismo briefing_builder show: ' . $e->getMessage());
         }
 
-        $defaultSystemPrompt = self::DEFAULT_SYSTEM_PROMPT;
+        $systemPrompt = self::DEFAULT_SYSTEM_PROMPT;
+        try {
+            $config       = new SystemConfigRepository(getDbConnection());
+            $systemPrompt = self::resolveStoredSystemPrompt($config);
+        } catch (\Throwable $e) {
+            error_log('Seismo briefing_builder show prompt: ' . $e->getMessage());
+        }
+
         $defaultLookbackDays = self::DEFAULT_LOOKBACK_DAYS;
         $defaultLimit        = self::DEFAULT_LIMIT;
         $maxLimit            = MagnituExportRepository::MAX_LIMIT;
@@ -146,22 +156,11 @@ PROMPT;
 
         $limit = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
 
-        $systemPrompt = trim((string)($_POST['system_prompt'] ?? ''));
-        if (strlen($systemPrompt) < self::MIN_SYSTEM_PROMPT_LEN) {
+        try {
+            $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
+        } catch (\InvalidArgumentException $e) {
             http_response_code(400);
-            echo json_encode(
-                ['ok' => false, 'error' => 'System prompt is too short (minimum ' . self::MIN_SYSTEM_PROMPT_LEN . ' characters).'],
-                JSON_UNESCAPED_UNICODE
-            );
-
-            return;
-        }
-        if (strlen($systemPrompt) > self::MAX_SYSTEM_PROMPT_LEN) {
-            http_response_code(400);
-            echo json_encode(
-                ['ok' => false, 'error' => 'System prompt is too long (maximum ' . self::MAX_SYSTEM_PROMPT_LEN . ' characters).'],
-                JSON_UNESCAPED_UNICODE
-            );
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
 
             return;
         }
@@ -237,6 +236,72 @@ PROMPT;
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not generate briefing.'], JSON_UNESCAPED_UNICODE);
         }
+    }
+
+    public function savePrompt(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
+            $config       = new SystemConfigRepository(getDbConnection());
+            $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, $systemPrompt);
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo briefing_builder_save_prompt: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not save prompt.'], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public static function resolveStoredSystemPrompt(SystemConfigRepository $config): string
+    {
+        $stored = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
+        if ($stored !== null && trim($stored) !== '') {
+            return $stored;
+        }
+
+        return self::DEFAULT_SYSTEM_PROMPT;
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    private function parseSystemPrompt(mixed $raw): string
+    {
+        $systemPrompt = trim((string)$raw);
+        if (strlen($systemPrompt) < self::MIN_SYSTEM_PROMPT_LEN) {
+            throw new \InvalidArgumentException(
+                'System prompt is too short (minimum ' . self::MIN_SYSTEM_PROMPT_LEN . ' characters).'
+            );
+        }
+        if (strlen($systemPrompt) > self::MAX_SYSTEM_PROMPT_LEN) {
+            throw new \InvalidArgumentException(
+                'System prompt is too long (maximum ' . self::MAX_SYSTEM_PROMPT_LEN . ' characters).'
+            );
+        }
+
+        return $systemPrompt;
     }
 
     /**
