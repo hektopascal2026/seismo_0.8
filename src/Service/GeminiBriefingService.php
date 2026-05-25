@@ -15,17 +15,24 @@ use Seismo\Service\Http\Response;
  */
 final class GeminiBriefingService
 {
-    public const DEFAULT_MODEL = 'gemini-1.5-pro';
+    /** Override via `system_config` key `gemini:model`. */
+    public const CONFIG_KEY_MODEL = 'gemini:model';
+
+    /** Stable alias; 1.5 models are shut down on the Gemini API (see Google changelog). */
+    public const DEFAULT_MODEL = 'gemini-2.5-flash';
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
     private const HTTP_TIMEOUT_SECONDS = 120;
 
+    private readonly string $model;
+
     public function __construct(
         private readonly SystemConfigRepository $config,
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
-        private readonly string $model = self::DEFAULT_MODEL,
     ) {
+        $configured = trim((string)($config->get(self::CONFIG_KEY_MODEL) ?? ''));
+        $this->model  = $configured !== '' ? $configured : self::DEFAULT_MODEL;
     }
 
     /**
@@ -43,7 +50,7 @@ final class GeminiBriefingService
             throw GeminiBriefingException::invalidInput('System prompt is required.');
         }
 
-        $url = self::API_BASE . rawurlencode($this->model) . ':generateContent?key=' . rawurlencode($apiKey);
+        $url = self::API_BASE . rawurlencode($this->model) . ':generateContent';
 
         $payload = [
             'contents' => [
@@ -57,7 +64,9 @@ final class GeminiBriefingService
         ];
 
         try {
-            $response = $this->http->postJson($url, $payload);
+            $response = $this->http->postJson($url, $payload, [
+                'x-goog-api-key' => $apiKey,
+            ]);
         } catch (HttpClientException $e) {
             error_log('GeminiBriefingService transport: ' . $e->getMessage());
             throw GeminiBriefingException::transportFailed();
@@ -67,14 +76,47 @@ final class GeminiBriefingService
         }
 
         if (!$response->isOk()) {
-            error_log(
-                'GeminiBriefingService HTTP ' . $response->status . ': '
-                . substr($response->body, 0, 500)
-            );
-            throw GeminiBriefingException::fromHttpStatus($response->status);
+            throw $this->exceptionFromFailedResponse($response);
         }
 
         return $this->extractText($response);
+    }
+
+    /**
+     * @throws GeminiBriefingException
+     */
+    private function exceptionFromFailedResponse(Response $response): GeminiBriefingException
+    {
+        $apiMessage = $this->parseApiErrorMessage($response);
+        error_log(
+            'GeminiBriefingService HTTP ' . $response->status
+            . ' model=' . $this->model
+            . ($apiMessage !== '' ? ': ' . $apiMessage : ': ' . substr($response->body, 0, 500))
+        );
+
+        if ($response->status === 404) {
+            return GeminiBriefingException::modelNotFound($this->model, $apiMessage);
+        }
+
+        if ($apiMessage !== '') {
+            return GeminiBriefingException::fromApiMessage($response->status, $apiMessage);
+        }
+
+        return GeminiBriefingException::fromHttpStatus($response->status);
+    }
+
+    private function parseApiErrorMessage(Response $response): string
+    {
+        try {
+            $json = $response->json();
+        } catch (\JsonException) {
+            return '';
+        }
+        if (!isset($json['error']) || !is_array($json['error'])) {
+            return '';
+        }
+
+        return trim((string)($json['error']['message'] ?? ''));
     }
 
     private function buildUserMessage(string $systemPrompt, string $markdownContext): string

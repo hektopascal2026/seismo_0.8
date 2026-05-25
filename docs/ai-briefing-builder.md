@@ -118,7 +118,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - Read `gemini:api_key` from `SystemConfigRepository`
 - `BaseClient` with **90–120s** timeout (UI may wait 10–20s+; Nginx allows 300s)
 - `postJson()` → `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key=...`
-- v1 model: `gemini-1.5-pro` (hardcoded or `gemini:model` config later)
+- v1 model: `gemini-2.5-flash` (default; override via `system_config` `gemini:model`)
 - Prompt shape: user system prompt + separator + “Seismo briefing (Markdown)” + `MarkdownBriefingFormatter` output
 - Parse `candidates[0].content.parts[0].text`
 - Errors: generic message to client; log details; **never** return API key or raw upstream body

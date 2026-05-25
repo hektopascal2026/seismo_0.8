@@ -27,10 +27,50 @@ final class GeminiBriefingException extends \RuntimeException
     public static function fromHttpStatus(int $status): self
     {
         return match (true) {
+            $status === 403 => new self(
+                'Gemini rejected the API key (403). Enable the Generative Language API for your Google Cloud project and check key restrictions.'
+            ),
             $status === 429 => new self('Gemini rate limit exceeded. Try again in a few minutes.'),
             $status >= 500 => new self('Gemini service is temporarily unavailable. Try again later.'),
             default => new self('Gemini request failed. Check the server error log.'),
         };
+    }
+
+    public static function modelNotFound(string $model, string $apiMessage = ''): self
+    {
+        $msg = 'Gemini model "' . $model . '" is not available for this API key.';
+        if ($apiMessage !== '') {
+            $msg .= ' ' . self::truncateForUi($apiMessage);
+        } else {
+            $msg .= ' Try gemini-2.5-flash or set system_config gemini:model.';
+        }
+
+        return new self($msg);
+    }
+
+    public static function fromApiMessage(int $status, string $apiMessage): self
+    {
+        if ($status === 403) {
+            return self::fromHttpStatus(403);
+        }
+        if ($status === 429) {
+            return self::fromHttpStatus(429);
+        }
+
+        return new self(self::truncateForUi($apiMessage));
+    }
+
+    private static function truncateForUi(string $message): string
+    {
+        $message = trim(preg_replace('/\s+/', ' ', $message) ?? $message);
+        if ($message === '') {
+            return 'Gemini request failed.';
+        }
+        if (strlen($message) > 220) {
+            return substr($message, 0, 217) . '…';
+        }
+
+        return $message;
     }
 
     public static function badResponse(): self
