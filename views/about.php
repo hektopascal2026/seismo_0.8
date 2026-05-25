@@ -212,7 +212,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.2 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.3 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Briefing prompt library</div>
+                        <ul>
+                            <li><strong>Named prompts:</strong> tabs above the system prompt on <code>?action=briefing_builder</code>; click a tab to load it, <strong>Save to library</strong> to add the current textarea under a custom name, <strong>&times;</strong> to delete.</li>
+                            <li><strong>Per desk:</strong> library in <code>system_config</code> key <code>ai_briefing_prompts</code> (mothership and each path satellite). First visit seeds a <strong>Default</strong> entry from that desk&rsquo;s current prompt.</li>
+                            <li><strong>Default prompt:</strong> <strong>Save prompt (default)</strong> still writes <code>briefing:system_prompt</code> for the instance reload default (separate from the library).</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.2</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Briefing JSON repair &amp; clearer errors</div>
                         <ul>
                             <li><strong>LenientJsonParser:</strong> multi-layer repair for Gemini JSON (fences, balanced braces, trailing commas) ported from tourdesuisse; fixes many &ldquo;Syntax error&rdquo; responses.</li>
@@ -360,7 +369,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                 <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for briefings, n8n, Raycast, or custom scripts:</p>
                 <ul>
-                    <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters and source-card attribution (mothership and path satellites).</li>
+                    <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters, per-desk prompt library, and source-card attribution (mothership and path satellites).</li>
                     <li><code>?action=export_briefing</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                     <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                 </ul>

@@ -1,4 +1,4 @@
-# Seismo 0.7.2
+# Seismo 0.7.3
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.7.3** | **Briefing prompt library** — named prompts on `?action=briefing_builder` (tabs, save to library, delete); stored per desk in `ai_briefing_prompts` (mothership + satellites). **Save prompt (default)** still updates `briefing:system_prompt`. First visit seeds a **Default** tab from the current prompt. |
 | **0.7.2** | **Briefing JSON repair** — `LenientJsonParser` (tourdesuisse-style pipeline) recovers malformed Gemini JSON; briefing still shown when attribution JSON fails (no source cards). Clearer API errors in the UI. |
 | **0.7.1** | **AI Briefing attribution** — after generation, **Referenced source entries** shows only dashboard cards for `used_entry_keys` returned by Gemini (citation order); fallback + warnings when IDs are missing or unknown. |
 | **0.7.0** | **AI Briefing Builder** (mothership) — `?action=briefing_builder`: filter investigation-lead entries (optional important), six module toggles, Gemini executive briefing (JSON + Markdown), up to **1000 characters** of body text per entry in context. Settings → General: `gemini:api_key`. Docs: `docs/ai-briefing-builder.md`. |
@@ -45,7 +46,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 |--------|---------|
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
-| `?action=briefing_builder` | AI Briefing Builder — Gemini executive briefing (mothership + satellites; satellites use local Magnitu scores) |
+| `?action=briefing_builder` | AI Briefing Builder — Gemini executive briefing, per-desk prompt library + default prompt (mothership + satellites; local Magnitu scores on satellites) |
 | `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
