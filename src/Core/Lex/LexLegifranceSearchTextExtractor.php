@@ -32,7 +32,46 @@ final class LexLegifranceSearchTextExtractor
 
         $plain = trim(implode("\n\n", array_filter($parts)));
 
-        return $plain !== '' ? LexPlainText::truncate($plain) : null;
+        if ($plain !== '') {
+            return LexPlainText::truncate($plain);
+        }
+
+        return self::synopsisFromSectionExtracts($hit);
+    }
+
+    /**
+     * When resumePrincipal is absent, use the first substantive /search section extract.
+     *
+     * @param array<string, mixed> $hit
+     */
+    public static function synopsisFromSectionExtracts(array $hit): ?string
+    {
+        foreach ((array)($hit['sections'] ?? []) as $section) {
+            if (!is_array($section)) {
+                continue;
+            }
+            foreach ((array)($section['extracts'] ?? []) as $extract) {
+                if (!is_array($extract)) {
+                    continue;
+                }
+                foreach ((array)($extract['values'] ?? []) as $value) {
+                    $plain = LexPlainText::fromHtml((string)$value);
+                    if ($plain === '' || mb_strlen($plain) < 40) {
+                        continue;
+                    }
+                    if (preg_match(
+                        '/\b(?:promulgue la loi dont la teneur suit|Assemblée nationale et le Sénat)\b/ui',
+                        $plain,
+                    )) {
+                        continue;
+                    }
+
+                    return LexPlainText::truncate($plain);
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

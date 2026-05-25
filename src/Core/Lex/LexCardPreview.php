@@ -155,7 +155,7 @@ final class LexCardPreview
     private static function frSummary(string $description, string $excerpt): string
     {
         $description = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
-        if ($description !== '' && !self::looksLikeFrenchJorfBoilerplate($description)) {
+        if ($description !== '' && !self::frIsBoilerplateOnly($description)) {
             return $description;
         }
 
@@ -167,7 +167,7 @@ final class LexCardPreview
      */
     private static function frBodyFromExcerpt(string $excerpt): string
     {
-        $excerpt = self::frTrimTravauxPreparatoires($excerpt);
+        $excerpt = self::frTrimTravauxPreparatoires(self::plainExcerpt($excerpt));
         if ($excerpt === '') {
             return '';
         }
@@ -177,13 +177,74 @@ final class LexCardPreview
         }
 
         $start = self::frBodyOffset($excerpt);
-        if ($start <= 0) {
-            return $excerpt;
+        if ($start > 0) {
+            $body = trim(substr($excerpt, $start));
+        } else {
+            $body = self::frStripKnownJorfHeaders($excerpt);
         }
 
-        $body = trim(substr($excerpt, $start));
+        $body = self::frTrimTravauxPreparatoires($body);
+        if ($body === '' || self::frIsBoilerplateOnly($body)) {
+            return '';
+        }
 
-        return ($body !== '' && mb_strlen($body) >= 40) ? $body : $excerpt;
+        if (mb_strlen($body) < 40 && !preg_match('/\b(?:Article|Art\.)\s/ui', $body)) {
+            return '';
+        }
+
+        return $body;
+    }
+
+    private static function frStripKnownJorfHeaders(string $text): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        $text = preg_replace(
+            '/^.*?(?:promulgue la loi dont la teneur suit|promulgue l[\x{2019}\']ordonnance dont la teneur suit)\s*:\s*\n/ius',
+            '',
+            $text,
+        ) ?? $text;
+
+        do {
+            $before = $text;
+            $text = preg_replace(
+                '/^(?:LOI|DÉCRET|ORDONNANCE|ARRÊTÉ)\s+n[°o]\s+\d{4}-\d+[^\n]*\n+/iu',
+                '',
+                trim($text),
+            ) ?? trim($text);
+        } while ($text !== $before && $text !== '');
+
+        return trim($text);
+    }
+
+    private static function frIsBoilerplateOnly(string $text): bool
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return true;
+        }
+
+        if (preg_match(
+            '/\b(?:promulgue la loi dont la teneur suit|Assemblée nationale et le Sénat ont adopté)\b/ui',
+            $text,
+        ) && !preg_match('/\b(?:Article\s|Art\.\s|Exposé des motifs)\b/ui', $text)) {
+            return true;
+        }
+
+        if (preg_match('/^(?:LOI|DÉCRET|ORDONNANCE|ARRÊTÉ)\s+n[°o]\s+\d{4}-\d+\b/iu', $text)) {
+            $lines = array_values(array_filter(array_map('trim', explode("\n", $text))));
+            if ($lines === [] || (count($lines) <= 2 && !preg_match('/\b(?:Article\s|Art\.\s)\b/ui', $text))) {
+                return true;
+            }
+        }
+
+        return (bool) preg_match(
+            '/\b(?:promulgue la loi dont la teneur suit|Assemblée nationale et le Sénat)\b/ui',
+            $text,
+        ) && mb_strlen($text) < 220;
     }
 
     private static function looksLikeFrenchJorfText(string $excerpt): bool
@@ -199,23 +260,13 @@ final class LexCardPreview
         );
     }
 
-    private static function looksLikeFrenchJorfBoilerplate(string $text): bool
-    {
-        if (self::looksLikeFrenchJorfText($text)) {
-            return true;
-        }
-
-        return (bool) preg_match(
-            '/\b(?:promulgue la loi dont la teneur suit|Assemblée nationale et le Sénat)\b/ui',
-            $text,
-        );
-    }
-
     private static function frBodyOffset(string $excerpt): int
     {
         $offset = strlen($excerpt);
         $patterns = [
-            '/\n\s*Article\s+(?:1er|premier|[1](?:[\s\.]|$))/ui',
+            '/\n\s*Article\s+(?:1er|premier|1\s+er|1(?:[\s\.\—\-]|$))/ui',
+            '/\n\s*Art\.?\s+(?:1er|premier|1(?:[\s\.\—\-]|$))/ui',
+            '/\n\s*(?:Exposé des motifs|EXPOSÉ DES MOTIFS)\b/ui',
             '/\n\s*Chapitre\s+(?:I|1\b|premier)/ui',
             '/\n\s*Titre\s+(?:I|1\b|premier)/ui',
             '/\n\s*Section\s+(?:I|1\b|première)/ui',
