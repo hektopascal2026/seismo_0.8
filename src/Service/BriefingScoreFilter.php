@@ -12,6 +12,8 @@ final class BriefingScoreFilter
     public function __construct(
         public readonly float $alertThreshold,
         public readonly bool $includeImportantBelowThreshold,
+        /** Skip Magnitu score pool; include all in-window module entries (experimental). */
+        public readonly bool $disregardMagnitu = false,
     ) {
     }
 }

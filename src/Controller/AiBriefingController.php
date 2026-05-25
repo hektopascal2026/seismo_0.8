@@ -285,10 +285,7 @@ PROMPT;
             $briefingMeta = [
                 'since'           => $since,
                 'limit'           => $limit,
-                'score_selection' => MagnituScoreBands::describeBriefingPool(
-                    $scoreFilter->alertThreshold,
-                    $scoreFilter->includeImportantBelowThreshold,
-                ),
+                'score_selection' => MagnituScoreBands::describeBriefingGather($scoreFilter),
                 'total'           => $contextEntryCount,
             ];
             $twoPass = $this->parseTwoPassEnabled($_POST['two_pass'] ?? null);
@@ -349,10 +346,8 @@ PROMPT;
                 'modules'          => $this->enabledModuleNames($selection),
                 'alert_threshold'  => $scoreFilter->alertThreshold,
                 'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
-                'score_selection'  => MagnituScoreBands::describeBriefingPool(
-                    $scoreFilter->alertThreshold,
-                    $scoreFilter->includeImportantBelowThreshold,
-                ),
+                'disregard_magnitu' => $scoreFilter->disregardMagnitu,
+                'score_selection'  => MagnituScoreBands::describeBriefingGather($scoreFilter),
                 'citation_slots'   => $citationSlots,
                 'two_pass'         => $twoPass,
             ];
@@ -810,8 +805,13 @@ PROMPT;
         $limit = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
 
         $includeImportantBelow = (string)($_POST['include_important'] ?? '0') === '1';
+        $disregardMagnitu      = (string)($_POST['disregard_magnitu'] ?? '0') === '1';
         $alertThreshold        = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
-        $scoreFilter           = new BriefingScoreFilter($alertThreshold, $includeImportantBelow);
+        $scoreFilter           = new BriefingScoreFilter(
+            $alertThreshold,
+            $includeImportantBelow,
+            $disregardMagnitu,
+        );
 
         return [
             'since'        => $since,
@@ -850,17 +850,18 @@ PROMPT;
             null,
             $filters['scoreFilter'],
         );
-        $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
-
         $scoreFilter = $filters['scoreFilter'];
+        if ($scoreFilter->disregardMagnitu) {
+            $gatherer->sortByPublishedDateDesc($entries);
+        } else {
+            $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+        }
+
         // XML entries with <id> for Gemini extraction; export path stays markdown.
         $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
             'since'          => $filters['since'],
             'limit'          => $filters['limit'],
-            'score_selection' => MagnituScoreBands::describeBriefingPool(
-                $scoreFilter->alertThreshold,
-                $scoreFilter->includeImportantBelowThreshold,
-            ),
+            'score_selection' => MagnituScoreBands::describeBriefingGather($scoreFilter),
             'total'          => count($entries),
         ], true, MarkdownBriefingFormatter::FORMAT_XML);
 

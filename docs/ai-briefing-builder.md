@@ -14,7 +14,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Source toggles | **Six nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, Lex, Leg |
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::MAX_LIMIT` (2000)** per enabled feed-family query (same ceiling as export) |
-| Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Score-based, not `predicted_label`. |
+| Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
@@ -155,7 +155,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - POST only → 405
 - `CsrfToken::verifyRequest(false)` → 403 (no rotation on long AJAX)
 - `session_write_close()` after CSRF verify
-- Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `system_prompt` (min/max length), `limit`
+- Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `disregard_magnitu`, `system_prompt` (min/max length), `limit`
 - Pipeline: `gatherBriefingContext()` → `MarkdownBriefingFormatter::format(..., includeEntryIds: true)` → `GeminiBriefingService` (`responseSchema` + envelope; falls back if model rejects schema)
 - Response: `{ "ok": true, "text": "...", "meta": { "entry_count", "since", "modules", "labels" } }` or `{ "ok": false, "error": "..." }`
 

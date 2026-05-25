@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Seismo\Core;
 
+use Seismo\Service\BriefingScoreFilter;
+
 /**
  * Magnitu relevance bands — shared by timeline badges and Briefing Builder gather.
  *
@@ -80,6 +82,18 @@ final class MagnituScoreBands
         }
 
         return $base . '; plus important band below threshold (score &gt; 50% and &lt; ' . $pct . '%)';
+    }
+
+    public static function describeBriefingGather(BriefingScoreFilter $filter): string
+    {
+        if ($filter->disregardMagnitu) {
+            return 'Magnitu relevance filter disabled (experimental); modules and lookback only';
+        }
+
+        return self::describeBriefingPool(
+            $filter->alertThreshold,
+            $filter->includeImportantBelowThreshold,
+        );
     }
 
     private static function clampThreshold(float $alertThreshold): float

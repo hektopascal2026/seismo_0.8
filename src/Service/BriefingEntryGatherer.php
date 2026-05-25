@@ -89,6 +89,11 @@ final class BriefingEntryGatherer
         BriefingScoreFilter $scoreFilter,
     ): array {
         $this->lastGatherStats = null;
+
+        if ($scoreFilter->disregardMagnitu) {
+            return $this->gatherForBriefingBuilderWithoutMagnitu($pdo, $since, $limit, $selection);
+        }
+
         $repo      = new MagnituExportRepository($pdo);
         $entryRepo = new EntryRepository($pdo);
 
@@ -180,6 +185,38 @@ final class BriefingEntryGatherer
     }
 
     /**
+     * Module + lookback only — no Magnitu score pool or relevance threshold.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
+     */
+    private function gatherForBriefingBuilderWithoutMagnitu(
+        PDO $pdo,
+        ?string $since,
+        int $limit,
+        BriefingSourceSelection $selection,
+    ): array {
+        $repo    = new MagnituExportRepository($pdo);
+        $entries = array_values(array_filter(
+            $this->collectShapedEntries($repo, $since, $limit, $selection),
+            function (array $e) use ($selection, $since): bool {
+                if (!$this->entryMatchesModuleSelection($e, $selection)) {
+                    return false;
+                }
+
+                return BriefingLookback::entryInWindow($e, $since);
+            },
+        ));
+
+        $pairs = [];
+        foreach ($entries as $e) {
+            $pairs[] = [(string)($e['entry_type'] ?? ''), (int)($e['entry_id'] ?? 0)];
+        }
+        $scoresByKey = $repo->scoresByEntryKey($pairs);
+
+        return [$entries, $scoresByKey];
+    }
+
+    /**
      * Primary: relevance_score desc. Secondary: published_date desc,
      * then (entry_type, entry_id) for full determinism.
      *
@@ -196,6 +233,27 @@ final class BriefingEntryGatherer
             if ($sa !== $sb) {
                 return $sb <=> $sa;
             }
+            $da = (string)($a['published_date'] ?? '');
+            $db = (string)($b['published_date'] ?? '');
+            if ($da !== $db) {
+                return strcmp($db, $da);
+            }
+            $ta = (string)($a['entry_type'] ?? '');
+            $tb = (string)($b['entry_type'] ?? '');
+            if ($ta !== $tb) {
+                return strcmp($ta, $tb);
+            }
+
+            return ((int)($a['entry_id'] ?? 0)) <=> ((int)($b['entry_id'] ?? 0));
+        });
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     */
+    public function sortByPublishedDateDesc(array &$entries): void
+    {
+        usort($entries, static function (array $a, array $b): int {
             $da = (string)($a['published_date'] ?? '');
             $db = (string)($b['published_date'] ?? '');
             if ($da !== $db) {

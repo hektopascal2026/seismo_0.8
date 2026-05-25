@@ -140,13 +140,20 @@ $moduleOptions = [
 
                 <div class="admin-form-field">
                     <label>Relevance</label>
-                    <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
+                    <p class="admin-intro" id="briefing-relevance-intro" style="margin:0.25rem 0 0.5rem;">
                         Highlights tier (≥ <?= (int)$alertThresholdPct ?>%) is always included.
                     </p>
-                    <label>
-                        <input type="checkbox" name="include_important" value="1">
+                    <label id="briefing-include-important-label">
+                        <input type="checkbox" id="briefing_include_important" name="include_important" value="1">
                         Also include important band below threshold (&gt; 50%, &lt; <?= (int)$alertThresholdPct ?>%)
                     </label>
+                    <label style="display:block; margin-top:0.5rem;">
+                        <input type="checkbox" id="briefing_disregard_magnitu" name="disregard_magnitu" value="1">
+                        Disregard Magnitu (experimental)
+                    </label>
+                    <p class="admin-intro" id="briefing-disregard-magnitu-hint" style="margin:0.25rem 0 0;" hidden>
+                        All in-window entries from selected modules are sent to Gemini (newest first). Magnitu scores are not used for filtering or ordering.
+                    </p>
                 </div>
 
                 <div class="admin-form-field">
@@ -321,7 +328,44 @@ $moduleOptions = [
             });
         }
 
+        function syncDisregardMagnituUi() {
+            var disregardCb = document.getElementById('briefing_disregard_magnitu');
+            var includeCb = document.getElementById('briefing_include_important');
+            var includeLabel = document.getElementById('briefing-include-important-label');
+            var hint = document.getElementById('briefing-disregard-magnitu-hint');
+            var relevanceIntro = document.getElementById('briefing-relevance-intro');
+            if (!disregardCb) {
+                return;
+            }
+            var off = disregardCb.checked;
+            if (relevanceIntro) {
+                relevanceIntro.hidden = off;
+            }
+            if (includeCb) {
+                includeCb.disabled = off;
+                if (off) {
+                    includeCb.checked = false;
+                }
+            }
+            if (includeLabel) {
+                includeLabel.style.opacity = off ? '0.5' : '';
+            }
+            if (hint) {
+                hint.hidden = !off;
+            }
+        }
+
+        function initDisregardMagnituToggle() {
+            var disregardCb = document.getElementById('briefing_disregard_magnitu');
+            if (!disregardCb) {
+                return;
+            }
+            disregardCb.addEventListener('change', syncDisregardMagnituUi);
+            syncDisregardMagnituUi();
+        }
+
         initBriefingModuleToggles();
+        initDisregardMagnituToggle();
 
         var statusTimerIds = [];
         var STATUS_STEPS_SINGLE = [
