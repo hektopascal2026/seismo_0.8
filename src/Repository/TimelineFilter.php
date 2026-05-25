@@ -8,8 +8,8 @@ namespace Seismo\Repository;
  * Dashboard tag-filter state. Default = show everything (no query params).
  *
  * **Native form (preferred):** `TimelineFilter::fromHttpGet()` reads
- * `filters[feed][]` (normal `feeds.category` strings plus `sc:<scraper_config.id>`
- * and `sf:<feeds.id>` scraper tokens), `filters[lex][]` (includes Swiss Jus sources
+ * `filters[feed][]` (`sf:<feeds.id>` per source, `sc:<scraper_config.id>` for scrapers;
+ * legacy `feeds.category` strings still work in SQL), `filters[lex][]` (includes Swiss Jus sources
  * `ch_bger` / `ch_bge` / `ch_bvger` as separate toggles), `filters[email][]`,
  * `filters[calendar]=1` (Leg), plus `filter_form=1` when the filter form
  * submitted so “all checkboxes off in a row” is not confused with the default

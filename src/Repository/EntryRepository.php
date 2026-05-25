@@ -2243,13 +2243,12 @@ final class EntryRepository
     }
 
     /**
-     * Distinct values for dashboard tag pills (bounded).
+     * Values for dashboard / filter-page feed pills.
      *
-     * `feed_categories` lists checkbox **values**: normal `feeds.category` strings,
-     * plus `sc:<scraper_config.id>` and `sf:<feeds.id>` for per-feed sources (scraper
-     * orphans and `parl_press` rows — label is `feeds.title` from Add feed).
-     * The literal category `scraper` is never returned; `parl_mm` / `parl_sda` category
-     * strings are omitted when those feeds have their own `sf:` pills.
+     * One pill per enabled source: `sf:<feeds.id>` with {@see feeds.title} (Feeds,
+     * Media, Parl. press, orphan scraper feeds) or `sc:<scraper_config.id>` with
+     * {@see scraper_configs.name}. Legacy `feeds.category` strings and `parl_mm` /
+     * `parl_sda` tokens are still accepted in filter URLs but are not listed here.
      *
      * @return array{
      *   feed_categories: list<string>,
@@ -2261,35 +2260,26 @@ final class EntryRepository
      */
     public function getFilterPillOptions(): array
     {
-        $cats = $this->selectDistinctFeedCategories();
-        $cats = array_values(array_filter($cats, static fn (string $c): bool => $c !== 'scraper'));
-        $parlCategoryHide = $this->selectParlPressFeedCategories();
-        $cats = array_values(array_filter(
-            $cats,
-            static fn (string $c): bool => !in_array($c, $parlCategoryHide, true)
-                && !in_array($c, ['parl_mm', 'parl_sda'], true)
-        ));
-        if ($cats !== []) {
-            sort($cats);
-        }
-
         $labels = [];
-        foreach ($cats as $c) {
-            $labels[$c] = $c;
+        foreach ($this->selectRssSubstackFeedFilterEntries() as $row) {
+            $labels[$row['token']] = $row['label'];
         }
-        $tokens = $cats;
+        foreach ($this->selectMediaFeedFilterEntries() as $row) {
+            $labels[$row['token']] = $row['label'];
+        }
         foreach ($this->selectScraperConfigFilterEntries() as $row) {
-            $tokens[]              = $row['token'];
             $labels[$row['token']] = $row['label'];
         }
         foreach ($this->selectOrphanScraperFeedEntries() as $row) {
-            $tokens[]              = $row['token'];
             $labels[$row['token']] = $row['label'];
         }
         foreach ($this->selectParlPressFeedFilterEntries() as $row) {
-            $tokens[]              = $row['token'];
             $labels[$row['token']] = $row['label'];
         }
+        if ($labels !== []) {
+            uasort($labels, static fn (string $a, string $b): int => strcasecmp($a, $b));
+        }
+        $tokens = array_keys($labels);
 
         $lex = $this->selectDistinctLexSources();
         foreach (TimelineFilter::JUS_LEX_SOURCES as $jusSrc) {
@@ -2313,6 +2303,71 @@ final class EntryRepository
     }
 
     /**
+     * Feeds-module RSS + Substack sources (excludes Media, scraper-linked, Parl. press).
+     *
+     * @return list<array{token: string, label: string}>
+     */
+    private function selectRssSubstackFeedFilterEntries(): array
+    {
+        $f  = entryTable('feeds');
+        $sc = entryTable('scraper_configs');
+        $sql = 'SELECT f.id,
+                       TRIM(COALESCE(NULLIF(f.title, \'\'), CONCAT(\'Feed \', f.id))) AS display_label
+                FROM ' . $f . ' f
+                WHERE f.disabled = 0
+                  AND f.source_type IN (\'rss\', \'substack\')
+                  AND IFNULL(f.category, \'\') NOT IN (\'scraper\', \'media\')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ' . $sc . ' sc
+                      WHERE ' . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND IFNULL(sc.disabled, 0) = 0
+                  )
+                ORDER BY display_label ASC';
+
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+    }
+
+    /**
+     * Media-module sources (`feeds.category = media`).
+     *
+     * @return list<array{token: string, label: string}>
+     */
+    private function selectMediaFeedFilterEntries(): array
+    {
+        $f   = entryTable('feeds');
+        $sql = 'SELECT f.id,
+                       TRIM(COALESCE(NULLIF(f.title, \'\'), CONCAT(\'Feed \', f.id))) AS display_label
+                FROM ' . $f . ' f
+                WHERE f.disabled = 0
+                  AND IFNULL(f.category, \'\') = \'media\'
+                  AND f.source_type IN (\'rss\', \'substack\')
+                ORDER BY display_label ASC';
+
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array{token: string, label: string}>
+     */
+    private function mapFeedFilterEntryRows(array $rows): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            $id = (int)($r['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $label = trim((string)($r['display_label'] ?? ''));
+            if ($label === '') {
+                $label = 'Feed ' . $id;
+            }
+            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
+        }
+
+        return $out;
+    }
+
+    /**
      * @return list<array{token: string, label: string}>
      */
     private function selectScraperConfigFilterEntries(): array
@@ -2322,8 +2377,7 @@ final class EntryRepository
                        TRIM(COALESCE(NULLIF(name, \'\'), CONCAT(\'Scraper \', id))) AS display_label
                 FROM ' . $t . '
                 WHERE IFNULL(disabled, 0) = 0
-                ORDER BY display_label ASC
-                LIMIT 50';
+                ORDER BY display_label ASC';
         $rows = $this->selectOrEmpty($sql);
         $out  = [];
         foreach ($rows as $r) {
@@ -2359,23 +2413,9 @@ final class EntryRepository
                       SELECT 1 FROM ' . $sc . ' sc
                       WHERE ' . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND IFNULL(sc.disabled, 0) = 0
                   )
-                ORDER BY display_label ASC
-                LIMIT 50';
-        $rows = $this->selectOrEmpty($sql);
-        $out  = [];
-        foreach ($rows as $r) {
-            $id = (int)($r['id'] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
-            $label = trim((string)($r['display_label'] ?? ''));
-            if ($label === '') {
-                $label = 'Feed ' . $id;
-            }
-            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
-        }
+                ORDER BY display_label ASC';
 
-        return $out;
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
     }
 
     /**
@@ -2391,74 +2431,9 @@ final class EntryRepository
                 FROM ' . $f . ' f
                 WHERE f.disabled = 0
                   AND f.source_type = \'parl_press\'
-                ORDER BY display_label ASC
-                LIMIT 50';
-        $rows = $this->selectOrEmpty($sql);
-        $out  = [];
-        foreach ($rows as $r) {
-            $id = (int)($r['id'] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
-            $label = trim((string)($r['display_label'] ?? ''));
-            if ($label === '') {
-                $label = 'Feed ' . $id;
-            }
-            $out[] = ['token' => 'sf:' . $id, 'label' => $label];
-        }
+                ORDER BY display_label ASC';
 
-        return $out;
-    }
-
-    /**
-     * Category strings used on `parl_press` feeds — hidden from generic category pills
-     * because those feeds already have per-feed `sf:` tokens.
-     *
-     * @return list<string>
-     */
-    private function selectParlPressFeedCategories(): array
-    {
-        $sql = 'SELECT DISTINCT TRIM(category) AS category FROM ' . entryTable('feeds') . "
-            WHERE disabled = 0
-              AND source_type = 'parl_press'
-              AND category IS NOT NULL
-              AND TRIM(category) <> ''
-            ORDER BY category ASC
-            LIMIT 50";
-        $rows = $this->selectOrEmpty($sql);
-        $out  = [];
-        foreach ($rows as $r) {
-            $c = trim((string)($r['category'] ?? ''));
-            if ($c !== '') {
-                $out[] = $c;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function selectDistinctFeedCategories(): array
-    {
-        $sql = 'SELECT DISTINCT category FROM ' . entryTable('feeds') . '
-            WHERE disabled = 0
-              AND category IS NOT NULL
-              AND category != \'\'
-              AND category != \'unsortiert\'
-            ORDER BY category ASC
-            LIMIT 50';
-        $rows = $this->selectOrEmpty($sql);
-        $out  = [];
-        foreach ($rows as $r) {
-            $c = trim((string)($r['category'] ?? ''));
-            if ($c !== '') {
-                $out[] = $c;
-            }
-        }
-
-        return $out;
+        return $this->mapFeedFilterEntryRows($this->selectOrEmpty($sql));
     }
 
     /**
