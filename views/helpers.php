@@ -81,6 +81,9 @@ if (!function_exists('seismo_timeline_view_link_params')) {
                 $params[$k] = $v;
             }
         }
+        if ($action === 'index' && isset($_GET['show_media']) && (string)$_GET['show_media'] === '1') {
+            $params['show_media'] = '1';
+        }
 
         return $params;
     }

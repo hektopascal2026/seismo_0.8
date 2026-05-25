@@ -129,8 +129,13 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getLatestTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null, bool $sortByRelevance = false): array
-    {
+    public function getLatestTimeline(
+        int $limit,
+        int $offset = 0,
+        ?TimelineFilter $filter = null,
+        bool $sortByRelevance = false,
+        bool $excludeMediaCategory = false,
+    ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
@@ -141,7 +146,7 @@ final class EntryRepository
         $f        = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItems($perSource, $f) as $row) {
+        foreach ($this->fetchFeedItems($perSource, $f, $excludeMediaCategory) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
         foreach ($this->fetchEmails($perSource, $f) as $row) {
@@ -176,8 +181,14 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function searchTimeline(string $q, int $limit, int $offset = 0, ?TimelineFilter $filter = null, bool $sortByRelevance = false): array
-    {
+    public function searchTimeline(
+        string $q,
+        int $limit,
+        int $offset = 0,
+        ?TimelineFilter $filter = null,
+        bool $sortByRelevance = false,
+        bool $excludeMediaCategory = false,
+    ): array {
         $q = trim($q);
         if ($q === '') {
             return [];
@@ -190,7 +201,7 @@ final class EntryRepository
         $f    = $filter;
 
         $items = [];
-        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f) as $row) {
+        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f, $excludeMediaCategory) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
         foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
@@ -615,8 +626,12 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getFavouritesTimeline(int $limit, int $offset = 0, ?TimelineFilter $filter = null): array
-    {
+    public function getFavouritesTimeline(
+        int $limit,
+        int $offset = 0,
+        ?TimelineFilter $filter = null,
+        bool $excludeMediaCategory = false,
+    ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
@@ -678,6 +693,13 @@ final class EntryRepository
             ));
         }
 
+        if ($excludeMediaCategory) {
+            $items = array_values(array_filter(
+                $items,
+                static fn (array $it): bool => empty($it['timeline_media']),
+            ));
+        }
+
         usort($items, static fn ($a, $b) => ($b['date'] ?? 0) <=> ($a['date'] ?? 0));
         $items = array_slice($items, $offset, $limit);
 
@@ -715,7 +737,7 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchFeedItems(int $limit, ?TimelineFilter $filter = null): array
+    private function fetchFeedItems(int $limit, ?TimelineFilter $filter = null, bool $excludeMediaCategory = false): array
     {
         if ($filter !== null && $filter->excludeAllFeedItems) {
             return [];
@@ -728,7 +750,7 @@ final class EntryRepository
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
               AND fi.hidden = 0
-              ' . $extra['sql'] . '
+              ' . $extra['sql'] . $this->sqlExcludeMediaCategoryClause($excludeMediaCategory) . '
             ORDER BY fi.published_date DESC, fi.cached_at DESC
             LIMIT ' . (int)$limit;
 
@@ -994,8 +1016,12 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchFeedItemsSearch(string $term, int $limit, ?TimelineFilter $filter = null): array
-    {
+    private function fetchFeedItemsSearch(
+        string $term,
+        int $limit,
+        ?TimelineFilter $filter = null,
+        bool $excludeMediaCategory = false,
+    ): array {
         if ($filter !== null && $filter->excludeAllFeedItems) {
             return [];
         }
@@ -1007,7 +1033,7 @@ final class EntryRepository
             JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
             WHERE f.disabled = 0
               AND fi.hidden = 0
-              ' . $extra['sql'] . '
+              ' . $extra['sql'] . $this->sqlExcludeMediaCategoryClause($excludeMediaCategory) . '
               AND (
                     fi.title LIKE ?
                  OR fi.description LIKE ?
@@ -1966,6 +1992,11 @@ final class EntryRepository
      *
      * @return array{sql: string, params: list<mixed>}
      */
+    private function sqlExcludeMediaCategoryClause(bool $excludeMediaCategory): string
+    {
+        return $excludeMediaCategory ? " AND IFNULL(f.category, '') <> 'media' " : '';
+    }
+
     private function feedSqlFilter(?TimelineFilter $filter): array
     {
         if ($filter === null) {

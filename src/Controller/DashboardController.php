@@ -46,6 +46,8 @@ final class DashboardController
         $timelineFilter = TimelineFilter::fromQueryArray($_GET);
         $alertThreshold    = $this->resolveAlertThreshold();
         $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();
+        $timelineMediaOn   = $this->resolveTimelineMediaOn();
+        $excludeMediaCategory = !$timelineMediaOn;
 
         try {
             $pdo  = getDbConnection();
@@ -53,11 +55,24 @@ final class DashboardController
             $pillOpts        = $repo->getFilterPillOptions();
             $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
             if ($currentView === 'favourites') {
-                $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter);
+                $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter, $excludeMediaCategory);
             } elseif ($searchQuery !== '') {
-                $allItems = $repo->searchTimeline($searchQuery, $limit, $offset, $timelineFilter, $sortByRelevance);
+                $allItems = $repo->searchTimeline(
+                    $searchQuery,
+                    $limit,
+                    $offset,
+                    $timelineFilter,
+                    $sortByRelevance,
+                    $excludeMediaCategory,
+                );
             } else {
-                $allItems = $repo->getLatestTimeline($limit, $offset, $timelineFilter, $sortByRelevance);
+                $allItems = $repo->getLatestTimeline(
+                    $limit,
+                    $offset,
+                    $timelineFilter,
+                    $sortByRelevance,
+                    $excludeMediaCategory,
+                );
             }
         } catch (\Throwable $e) {
             error_log('Seismo dashboard: ' . $e->getMessage());
@@ -337,6 +352,12 @@ final class DashboardController
      *
      * @return 'newest'|'favourites'
      */
+    /** Main index timeline: include `feeds.category = media` rows when `?show_media=1`. */
+    private function resolveTimelineMediaOn(): bool
+    {
+        return isset($_GET['show_media']) && (string)$_GET['show_media'] === '1';
+    }
+
     private function resolveTimelineView(): string
     {
         if (isset($_GET['view'])) {

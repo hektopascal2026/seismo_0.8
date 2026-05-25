@@ -23,7 +23,7 @@ final class FavouriteController
      * @var list<string>
      */
     private const RETURN_QUERY_ALLOW = [
-        'q', 'view', 'limit', 'offset',
+        'q', 'view', 'show_media', 'limit', 'offset',
         'fc', 'fk', 'lx', 'etag',
         'efc', 'elx', 'eet', 'ecal', 'ejus',
         'none', 'filter_form',

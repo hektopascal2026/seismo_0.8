@@ -18,6 +18,7 @@ declare(strict_types=1);
 /** @var string $emptyTimelineHint 'default'|'favourites'|'search'|'filters' */
 /** @var string $csrfField CSRF hidden input HTML from DashboardController::show() */
 /** @var \Seismo\Repository\TimelineFilter $timelineFilter */
+/** @var bool $timelineMediaOn */
 /** @var float $alertThreshold Magnitu alert threshold (used e.g. by Highlights; timeline score badges stay numeric) */
 
 $basePath = getBasePath();
@@ -31,6 +32,15 @@ $indexNewestQs = http_build_query(seismo_timeline_view_link_params('index', fals
 $indexFavouritesQs = http_build_query(seismo_timeline_view_link_params('index', true));
 $timelineFavouritesOn = $currentView === 'favourites';
 $timelineFavouritesToggleHref = $timelineFavouritesOn ? $indexNewestQs : $indexFavouritesQs;
+$timelineMediaOn = !empty($timelineMediaOn);
+$mediaToggleParams = seismo_timeline_view_link_params('index', $currentView === 'favourites');
+if ($timelineMediaOn) {
+    unset($mediaToggleParams['show_media']);
+    $timelineMediaToggleHref = http_build_query($mediaToggleParams);
+} else {
+    $mediaToggleParams['show_media'] = '1';
+    $timelineMediaToggleHref = http_build_query($mediaToggleParams);
+}
 $showTimelineMediaToggle = true;
 $timelineMediaToggleFeature = true;
 $showTimelineFavouritesToggle = true;
@@ -38,6 +48,9 @@ $showTimelineFavouritesToggle = true;
 $clearSearchParams = ['action' => 'index'];
 if ($currentView === 'favourites') {
     $clearSearchParams['view'] = 'favourites';
+}
+if ($timelineMediaOn) {
+    $clearSearchParams['show_media'] = '1';
 }
 $clearSearchQs = http_build_query($clearSearchParams);
 
@@ -75,17 +88,8 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
-    <script>
-    (function() {
-        try {
-            if (localStorage.getItem('seismo_timeline_show_media') === '1') {
-                document.documentElement.classList.add('timeline-media-on');
-            }
-        } catch (e) {}
-    })();
-    </script>
 </head>
-<body class="timeline-media-toggle-feature">
+<body>
     <div class="container">
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
@@ -136,10 +140,14 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
         </div>
     </div>
 
-    <script src="<?= e($basePath) ?>/assets/js/timeline-media-toggle.js?v=<?= e(SEISMO_VERSION) ?>"></script>
     <script>
     (function() {
         document.addEventListener('click', function(e) {
+            var mediaBtn = e.target.closest('.timeline-media-toggle-btn');
+            if (mediaBtn && mediaBtn.dataset.href) {
+                window.location.assign(mediaBtn.dataset.href);
+                return;
+            }
             var btn = e.target.closest('.timeline-favourites-toggle-btn');
             if (!btn || !btn.dataset.href) return;
             window.location.assign(btn.dataset.href);

@@ -19,6 +19,9 @@ $currentView    = $currentView ?? 'newest';
                 <?php if ($currentView === 'favourites'): ?>
                     <input type="hidden" name="view" value="favourites">
                 <?php endif; ?>
+                <?php if (isset($_GET['show_media']) && (string)$_GET['show_media'] === '1'): ?>
+                    <input type="hidden" name="show_media" value="1">
+                <?php endif; ?>
                 <?php
                 $ff = $_GET['filter_form'] ?? null;
                 if (is_scalar($ff) && trim((string)$ff) !== '') {
