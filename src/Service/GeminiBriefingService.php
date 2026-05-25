@@ -33,13 +33,14 @@ You are the backend engine for the Seismo AI Briefing Builder.
    - Only cite IDs that appear in ENTRIES_DATA <id> elements. Never invent IDs.
 
 3. CORE ITEMS:
-   - Extract and detail up to {itemCount} separate core developments from ENTRIES_DATA (relevance order).
-   - Target exactly {effectiveItemCount} core items in briefing_markdown and in used_entry_keys when enough distinct entries exist.
-   - If ENTRIES_DATA contains fewer than {effectiveItemCount} entries, use every available entry — do not invent rows.
-   - Do not merge multiple distinct entries into one bullet if that would drop below the number of entries you can cite.
+   - Extract and detail UP TO {itemCount} separate core developments from ENTRIES_DATA (relevance order).
+   - Include at most {maxCoreItems} core items in briefing_markdown and used_entry_keys.
+   - When the user prompt imposes strict inclusion criteria (e.g. only named companies or spokesperson quotes), return FEWER items rather than padding with loosely related news. Never cite an entry that does not satisfy the user prompt.
+   - If ENTRIES_DATA contains fewer than {maxCoreItems} entries, use only qualifying entries — do not invent rows.
+   - Do not merge multiple distinct qualifying entries into one bullet if that would omit a separate core development you are citing.
 
 4. DRAFTING (JSON field drafting_thoughts — not shown to users):
-   - Before briefing_markdown, list exactly the {effectiveItemCount} entry_type:entry_id keys you will cite (one per line), taken only from <id> values in ENTRIES_DATA.
+   - Before briefing_markdown, list the entry_type:entry_id keys you will cite (one per line, up to {maxCoreItems}), taken only from <id> values in ENTRIES_DATA that satisfy the user prompt.
    - used_entry_keys must match that list in the same order.
 
 5. CITATIONS:
@@ -56,8 +57,8 @@ You choose which entries merit inclusion in an executive briefing. The user pers
 
 RULES:
 - ENTRIES_DATA contains XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
-- Select exactly {effectiveItemCount} distinct entries when at least that many exist; otherwise select every available entry.
-- Prefer entries that are timely, non-redundant, and fit the user system prompt (audience, jurisdictions, topics). Use <jurisdiction> and <source_type> when the prompt targets specific countries or legal corpora.
+- Select UP TO {maxCoreItems} distinct entries that satisfy the user system prompt (audience, jurisdictions, topics, named entities). Selecting fewer is correct when strict criteria apply — do not pad with high-relevance entries that fail the prompt.
+- Prefer entries that are timely, non-redundant, and fit the user system prompt. Use <jurisdiction> and <source_type> when the prompt targets specific countries or legal corpora.
 - used_entry_keys must list the chosen <id> values in briefing order (most important first).
 - selection_notes: one short sentence per chosen entry (why it made the cut). Not shown to end users.
 - Never invent IDs. Only keys from ENTRIES_DATA <id> elements.
@@ -246,10 +247,10 @@ CONTRACT;
             $effectiveCount,
         );
         $userText = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract. '
-            . 'Fülle zuerst drafting_thoughts mit den exakten entry_type:entry_id-Werten aus ENTRIES_DATA <id>, '
+            . 'Fülle zuerst drafting_thoughts mit den entry_type:entry_id-Werten aus ENTRIES_DATA <id>, '
             . 'dann briefing_markdown, dann used_entry_keys (gleiche Reihenfolge). '
-            . 'Du MUSST ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys liefern '
-            . '(sofern genügend <entry>-Blöcke in ENTRIES_DATA vorhanden sind; sonst alle verfügbaren).';
+            . 'Liefere bis zu ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys, '
+            . 'nur aus Einträgen, die den User-Prompt erfüllen; wenn weniger passen, liefere weniger — kein Auffüllen.';
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
@@ -284,7 +285,7 @@ CONTRACT;
         $selectionTarget = min($effectiveCount, max(1, $poolCount));
 
         $selectedKeys = $this->runSelectionPass($poolContext, $itemCount, $selectionTarget, $apiKey);
-        $selectedKeys = $this->finalizeSelectedKeys($selectedKeys, $poolEntries, $selectionTarget);
+        $selectedKeys = $this->finalizeSelectedKeys($selectedKeys, $selectionTarget);
 
         $summaryEntries = $this->entriesForKeys($contextEntries, $selectedKeys);
         if ($summaryEntries === []) {
@@ -344,19 +345,19 @@ CONTRACT;
             'properties' => [
                 'drafting_thoughts' => [
                     'type'        => 'STRING',
-                    'description' => 'Before briefing_markdown: list exactly ' . $effectiveCount
-                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements only.',
+                    'description' => 'Before briefing_markdown: list up to ' . $effectiveCount
+                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements that satisfy the user prompt.',
                 ],
                 'briefing_markdown' => [
                     'type'        => 'STRING',
-                    'description' => 'Complete briefing Markdown with ' . $effectiveCount
-                        . ' distinct core items (one cited entry each), up to ' . $itemCount . ' requested.',
+                    'description' => 'Complete briefing Markdown with up to ' . $effectiveCount
+                        . ' distinct core items (one cited entry each), at most ' . $itemCount . ' requested.',
                 ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
                     'description' => 'Exact entry_type:entry_id strings for each core item, same order as briefing_markdown.',
                     'items'       => ['type' => 'STRING'],
-                    'minItems'    => $effectiveCount,
+                    'minItems'    => 0,
                     'maxItems'    => $effectiveCount,
                 ],
             ],
@@ -371,7 +372,7 @@ CONTRACT;
         int $effectiveItemCount,
     ): string {
         $envelope = str_replace(
-            ['{itemCount}', '{effectiveItemCount}', '{markdownContext}'],
+            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
             [(string)$itemCount, (string)$effectiveItemCount, $markdownContext],
             self::SINGLE_PASS_OUTPUT_CONTRACT,
         );
@@ -476,12 +477,13 @@ CONTRACT;
         string $apiKey,
     ): array {
         $systemText = str_replace(
-            ['{itemCount}', '{effectiveItemCount}', '{markdownContext}'],
+            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
             [(string)$itemCount, (string)$selectionTarget, trim($poolContext)],
             self::SELECTION_OUTPUT_CONTRACT,
         );
 
-        $userText = 'Wähle genau ' . $selectionTarget . ' Einträge für das Executive Briefing. '
+        $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge für das Executive Briefing, '
+            . 'nur wenn sie den User-Prompt erfüllen (weniger ist korrekt). '
             . 'Fülle selection_notes und used_entry_keys (gleiche Reihenfolge).';
 
         $payload = [
@@ -612,9 +614,9 @@ CONTRACT;
                 ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
-                    'description' => 'Exactly ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id>, briefing order.',
+                    'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, briefing order.',
                     'items'       => ['type' => 'STRING'],
-                    'minItems'    => $selectionTarget,
+                    'minItems'    => 1,
                     'maxItems'    => $selectionTarget,
                 ],
             ],
@@ -709,44 +711,20 @@ CONTRACT;
      * @param list<array<string, mixed>> $poolEntries
      * @return list<string>
      */
-    private function finalizeSelectedKeys(array $selectedKeys, array $poolEntries, int $effectiveCount): array
+    private function finalizeSelectedKeys(array $selectedKeys, int $effectiveCount): array
     {
-        if (count($selectedKeys) >= $effectiveCount) {
+        if (count($selectedKeys) > $effectiveCount) {
             return array_slice($selectedKeys, 0, $effectiveCount);
         }
 
-        if ($poolEntries !== []) {
+        if ($selectedKeys !== [] && count($selectedKeys) < $effectiveCount) {
             error_log(
                 'GeminiBriefingService: selection returned ' . count($selectedKeys)
-                . ' keys, padding to ' . $effectiveCount . ' from relevance order'
+                . ' of up to ' . $effectiveCount . ' requested keys (no relevance padding)'
             );
-
-            return $this->padSelectedKeys($selectedKeys, $poolEntries, $effectiveCount);
         }
 
         return $selectedKeys;
-    }
-
-    /**
-     * @param list<string> $selectedKeys
-     * @param list<array<string, mixed>> $poolEntries
-     * @return list<string>
-     */
-    private function padSelectedKeys(array $selectedKeys, array $poolEntries, int $needed): array
-    {
-        $out = $selectedKeys;
-        foreach ($poolEntries as $entry) {
-            if (count($out) >= $needed) {
-                break;
-            }
-            $key = $this->entryKey($entry);
-            if ($key === null || in_array($key, $out, true)) {
-                continue;
-            }
-            $out[] = $key;
-        }
-
-        return array_slice($out, 0, $needed);
     }
 
     /**
@@ -1064,12 +1042,8 @@ CONTRACT;
     /**
      * @throws GeminiBriefingException
      */
-    private function assertBriefingNotTruncated(GeminiBriefingResult $result, int $expectedItemCount): void
+    private function assertBriefingNotTruncated(GeminiBriefingResult $result, int $maxItemCount): void
     {
-        if ($expectedItemCount < 2) {
-            return;
-        }
-
         $keysInMarkdown = $this->countDistinctEntryKeysInMarkdown($result->markdown);
         $citedKeys      = count($result->usedEntryKeys);
 
@@ -1081,23 +1055,28 @@ CONTRACT;
             throw GeminiBriefingException::outputTruncated();
         }
 
-        if ($keysInMarkdown >= $expectedItemCount) {
+        $itemsToCheck = $citedKeys > 0 ? $citedKeys : ($keysInMarkdown > 0 ? $keysInMarkdown : 0);
+        if ($itemsToCheck < 2) {
             return;
         }
 
-        if ($citedKeys >= $expectedItemCount && $keysInMarkdown < $expectedItemCount) {
+        if ($keysInMarkdown >= $itemsToCheck) {
+            return;
+        }
+
+        if ($citedKeys >= $itemsToCheck && $keysInMarkdown < $itemsToCheck) {
             error_log(
-                'GeminiBriefingService: expected ' . $expectedItemCount
+                'GeminiBriefingService: expected ' . $itemsToCheck
                 . ' cited items in markdown, found ' . $keysInMarkdown
             );
             throw GeminiBriefingException::outputTruncated();
         }
 
-        $minChars = $expectedItemCount * 220;
-        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($expectedItemCount * 0.75)) {
+        $minChars = $itemsToCheck * 220;
+        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($itemsToCheck * 0.75)) {
             error_log(
                 'GeminiBriefingService: briefing_markdown length ' . strlen($result->markdown)
-                . ' below heuristic for ' . $expectedItemCount . ' items'
+                . ' below heuristic for ' . $itemsToCheck . ' items (max requested ' . $maxItemCount . ')'
             );
             throw GeminiBriefingException::outputTruncated();
         }
