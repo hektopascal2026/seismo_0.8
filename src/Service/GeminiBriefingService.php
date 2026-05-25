@@ -102,10 +102,7 @@ final class GeminiBriefingService
                     'role'  => 'user',
                     'parts' => [
                         [
-                            'text' => "Below is a Seismo briefing export (Markdown). "
-                                . "Write the briefing according to your system instructions. "
-                                . "Preserve nuance from individual entries; do not invent facts.\n\n"
-                                . trim($markdownContext),
+                            'text' => "ENTRIES_DATA:\n\n" . trim($markdownContext),
                         ],
                     ],
                 ],

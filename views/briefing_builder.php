@@ -16,7 +16,7 @@ declare(strict_types=1);
 $accent = seismoBrandAccent();
 
 $headerTitle    = 'AI Briefing';
-$headerSubtitle = 'Gemini summary from recent entries';
+$headerSubtitle = 'Executive Briefing (Politik & Wirtschaft)';
 $activeNav      = 'briefing_builder';
 
 $generateUrl = $basePath . '/index.php?action=briefing_builder_generate';
@@ -40,6 +40,29 @@ $moduleOptions = [
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
+    <style>
+    .briefing-output-status__lead {
+        margin: 0 0 0.5rem;
+        font-weight: 600;
+    }
+    .briefing-output-status__steps {
+        list-style: none;
+        margin: 0.5rem 0 0;
+        padding: 0;
+    }
+    .briefing-output-status__step {
+        padding: 0.3rem 0;
+        color: var(--text-muted, #6b7280);
+    }
+    .briefing-output-status__step.is-active {
+        color: inherit;
+        font-weight: 600;
+    }
+    .briefing-output-status__step.is-done::before {
+        content: '\2713  ';
+        color: var(--seismo-accent, #2563eb);
+    }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -106,7 +129,7 @@ $moduleOptions = [
 
                 <div class="admin-form-field">
                     <label for="briefing_system_prompt">System prompt</label>
-                    <textarea id="briefing_system_prompt" name="system_prompt" rows="8" class="search-input"
+                    <textarea id="briefing_system_prompt" name="system_prompt" rows="14" class="search-input"
                               style="width:100%; max-width:40rem;"><?= e($defaultSystemPrompt) ?></textarea>
                 </div>
 
@@ -126,6 +149,14 @@ $moduleOptions = [
             </div>
         </div>
 
+        <div class="latest-entries-section module-section-spaced" id="briefing-sources-section" hidden>
+            <h2 class="section-title">Source entries</h2>
+            <p class="admin-intro" id="briefing-sources-intro">
+                Same entries sent to Gemini, in relevance order (for validation).
+            </p>
+            <div id="briefing-sources-cards"></div>
+        </div>
+
         <div class="label-hidden-csrf" aria-hidden="true"><?= $csrfField ?></div>
     </div>
 
@@ -137,11 +168,123 @@ $moduleOptions = [
         var placeholder = document.getElementById('briefing-output-placeholder');
         var errEl = document.getElementById('briefing-output-error');
         var warnEl = document.getElementById('briefing-output-warning');
+        var sourcesSection = document.getElementById('briefing-sources-section');
+        var sourcesCards = document.getElementById('briefing-sources-cards');
+        var sourcesIntro = document.getElementById('briefing-sources-intro');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
         var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
         var moduleCbs = document.querySelectorAll('.briefing-module-cb');
         var btnAll = document.getElementById('briefing-modules-all');
         var btnNone = document.getElementById('briefing-modules-none');
+        var statusTimerIds = [];
+        var STATUS_STEPS = [
+            { id: 'send', label: 'Sending request to the server' },
+            { id: 'load', label: 'Loading and filtering entries from selected modules' },
+            { id: 'context', label: 'Building markdown source context' },
+            { id: 'gemini', label: 'Generating executive briefing with Gemini (often 20\u201360 seconds)' },
+            { id: 'cards', label: 'Preparing source entry cards for validation' }
+        ];
+
+        function clearStatusTimers() {
+            statusTimerIds.forEach(function(id) { clearTimeout(id); });
+            statusTimerIds = [];
+        }
+
+        function scheduleStatus(delayMs, stepId) {
+            statusTimerIds.push(setTimeout(function() { setActiveStatusStep(stepId); }, delayMs));
+        }
+
+        function setActiveStatusStep(stepId) {
+            var list = document.getElementById('briefing-status-steps');
+            if (!list) return;
+            var found = false;
+            list.querySelectorAll('.briefing-output-status__step').forEach(function(li) {
+                var id = li.getAttribute('data-step');
+                if (id === stepId) {
+                    li.classList.add('is-active');
+                    li.classList.remove('is-done');
+                    found = true;
+                    var leadText = document.getElementById('briefing-status-lead-text');
+                    if (leadText) leadText.textContent = li.textContent;
+                } else if (!found) {
+                    li.classList.remove('is-active');
+                    li.classList.add('is-done');
+                } else {
+                    li.classList.remove('is-active', 'is-done');
+                }
+            });
+        }
+
+        function showProcessingStatus() {
+            clearStatusTimers();
+            if (placeholder) placeholder.remove();
+            out.style.whiteSpace = 'normal';
+            out.innerHTML = '';
+            out.setAttribute('aria-busy', 'true');
+
+            var wrap = document.createElement('div');
+            wrap.id = 'briefing-output-status';
+            wrap.className = 'briefing-output-status';
+            wrap.setAttribute('aria-live', 'polite');
+
+            var lead = document.createElement('p');
+            lead.id = 'briefing-status-lead';
+            lead.className = 'briefing-output-status__lead';
+
+            var leadText = document.createElement('span');
+            leadText.id = 'briefing-status-lead-text';
+            leadText.textContent = STATUS_STEPS[0].label;
+            lead.appendChild(leadText);
+
+            var dots = document.createElement('span');
+            dots.className = 'loading-dots';
+            dots.setAttribute('aria-hidden', 'true');
+            dots.innerHTML = '<span class="loading-dots-char">.</span>'
+                + '<span class="loading-dots-char">.</span>'
+                + '<span class="loading-dots-char">.</span>';
+            lead.appendChild(document.createTextNode(' '));
+            lead.appendChild(dots);
+
+            var list = document.createElement('ol');
+            list.id = 'briefing-status-steps';
+            list.className = 'briefing-output-status__steps';
+            STATUS_STEPS.forEach(function(step, idx) {
+                var li = document.createElement('li');
+                li.className = 'briefing-output-status__step' + (idx === 0 ? ' is-active' : '');
+                li.setAttribute('data-step', step.id);
+                li.textContent = step.label;
+                list.appendChild(li);
+            });
+
+            wrap.appendChild(lead);
+            wrap.appendChild(list);
+            out.appendChild(wrap);
+
+            setActiveStatusStep('send');
+            scheduleStatus(400, 'load');
+            scheduleStatus(2000, 'context');
+            scheduleStatus(5000, 'gemini');
+        }
+
+        function hideProcessingStatus() {
+            clearStatusTimers();
+            out.removeAttribute('aria-busy');
+            var status = document.getElementById('briefing-output-status');
+            if (status) status.remove();
+        }
+
+        function restoreOutputPlaceholder() {
+            hideProcessingStatus();
+            if (!out.querySelector('#briefing-output-placeholder') && !out.textContent.trim()) {
+                out.style.whiteSpace = 'pre-wrap';
+                var p = document.createElement('p');
+                p.className = 'admin-intro';
+                p.id = 'briefing-output-placeholder';
+                p.textContent = 'Generated text will appear here.';
+                out.appendChild(p);
+                placeholder = p;
+            }
+        }
 
         function getCsrf() {
             var input = csrfWrap ? csrfWrap.querySelector('input[name="_csrf"]') : null;
@@ -180,6 +323,8 @@ $moduleOptions = [
                 warnEl.hidden = true;
                 warnEl.textContent = '';
             }
+            if (sourcesSection) sourcesSection.hidden = true;
+            if (sourcesCards) sourcesCards.innerHTML = '';
             var checked = 0;
             moduleCbs.forEach(function(cb) { if (cb.checked) checked++; });
             if (checked === 0) {
@@ -196,7 +341,7 @@ $moduleOptions = [
             btn.disabled = true;
             var prevLabel = btn.textContent;
             btn.textContent = 'Generating…';
-            if (placeholder) placeholder.textContent = 'Calling Gemini — this may take 20–60 seconds…';
+            showProcessingStatus();
 
             fetch(generateUrl, {
                 method: 'POST',
@@ -210,6 +355,7 @@ $moduleOptions = [
                 });
             })
             .then(function(res) {
+                setActiveStatusStep('cards');
                 var data;
                 try {
                     data = JSON.parse(res.body);
@@ -218,6 +364,7 @@ $moduleOptions = [
                         errEl.textContent = 'Invalid response (HTTP ' + res.status + ').';
                         errEl.hidden = false;
                     }
+                    restoreOutputPlaceholder();
                     return;
                 }
                 if (!data.ok) {
@@ -225,13 +372,15 @@ $moduleOptions = [
                         errEl.textContent = data.error || 'Generation failed.';
                         errEl.hidden = false;
                     }
+                    restoreOutputPlaceholder();
                     return;
                 }
                 if (data.meta && data.meta.context_warning && warnEl) {
                     warnEl.textContent = data.meta.context_warning;
                     warnEl.hidden = false;
                 }
-                if (placeholder) placeholder.remove();
+                hideProcessingStatus();
+                out.style.whiteSpace = 'pre-wrap';
                 out.textContent = data.text || '';
                 if (data.meta) {
                     var note = document.createElement('p');
@@ -252,17 +401,57 @@ $moduleOptions = [
                         out.appendChild(note);
                     }
                 }
+                if (data.entries_html && sourcesCards) {
+                    sourcesCards.innerHTML = data.entries_html;
+                    if (sourcesIntro && data.meta && data.meta.entry_count !== undefined) {
+                        sourcesIntro.textContent =
+                            String(data.meta.entry_count) +
+                            ' entries sent to Gemini, in relevance order (for validation).';
+                    }
+                    if (sourcesSection) sourcesSection.hidden = false;
+                }
             })
             .catch(function() {
                 if (errEl) {
                     errEl.textContent = 'Network error — could not reach the server.';
                     errEl.hidden = false;
                 }
+                restoreOutputPlaceholder();
             })
             .finally(function() {
+                clearStatusTimers();
+                out.removeAttribute('aria-busy');
                 btn.disabled = <?= $geminiConfigured ? 'false' : 'true' ?>;
                 btn.textContent = prevLabel;
             });
+        });
+
+        function collapseEntryCard(card, btn) {
+            var preview = card.querySelector('.entry-preview');
+            var full = card.querySelector('.entry-full-content');
+            if (!preview || !full) return;
+            full.style.display = 'none';
+            preview.style.display = '';
+            if (btn) btn.textContent = 'expand \u25BC';
+        }
+        function expandEntryCard(card, btn) {
+            var preview = card.querySelector('.entry-preview');
+            var full = card.querySelector('.entry-full-content');
+            if (!preview || !full) return;
+            preview.style.display = 'none';
+            full.style.display = 'block';
+            if (btn) btn.textContent = 'collapse \u25B2';
+        }
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.entry-expand-btn');
+            if (!btn || !sourcesCards || !sourcesCards.contains(btn)) return;
+            var card = btn.closest('.entry-card');
+            if (!card) return;
+            var full = card.querySelector('.entry-full-content');
+            if (!full) return;
+            full.style.display === 'block'
+                ? collapseEntryCard(card, btn)
+                : expandEntryCard(card, btn);
         });
     })();
     </script>

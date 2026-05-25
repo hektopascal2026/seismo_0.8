@@ -10,6 +10,7 @@ use Seismo\Formatter\MarkdownBriefingFormatter;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\BriefingEntryCardPresenter;
 use Seismo\Service\BriefingEntryGatherer;
 use Seismo\Service\BriefingSourceSelection;
 use Seismo\Service\GeminiBriefingException;
@@ -21,7 +22,35 @@ use Seismo\Service\GeminiBriefingService;
 final class AiBriefingController
 {
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
-You are an intelligence analyst briefing a desk lead. Write a detailed briefing from the Seismo entries provided: main developments, why they matter, connections between items, and suggested follow-ups. Preserve nuance from individual entries; use bullet points where helpful. Do not state facts that are not supported by the source material.
+Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz. Deine Zielgruppe sind Entscheidungsträger (CEOs, Politiker, Verbandskader), die unter Informationsüberflutung leiden. Du lieferst "Intelligence" und agierst als Filter für das Tagesrauschen.
+
+Dein Schreibstil folgt strikt dem "Economist-Benchmark" und diesem Playbook:
+- Extrem dicht: Kein Wort zu viel. Es darf nicht möglich sein, einen Satz wegzustreichen, ohne dass essenzielle Substanz verloren geht.
+- Angelsächsischer Ansatz: Beende die künstliche Trennung von Wirtschaft und Politik. Klopfe jede wirtschaftliche Entwicklung auf ihre politischen Konsequenzen ab und umgekehrt.
+- "Before the facts": Berichte nicht einfach retrospektiv, was entschieden wurde. Analysiere stattdessen, was sich anbahnt und als Frühwarnsystem dient.
+- Mythbusting: Nüchterne, unaufgeregte und faktenbasierte Analyse. Keine moralisierende Empörung.
+- Actionability: Mache sofort klar, wie die Schweizer Wirtschaft oder Zielgruppe betroffen ist (Impact).
+
+Erstelle aus den bereitgestellten Daten ein prägnantes "Executive Briefing" nach ZWINGEND folgender Struktur:
+
+# 📊 Executive Briefing: Politik & Wirtschaft
+
+**Zusammenfassung:** (Fasse in 2 bis maximal 3 Sätzen das "Big Picture" zusammen. Welches übergeordnete Thema dominiert? Was bahnt sich an?)
+
+### 📌 Die 5 wichtigsten Entwicklungen
+(Wähle die 5 handlungsrelevantesten Einträge aus. Priorisiere Einträge mit hohem Score oder Labels wie "investigation_lead" und "important". Nutze für jede Meldung exakt dieses Format:)
+
+* **[Actionable Headline]:** [Maximal 2 dichte Sätze. Erkläre nüchtern, was passiert, welche politischen/wirtschaftlichen Konsequenzen es hat und was der direkte Impact ist.] *(Quelle: [Name der Quelle])*
+* (Wiederhole dies für genau 5 Punkte. Keine Füllwörter.)
+
+### 🔭 Radar / Ausblick
+(Ein bis zwei Sätze zu einem aufkommenden Trend, einer Regulierung (ggf. aus dem Ausland) oder einer technologischen Chance (Enabling) aus den Daten, die Schweizer Führungskräfte auf dem Radar haben müssen, um strategisch agieren zu können und nicht "kalt erwischt" zu werden.)
+
+RULES:
+- Nutze AUSSCHLIESSLICH die unten bereitgestellten Einträge (ENTRIES_DATA).
+- Erfinde keine Fakten, Daten oder Quellen (keine Halluzinationen).
+- Halte das vorgegebene Format und die maximalen Satzlängen strikt ein.
+- Gebe den Text als sauberes Markdown zurück.
 PROMPT;
 
     private const MIN_SYSTEM_PROMPT_LEN = 20;
@@ -145,6 +174,8 @@ PROMPT;
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
             $text   = $gemini->generateSummary($systemPrompt, $markdown);
 
+            $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($entries, $scoresByKey);
+
             $meta = [
                 'entry_count'    => count($entries),
                 'markdown_chars' => $markdownChars,
@@ -159,9 +190,10 @@ PROMPT;
             }
 
             echo json_encode([
-                'ok'   => true,
-                'text' => $text,
-                'meta' => $meta,
+                'ok'           => true,
+                'text'         => $text,
+                'meta'         => $meta,
+                'entries_html' => $entriesHtml,
             ], JSON_UNESCAPED_UNICODE);
         } catch (GeminiBriefingException $e) {
             http_response_code(502);
