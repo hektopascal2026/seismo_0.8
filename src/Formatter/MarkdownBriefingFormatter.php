@@ -24,6 +24,12 @@ final class MarkdownBriefingFormatter
 {
     public const CONTENT_TYPE = 'text/markdown; charset=utf-8';
 
+    /** Human/LLM markdown list (export downloads, legacy). */
+    public const FORMAT_MARKDOWN = 'markdown';
+
+    /** Tagged entries for AI Briefing Builder — clearer boundaries for extraction. */
+    public const FORMAT_XML = 'xml';
+
     /** Max characters of entry body text included per item (content, else description). */
     public const ENTRY_BODY_MAX_CHARS = 1000;
 
@@ -31,9 +37,29 @@ final class MarkdownBriefingFormatter
      * @param array<int, array<string, mixed>> $entries Shaped Magnitu-contract rows.
      * @param array<string, array<string, mixed>> $scoresByKey "type:id" → score row.
      * @param array<string, mixed> $meta               Printed in the preamble (since, total, etc.).
-     * @param bool $includeEntryIds                    When true, each item is tagged `[ID: type:id]` for LLM attribution.
+     * @param bool $includeEntryIds                    When true, each item is tagged for LLM attribution.
+     * @param string $format                           {@see FORMAT_MARKDOWN} or {@see FORMAT_XML}.
      */
-    public static function format(array $entries, array $scoresByKey, array $meta, bool $includeEntryIds = false): string
+    public static function format(
+        array $entries,
+        array $scoresByKey,
+        array $meta,
+        bool $includeEntryIds = false,
+        string $format = self::FORMAT_MARKDOWN,
+    ): string {
+        if ($format === self::FORMAT_XML) {
+            return self::formatXml($entries, $scoresByKey, $meta, $includeEntryIds);
+        }
+
+        return self::formatMarkdown($entries, $scoresByKey, $meta, $includeEntryIds);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $meta
+     */
+    private static function formatMarkdown(array $entries, array $scoresByKey, array $meta, bool $includeEntryIds): string
     {
         $generatedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->format('Y-m-d\TH:i:s\Z');
@@ -119,6 +145,102 @@ final class MarkdownBriefingFormatter
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $meta
+     */
+    private static function formatXml(array $entries, array $scoresByKey, array $meta, bool $includeEntryIds): string
+    {
+        $generatedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->format('Y-m-d\TH:i:s\Z');
+
+        $parts = ['<seismo_briefing'];
+        $parts[] = ' generated="' . self::escapeXmlAttribute($generatedAt) . '"';
+        $parts[] = ' total_entries="' . count($entries) . '"';
+        if (isset($meta['since']) && $meta['since'] !== null && $meta['since'] !== '') {
+            $parts[] = ' since="' . self::escapeXmlAttribute((string)$meta['since']) . '"';
+        }
+        if (isset($meta['label_filter']) && $meta['label_filter'] !== null) {
+            $labels = is_array($meta['label_filter'])
+                ? implode(', ', $meta['label_filter'])
+                : (string)$meta['label_filter'];
+            $parts[] = ' label_filter="' . self::escapeXmlAttribute($labels) . '"';
+        }
+        $parts[] = '>';
+        $xml = implode('', $parts);
+
+        if ($entries === []) {
+            return $xml . '<empty>No entries matched the requested window.</empty></seismo_briefing>';
+        }
+
+        $xml .= '<entries>';
+        foreach ($entries as $e) {
+            $key   = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
+            $score = $scoresByKey[$key] ?? null;
+
+            $xml .= '<entry>';
+            if ($includeEntryIds && $key !== '' && $key !== ':') {
+                $xml .= '<id>' . self::escapeXmlText($key) . '</id>';
+            }
+
+            $title = self::sanitizeLinkText((string)($e['title'] ?? '(untitled)'));
+            if ($title === '') {
+                $title = '(untitled)';
+            }
+            $xml .= '<title>' . self::escapeXmlText($title) . '</title>';
+
+            $link = self::sanitizeLinkUrl((string)($e['link'] ?? ''));
+            if ($link !== '') {
+                $xml .= '<link>' . self::escapeXmlText($link) . '</link>';
+            }
+
+            if (!empty($e['published_date'])) {
+                $xml .= '<published_date>' . self::escapeXmlText((string)$e['published_date']) . '</published_date>';
+            }
+            if (!empty($e['source_name'])) {
+                $xml .= '<source_name>' . self::escapeXmlText((string)$e['source_name']) . '</source_name>';
+            }
+            if (!empty($e['source_type'])) {
+                $xml .= '<source_type>' . self::escapeXmlText((string)$e['source_type']) . '</source_type>';
+            }
+            if (!empty($e['source_category'])) {
+                $xml .= '<category>' . self::escapeXmlText((string)$e['source_category']) . '</category>';
+            }
+            if ($score !== null) {
+                $rel = (float)($score['relevance_score'] ?? 0);
+                $lbl = (string)($score['predicted_label'] ?? '');
+                $src = (string)($score['score_source'] ?? '');
+                $xml .= '<relevance_score>' . self::escapeXmlText(sprintf('%.2f', $rel)) . '</relevance_score>';
+                if ($lbl !== '') {
+                    $xml .= '<predicted_label>' . self::escapeXmlText($lbl) . '</predicted_label>';
+                }
+                if ($src !== '') {
+                    $xml .= '<score_source>' . self::escapeXmlText($src) . '</score_source>';
+                }
+            }
+
+            $body = self::formatEntryBody($e);
+            if ($body !== '') {
+                $xml .= '<content>' . self::escapeXmlText($body) . '</content>';
+            }
+
+            $xml .= '</entry>';
+        }
+
+        return $xml . '</entries></seismo_briefing>';
+    }
+
+    private static function escapeXmlAttribute(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    }
+
+    private static function escapeXmlText(string $value): string
+    {
+        return htmlspecialchars($value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }
 
     /**
