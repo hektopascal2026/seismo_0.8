@@ -31,6 +31,8 @@ $indexNewestQs = http_build_query(seismo_timeline_view_link_params('index', fals
 $indexFavouritesQs = http_build_query(seismo_timeline_view_link_params('index', true));
 $timelineFavouritesOn = $currentView === 'favourites';
 $timelineFavouritesToggleHref = $timelineFavouritesOn ? $indexNewestQs : $indexFavouritesQs;
+$showTimelineMediaToggle = true;
+$timelineMediaToggleFeature = true;
 $showTimelineFavouritesToggle = true;
 
 $clearSearchParams = ['action' => 'index'];
@@ -73,8 +75,17 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
+    <script>
+    (function() {
+        try {
+            if (localStorage.getItem('seismo_timeline_show_media') === '1') {
+                document.documentElement.classList.add('timeline-media-on');
+            }
+        } catch (e) {}
+    })();
+    </script>
 </head>
-<body>
+<body class="timeline-media-toggle-feature">
     <div class="container">
         <?php require __DIR__ . '/partials/site_header.php'; ?>
 
@@ -127,7 +138,57 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
 
     <script>
     (function() {
+        var MEDIA_STORAGE_KEY = 'seismo_timeline_show_media';
+        function timelineMediaOn() {
+            return document.documentElement.classList.contains('timeline-media-on');
+        }
+        function setTimelineMediaOn(on) {
+            document.documentElement.classList.toggle('timeline-media-on', on);
+            try {
+                localStorage.setItem(MEDIA_STORAGE_KEY, on ? '1' : '0');
+            } catch (e) {}
+            var mediaBtn = document.querySelector('.timeline-media-toggle-btn');
+            if (mediaBtn) {
+                mediaBtn.classList.toggle('is-active', on);
+                mediaBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+                mediaBtn.title = on ? 'Hide media monitoring entries' : 'Show media monitoring entries';
+            }
+            reconcileTimelineDaySeparators();
+        }
+        function reconcileTimelineDaySeparators() {
+            var section = document.querySelector('.latest-entries-section');
+            if (!section) return;
+            var children = section.children;
+            for (var i = 0; i < children.length; i++) {
+                var el = children[i];
+                if (!el.classList || !el.classList.contains('magnitu-day-separator')) continue;
+                var hasVisible = false;
+                for (var j = i + 1; j < children.length; j++) {
+                    var next = children[j];
+                    if (next.classList.contains('magnitu-day-separator')) break;
+                    if (next.classList.contains('entry-card') && next.offsetParent !== null) {
+                        hasVisible = true;
+                        break;
+                    }
+                }
+                el.style.display = hasVisible ? '' : 'none';
+            }
+        }
+        function initTimelineMediaToggle() {
+            var on = timelineMediaOn();
+            setTimelineMediaOn(on);
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initTimelineMediaToggle);
+        } else {
+            initTimelineMediaToggle();
+        }
         document.addEventListener('click', function(e) {
+            var mediaBtn = e.target.closest('.timeline-media-toggle-btn');
+            if (mediaBtn) {
+                setTimelineMediaOn(!timelineMediaOn());
+                return;
+            }
             var btn = e.target.closest('.timeline-favourites-toggle-btn');
             if (!btn || !btn.dataset.href) return;
             window.location.assign(btn.dataset.href);

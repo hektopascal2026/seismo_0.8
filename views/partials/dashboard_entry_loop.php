@@ -18,6 +18,8 @@
  * @var string $csrfField From DashboardController (CSRF hidden input HTML)
  * @var bool $embedTimelineExpandAllInDayRow When true (index only), first day heading shares a row with "expand all".
  * @var bool $embedDashboardTimelineSearch When true (index + items), mobile search form is embedded in that row.
+ * @var bool $timelineMediaToggleFeature When true, mark media-category feed cards for the index Media toggle.
+ * @var bool $showTimelineMediaToggle When true, show Media visibility toggle (main index timeline).
  * @var bool $showTimelineFavouritesToggle When true, show ★ favs link beside expand all (index / filter preview).
  * @var bool $timelineFavouritesOn
  * @var string $timelineFavouritesToggleHref

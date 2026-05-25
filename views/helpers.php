@@ -140,6 +140,15 @@ if (!function_exists('seismo_feed_item_pill_label')) {
     }
 }
 
+if (!function_exists('seismo_feed_item_is_timeline_media')) {
+    /** True when the feed row is routed to the Media module (`feeds.category = media`). */
+    function seismo_feed_item_is_timeline_media(array $item): bool
+    {
+        return strtolower(trim((string)($item['feed_category'] ?? '')))
+            === \Seismo\Feed\FeedModule::CATEGORY_MEDIA;
+    }
+}
+
 if (!function_exists('seismo_feed_item_resolved_link')) {
     /**
      * Resolve a feed_items row to a usable article URL.

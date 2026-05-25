@@ -1624,8 +1624,14 @@ textarea.search-input.setup-code-preview {
     gap: 0.5rem;
 }
 
-/* Timeline toolbar: ★ favs / highest sort + expand all — matched control utilities */
+/* Main index timeline: hide media-category cards unless Media toggle is on */
+html:not(.timeline-media-on) body.timeline-media-toggle-feature .entry-card--timeline-media {
+    display: none;
+}
+
+/* Timeline toolbar: Media / ★ favs / highest sort + expand all — matched control utilities */
 .timeline-day-row-actions .btn.entry-expand-all-btn,
+.timeline-day-row-actions .btn.timeline-media-toggle-btn,
 .timeline-day-row-actions .btn.timeline-favourites-toggle-btn,
 .timeline-day-row-actions .btn.timeline-highlights-sort-toggle-btn {
     display: inline-flex;
@@ -1649,6 +1655,7 @@ textarea.search-input.setup-code-preview {
     margin-inline-end: 0.125rem;
 }
 
+.timeline-media-toggle-btn.is-active,
 .timeline-favourites-toggle-btn.is-active,
 .timeline-highlights-sort-toggle-btn.is-active {
     background-color: #f0f0f0;

@@ -2,6 +2,7 @@
 /**
  * Right-side timeline toolbar: favourites / highlights sort toggles + expand all.
  *
+ * @var bool $showTimelineMediaToggle
  * @var bool $showTimelineFavouritesToggle
  * @var bool $timelineFavouritesOn
  * @var string $timelineFavouritesToggleHref
@@ -12,10 +13,14 @@
 
 declare(strict_types=1);
 
+$showTimelineMediaToggle = !empty($showTimelineMediaToggle);
 $showTimelineFavouritesToggle = !empty($showTimelineFavouritesToggle);
 $showTimelineHighlightsSortToggle = !empty($showTimelineHighlightsSortToggle);
 ?>
 <div class="timeline-day-row-actions">
+<?php if ($showTimelineMediaToggle): ?>
+    <?php require __DIR__ . '/timeline_media_toggle.php'; ?>
+<?php endif; ?>
 <?php if ($showTimelineFavouritesToggle): ?>
     <?php require __DIR__ . '/timeline_favourites_toggle.php'; ?>
 <?php endif; ?>

@@ -28,8 +28,11 @@ if (mb_strlen($fullContent) > 200) {
 }
 $hasMore = mb_strlen($fullContent) > 200;
 $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
+$timelineMediaCardClass = !empty($timelineMediaToggleFeature) && seismo_feed_item_is_timeline_media($item)
+    ? ' entry-card--timeline-media'
+    : '';
 ?>
-                        <div class="entry-card">
+                        <div class="entry-card<?= $timelineMediaCardClass ?>">
                             <div class="entry-header">
                                 <?php if ($isParlPressFeed): ?>
                                     <?php

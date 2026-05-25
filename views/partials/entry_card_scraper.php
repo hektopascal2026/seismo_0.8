@@ -25,8 +25,11 @@ if (mb_strlen($scraperContent) > 200) {
     $scraperPreview .= '...';
 }
 $scraperHasMore = mb_strlen($scraperContent) > 200;
+$timelineMediaCardClass = !empty($timelineMediaToggleFeature) && seismo_feed_item_is_timeline_media($item)
+    ? ' entry-card--timeline-media'
+    : '';
 ?>
-                        <div class="entry-card">
+                        <div class="entry-card<?= $timelineMediaCardClass ?>">
                             <div class="entry-header">
                                 <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
