@@ -16,6 +16,83 @@ final class LexCardPreview
 
     public const CARD_PREVIEW_CHARS = 300;
 
+    /** Max plain-text body sent to the AI Briefing Builder for DE/FR/EU lex items. */
+    public const BRIEFING_BODY_CHARS = 6000;
+
+    /**
+     * Plain-text legal body for AI briefing context (prefers operative text over synopsis).
+     *
+     * @param array<string, mixed> $row Row with `source`, `description`, and/or `content`
+     */
+    public static function briefingText(array $row, int $maxChars = self::BRIEFING_BODY_CHARS): string
+    {
+        $source = strtolower(trim((string)($row['source'] ?? '')));
+        $description = trim((string)($row['description'] ?? ''));
+        $excerpt = self::excerptFromRow($row);
+
+        $body = match ($source) {
+            'eu' => self::briefingEuBody($description, $excerpt),
+            'fr' => self::briefingFrBody($description, $excerpt),
+            'de' => self::briefingDeBody($description, $excerpt),
+            default => $description !== ''
+                ? self::plainExcerpt($description)
+                : self::plainExcerpt($excerpt),
+        };
+
+        $body = trim($body);
+
+        return $body === '' ? '' : self::lead($body, $maxChars);
+    }
+
+    private static function briefingEuBody(string $description, string $excerpt): string
+    {
+        if ($excerpt !== '') {
+            $fromExcerpt = self::euPreamble($description, $excerpt);
+            if ($fromExcerpt !== '' && mb_strlen($fromExcerpt) >= 120) {
+                return $fromExcerpt;
+            }
+            $body = self::euBodyFromExcerpt(self::plainExcerpt($excerpt));
+            if ($body !== '' && mb_strlen($body) >= 80) {
+                return $body;
+            }
+        }
+
+        return $description !== '' ? self::plainExcerpt($description) : self::plainExcerpt($excerpt);
+    }
+
+    private static function briefingFrBody(string $description, string $excerpt): string
+    {
+        if ($excerpt !== '') {
+            $body = self::frBodyFromExcerpt($excerpt);
+            if ($body !== '' && mb_strlen($body) >= 40) {
+                return $body;
+            }
+        }
+
+        $description = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
+        if ($description !== '' && !self::frIsBoilerplateOnly($description)) {
+            return $description;
+        }
+
+        return self::plainExcerpt($excerpt);
+    }
+
+    private static function briefingDeBody(string $description, string $excerpt): string
+    {
+        if ($excerpt !== '') {
+            $body = self::deBodyFromExcerpt(self::plainExcerpt($excerpt));
+            if ($body !== '' && mb_strlen($body) >= 80) {
+                return $body;
+            }
+        }
+
+        if ($description !== '') {
+            return self::plainExcerpt($description);
+        }
+
+        return self::plainExcerpt($excerpt);
+    }
+
     /**
      * @param array<string, mixed> $row
      */

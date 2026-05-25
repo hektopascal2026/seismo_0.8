@@ -19,6 +19,8 @@ namespace Seismo\Formatter;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Seismo\Core\Lex\LexCardPreview;
+use Seismo\Core\Lex\LexPlainText;
 
 final class MarkdownBriefingFormatter
 {
@@ -32,6 +34,9 @@ final class MarkdownBriefingFormatter
 
     /** Max characters of entry body text included per item (content, else description). */
     public const ENTRY_BODY_MAX_CHARS = 1000;
+
+    /** Lex sources that receive {@see LexCardPreview::briefingText()} in AI briefing context. */
+    private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu'];
 
     /**
      * @param array<int, array<string, mixed>> $entries Shaped Magnitu-contract rows.
@@ -210,6 +215,10 @@ final class MarkdownBriefingFormatter
             if (!empty($e['source_type'])) {
                 $xml .= '<source_type>' . self::escapeXmlText((string)$e['source_type']) . '</source_type>';
             }
+            $jurisdiction = self::jurisdictionLabel($e);
+            if ($jurisdiction !== '') {
+                $xml .= '<jurisdiction>' . self::escapeXmlText($jurisdiction) . '</jurisdiction>';
+            }
             if (!empty($e['source_category'])) {
                 $xml .= '<category>' . self::escapeXmlText((string)$e['source_category']) . '</category>';
             }
@@ -252,6 +261,14 @@ final class MarkdownBriefingFormatter
      */
     private static function formatEntryBody(array $entry): string
     {
+        $lexSource = self::lexSourceFromEntry($entry);
+        if ($lexSource !== null && in_array($lexSource, self::LEX_BRIEFING_BODY_SOURCES, true)) {
+            $legal = LexCardPreview::briefingText(self::entryAsLexRow($entry, $lexSource));
+            if ($legal !== '') {
+                return $legal;
+            }
+        }
+
         $body = trim((string)($entry['content'] ?? ''));
         if ($body === '') {
             $body = trim((string)($entry['description'] ?? ''));
@@ -260,9 +277,66 @@ final class MarkdownBriefingFormatter
             return '';
         }
 
-        $body = (string)preg_replace('/\s+/', ' ', $body);
+        $body = LexPlainText::normalize($body);
 
-        return mb_substr($body, 0, self::ENTRY_BODY_MAX_CHARS);
+        return LexPlainText::truncate($body, self::ENTRY_BODY_MAX_CHARS) ?? '';
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     * @return array{source: string, description: string, content: string}
+     */
+    private static function entryAsLexRow(array $entry, string $lexSource): array
+    {
+        return [
+            'source'      => $lexSource,
+            'description' => (string)($entry['description'] ?? ''),
+            'content'     => (string)($entry['content'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private static function lexSourceFromEntry(array $entry): ?string
+    {
+        if ((string)($entry['entry_type'] ?? '') !== 'lex_item') {
+            return null;
+        }
+        $sourceType = (string)($entry['source_type'] ?? '');
+        if (!str_starts_with($sourceType, 'lex_')) {
+            return null;
+        }
+
+        $source = substr($sourceType, 4);
+
+        return $source !== '' ? $source : null;
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private static function jurisdictionLabel(array $entry): string
+    {
+        $lexSource = self::lexSourceFromEntry($entry);
+        if ($lexSource !== null) {
+            return match ($lexSource) {
+                'de' => 'DE',
+                'fr' => 'FR',
+                'eu' => 'EU',
+                'ch', 'ch_bger', 'ch_bge', 'ch_bvger' => 'CH',
+                default => strtoupper($lexSource),
+            };
+        }
+
+        if ((string)($entry['entry_type'] ?? '') === 'calendar_event') {
+            $sourceType = strtolower((string)($entry['source_type'] ?? ''));
+            if (str_contains($sourceType, 'parliament_ch') || str_contains($sourceType, 'ch')) {
+                return 'CH';
+            }
+        }
+
+        return '';
     }
 
     /**

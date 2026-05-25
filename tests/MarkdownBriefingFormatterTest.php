@@ -54,4 +54,58 @@ final class MarkdownBriefingFormatterTest extends TestCase
         self::assertStringContainsString('[ID: lex_item:9]', $md);
         self::assertStringContainsString('- Lex title', $md);
     }
+
+    public function testXmlLexDeIncludesJurisdictionAndSubstantiveBody(): void
+    {
+        $bgblHeader = "Bundesgesetzblatt\nAusgegeben zu Bonn\n";
+        $operative = "Auf Grund des § 1 Abs. 2 des Gesetzes verordnet die Bundesregierung:\n§ 1 Geltungsbereich\nDiese Verordnung gilt für grenzüberschreitende Lieferketten.";
+        $entries = [[
+            'entry_type'      => 'lex_item',
+            'entry_id'        => 7,
+            'title'           => 'BGBl Verordnung',
+            'source_type'     => 'lex_de',
+            'source_category' => 'Gesetz',
+            'content'         => $bgblHeader . $operative,
+            'description'     => 'Kurzbeschreibung',
+        ]];
+
+        $xml = MarkdownBriefingFormatter::format(
+            $entries,
+            [],
+            [],
+            true,
+            MarkdownBriefingFormatter::FORMAT_XML,
+        );
+
+        self::assertStringContainsString('<jurisdiction>DE</jurisdiction>', $xml);
+        self::assertStringContainsString('§ 1 Geltungsbereich', $xml);
+        self::assertStringNotContainsString('Ausgegeben zu Bonn', $xml);
+    }
+
+    public function testXmlLexFrStripsJorfBoilerplateInContent(): void
+    {
+        $content = "Assemblée nationale et le Sénat ont adopté\n"
+            . "promulgue la loi dont la teneur suit :\n"
+            . "Article 1er\nLes entreprises étrangères doivent déclarer leurs filiales "
+            . "dans l'Union européenne conformément au présent article.";
+        $entries = [[
+            'entry_type'  => 'lex_item',
+            'entry_id'    => 8,
+            'title'       => 'Loi test',
+            'source_type' => 'lex_fr',
+            'content'     => $content,
+        ]];
+
+        $xml = MarkdownBriefingFormatter::format(
+            $entries,
+            [],
+            [],
+            true,
+            MarkdownBriefingFormatter::FORMAT_XML,
+        );
+
+        self::assertStringContainsString('<jurisdiction>FR</jurisdiction>', $xml);
+        self::assertStringContainsString('Article 1er', $xml);
+        self::assertStringNotContainsString('promulgue la loi dont la teneur suit', $xml);
+    }
 }

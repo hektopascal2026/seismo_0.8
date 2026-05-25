@@ -57,7 +57,7 @@ You choose which entries merit inclusion in an executive briefing. The user pers
 RULES:
 - ENTRIES_DATA contains XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
 - Select exactly {effectiveItemCount} distinct entries when at least that many exist; otherwise select every available entry.
-- Prefer entries that are timely, non-redundant, and material for Swiss decision-makers (CEOs, boards, associations).
+- Prefer entries that are timely, non-redundant, and fit the user system prompt (audience, jurisdictions, topics). Use <jurisdiction> and <source_type> when the prompt targets specific countries or legal corpora.
 - used_entry_keys must list the chosen <id> values in briefing order (most important first).
 - selection_notes: one short sentence per chosen entry (why it made the cut). Not shown to end users.
 - Never invent IDs. Only keys from ENTRIES_DATA <id> elements.
