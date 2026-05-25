@@ -446,7 +446,7 @@ $moduleOptions = [
 
             var leadText = document.createElement('span');
             leadText.id = 'briefing-status-lead-text';
-            leadText.textContent = STATUS_STEPS[0].label;
+            leadText.textContent = statusStepsForMode()[0].label;
             lead.appendChild(leadText);
 
             var dots = document.createElement('span');
@@ -867,7 +867,19 @@ $moduleOptions = [
             btn.disabled = true;
             var prevLabel = btn.textContent;
             btn.textContent = 'Generating…';
-            showProcessingStatus();
+            try {
+                showProcessingStatus();
+            } catch (statusErr) {
+                console.error('Briefing status UI failed:', statusErr);
+                if (placeholder) placeholder.remove();
+                out.style.whiteSpace = 'pre-wrap';
+                out.innerHTML = '';
+                var fallback = document.createElement('p');
+                fallback.className = 'admin-intro';
+                fallback.textContent = 'Generating briefing…';
+                out.appendChild(fallback);
+                out.setAttribute('aria-busy', 'true');
+            }
 
             postBriefingAction(prepareUrl, fd)
             .then(function(prep) {
@@ -917,8 +929,19 @@ $moduleOptions = [
                     }
                     hideProcessingStatus();
                     out.style.whiteSpace = 'pre-wrap';
-                    out.textContent = payload.text || '';
-                    showCopyBtn(payload.text || '');
+                    var briefingText = (payload.text && String(payload.text).trim()) ? String(payload.text) : '';
+                    if (briefingText === '') {
+                        var emptyMsg = 'Gemini returned an empty briefing. Try again, reduce modules or lookback, or enable two-pass.';
+                        if (errEl) {
+                            errEl.textContent = emptyMsg;
+                            errEl.hidden = false;
+                        }
+                        out.textContent = emptyMsg;
+                        hideCopyBtn();
+                        return;
+                    }
+                    out.textContent = briefingText;
+                    showCopyBtn(briefingText);
                     if (payload.meta) {
                         var note = document.createElement('p');
                         note.className = 'admin-intro';
