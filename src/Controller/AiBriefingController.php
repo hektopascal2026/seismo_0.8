@@ -109,14 +109,17 @@ PROMPT;
         $csrfField = CsrfToken::field();
         $basePath  = getBasePath();
 
-        $geminiConfigured = false;
-        $systemPrompt     = self::DEFAULT_SYSTEM_PROMPT;
-        $savedPrompts     = [];
+        $geminiConfigured      = false;
+        $systemPrompt          = self::DEFAULT_SYSTEM_PROMPT;
+        $savedPrompts          = [];
+        $defaultPromptStored   = false;
 
         try {
             $config = new SystemConfigRepository(getDbConnection());
             $key    = $config->get(SettingsController::KEY_GEMINI_API_KEY);
             $geminiConfigured = $key !== null && trim($key) !== '';
+            $storedDefault    = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
+            $defaultPromptStored = $storedDefault !== null && trim($storedDefault) !== '';
             $systemPrompt     = self::resolveStoredSystemPrompt($config);
             $savedPrompts     = self::ensurePromptLibrarySeeded($config, $systemPrompt);
         } catch (\Throwable $e) {
@@ -419,10 +422,19 @@ PROMPT;
         }
 
         try {
-            $name    = $this->parsePromptLibraryName($_POST['name'] ?? null);
             $content = $this->parseSystemPrompt($_POST['content'] ?? null);
             $config  = new SystemConfigRepository(getDbConnection());
             $library = self::loadPromptLibrary($config);
+            $id      = trim((string)($_POST['id'] ?? ''));
+            if ($id !== '') {
+                $library = self::updatePromptLibraryEntry($library, $id, $content);
+                $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+                echo json_encode(['ok' => true, 'prompts' => $library], JSON_UNESCAPED_UNICODE);
+
+                return;
+            }
+
+            $name = $this->parsePromptLibraryName($_POST['name'] ?? null);
             if (count($library) >= self::MAX_PROMPT_LIBRARY) {
                 throw new \InvalidArgumentException(
                     'Prompt library is full (maximum ' . self::MAX_PROMPT_LIBRARY . ' prompts). Delete one first.'
@@ -547,6 +559,28 @@ PROMPT;
         }
 
         return $out;
+    }
+
+    /**
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    public static function updatePromptLibraryEntry(array $library, string $id, string $content): array
+    {
+        $updated = false;
+        foreach ($library as $i => $row) {
+            if (($row['id'] ?? '') !== $id) {
+                continue;
+            }
+            $library[$i]['content'] = $content;
+            $updated                = true;
+            break;
+        }
+        if (!$updated) {
+            throw new \InvalidArgumentException('Prompt not found.');
+        }
+
+        return $library;
     }
 
     public static function resolveStoredSystemPrompt(SystemConfigRepository $config): string
