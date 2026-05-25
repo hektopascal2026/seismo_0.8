@@ -18,6 +18,21 @@ use Seismo\Service\Http\Response;
  */
 final class GeminiBriefingService
 {
+    /**
+     * App-owned output contract (not user-editable). `{itemCount}` and
+     * `{markdownContext}` are substituted before the Gemini call.
+     */
+    private const BRIEFING_OUTPUT_CONTRACT = <<<'CONTRACT'
+OUTPUT CONTRACT (platform — follow exactly):
+- Respond with a single JSON object only (no Markdown code fence) containing "briefing_markdown" and "used_entry_keys".
+- In briefing_markdown, include the section "### 📌 Die {itemCount} wichtigsten Entwicklungen" with exactly {itemCount} bullet points (one per top development, in relevance order).
+- "used_entry_keys" must be a JSON array of exactly {itemCount} strings: entry IDs from ENTRIES_DATA in the same order as the developments (format entry_type:entry_id as in [ID: entry_type:entry_id] tags).
+- Use only facts and sources from ENTRIES_DATA; do not invent entries or citations.
+
+ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
+
     /** Override via `system_config` key `gemini:model`. */
     public const CONFIG_KEY_MODEL = 'gemini:model';
 
@@ -63,20 +78,27 @@ final class GeminiBriefingService
     /**
      * @throws GeminiBriefingException
      */
-    public function generateSummary(string $systemPrompt, string $markdownContext): GeminiBriefingResult
-    {
+    public function generateSummary(
+        string $userSystemPrompt,
+        string $markdownContext,
+        int $itemCount = 5,
+    ): GeminiBriefingResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
             throw GeminiBriefingException::missingApiKey();
         }
 
-        $systemPrompt = trim($systemPrompt);
-        if ($systemPrompt === '') {
+        $userSystemPrompt = trim($userSystemPrompt);
+        if ($userSystemPrompt === '') {
             throw GeminiBriefingException::invalidInput('System prompt is required.');
         }
 
+        if ($itemCount < 1) {
+            $itemCount = 5;
+        }
+
         $url     = self::API_BASE . rawurlencode($this->model) . ':generateContent';
-        $payload = $this->buildPayload($systemPrompt, $markdownContext);
+        $payload = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount);
 
         $response = $this->postWithRetries($url, $payload, $apiKey);
 
@@ -90,18 +112,11 @@ final class GeminiBriefingService
     /**
      * @return array<string, mixed>
      */
-    private function buildPayload(string $systemPrompt, string $markdownContext): array
+    private function buildPayload(string $userSystemPrompt, string $markdownContext, int $itemCount): array
     {
         $markdownContext = trim($markdownContext);
-        $systemPrompt    = trim($systemPrompt);
+        $systemText      = $this->composeSystemInstruction($userSystemPrompt, $markdownContext, $itemCount);
         $userText        = 'Erstelle das Executive Briefing gemäss den System Instructions.';
-
-        if (str_contains($systemPrompt, '{markdownContext}')) {
-            $systemText = str_replace('{markdownContext}', $markdownContext, $systemPrompt);
-        } else {
-            $systemText = $systemPrompt;
-            $userText   = "ENTRIES_DATA:\n\n" . $markdownContext;
-        }
 
         return [
             'systemInstruction' => [
@@ -123,6 +138,21 @@ final class GeminiBriefingService
                 'responseMimeType' => 'application/json',
             ],
         ];
+    }
+
+    private function composeSystemInstruction(
+        string $userSystemPrompt,
+        string $markdownContext,
+        int $itemCount,
+    ): string {
+        $envelope = str_replace('{itemCount}', (string)$itemCount, self::BRIEFING_OUTPUT_CONTRACT);
+        $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
+
+        if (str_contains($combined, '{markdownContext}')) {
+            return str_replace('{markdownContext}', $markdownContext, $combined);
+        }
+
+        return $combined . "\n\nENTRIES_DATA:\n\n" . $markdownContext;
     }
 
     /**

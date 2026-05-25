@@ -19,6 +19,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
 | Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
+| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = content/style only; `GeminiBriefingService` appends a platform **output contract** with `{itemCount}` and JSON/`used_entry_keys` rules. Attribution cards trim/warn when cite count ≠ requested. |
 
 ### Why six toggles (not four `entry_type` values)
 
@@ -82,7 +83,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 **Inputs**
 
-- `?string $since` — from lookback days (1 / 3 / 7 → UTC ISO timestamp)
+- `?string $since` — from lookback days (1–7 → UTC ISO timestamp)
 - `int $limit` — clamp 1 … `MAX_LIMIT`
 - Module flags: `includeFeeds`, `includeMedia`, `includeScraper`, `includeEmail`, `includeLex`, `includeLeg` (at least one must be true)
 - `array $labelFilter` — `['investigation_lead']` or `['investigation_lead', 'important']`
@@ -153,7 +154,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - POST only → 405
 - `CsrfToken::verifyRequest(false)` → 403 (no rotation on long AJAX)
 - `session_write_close()` after CSRF verify
-- Validate POST: module checkboxes, `lookback_days` ∈ {1,3,7}, `include_important`, `system_prompt` (min/max length), `limit`
+- Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `system_prompt` (min/max length), `limit`
 - Pipeline: gatherer → `MarkdownBriefingFormatter::format()` → `GeminiBriefingService`
 - Response: `{ "ok": true, "text": "...", "meta": { "entry_count", "since", "modules", "labels" } }` or `{ "ok": false, "error": "..." }`
 

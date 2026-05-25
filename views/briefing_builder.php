@@ -10,6 +10,8 @@
  * @var int $defaultLookbackDays
  * @var int $defaultLimit
  * @var int $maxLimit
+ * @var int $defaultItemCount
+ * @var list<int> $itemCountOptions
  */
 
 declare(strict_types=1);
@@ -145,9 +147,11 @@ $moduleOptions = [
                 <div class="admin-form-field">
                     <label for="briefing_lookback">Lookback window</label>
                     <select id="briefing_lookback" name="lookback_days" class="search-input" style="width:auto;">
-                        <option value="1"<?= $defaultLookbackDays === 1 ? ' selected' : '' ?>>1 day</option>
-                        <option value="3"<?= $defaultLookbackDays === 3 ? ' selected' : '' ?>>3 days</option>
-                        <option value="7"<?= $defaultLookbackDays === 7 ? ' selected' : '' ?>>7 days</option>
+                        <?php for ($d = 1; $d <= 7; $d++): ?>
+                        <option value="<?= $d ?>"<?= $defaultLookbackDays === $d ? ' selected' : '' ?>>
+                            <?= $d === 1 ? '1 day' : $d . ' days' ?>
+                        </option>
+                        <?php endfor; ?>
                     </select>
                 </div>
 
@@ -155,6 +159,18 @@ $moduleOptions = [
                     <label for="briefing_limit">Entry limit (per module)</label>
                     <input type="number" id="briefing_limit" name="limit" class="search-input" style="width:7rem;"
                            min="1" max="<?= (int)$maxLimit ?>" value="<?= (int)$defaultLimit ?>">
+                </div>
+
+                <div class="admin-form-field">
+                    <label for="briefing_item_count">Number of items</label>
+                    <select id="briefing_item_count" name="item_count" class="search-input" style="width:auto;">
+                        <?php foreach ($itemCountOptions as $n): ?>
+                        <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
+                            <?= (int)$n ?> items
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="admin-intro" style="margin:0.25rem 0 0;">Top developments in the briefing (source cards follow Gemini citations).</p>
                 </div>
 
                 <div class="admin-form-field">
@@ -264,6 +280,13 @@ $moduleOptions = [
             statusTimerIds.push(setTimeout(function() { setActiveStatusStep(stepId); }, delayMs));
         }
 
+        function setStatusStepLabel(stepId, label) {
+            var list = document.getElementById('briefing-status-steps');
+            if (!list) return;
+            var li = list.querySelector('.briefing-output-status__step[data-step="' + stepId + '"]');
+            if (li) li.textContent = label;
+        }
+
         function setActiveStatusStep(stepId) {
             var list = document.getElementById('briefing-status-steps');
             if (!list) return;
@@ -283,6 +306,21 @@ $moduleOptions = [
                     li.classList.remove('is-active', 'is-done');
                 }
             });
+        }
+
+        function applyStatusEntryCount(entryCount) {
+            var n = parseInt(entryCount, 10);
+            if (!n || n < 1) return;
+            var entryWord = n === 1 ? 'entry' : 'entries';
+            setStatusStepLabel(
+                'context',
+                'Built markdown source context from ' + n + ' ' + entryWord
+            );
+            setStatusStepLabel(
+                'gemini',
+                'Sent ' + n + ' ' + entryWord + ' to Gemini (executive briefing)'
+            );
+            setActiveStatusStep('gemini');
         }
 
         function showProcessingStatus() {
@@ -733,7 +771,6 @@ $moduleOptions = [
                 });
             })
             .then(function(res) {
-                setActiveStatusStep('cards');
                 var data;
                 try {
                     data = JSON.parse(res.body);
@@ -762,67 +799,86 @@ $moduleOptions = [
                     out.appendChild(errInBox);
                     return;
                 }
-                if (warnEl) {
-                    var warnParts = [];
-                    if (data.meta && data.meta.context_warning) {
-                        warnParts.push(data.meta.context_warning);
+                function renderBriefingSuccess(payload) {
+                    if (warnEl) {
+                        var warnParts = [];
+                        if (payload.meta && payload.meta.context_warning) {
+                            warnParts.push(payload.meta.context_warning);
+                        }
+                        if (payload.meta && payload.meta.attribution_warning) {
+                            warnParts.push(payload.meta.attribution_warning);
+                        }
+                        if (warnParts.length) {
+                            warnEl.textContent = warnParts.join(' ');
+                            warnEl.hidden = false;
+                        }
                     }
-                    if (data.meta && data.meta.attribution_warning) {
-                        warnParts.push(data.meta.attribution_warning);
+                    hideProcessingStatus();
+                    out.style.whiteSpace = 'pre-wrap';
+                    out.textContent = payload.text || '';
+                    showCopyBtn(payload.text || '');
+                    if (payload.meta) {
+                        var note = document.createElement('p');
+                        note.className = 'admin-intro';
+                        note.style.marginTop = '1rem';
+                        var parts = [];
+                        if (payload.meta.entry_count !== undefined) {
+                            parts.push(String(payload.meta.entry_count) + ' entries in context');
+                        }
+                        if (payload.meta.item_count !== undefined) {
+                            parts.push(String(payload.meta.item_count) + ' developments requested');
+                        }
+                        if (payload.meta.cited_entry_count !== undefined) {
+                            parts.push(String(payload.meta.cited_entry_count) + ' cited');
+                        }
+                        if (payload.meta.markdown_chars !== undefined) {
+                            parts.push(Math.round(payload.meta.markdown_chars / 1024) + ' KB source context');
+                        }
+                        if (payload.meta.since) {
+                            parts.push('since ' + payload.meta.since);
+                        }
+                        if (parts.length) {
+                            note.textContent = 'Based on ' + parts.join(' · ') + '.';
+                            out.appendChild(note);
+                        }
                     }
-                    if (warnParts.length) {
-                        warnEl.textContent = warnParts.join(' ');
-                        warnEl.hidden = false;
-                    }
-                }
-                hideProcessingStatus();
-                out.style.whiteSpace = 'pre-wrap';
-                out.textContent = data.text || '';
-                showCopyBtn(data.text || '');
-                if (data.meta) {
-                    var note = document.createElement('p');
-                    note.className = 'admin-intro';
-                    note.style.marginTop = '1rem';
-                    var parts = [];
-                    if (data.meta.entry_count !== undefined) {
-                        parts.push(String(data.meta.entry_count) + ' entries');
-                    }
-                    if (data.meta.markdown_chars !== undefined) {
-                        parts.push(Math.round(data.meta.markdown_chars / 1024) + ' KB source context');
-                    }
-                    if (data.meta.since) {
-                        parts.push('since ' + data.meta.since);
-                    }
-                    if (parts.length) {
-                        note.textContent = 'Based on ' + parts.join(' · ') + '.';
-                        out.appendChild(note);
-                    }
-                }
-                if (data.entries_html && sourcesCards) {
-                    sourcesCards.innerHTML = data.entries_html;
-                    if (sourcesIntro && data.meta) {
-                        var introParts = [];
-                        if (data.meta.attribution_filtered && data.meta.attributed_entry_count !== undefined) {
-                            introParts.push(
-                                String(data.meta.attributed_entry_count) +
-                                ' entries cited in the briefing (attribution order)'
-                            );
-                            if (data.meta.context_entry_count !== undefined) {
+                    if (payload.entries_html && sourcesCards) {
+                        sourcesCards.innerHTML = payload.entries_html;
+                        if (sourcesIntro && payload.meta) {
+                            var introParts = [];
+                            if (payload.meta.attribution_filtered && payload.meta.attributed_entry_count !== undefined) {
                                 introParts.push(
-                                    String(data.meta.context_entry_count) + ' sent as context'
+                                    String(payload.meta.attributed_entry_count) +
+                                    ' entries cited in the briefing (attribution order)'
+                                );
+                                if (payload.meta.context_entry_count !== undefined) {
+                                    introParts.push(
+                                        String(payload.meta.context_entry_count) + ' sent as context'
+                                    );
+                                }
+                            } else if (payload.meta.context_entry_count !== undefined) {
+                                introParts.push(
+                                    String(payload.meta.context_entry_count) +
+                                    ' context entries shown (attribution unavailable)'
                                 );
                             }
-                        } else if (data.meta.context_entry_count !== undefined) {
-                            introParts.push(
-                                String(data.meta.context_entry_count) +
-                                ' context entries shown (attribution unavailable)'
-                            );
+                            if (introParts.length) {
+                                sourcesIntro.textContent = introParts.join(' · ') + '.';
+                            }
                         }
-                        if (introParts.length) {
-                            sourcesIntro.textContent = introParts.join(' · ') + '.';
-                        }
+                        if (sourcesSection) sourcesSection.hidden = false;
                     }
-                    if (sourcesSection) sourcesSection.hidden = false;
+                }
+
+                if (data.meta && data.meta.entry_count !== undefined) {
+                    applyStatusEntryCount(data.meta.entry_count);
+                    setTimeout(function() {
+                        setActiveStatusStep('cards');
+                        renderBriefingSuccess(data);
+                    }, 900);
+                } else {
+                    setActiveStatusStep('cards');
+                    renderBriefingSuccess(data);
                 }
             })
             .catch(function() {

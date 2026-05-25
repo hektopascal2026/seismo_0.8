@@ -57,36 +57,37 @@ Erstelle aus den bereitgestellten Daten ein "Executive Briefing" nach ZWINGEND f
 
 **Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der makroökonomische oder politische rote Faden der wichtigsten Entwicklungen? VERBOTEN sind Meta-Einleitungen wie "Die heutigen Meldungen zeichnen ein Bild...". Steig im ersten Satz direkt in die harte Analyse ein.)
 
-### 📌 Die 5 wichtigsten Entwicklungen
-(Wähle die 5 strategisch relevantesten Einträge. Filtere weiche Themen gnadenlos heraus. Nutze exakt dieses Format:)
+### 📌 Die wichtigsten Entwicklungen
+(Wähle die strategisch relevantesten Einträge. Filtere weiche Themen gnadenlos heraus. Nutze exakt dieses Format:)
 
 * **[Actionable Headline]:** [Ein kompakter, flüssig lesbarer Absatz (3-4 Sätze). 1. Nenne den konkreten aktuellen Auslöser. 2. Ordne die Dynamik dahinter politisch-wirtschaftlich ein. 3. Beschreibe den direkten, harten Impact auf Schweizer Unternehmen oder den Werkplatz. Nutze elegante, logische Übergänge.] *(Quelle: [Name der Quelle])*
-* (Wiederhole dies für genau 5 Punkte. Nach jedem Absatz eine Zeile leer.)
+* (Pro Top-Entwicklung ein Bullet; nach jedem Absatz eine Zeile leer.)
 
 ### 🔭 Radar / Ausblick
 (Ein weitsichtiger Absatz, 2-3 Sätze zu einem aufkommenden strategischen Trend aus den Daten (z.B. neue EU-Regulierung mit Spillover-Effekt, geopolitische Shifts). VERBOTEN sind gesellschaftliche Kuriositäten. Es muss ein Thema sein, das CEOs für die strategische Planung auf dem Radar brauchen.)
 
-RULES:
-- Du musst zwingend im JSON-Format antworten (inklusive "briefing_markdown" und "used_entry_keys").
-- Nutze AUSSCHLIESSLICH die unten bereitgestellten Einträge (ENTRIES_DATA). Jeder Eintrag ist mit `[ID: entry_type:entry_id]` markiert; `used_entry_keys` muss exakt diese IDs der fünf Top-Entwicklungen enthalten.
+Inhaltliche Regeln:
 - Erfinde keine Fakten oder Quellen.
 - Streiche jedes Adjektiv, das keinen informativen Mehrwert bietet.
-
-ERWARTETES FORMAT (ein JSON-Objekt, ohne Markdown-Code-Fence):
-{
-  "briefing_markdown": "<dein Executive Briefing als Markdown-String>",
-  "used_entry_keys": ["feed_item:123", "email:45"]
-}
-
-ENTRIES_DATA:
-{markdownContext}
 PROMPT;
+
+    /** Allowed “number of items” values in the Briefing Builder UI. */
+    public const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12, 15];
+
+    public const DEFAULT_ITEM_COUNT = 5;
 
     private const MIN_SYSTEM_PROMPT_LEN = 20;
 
     private const MAX_SYSTEM_PROMPT_LEN = 8000;
 
+    private const MIN_LOOKBACK_DAYS = 1;
+
+    private const MAX_LOOKBACK_DAYS = 7;
+
     private const DEFAULT_LOOKBACK_DAYS = 7;
+
+    /** Used when POST `lookback_days` is outside 1–7. */
+    private const FALLBACK_LOOKBACK_DAYS = 2;
 
     private const DEFAULT_LIMIT = 200;
 
@@ -120,6 +121,8 @@ PROMPT;
         $defaultLookbackDays = self::DEFAULT_LOOKBACK_DAYS;
         $defaultLimit        = self::DEFAULT_LIMIT;
         $maxLimit            = MagnituExportRepository::MAX_LIMIT;
+        $defaultItemCount    = self::DEFAULT_ITEM_COUNT;
+        $itemCountOptions    = self::ALLOWED_ITEM_COUNTS;
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/briefing_builder.php';
@@ -160,7 +163,8 @@ PROMPT;
             ->modify('-' . $lookbackDays . ' days')
             ->format('Y-m-d\TH:i:s\Z');
 
-        $limit = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
+        $limit     = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
+        $itemCount = $this->parseItemCount($_POST['item_count'] ?? null);
 
         try {
             $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
@@ -194,7 +198,7 @@ PROMPT;
             $contextWarning  = $this->contextSizeWarning($markdownChars);
 
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
-            $result = $gemini->generateSummary($systemPrompt, $markdown);
+            $result = $gemini->generateSummary($systemPrompt, $markdown, $itemCount);
 
             $entriesHtml     = '';
             $attributionMeta = [
@@ -202,10 +206,16 @@ PROMPT;
                 'attributed_entry_count' => 0,
                 'used_entry_keys'        => $result->usedEntryKeys,
                 'attribution_filtered'   => false,
+                'item_count'             => $itemCount,
+                'cited_entry_count'      => count($result->usedEntryKeys),
             ];
 
             if ($result->attributionParsed) {
-                [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries($entries, $result->usedEntryKeys);
+                [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries(
+                    $entries,
+                    $result->usedEntryKeys,
+                    $itemCount,
+                );
                 if ($cardsEntries !== []) {
                     $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
                 }
@@ -539,8 +549,18 @@ PROMPT;
     private function parseLookbackDays(mixed $raw): int
     {
         $n = (int)$raw;
+        if ($n >= self::MIN_LOOKBACK_DAYS && $n <= self::MAX_LOOKBACK_DAYS) {
+            return $n;
+        }
 
-        return in_array($n, [1, 3, 7], true) ? $n : self::DEFAULT_LOOKBACK_DAYS;
+        return self::FALLBACK_LOOKBACK_DAYS;
+    }
+
+    private function parseItemCount(mixed $raw): int
+    {
+        $n = (int)$raw;
+
+        return in_array($n, self::ALLOWED_ITEM_COUNTS, true) ? $n : self::DEFAULT_ITEM_COUNT;
     }
 
     private function clampLimit(mixed $raw): int
@@ -570,16 +590,31 @@ PROMPT;
      * @param list<string> $usedEntryKeys
      * @return array{0: list<array<string, mixed>>, 1: array<string, mixed>}
      */
-    private function resolveAttributedEntries(array $entries, array $usedEntryKeys): array
+    private function resolveAttributedEntries(array $entries, array $usedEntryKeys, int $expectedItemCount): array
     {
         $contextCount = count($entries);
-        $attributed   = BriefingEntryCardPresenter::filterByUsedKeys($entries, $usedEntryKeys);
+        $warnings     = [];
+
+        if (count($usedEntryKeys) > $expectedItemCount) {
+            $warnings[] = 'Trimmed cited IDs to ' . $expectedItemCount
+                . ' (model returned ' . count($usedEntryKeys) . ').';
+            $usedEntryKeys = array_slice($usedEntryKeys, 0, $expectedItemCount);
+        }
+
+        $citedCount = count($usedEntryKeys);
+        if ($citedCount > 0 && $citedCount < $expectedItemCount) {
+            $warnings[] = 'Model cited ' . $citedCount . ' of ' . $expectedItemCount . ' requested entries.';
+        }
+
+        $attributed = BriefingEntryCardPresenter::filterByUsedKeys($entries, $usedEntryKeys);
 
         $meta = [
             'context_entry_count'    => $contextCount,
             'attributed_entry_count' => count($attributed),
             'used_entry_keys'        => $usedEntryKeys,
             'attribution_filtered'   => false,
+            'item_count'             => $expectedItemCount,
+            'cited_entry_count'      => $citedCount,
         ];
 
         if ($usedEntryKeys === []) {
@@ -598,8 +633,11 @@ PROMPT;
 
         $unmatched = count($usedEntryKeys) - count($attributed);
         if ($unmatched > 0) {
-            $meta['attribution_warning'] = $unmatched
-                . ' cited ID(s) did not match gathered entries.';
+            $warnings[] = $unmatched . ' cited ID(s) did not match gathered entries.';
+        }
+
+        if ($warnings !== []) {
+            $meta['attribution_warning'] = implode(' ', $warnings);
         }
 
         $meta['attribution_filtered'] = true;
