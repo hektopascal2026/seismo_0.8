@@ -212,7 +212,34 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.6.6 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.1 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">AI Briefing: attribution cards</div>
+                        <ul>
+                            <li><strong>Grounding:</strong> Gemini returns <code>used_entry_keys</code>; the Briefing page shows only the matching timeline cards under <strong>Referenced source entries</strong> (citation order).</li>
+                            <li><strong>Context IDs:</strong> each entry in the LLM payload is tagged <code>[ID: entry_type:entry_id]</code> so citations map back to Seismo rows.</li>
+                            <li><strong>Fallbacks:</strong> warnings when the model omits IDs or cites unknown keys; full context list shown only in those cases.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.0</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">AI Briefing Builder (Gemini)</div>
+                        <ul>
+                            <li><strong>Page:</strong> <code>?action=briefing_builder</code> on the mothership — nav link after Highlights.</li>
+                            <li><strong>Pipeline:</strong> <code>BriefingEntryGatherer</code> + Magnitu labels, markdown context (up to 1000 chars of body per entry), single-pass <code>GeminiBriefingService</code> with JSON (<code>briefing_markdown</code>).</li>
+                            <li><strong>Filters:</strong> six module toggles (Feeds, Media, Scraper, Mail, Lex, Leg), lookback window, per-module cap; default <strong>investigation lead</strong> (+ optional important).</li>
+                            <li><strong>Config:</strong> <code>gemini:api_key</code> in Settings → General. See <code>docs/ai-briefing-builder.md</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.7</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Filter page revamp</div>
+                        <ul>
+                            <li><strong>Unified UX:</strong> <code>?action=filter</code> uses the same entry-card layout and square source pills as the main timeline.</li>
+                            <li><strong>Workflow:</strong> pick modules and sources, then preview the filtered stream before opening it on the dashboard.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.6.6</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Media module &amp; RSS full-text hydration</div>
                         <ul>
                             <li><strong>Media admin:</strong> <code>?action=media</code> for news sources (<code>feeds.category = media</code>), partitioned from Feeds; timeline pills show your source <strong>Title</strong>, not the routing category.</li>
@@ -324,6 +351,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                 <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                 <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for briefings, n8n, Raycast, or custom scripts:</p>
                 <ul>
+                    <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters and source-card attribution (mothership only).</li>
                     <li><code>?action=export_briefing</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                     <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                 </ul>

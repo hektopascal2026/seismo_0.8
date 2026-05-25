@@ -1,4 +1,4 @@
-# Seismo 0.6.6
+# Seismo 0.7.1
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,9 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.7.1** | **AI Briefing attribution** — after generation, **Referenced source entries** shows only dashboard cards for `used_entry_keys` returned by Gemini (citation order); fallback + warnings when IDs are missing or unknown. |
+| **0.7.0** | **AI Briefing Builder** (mothership) — `?action=briefing_builder`: filter investigation-lead entries (optional important), six module toggles, Gemini executive briefing (JSON + Markdown), up to **1000 characters** of body text per entry in context. Settings → General: `gemini:api_key`. Docs: `docs/ai-briefing-builder.md`. |
+| **0.6.7** | **Filter page revamp** — `?action=filter` UI aligned with the timeline: shared entry-card styling, square source pills, and clearer module/source filtering before previewing the filtered stream. |
 | **0.6.6** | **Media module** — admin at `?action=media` for news monitoring (`feeds.category = media`), separate from Feeds. **RSS full-text hydration:** per-feed **Extract full text** (migration 024), **`RssArticleHydrator`** + **`ArticlePageBodyExtractor`** (JSON-LD, Readability, meta), **`GoogleNewsArticleUrlResolver`** for Google News wrappers. **Refresh Media** runs only media-category RSS + scrapers. Docs: `docs/media-module.md`, `docs/rss-hydration.md`. |
 | **0.6.5** | **DE BGBl PDF corpus** — recht.bund.de RSS is metadata-only; **`LexRechtBundContentFetcher`** downloads `regelungstext.pdf` and extracts plain text via **`pdftotext`** (poppler-utils). Forward ingest on Lex refresh + **`php bin/lex-backfill-content.php --de`**. Requires `apt install poppler-utils` on the mothership. |
 | **0.6.4** | **Lex full-text corpus** — `lex_items.content` (LONGTEXT) for Magnitu training; timeline reads stay lightweight. **FR:** Légifrance PISTE **`/consult/jorf`** on ingest/backfill (versioned `JORFTEXT…` id normalization). **CH:** Fedlex synopsis → `content` promote path. **EU:** EUR-Lex HTML backfill; **Jus:** entscheidsuche HTML corpus. Recipe scoring uses synopsis only (`description`). **`bin/lex-backfill-content.php`** (`--fr`, `--eu`, `--ch`, `--de` promote legacy). Schema v39. |
@@ -40,6 +43,8 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | Action | Purpose |
 |--------|---------|
 | `?action=index` | Dashboard timeline |
+| `?action=filter` | Filter page — module/source pills, preview filtered entries |
+| `?action=briefing_builder` | AI Briefing Builder — Gemini executive briefing (mothership only) |
 | `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
