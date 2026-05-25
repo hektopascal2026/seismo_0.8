@@ -197,18 +197,23 @@ final class LexEurLexContentFetcher
             return '';
         }
 
-        $patterns = [
-            '/(?:\n\s*|^)Having regard to\b/ui',
-            '/(?:\n\s*|^)Whereas:\s*(?:\n|$)/ui',
-            '/(?:\n\s*|^)\(1\)[A-Za-zÀ-ÿ]/u',
-            '/(?:\n\s*|^)Article\s+1\b/ui',
+        $markers = [
+            'Having regard to',
+            'Whereas:',
+            '(1)',
+            'Article 1',
         ];
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $plain, $m, PREG_OFFSET_CAPTURE)) {
-                $trimmed = trim(mb_substr($plain, $m[0][1] + 1));
-                if ($trimmed !== '') {
-                    return $trimmed;
-                }
+        foreach ($markers as $marker) {
+            $pos = mb_stripos($plain, $marker);
+            if ($pos === false) {
+                continue;
+            }
+            if ($marker === '(1)' && !preg_match('/\(1\)[A-Za-zÀ-ÿ]/u', mb_substr($plain, $pos, 8))) {
+                continue;
+            }
+            $trimmed = trim(mb_substr($plain, $pos));
+            if ($trimmed !== '') {
+                return $trimmed;
             }
         }
 
