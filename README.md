@@ -1,4 +1,4 @@
-# Seismo 0.7.3
+# Seismo 0.7.4
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.7.4** | **Mail locale web views** — bilingual newsletters: inbox language picks the best labelled edition (German inbox → DE; non-English → DE then EN; English → EN then DE) over generic “view in browser” links. **Hosted DE/EN hydration** at ingest/reprocess: fetches the web edition (Readability + newsletter fallback), replaces `text_body`, metadata `web_view_url`, `web_view_locale`, `body_source`. |
 | **0.7.3** | **Briefing prompt library** — named prompts on `?action=briefing_builder` (tabs, save to library, delete); stored per desk in `ai_briefing_prompts` (mothership + satellites). **Save prompt (default)** still updates `briefing:system_prompt`. First visit seeds a **Default** tab from the current prompt. |
 | **0.7.2** | **Briefing JSON repair** — `LenientJsonParser` (tourdesuisse-style pipeline) recovers malformed Gemini JSON; briefing still shown when attribution JSON fails (no source cards). Clearer API errors in the UI. |
 | **0.7.1** | **AI Briefing attribution** — after generation, **Referenced source entries** shows only dashboard cards for `used_entry_keys` returned by Gemini (citation order); fallback + warnings when IDs are missing or unknown. |

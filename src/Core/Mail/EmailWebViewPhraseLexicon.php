@@ -15,6 +15,155 @@ final class EmailWebViewPhraseLexicon
     /** @var list<string>|null */
     private static ?array $allPhrasesCache = null;
 
+    public const RANK_LOCALE_ENGLISH = 0;
+    public const RANK_LOCALE_GERMAN  = 10;
+    public const RANK_LOCALE_FRENCH  = 20;
+    public const RANK_LOCALE_SPANISH = 30;
+    public const RANK_LOCALE_ITALIAN = 40;
+    public const RANK_LOCALE_DUTCH   = 50;
+    /** Any other explicitly labelled locale edition (before generic webview). */
+    public const RANK_LOCALE_OTHER   = 60;
+
+    /** @var list<array{phrase: string, rank: int}>|null */
+    private static ?array $alternateLocaleEntriesCache = null;
+
+    /**
+     * Explicit “read the English/German/…” (or “version anglaise”) links — not generic webview boilerplate.
+     */
+    public static function textLooksLikeAlternateLocaleVersion(string $text): bool
+    {
+        return self::alternateLocaleRankForText($text) !== null;
+    }
+
+    /**
+     * Lower rank = preferred when several locale-specific links appear in one message.
+     */
+    public static function alternateLocaleRankForText(string $text): ?int
+    {
+        $lower = self::normalizeForMatch($text);
+        if ($lower === '') {
+            return null;
+        }
+
+        $best = null;
+        foreach (self::alternateLocaleEntries() as $entry) {
+            if (!str_contains($lower, $entry['phrase'])) {
+                continue;
+            }
+            $best = $best === null ? $entry['rank'] : min($best, $entry['rank']);
+        }
+
+        foreach (self::alternateLocaleRegexSpecs() as $spec) {
+            if (!preg_match($spec['pattern'], $lower, $m)) {
+                continue;
+            }
+            $token = (string)($m[1] ?? '');
+            $rank  = $spec['ranks'][$token] ?? self::RANK_LOCALE_OTHER;
+            $best  = $best === null ? $rank : min($best, $rank);
+        }
+
+        return $best;
+    }
+
+    /**
+     * @return list<array{phrase: string, rank: int}>
+     */
+    public static function alternateLocaleEntries(): array
+    {
+        if (self::$alternateLocaleEntriesCache !== null) {
+            return self::$alternateLocaleEntriesCache;
+        }
+
+        $entries = [];
+        foreach (
+            [
+                [self::phrasesAlternateLocaleEnglish(), self::RANK_LOCALE_ENGLISH],
+                [self::phrasesAlternateLocaleGerman(), self::RANK_LOCALE_GERMAN],
+                [self::phrasesAlternateLocaleFrench(), self::RANK_LOCALE_FRENCH],
+                [self::phrasesAlternateLocaleSpanish(), self::RANK_LOCALE_SPANISH],
+                [self::phrasesAlternateLocaleItalian(), self::RANK_LOCALE_ITALIAN],
+                [self::phrasesAlternateLocaleDutch(), self::RANK_LOCALE_DUTCH],
+            ] as [$phrases, $rank]
+        ) {
+            foreach ($phrases as $phrase) {
+                $p = self::normalizeForMatch($phrase);
+                if ($p !== '') {
+                    $entries[] = ['phrase' => $p, 'rank' => $rank];
+                }
+            }
+        }
+
+        self::$alternateLocaleEntriesCache = $entries;
+
+        return self::$alternateLocaleEntriesCache;
+    }
+
+    /**
+     * @return list<array{pattern: string, ranks: array<string, int>}>
+     */
+    public static function alternateLocaleRegexSpecs(): array
+    {
+        return [
+            [
+                'pattern' => '/\bread\s+the\s+(english|german|french|spanish|italian|dutch)\s+version\b/u',
+                'ranks'   => [
+                    'english' => self::RANK_LOCALE_ENGLISH,
+                    'german'  => self::RANK_LOCALE_GERMAN,
+                    'french'  => self::RANK_LOCALE_FRENCH,
+                    'spanish' => self::RANK_LOCALE_SPANISH,
+                    'italian' => self::RANK_LOCALE_ITALIAN,
+                    'dutch'   => self::RANK_LOCALE_DUTCH,
+                ],
+            ],
+            [
+                'pattern' => '/\b(english|german|french|spanish|italian|dutch)\s+version\s+of\s+(our\s+|the\s+|this\s+)?newsletter\b/u',
+                'ranks'   => [
+                    'english' => self::RANK_LOCALE_ENGLISH,
+                    'german'  => self::RANK_LOCALE_GERMAN,
+                    'french'  => self::RANK_LOCALE_FRENCH,
+                    'spanish' => self::RANK_LOCALE_SPANISH,
+                    'italian' => self::RANK_LOCALE_ITALIAN,
+                    'dutch'   => self::RANK_LOCALE_DUTCH,
+                ],
+            ],
+            [
+                'pattern' => '/\bversion\s+(anglaise|allemande|francaise|espagnole|italienne|neerlandaise)\b/u',
+                'ranks'   => [
+                    'anglaise'    => self::RANK_LOCALE_ENGLISH,
+                    'allemande'   => self::RANK_LOCALE_GERMAN,
+                    'francaise'   => self::RANK_LOCALE_FRENCH,
+                    'espagnole'   => self::RANK_LOCALE_SPANISH,
+                    'italienne'   => self::RANK_LOCALE_ITALIAN,
+                    'neerlandaise' => self::RANK_LOCALE_DUTCH,
+                ],
+            ],
+            [
+                'pattern' => '/\bnewsletter\s+auf\s+(deutsch|englisch|franzosisch)\b/u',
+                'ranks'   => [
+                    'deutsch'      => self::RANK_LOCALE_GERMAN,
+                    'englisch'     => self::RANK_LOCALE_ENGLISH,
+                    'franzosisch'  => self::RANK_LOCALE_FRENCH,
+                ],
+            ],
+            [
+                'pattern' => '/\blire\s+la\s+version\s+(anglaise|francaise|allemande)\b/u',
+                'ranks'   => [
+                    'anglaise'  => self::RANK_LOCALE_ENGLISH,
+                    'francaise' => self::RANK_LOCALE_FRENCH,
+                    'allemande' => self::RANK_LOCALE_GERMAN,
+                ],
+            ],
+            [
+                'pattern' => '/\blese\s+(die\s+)?(englische|deutsche|franzosische)\s+version\b/u',
+                'ranks'   => [
+                    'englische'    => self::RANK_LOCALE_ENGLISH,
+                    'deutsche'     => self::RANK_LOCALE_GERMAN,
+                    'franzosische' => self::RANK_LOCALE_FRENCH,
+                ],
+            ],
+        ];
+    }
+
     public static function textLooksLikeWebView(string $text): bool
     {
         $lower = self::normalizeForMatch($text);
@@ -169,8 +318,105 @@ final class EmailWebViewPhraseLexicon
     }
 
     /**
+     * Labelled locale editions — preferred over generic “view in browser” on every sender.
+     *
      * @return list<string>
      */
+    private static function phrasesAlternateLocaleEnglish(): array
+    {
+        return [
+            'read the english version of our newsletter',
+            'read the english version of the newsletter',
+            'read the english version of this newsletter',
+            'read the english version here',
+            'read the english version',
+            'english version of our newsletter',
+            'english version of the newsletter',
+            'english version of this newsletter',
+            'english version here',
+            'english language version',
+            'our newsletter in english',
+            'newsletter in english',
+            'see the english version',
+            'click here for the english version',
+            'read our newsletter in english',
+            'version anglaise de notre newsletter',
+            'version anglaise de la newsletter',
+            'version anglaise du newsletter',
+            'lire la version anglaise',
+            'voir la version anglaise',
+            'consulter la version anglaise',
+            'read newsletter in english',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesAlternateLocaleGerman(): array
+    {
+        return [
+            'deutsche version unseres newsletters',
+            'deutsche version des newsletters',
+            'deutsche version dieses newsletters',
+            'deutsche version hier',
+            'die deutsche version lesen',
+            'lesen sie die deutsche version',
+            'newsletter auf deutsch',
+            'newsletter in deutscher sprache',
+            'unsere newsletter auf deutsch',
+            'deutsche fassung',
+            'deutschsprachige version',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesAlternateLocaleFrench(): array
+    {
+        return [
+            'version francaise de notre newsletter',
+            'version francaise de la newsletter',
+            'version francaise du newsletter',
+            'lire la version francaise',
+            'voir la version francaise',
+            'consulter la version francaise',
+            'newsletter en francais',
+            'notre newsletter en francais',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesAlternateLocaleSpanish(): array
+    {
+        return [
+            'version espanola de nuestro boletin',
+            'version espanola del boletin',
+            'leer la version en espanol',
+            'ver la version en espanol',
+            'boletin en espanol',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesAlternateLocaleItalian(): array
+    {
+        return [
+            'versione italiana della newsletter',
+            'versione italiana del bollettino',
+            'leggi la versione italiana',
+            'newsletter in italiano',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesAlternateLocaleDutch(): array
+    {
+        return [
+            'nederlandse versie van onze nieuwsbrief',
+            'nederlandse versie van de nieuwsbrief',
+            'lees de nederlandse versie',
+            'nieuwsbrief in het nederlands',
+        ];
+    }
+
     private static function phrasesEnglish(): array
     {
         return [

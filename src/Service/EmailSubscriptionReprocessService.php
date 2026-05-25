@@ -47,7 +47,7 @@ final class EmailSubscriptionReprocessService
             $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
             $row = EmailIngestNormalizer::normalizeBodies($row);
             $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
-            $row = $ingest->applyWebViewUrlMetadata($row, $htmlBeforeNormalize, $plainAfterNormalize);
+            $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize);
             $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
             if (!empty($ui['strip_listing_boilerplate'])) {
                 $subj = trim((string)($row['subject'] ?? ''));

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\Mail\EmailAlternateLocalePolicy;
 use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
+use Seismo\Core\Mail\EmailLocaleGuesser;
 use Seismo\Core\Mail\EmailMetadata;
 use Seismo\Core\Mail\EmailSubscriptionProcessor;
+use Seismo\Core\Mail\EmailWebViewBodyHydrator;
 use Seismo\Core\Mail\EmailWebViewUrlExtractor;
 
 /**
@@ -215,7 +218,7 @@ final class EmailIngestRepository
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
         // Before listing/subscription stripping — those remove “view in browser” lines from plain text.
-        $row = $this->applyWebViewUrlMetadata($row, $htmlBeforeNormalize, $plainAfterNormalize);
+        $row = $this->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
         $row = EmailSubscriptionProcessor::apply($row, $subs);
         $row = $this->syncAndCapBodies($row);
@@ -265,7 +268,10 @@ final class EmailIngestRepository
      * @param string $plainForExtract Plain body right after {@see EmailIngestNormalizer}, before listing/subscription processors.
      * @return array<string, mixed>
      */
-    public function applyWebViewUrlMetadata(
+    /**
+     * Resolve locale-specific web-view links and optionally hydrate plain text from hosted DE/EN editions.
+     */
+    public function applyWebViewProcessing(
         array $row,
         string $htmlForExtract = '',
         string $plainForExtract = '',
@@ -279,12 +285,38 @@ final class EmailIngestRepository
             $plain = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
         }
 
-        $url = $html !== '' ? EmailWebViewUrlExtractor::fromHtml($html) : null;
-        if ($url === null && $plain !== '') {
-            $url = EmailWebViewUrlExtractor::fromPlainText($plain);
+        $profile = EmailLocaleGuesser::profileForEmail(
+            (string)($row['subject'] ?? ''),
+            $plain
+        );
+        $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
+        $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, $ranks);
+
+        if ($resolution->url !== null) {
+            $row = EmailMetadata::mergeWebViewUrl($row, $resolution->url);
         }
 
-        return EmailMetadata::mergeWebViewUrl($row, $url);
+        if ($resolution->hydrateBody
+            && $resolution->url !== null
+            && $resolution->localeRank !== null
+        ) {
+            $row = (new EmailWebViewBodyHydrator())->hydrateRow(
+                $row,
+                $resolution->url,
+                $resolution->localeRank
+            );
+        }
+
+        return $row;
+    }
+
+    /** @deprecated use {@see applyWebViewProcessing()} */
+    public function applyWebViewUrlMetadata(
+        array $row,
+        string $htmlForExtract = '',
+        string $plainForExtract = '',
+    ): array {
+        return $this->applyWebViewProcessing($row, $htmlForExtract, $plainForExtract);
     }
 
     private function nullStr(mixed $v): ?string

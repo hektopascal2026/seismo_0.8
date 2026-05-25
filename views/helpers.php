@@ -506,20 +506,16 @@ if (!function_exists('seismo_email_web_view_url')) {
             return $url;
         }
 
-        $html = trim((string)($email['html_body'] ?? $email['body_html'] ?? ''));
-        if ($html !== '') {
-            $url = \Seismo\Core\Mail\EmailWebViewUrlExtractor::fromHtml($html);
-            if ($url !== null && seismo_is_navigable_url($url)) {
-                return $url;
-            }
-        }
-
+        $html  = trim((string)($email['html_body'] ?? $email['body_html'] ?? ''));
         $plain = trim((string)($email['text_body'] ?? $email['body_text'] ?? ''));
-        if ($plain !== '') {
-            $url = \Seismo\Core\Mail\EmailWebViewUrlExtractor::fromPlainText($plain);
-            if ($url !== null && seismo_is_navigable_url($url)) {
-                return $url;
-            }
+        $profile = \Seismo\Core\Mail\EmailLocaleGuesser::profileForEmail(
+            (string)($email['subject'] ?? ''),
+            $plain
+        );
+        $ranks = \Seismo\Core\Mail\EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
+        $url   = \Seismo\Core\Mail\EmailWebViewUrlExtractor::resolve($html, $plain, $ranks)->url;
+        if ($url !== null && seismo_is_navigable_url($url)) {
+            return $url;
         }
 
         return null;

@@ -114,6 +114,52 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         ));
     }
 
+    public function testPrefersEnglishVersionLinkOverDefaultWebView(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/mail/coe_ukraine_english_version.html');
+        self::assertIsString($html);
+
+        $english = 'https://track.example.net/mk/cl/f/sh/english-edition';
+        self::assertSame($english, EmailWebViewUrlExtractor::fromHtml($html));
+
+        $plain = "If you cannot read this email, please click here "
+            . "( https://track.example.net/mk/mr/sh/default-locale )\n\n"
+            . "Read the English version of our Newsletter here (click) "
+            . "( {$english} )\n\n"
+            . "Спільна заява";
+
+        self::assertSame($english, EmailWebViewUrlExtractor::fromPlainText($plain));
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeAlternateLocaleVersion(
+            'Read the English version of our Newsletter here (click)'
+        ));
+    }
+
+    public function testEnglishFirstRanksPreferEnglishOverGerman(): void
+    {
+        $html = <<<'HTML'
+        <html><body>
+        <p>Newsletter auf Deutsch <a href="https://news.example.net/de">hier</a></p>
+        <p>Read the English version <a href="https://news.example.net/en">here</a></p>
+        </body></html>
+        HTML;
+
+        self::assertSame('https://news.example.net/en', EmailWebViewUrlExtractor::fromHtml($html));
+
+        $plain = "Newsletter auf Deutsch ( https://news.example.net/de )\n"
+            . "Read the English version ( https://news.example.net/en )";
+
+        self::assertSame('https://news.example.net/en', EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
+    public function testUsesGermanAlternateWhenOnlyLabelledLocaleEdition(): void
+    {
+        $plain = "Falls die E-Mail nicht angezeigt wird, im Browser ansehen "
+            . "( https://news.example.net/default )\n"
+            . "Newsletter auf Deutsch ( https://news.example.net/de-edition )";
+
+        self::assertSame('https://news.example.net/de-edition', EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
     public function testPlainWebViewLineSurvivesWhenHtmlSnapshotUsedAfterStrip(): void
     {
         $html = '<a href="https://news.example.org/digest/99">View in browser</a>';

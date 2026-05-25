@@ -12,7 +12,237 @@ use DOMElement;
  */
 final class EmailWebViewUrlExtractor
 {
+    /**
+     * @param list<int> $preferredLocaleRanks {@see EmailAlternateLocalePolicy::preferredLocaleRanks()}
+     */
+    public static function resolve(string $html, string $plain, array $preferredLocaleRanks): EmailWebViewResolution
+    {
+        $html  = trim($html);
+        $plain = trim($plain);
+
+        $press = self::pressReleaseUrl($html, $plain);
+        if ($press !== null) {
+            return new EmailWebViewResolution($press, null, false);
+        }
+
+        $picked = self::pickAlternateByRanks(
+            self::collectAlternateLocaleCandidates($html, $plain),
+            $preferredLocaleRanks
+        );
+        if ($picked !== null) {
+            return new EmailWebViewResolution(
+                $picked['url'],
+                $picked['rank'],
+                EmailAlternateLocalePolicy::shouldHydrateBodyFromWebView($picked['rank'])
+            );
+        }
+
+        $generic = self::genericWebViewUrl($html, $plain);
+
+        return new EmailWebViewResolution($generic, null, false);
+    }
+
     public static function fromHtml(string $html): ?string
+    {
+        return self::resolve($html, '', EmailAlternateLocalePolicy::englishFirstRanks())->url;
+    }
+
+    public static function fromPlainText(string $plain): ?string
+    {
+        return self::resolve('', $plain, EmailAlternateLocalePolicy::englishFirstRanks())->url;
+    }
+
+    /**
+     * @return list<array{url: string, rank: int}>
+     */
+    public static function collectAlternateLocaleCandidates(string $html, string $plain): array
+    {
+        $byUrl = [];
+
+        $root = self::loadMailRoot($html);
+        if ($root instanceof DOMElement) {
+            foreach ($root->getElementsByTagName('a') as $anchor) {
+                if (!$anchor instanceof DOMElement) {
+                    continue;
+                }
+                $href = self::normalizeHref($anchor->getAttribute('href'));
+                if ($href === null || EmailTrackingUrl::isTrackingOrAsset($href)) {
+                    continue;
+                }
+                $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
+                $context = self::anchorContextText($anchor);
+                $rank    = EmailWebViewPhraseLexicon::alternateLocaleRankForText($label);
+                if ($rank === null) {
+                    $rank = EmailWebViewPhraseLexicon::alternateLocaleRankForText($context);
+                }
+                if ($rank === null) {
+                    continue;
+                }
+                self::mergeAlternateCandidate($byUrl, $href, $rank);
+            }
+        }
+
+        self::mergeAlternateCandidatesFromPlain($plain, $byUrl);
+
+        return array_values(array_map(
+            static fn (array $c): array => ['url' => $c['url'], 'rank' => $c['rank']],
+            $byUrl
+        ));
+    }
+
+    /**
+     * @param array<string, array{url: string, rank: int}> $byUrl
+     */
+    private static function mergeAlternateCandidate(array &$byUrl, string $url, int $rank): void
+    {
+        if (!isset($byUrl[$url]) || $rank < $byUrl[$url]['rank']) {
+            $byUrl[$url] = ['url' => $url, 'rank' => $rank];
+        }
+    }
+
+    /**
+     * @param array<string, array{url: string, rank: int}> $byUrl
+     */
+    private static function mergeAlternateCandidatesFromPlain(string $plain, array &$byUrl): void
+    {
+        $plain = trim($plain);
+        if ($plain === '') {
+            return;
+        }
+
+        $lower = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
+
+        foreach (EmailWebViewPhraseLexicon::alternateLocaleEntries() as $entry) {
+            $pos = mb_strpos($lower, $entry['phrase'], 0, 'UTF-8');
+            if ($pos === false) {
+                continue;
+            }
+            $slice = mb_substr($plain, (int)$pos, 2500, 'UTF-8');
+            $url   = self::firstHttpUrl($slice);
+            if ($url !== null) {
+                self::mergeAlternateCandidate($byUrl, $url, $entry['rank']);
+            }
+        }
+
+        foreach (EmailWebViewPhraseLexicon::alternateLocaleRegexSpecs() as $spec) {
+            if (preg_match_all($spec['pattern'], $lower, $matches, PREG_OFFSET_CAPTURE) === false) {
+                continue;
+            }
+            $tokenList = $matches[1] ?? [];
+            $matchList = $matches[0] ?? [];
+            foreach ($matchList as $i => $match) {
+                $token = (string)($tokenList[$i][0] ?? '');
+                $rank  = $spec['ranks'][$token] ?? EmailWebViewPhraseLexicon::RANK_LOCALE_OTHER;
+                $pos   = (int)($match[1] ?? 0);
+                $slice = mb_substr($plain, $pos, 2500, 'UTF-8');
+                $url   = self::firstHttpUrl($slice);
+                if ($url !== null) {
+                    self::mergeAlternateCandidate($byUrl, $url, $rank);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param list<array{url: string, rank: int}> $candidates
+     * @param list<int> $preferredLocaleRanks
+     * @return array{url: string, rank: int}|null
+     */
+    public static function pickAlternateByRanks(array $candidates, array $preferredLocaleRanks): ?array
+    {
+        if ($candidates === []) {
+            return null;
+        }
+
+        foreach ($preferredLocaleRanks as $wanted) {
+            foreach ($candidates as $c) {
+                if ($c['rank'] === $wanted) {
+                    return $c;
+                }
+            }
+        }
+
+        $best = null;
+        foreach ($candidates as $c) {
+            if ($best === null || $c['rank'] < $best['rank']) {
+                $best = $c;
+            }
+        }
+
+        return $best;
+    }
+
+    private static function pressReleaseUrl(string $html, string $plain): ?string
+    {
+        $root = self::loadMailRoot($html);
+        if ($root instanceof DOMElement) {
+            $fromDom = self::firstPressReleaseArticleLinkFromDom($root);
+            if ($fromDom !== null) {
+                return $fromDom;
+            }
+        }
+
+        foreach (
+            [
+                self::firstAdminChNewnsbUrl($plain),
+                self::firstEuroparlPressRoomUrl($plain),
+                self::firstPressReleaseUrlNearMarker($plain),
+            ] as $press
+        ) {
+            if ($press !== null) {
+                return $press;
+            }
+        }
+
+        return null;
+    }
+
+    private static function genericWebViewUrl(string $html, string $plain): ?string
+    {
+        $root = self::loadMailRoot($html);
+        if ($root instanceof DOMElement) {
+            foreach ($root->getElementsByTagName('a') as $anchor) {
+                if (!$anchor instanceof DOMElement) {
+                    continue;
+                }
+                $href = self::normalizeHref($anchor->getAttribute('href'));
+                if ($href === null) {
+                    continue;
+                }
+                $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
+                $context = self::anchorContextText($anchor);
+                if (EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
+                    || EmailWebViewPhraseLexicon::textLooksLikeWebView($context)
+                    || EmailWebViewPhraseLexicon::shortAnchorInWebViewContext($label, $context)
+                ) {
+                    return $href;
+                }
+            }
+        }
+
+        $plain = trim($plain);
+        if ($plain === '') {
+            return null;
+        }
+
+        $near = self::urlNearWebViewPhrase($plain);
+        if ($near !== null) {
+            return $near;
+        }
+
+        foreach (preg_split("/\r\n|\n|\r/", $plain) ?: [] as $line) {
+            $line = trim((string)$line);
+            if ($line === '' || !EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
+                continue;
+            }
+
+            return self::firstHttpUrl($line);
+        }
+
+        return null;
+    }
+
+    private static function loadMailRoot(string $html): ?DOMElement
     {
         $html = trim($html);
         if ($html === '') {
@@ -32,80 +262,23 @@ final class EmailWebViewUrlExtractor
         }
 
         $root = $dom->getElementById('seismo-mail-root');
-        if (!$root instanceof DOMElement) {
-            return null;
-        }
 
-        $press = self::firstPressReleaseArticleLinkFromDom($root);
-        if ($press !== null) {
-            return $press;
-        }
-
-        foreach ($root->getElementsByTagName('a') as $anchor) {
-            if (!$anchor instanceof DOMElement) {
-                continue;
-            }
-            $href = self::normalizeHref($anchor->getAttribute('href'));
-            if ($href === null) {
-                continue;
-            }
-            $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
-            $context = self::anchorContextText($anchor);
-            if (EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
-                || EmailWebViewPhraseLexicon::textLooksLikeWebView($context)
-                || EmailWebViewPhraseLexicon::shortAnchorInWebViewContext($label, $context)
-            ) {
-                return $href;
-            }
-        }
-
-        return null;
-    }
-
-    public static function fromPlainText(string $plain): ?string
-    {
-        $plain = trim($plain);
-        if ($plain === '') {
-            return null;
-        }
-
-        $near = self::urlNearWebViewPhrase($plain);
-        if ($near !== null) {
-            return $near;
-        }
-
-        $press = self::firstAdminChNewnsbUrl($plain);
-        if ($press !== null) {
-            return $press;
-        }
-
-        $press = self::firstEuroparlPressRoomUrl($plain);
-        if ($press !== null) {
-            return $press;
-        }
-
-        $press = self::firstPressReleaseUrlNearMarker($plain);
-        if ($press !== null) {
-            return $press;
-        }
-
-        foreach (preg_split("/\r\n|\n|\r/", $plain) ?: [] as $line) {
-            $line = trim((string)$line);
-            if ($line === '' || !EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
-                continue;
-            }
-
-            return self::firstHttpUrl($line);
-        }
-
-        return null;
+        return $root instanceof DOMElement ? $root : null;
     }
 
     private static function urlNearWebViewPhrase(string $text): ?string
     {
+        return self::urlNearPhraseList($text, EmailWebViewPhraseLexicon::allPhrases());
+    }
+
+    /**
+     * @param list<string> $phrases
+     */
+    private static function urlNearPhraseList(string $text, array $phrases): ?string
+    {
         $lower   = EmailWebViewPhraseLexicon::normalizeForMatch($text);
         $bestPos = null;
-        foreach (EmailWebViewPhraseLexicon::allPhrases() as $phrase) {
+        foreach ($phrases as $phrase) {
             $pos = mb_strpos($lower, $phrase, 0, 'UTF-8');
             if ($pos !== false && ($bestPos === null || $pos < $bestPos)) {
                 $bestPos = $pos;

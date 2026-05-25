@@ -9,7 +9,12 @@ namespace Seismo\Core\Mail;
  */
 final class EmailMetadata
 {
-    public const KEY_WEB_VIEW_URL = 'web_view_url';
+    public const KEY_WEB_VIEW_URL    = 'web_view_url';
+    public const KEY_WEB_VIEW_LOCALE = 'web_view_locale';
+    public const KEY_BODY_SOURCE     = 'body_source';
+
+    public const BODY_SOURCE_INBOX    = 'inbox';
+    public const BODY_SOURCE_WEB_VIEW = 'web_view';
 
     /**
      * @param array<string, mixed> $row
@@ -35,6 +40,21 @@ final class EmailMetadata
         $url  = trim((string)($meta[self::KEY_WEB_VIEW_URL] ?? ''));
 
         return $url !== '' ? $url : null;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    public static function mergeWebViewHydration(array $row, string $url, int $localeRank): array
+    {
+        $row = self::mergeWebViewUrl($row, $url);
+        $meta = self::decode($row['metadata'] ?? null);
+        $meta[self::KEY_WEB_VIEW_LOCALE] = EmailAlternateLocalePolicy::localeKeyFromRank($localeRank);
+        $meta[self::KEY_BODY_SOURCE]     = self::BODY_SOURCE_WEB_VIEW;
+        $row['metadata'] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+
+        return $row;
     }
 
     /**

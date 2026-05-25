@@ -212,7 +212,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.3 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.4 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Mail: locale web views &amp; hosted hydration</div>
+                        <ul>
+                            <li><strong>Locale loop (all senders):</strong> guesses inbox language; prefers labelled DE/EN/FR edition links over generic &ldquo;cannot read this email&rdquo; webview URLs. German inbox → German edition; non-English → German then English; English → English then German.</li>
+                            <li><strong>Hosted body:</strong> when a German or English edition link is chosen, ingest and <strong>Reprocess stored mail</strong> fetch that page (scraper-style HTTP + Readability, newsletter HTML fallback) and store plain text in <code>text_body</code> for timeline, scoring, and briefings.</li>
+                            <li><strong>Metadata:</strong> <code>web_view_url</code>, <code>web_view_locale</code> (<code>de</code>/<code>en</code>), <code>body_source</code> = <code>web_view</code> on <code>emails.metadata</code>. Fetch failures keep the inbox body.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.3</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Briefing prompt library</div>
                         <ul>
                             <li><strong>Named prompts:</strong> tabs above the system prompt on <code>?action=briefing_builder</code>; click a tab to load it, <strong>Save to library</strong> to add the current textarea under a custom name, <strong>&times;</strong> to delete.</li>
