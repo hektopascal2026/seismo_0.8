@@ -23,10 +23,11 @@ final class GeminiBriefingService
      * `{markdownContext}` are substituted before the Gemini call.
      */
     private const BRIEFING_OUTPUT_CONTRACT = <<<'CONTRACT'
-OUTPUT CONTRACT (platform — follow exactly):
-- Respond with a single JSON object only (no Markdown code fence) containing "briefing_markdown" and "used_entry_keys".
-- In briefing_markdown, include the section "### 📌 Die {itemCount} wichtigsten Entwicklungen" with exactly {itemCount} bullet points (one per top development, in relevance order).
-- "used_entry_keys" must be a JSON array of exactly {itemCount} strings: entry IDs from ENTRIES_DATA in the same order as the developments (format entry_type:entry_id as in [ID: entry_type:entry_id] tags).
+OUTPUT CONTRACT (platform — binding for item count and citations):
+- Respond with a single JSON object only (no Markdown code fence): "briefing_markdown" (string) and "used_entry_keys" (array).
+- Your prompt above defines tone, role, headings, and layout (optional intro, sections before/after, any titles). The platform fixes only the number of core items.
+- CORE ITEMS: Include exactly {itemCount} core items sourced from ENTRIES_DATA — the main cited signals/developments, in relevance order. Each core item is one distinct entry (bullet, numbered point, or clearly separated block). Surrounding prose is free-form.
+- used_entry_keys: JSON array of exactly {itemCount} strings — IDs of those core items only, in the same order as they appear in briefing_markdown (format entry_type:entry_id as in [ID: entry_type:entry_id] tags). The app shows validation cards for these IDs.
 - Use only facts and sources from ENTRIES_DATA; do not invent entries or citations.
 
 ENTRIES_DATA:
@@ -116,7 +117,7 @@ CONTRACT;
     {
         $markdownContext = trim($markdownContext);
         $systemText      = $this->composeSystemInstruction($userSystemPrompt, $markdownContext, $itemCount);
-        $userText        = 'Erstelle das Executive Briefing gemäss den System Instructions.';
+        $userText        = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract.';
 
         return [
             'systemInstruction' => [

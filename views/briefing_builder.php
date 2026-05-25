@@ -170,7 +170,7 @@ $moduleOptions = [
                         </option>
                         <?php endforeach; ?>
                     </select>
-                    <p class="admin-intro" style="margin:0.25rem 0 0;">Top developments in the briefing (source cards follow Gemini citations).</p>
+                    <p class="admin-intro" style="margin:0.25rem 0 0;">Fixes how many cited core items Gemini must return (and matching source cards). Headings and layout come from your prompt.</p>
                 </div>
 
                 <div class="admin-form-field">

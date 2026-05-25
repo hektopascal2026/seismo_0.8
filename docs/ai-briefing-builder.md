@@ -19,7 +19,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
 | Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
-| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = content/style only; `GeminiBriefingService` appends a platform **output contract** with `{itemCount}` and JSON/`used_entry_keys` rules. Attribution cards trim/warn when cite count ≠ requested. |
+| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure (headings, intro, sections); platform contract only enforces **exactly N core items** + **`used_entry_keys`** for validation cards. Attribution trim/warn when cite count ≠ N. |
 
 ### Why six toggles (not four `entry_type` values)
 
