@@ -71,7 +71,7 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e(seismoBrandTitle()) ?></title>
-    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
+    <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css?v=<?= e(SEISMO_VERSION) ?>">
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
@@ -136,59 +136,10 @@ $clearTimelineFiltersQs = http_build_query($clearTimelineFiltersParams);
         </div>
     </div>
 
+    <script src="<?= e($basePath) ?>/assets/js/timeline-media-toggle.js?v=<?= e(SEISMO_VERSION) ?>"></script>
     <script>
     (function() {
-        var MEDIA_STORAGE_KEY = 'seismo_timeline_show_media';
-        function timelineMediaOn() {
-            return document.documentElement.classList.contains('timeline-media-on');
-        }
-        function setTimelineMediaOn(on) {
-            document.documentElement.classList.toggle('timeline-media-on', on);
-            try {
-                localStorage.setItem(MEDIA_STORAGE_KEY, on ? '1' : '0');
-            } catch (e) {}
-            var mediaBtn = document.querySelector('.timeline-media-toggle-btn');
-            if (mediaBtn) {
-                mediaBtn.classList.toggle('is-active', on);
-                mediaBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-                mediaBtn.title = on ? 'Hide media monitoring entries' : 'Show media monitoring entries';
-            }
-            reconcileTimelineDaySeparators();
-        }
-        function reconcileTimelineDaySeparators() {
-            var section = document.querySelector('.latest-entries-section');
-            if (!section) return;
-            var children = section.children;
-            for (var i = 0; i < children.length; i++) {
-                var el = children[i];
-                if (!el.classList || !el.classList.contains('magnitu-day-separator')) continue;
-                var hasVisible = false;
-                for (var j = i + 1; j < children.length; j++) {
-                    var next = children[j];
-                    if (next.classList.contains('magnitu-day-separator')) break;
-                    if (next.classList.contains('entry-card') && next.offsetParent !== null) {
-                        hasVisible = true;
-                        break;
-                    }
-                }
-                el.style.display = hasVisible ? '' : 'none';
-            }
-        }
-        function initTimelineMediaToggle() {
-            var on = timelineMediaOn();
-            setTimelineMediaOn(on);
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initTimelineMediaToggle);
-        } else {
-            initTimelineMediaToggle();
-        }
         document.addEventListener('click', function(e) {
-            var mediaBtn = e.target.closest('.timeline-media-toggle-btn');
-            if (mediaBtn) {
-                setTimelineMediaOn(!timelineMediaOn());
-                return;
-            }
             var btn = e.target.closest('.timeline-favourites-toggle-btn');
             if (!btn || !btn.dataset.href) return;
             window.location.assign(btn.dataset.href);

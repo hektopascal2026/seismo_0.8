@@ -910,8 +910,11 @@ final class EntryRepository
             $type = 'feed';
         }
 
+        $catLower = strtolower(trim($category));
+
         $wrapper = [
-            'type'         => $type,
+            'type'           => $type,
+            'timeline_media' => $catLower === 'media',
             'entry_type'   => 'feed_item',
             'entry_id'     => (int)($row['id'] ?? 0),
             'date'         => seismo_feed_item_timeline_unix($row),

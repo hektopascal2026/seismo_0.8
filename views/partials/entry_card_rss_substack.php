@@ -28,11 +28,15 @@ if (mb_strlen($fullContent) > 200) {
 }
 $hasMore = mb_strlen($fullContent) > 200;
 $feedCatTagClass = ($itemWrapper['type'] === 'substack') ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
-$timelineMediaCardClass = !empty($timelineMediaToggleFeature) && seismo_feed_item_is_timeline_media($item)
-    ? ' entry-card--timeline-media'
-    : '';
+$isTimelineMediaEntry = !empty($itemWrapper['timeline_media']);
+$timelineMediaCardClass = '';
+$timelineMediaDataAttr  = '';
+if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
+    $timelineMediaCardClass = ' entry-card--timeline-media';
+    $timelineMediaDataAttr  = ' data-timeline-media="1"';
+}
 ?>
-                        <div class="entry-card<?= $timelineMediaCardClass ?>">
+                        <div class="entry-card<?= $timelineMediaCardClass ?>"<?= $timelineMediaDataAttr ?>>
                             <div class="entry-header">
                                 <?php if ($isParlPressFeed): ?>
                                     <?php

@@ -1626,7 +1626,7 @@ textarea.search-input.setup-code-preview {
 
 /* Main index timeline: hide media-category cards unless Media toggle is on */
 html:not(.timeline-media-on) body.timeline-media-toggle-feature .entry-card--timeline-media {
-    display: none;
+    display: none !important;
 }
 
 /* Timeline toolbar: Media / ★ favs / highest sort + expand all — matched control utilities */

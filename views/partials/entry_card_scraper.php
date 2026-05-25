@@ -25,11 +25,15 @@ if (mb_strlen($scraperContent) > 200) {
     $scraperPreview .= '...';
 }
 $scraperHasMore = mb_strlen($scraperContent) > 200;
-$timelineMediaCardClass = !empty($timelineMediaToggleFeature) && seismo_feed_item_is_timeline_media($item)
-    ? ' entry-card--timeline-media'
-    : '';
+$isTimelineMediaEntry = !empty($itemWrapper['timeline_media']);
+$timelineMediaCardClass = '';
+$timelineMediaDataAttr  = '';
+if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
+    $timelineMediaCardClass = ' entry-card--timeline-media';
+    $timelineMediaDataAttr  = ' data-timeline-media="1"';
+}
 ?>
-                        <div class="entry-card<?= $timelineMediaCardClass ?>">
+                        <div class="entry-card<?= $timelineMediaCardClass ?>"<?= $timelineMediaDataAttr ?>>
                             <div class="entry-header">
                                 <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
