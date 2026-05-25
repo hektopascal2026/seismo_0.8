@@ -23,12 +23,22 @@ final class GeminiBriefingService
      * `{markdownContext}` are substituted before the Gemini call.
      */
     private const BRIEFING_OUTPUT_CONTRACT = <<<'CONTRACT'
-OUTPUT CONTRACT (platform — binding for item count and citations):
-- Respond with a single JSON object only (no Markdown code fence): "briefing_markdown" (string) and "used_entry_keys" (array).
-- Your prompt above defines tone, role, headings, and layout (optional intro, sections before/after, any titles). The platform fixes only the number of core items.
-- CORE ITEMS: Include exactly {itemCount} core items sourced from ENTRIES_DATA — the main cited signals/developments, in relevance order. Each core item is one distinct entry (bullet, numbered point, or clearly separated block). Surrounding prose is free-form.
-- used_entry_keys (REQUIRED): non-empty JSON array of exactly {itemCount} strings — IDs of those core items only, in the same order as in briefing_markdown (format entry_type:entry_id exactly as in ENTRIES_DATA [ID: …] tags, e.g. feed_item:123). Never omit this field; never return [] when the briefing lists core items.
-- Use only facts and sources from ENTRIES_DATA; do not invent entries or citations.
+SYSTEM DIRECTIVE — STRICT COMPLIANCE REQUIRED:
+You are the backend engine for the Seismo AI Briefing Builder.
+
+1. SEPARATION OF CONCERNS:
+   - The prompt above defines your PERSONA, TONE, and OPTIONAL WRAPPERS (intro, radar, outro, headings). Follow it creatively.
+   - The rules below are absolute platform constraints. They override the creative prompt when they conflict.
+
+2. CORE ITEMS:
+   - Extract and detail up to {itemCount} separate core developments from ENTRIES_DATA (relevance order).
+   - Target exactly {effectiveItemCount} core items in briefing_markdown and in used_entry_keys when enough distinct entries exist.
+   - If ENTRIES_DATA contains fewer than {effectiveItemCount} entries, use every available entry — do not invent rows.
+   - Do not merge multiple distinct entries into one bullet if that would drop below the number of entries you can cite.
+
+3. CITATIONS:
+   - Each core item must map to one entry in ENTRIES_DATA.
+   - Populate used_entry_keys with the exact [ID: entry_type:entry_id] strings for the entries you selected, in the same order as the core items in briefing_markdown.
 
 ENTRIES_DATA:
 {markdownContext}
@@ -83,6 +93,7 @@ CONTRACT;
         string $userSystemPrompt,
         string $markdownContext,
         int $itemCount = 5,
+        int $contextEntryCount = 0,
     ): GeminiBriefingResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
@@ -99,9 +110,17 @@ CONTRACT;
         }
 
         $url     = self::API_BASE . rawurlencode($this->model) . ':generateContent';
-        $payload = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount);
+        $payload = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount, $contextEntryCount, true);
 
         $response = $this->postWithRetries($url, $payload, $apiKey);
+
+        if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
+            error_log(
+                'GeminiBriefingService: responseSchema rejected for model ' . $this->model . '; retrying without schema'
+            );
+            $payload  = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount, $contextEntryCount, false);
+            $response = $this->postWithRetries($url, $payload, $apiKey);
+        }
 
         if (!$response->isOk()) {
             throw $this->exceptionFromFailedResponse($response);
@@ -113,11 +132,24 @@ CONTRACT;
     /**
      * @return array<string, mixed>
      */
-    private function buildPayload(string $userSystemPrompt, string $markdownContext, int $itemCount): array
-    {
-        $markdownContext = trim($markdownContext);
-        $systemText      = $this->composeSystemInstruction($userSystemPrompt, $markdownContext, $itemCount);
-        $userText        = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract.';
+    private function buildPayload(
+        string $userSystemPrompt,
+        string $markdownContext,
+        int $itemCount,
+        int $contextEntryCount,
+        bool $useStructuredSchema,
+    ): array {
+        $markdownContext  = trim($markdownContext);
+        $effectiveCount   = $this->effectiveCitationCount($itemCount, $contextEntryCount);
+        $systemText       = $this->composeSystemInstruction(
+            $userSystemPrompt,
+            $markdownContext,
+            $itemCount,
+            $effectiveCount,
+        );
+        $userText = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract. '
+            . 'Du MUSST ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys liefern '
+            . '(sofern genügend Einträge in ENTRIES_DATA vorhanden sind; sonst alle verfügbaren).';
 
         return [
             'systemInstruction' => [
@@ -133,11 +165,73 @@ CONTRACT;
                     ],
                 ],
             ],
-            'generationConfig' => [
-                'temperature'      => self::DEFAULT_TEMPERATURE,
-                'maxOutputTokens'  => $this->maxOutputTokens,
-                'responseMimeType' => 'application/json',
+            'generationConfig' => $this->generationConfig($itemCount, $effectiveCount, $useStructuredSchema),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function generationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
+    {
+        $config = [
+            'temperature'      => self::DEFAULT_TEMPERATURE,
+            'maxOutputTokens'  => $this->maxOutputTokens,
+            'responseMimeType' => 'application/json',
+        ];
+        if ($useStructuredSchema) {
+            $config['responseSchema'] = $this->briefingResponseSchema($itemCount, $effectiveCount);
+        }
+
+        return $config;
+    }
+
+    private function shouldRetryWithoutResponseSchema(Response $response): bool
+    {
+        if ($response->status !== 400) {
+            return false;
+        }
+
+        $body = strtolower($response->body);
+
+        return str_contains($body, 'response_schema')
+            || str_contains($body, 'responseschema')
+            || str_contains($body, 'response schema');
+    }
+
+    private function effectiveCitationCount(int $itemCount, int $contextEntryCount): int
+    {
+        if ($contextEntryCount < 1) {
+            return max(1, $itemCount);
+        }
+
+        return max(1, min($itemCount, $contextEntryCount));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function briefingResponseSchema(int $itemCount, int $effectiveCount): array
+    {
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'briefing_markdown' => [
+                    'type'        => 'STRING',
+                    'description' => 'Complete briefing Markdown: follow the user persona above; include optional intro/outro; '
+                        . 'must contain ' . $effectiveCount . ' distinct core items (one cited entry each) when data allows, '
+                        . 'up to ' . $itemCount . ' requested.',
+                ],
+                'used_entry_keys' => [
+                    'type'        => 'ARRAY',
+                    'description' => 'Exact entry_type:entry_id strings from ENTRIES_DATA [ID: …] tags for each core item, '
+                        . 'same order as in briefing_markdown.',
+                    'items'       => ['type' => 'STRING'],
+                    'minItems'    => $effectiveCount,
+                    'maxItems'    => $effectiveCount,
+                ],
             ],
+            'required' => ['briefing_markdown', 'used_entry_keys'],
         ];
     }
 
@@ -145,8 +239,13 @@ CONTRACT;
         string $userSystemPrompt,
         string $markdownContext,
         int $itemCount,
+        int $effectiveItemCount,
     ): string {
-        $envelope = str_replace('{itemCount}', (string)$itemCount, self::BRIEFING_OUTPUT_CONTRACT);
+        $envelope = str_replace(
+            ['{itemCount}', '{effectiveItemCount}'],
+            [(string)$itemCount, (string)$effectiveItemCount],
+            self::BRIEFING_OUTPUT_CONTRACT,
+        );
         $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
 
         if (str_contains($combined, '{markdownContext}')) {

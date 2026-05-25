@@ -253,8 +253,11 @@ PROMPT;
                 return;
             }
 
+            $contextEntryCount = count($entries);
+            $citationSlots     = min($itemCount, $contextEntryCount);
+
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
-            $result = $gemini->generateSummary($systemPrompt, $markdown, $itemCount);
+            $result = $gemini->generateSummary($systemPrompt, $markdown, $itemCount, $contextEntryCount);
 
             $entriesHtml     = '';
             $usedEntryKeys   = $result->usedEntryKeys;
@@ -294,13 +297,14 @@ PROMPT;
             }
 
             $meta = [
-                'entry_count'    => count($entries),
-                'markdown_chars' => $markdownChars,
-                'since'          => $since,
-                'lookback_days'  => $lookbackDays,
-                'limit'          => $limit,
-                'modules'        => $this->enabledModuleNames($selection),
-                'labels'         => $labelFilter,
+                'entry_count'      => $contextEntryCount,
+                'markdown_chars'   => $markdownChars,
+                'since'            => $since,
+                'lookback_days'    => $lookbackDays,
+                'limit'            => $limit,
+                'modules'          => $this->enabledModuleNames($selection),
+                'labels'           => $labelFilter,
+                'citation_slots'   => $citationSlots,
             ];
             $meta = array_merge($meta, $attributionMeta);
             if ($contextWarning !== null) {
@@ -652,6 +656,87 @@ PROMPT;
         }
 
         return null;
+    }
+
+    /**
+     * @return array{
+     *     since: string,
+     *     limit: int,
+     *     lookbackDays: int,
+     *     labelFilter: list<string>,
+     *     selection: BriefingSourceSelection
+     * }
+     * @throws \InvalidArgumentException
+     */
+    private function parseBriefingFiltersFromPost(): array
+    {
+        $selection = $this->parseModuleSelection($_POST['modules'] ?? null);
+        $lookbackDays = $this->parseLookbackDays($_POST['lookback_days'] ?? null);
+        $since        = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+            ->modify('-' . $lookbackDays . ' days')
+            ->format('Y-m-d\TH:i:s\Z');
+        $limit = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
+
+        $includeImportant = (string)($_POST['include_important'] ?? '0') === '1';
+        $labelFilter      = ['investigation_lead'];
+        if ($includeImportant) {
+            $labelFilter[] = 'important';
+        }
+
+        return [
+            'since'        => $since,
+            'limit'        => $limit,
+            'lookbackDays' => $lookbackDays,
+            'labelFilter'  => $labelFilter,
+            'selection'    => $selection,
+        ];
+    }
+
+    /**
+     * @param array{
+     *     since: string,
+     *     limit: int,
+     *     lookbackDays: int,
+     *     labelFilter: list<string>,
+     *     selection: BriefingSourceSelection
+     * } $filters
+     * @return array{
+     *     entries: list<array<string, mixed>>,
+     *     scoresByKey: array<string, array<string, mixed>>,
+     *     markdown: string,
+     *     markdownChars: int,
+     *     contextWarning: ?string
+     * }
+     */
+    private function gatherBriefingContext(PDO $pdo, array $filters): array
+    {
+        $gatherer = new BriefingEntryGatherer();
+        [$entries, $scoresByKey] = $gatherer->gather(
+            $pdo,
+            $filters['since'],
+            $filters['limit'],
+            $filters['selection'],
+            $filters['labelFilter'],
+        );
+        $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+
+        // includeEntryIds=true — each row gets [ID: entry_type:entry_id] for used_entry_keys / cards
+        $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
+            'since'        => $filters['since'],
+            'limit'        => $filters['limit'],
+            'label_filter' => $filters['labelFilter'],
+            'total'        => count($entries),
+        ], true);
+
+        $markdownChars = strlen($markdown);
+
+        return [
+            'entries'        => $entries,
+            'scoresByKey'    => $scoresByKey,
+            'markdown'       => $markdown,
+            'markdownChars'  => $markdownChars,
+            'contextWarning' => $this->contextSizeWarning($markdownChars),
+        ];
     }
 
     /**
