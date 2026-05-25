@@ -14,6 +14,20 @@ final class GeminiBriefingException extends \RuntimeException
         return new self('Gemini API key is not configured. Add it under Settings → General.');
     }
 
+    public static function invalidApiKey(): self
+    {
+        return new self(
+            'Gemini rejected the API key. Renew the key in Google AI Studio and update Settings → General.'
+        );
+    }
+
+    public static function outputTruncated(): self
+    {
+        return new self(
+            'Gemini hit the output token limit. Shorten the system prompt or reduce entries (limit / lookback / modules) and try again.'
+        );
+    }
+
     public static function invalidInput(string $message): self
     {
         return new self($message);

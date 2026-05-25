@@ -21,7 +21,7 @@ use Seismo\Service\GeminiBriefingService;
 final class AiBriefingController
 {
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
-You are an intelligence analyst briefing a desk lead. Summarize the Seismo entries below: main developments, why they matter, and suggested follow-ups. Be concise; use bullet points where helpful. Do not state facts that are not supported by the source material.
+You are an intelligence analyst briefing a desk lead. Write a detailed briefing from the Seismo entries provided: main developments, why they matter, connections between items, and suggested follow-ups. Preserve nuance from individual entries; use bullet points where helpful. Do not state facts that are not supported by the source material.
 PROMPT;
 
     private const MIN_SYSTEM_PROMPT_LEN = 20;
@@ -30,7 +30,12 @@ PROMPT;
 
     private const DEFAULT_LOOKBACK_DAYS = 7;
 
-    private const DEFAULT_LIMIT = 2000;
+    private const DEFAULT_LIMIT = 200;
+
+    /** Warn in UI meta when source markdown exceeds this size (bytes). */
+    private const CONTEXT_WARN_CHARS = 200_000;
+
+    private const CONTEXT_HEAVY_CHARS = 400_000;
 
     /** @var list<string> */
     private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'lex', 'leg'];
@@ -134,20 +139,29 @@ PROMPT;
                 'total'        => count($entries),
             ]);
 
+            $markdownChars   = strlen($markdown);
+            $contextWarning  = $this->contextSizeWarning($markdownChars);
+
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
             $text   = $gemini->generateSummary($systemPrompt, $markdown);
+
+            $meta = [
+                'entry_count'    => count($entries),
+                'markdown_chars' => $markdownChars,
+                'since'          => $since,
+                'lookback_days'  => $lookbackDays,
+                'limit'          => $limit,
+                'modules'        => $this->enabledModuleNames($selection),
+                'labels'         => $labelFilter,
+            ];
+            if ($contextWarning !== null) {
+                $meta['context_warning'] = $contextWarning;
+            }
 
             echo json_encode([
                 'ok'   => true,
                 'text' => $text,
-                'meta' => [
-                    'entry_count' => count($entries),
-                    'since'       => $since,
-                    'lookback_days' => $lookbackDays,
-                    'limit'       => $limit,
-                    'modules'     => $this->enabledModuleNames($selection),
-                    'labels'      => $labelFilter,
-                ],
+                'meta' => $meta,
             ], JSON_UNESCAPED_UNICODE);
         } catch (GeminiBriefingException $e) {
             http_response_code(502);
@@ -230,5 +244,17 @@ PROMPT;
         }
 
         return min($n, MagnituExportRepository::MAX_LIMIT);
+    }
+
+    private function contextSizeWarning(int $markdownChars): ?string
+    {
+        if ($markdownChars >= self::CONTEXT_HEAVY_CHARS) {
+            return 'Source context is very large; use fewer modules, a shorter lookback, or a lower per-module limit.';
+        }
+        if ($markdownChars >= self::CONTEXT_WARN_CHARS) {
+            return 'Source context is large; generation may be slow or hit model input limits.';
+        }
+
+        return null;
     }
 }

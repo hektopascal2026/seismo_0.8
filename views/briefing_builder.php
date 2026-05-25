@@ -58,7 +58,8 @@ $moduleOptions = [
             <p class="admin-intro">
                 Entries are scored labels from Magnitu or the recipe scorer.
                 Only <strong>investigation lead</strong> rows are included by default; optionally add <strong>important</strong>.
-                Each enabled module loads up to the entry limit below (export maximum <?= (int)$maxLimit ?>).
+                Each enabled module loads up to the entry limit below (default <?= (int)$defaultLimit ?>, maximum <?= (int)$maxLimit ?>).
+                The full entry text is sent to Gemini in one pass so detail is preserved.
             </p>
 
             <form id="briefing-builder-form" class="admin-form-card">
@@ -119,6 +120,7 @@ $moduleOptions = [
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Summary</h2>
             <div id="briefing-output-error" class="message message-error" hidden></div>
+            <div id="briefing-output-warning" class="message message-warning" hidden></div>
             <div id="briefing-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem;">
                 <p class="admin-intro" id="briefing-output-placeholder">Generated text will appear here.</p>
             </div>
@@ -134,6 +136,7 @@ $moduleOptions = [
         var out = document.getElementById('briefing-output');
         var placeholder = document.getElementById('briefing-output-placeholder');
         var errEl = document.getElementById('briefing-output-error');
+        var warnEl = document.getElementById('briefing-output-warning');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
         var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
         var moduleCbs = document.querySelectorAll('.briefing-module-cb');
@@ -172,6 +175,10 @@ $moduleOptions = [
             if (errEl) {
                 errEl.hidden = true;
                 errEl.textContent = '';
+            }
+            if (warnEl) {
+                warnEl.hidden = true;
+                warnEl.textContent = '';
             }
             var checked = 0;
             moduleCbs.forEach(function(cb) { if (cb.checked) checked++; });
@@ -220,15 +227,30 @@ $moduleOptions = [
                     }
                     return;
                 }
+                if (data.meta && data.meta.context_warning && warnEl) {
+                    warnEl.textContent = data.meta.context_warning;
+                    warnEl.hidden = false;
+                }
                 if (placeholder) placeholder.remove();
                 out.textContent = data.text || '';
-                if (data.meta && data.meta.entry_count !== undefined) {
+                if (data.meta) {
                     var note = document.createElement('p');
                     note.className = 'admin-intro';
                     note.style.marginTop = '1rem';
-                    note.textContent = 'Based on ' + data.meta.entry_count + ' entries'
-                        + (data.meta.since ? ' since ' + data.meta.since : '') + '.';
-                    out.appendChild(note);
+                    var parts = [];
+                    if (data.meta.entry_count !== undefined) {
+                        parts.push(String(data.meta.entry_count) + ' entries');
+                    }
+                    if (data.meta.markdown_chars !== undefined) {
+                        parts.push(Math.round(data.meta.markdown_chars / 1024) + ' KB source context');
+                    }
+                    if (data.meta.since) {
+                        parts.push('since ' + data.meta.since);
+                    }
+                    if (parts.length) {
+                        note.textContent = 'Based on ' + parts.join(' · ') + '.';
+                        out.appendChild(note);
+                    }
                 }
             })
             .catch(function() {
