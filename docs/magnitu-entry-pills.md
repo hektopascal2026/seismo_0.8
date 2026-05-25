@@ -83,7 +83,7 @@ flowchart TD
 | `feeds` | `source_type`, `category`, `title` |
 
 - `feeds.source_type`: `rss` \| `substack` \| `scraper` \| `parl_press`
-- `feeds.category`: free string (e.g. outlet bucket); literal `unsortiert` is **ignored** for the pill label.
+- `feeds.category`: routing / future classification (e.g. `media`, outlet tags); **not** used for pill text.
 
 Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed_name` (both = `feeds.title`).
 
@@ -99,9 +99,8 @@ Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed
 
 **Not `parl_press`:**
 
-1. If `source_category` is non-empty and is an **outlet bucket** (not `unsortiert`, `media`, or `scraper`) → pill text = **category** (e.g. “NZZ”).
-2. Else → pill text = **`source_name` / feed title** (Media module sources always use the feed title).
-3. Truncate at **32 characters** + `…`.
+1. Pill text = **`source_name`** (`feeds.title`). Ignore `source_category` for display.
+2. Truncate at **32 characters** + `…`.
 
 **`parl_press`:** two pills (see below). Uses `feed_items.guid` and `feeds.category` on the dashboard; `guid` is not in the current Magnitu export — coordinate if Magnitu needs SDA vs MM without heuristics.
 
@@ -109,12 +108,12 @@ Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed
 
 | Condition | CSS class | Background | Pill text |
 |-----------|-----------|------------|-----------|
-| `source_type === 'substack'` | `entry-tag entry-tag--feed-substack` | `#C5B4D1` | category or title |
+| `source_type === 'substack'` | `entry-tag entry-tag--feed-substack` | `#C5B4D1` | feed title |
 | `source_type === 'scraper'` | `entry-tag entry-tag--scraper` | `#FFDBBB` | `🌐 ` + feed title (default “Scraper”) |
-| `source_type === 'rss'` (and other non-special) | `entry-tag entry-tag--feed-rss` | `#add8e6` | category or title |
+| `source_type === 'rss'` (and other non-special) | `entry-tag entry-tag--feed-rss` | `#add8e6` | feed title |
 | `source_type === 'parl_press'` | see Parl table | | |
 
-Example: “NZZ” on light blue = RSS pill (`entry-tag--feed-rss`, `#add8e6`), text from category or title.
+Example: outlet name on light blue = RSS pill (`entry-tag--feed-rss`, `#add8e6`), text from `source_name`.
 
 ### `parl_press` (two pills)
 
@@ -295,9 +294,7 @@ function feedPill(entry) {
       text: '🌐 ' + (entry.source_name || 'Scraper'),
     };
   }
-  const label = truncateLabel(
-    labelFromCategoryOrTitle(entry.source_category, entry.source_name)
-  );
+  const label = truncateLabel(entry.source_name || '');
   const css =
     st === 'substack'
       ? 'entry-tag entry-tag--feed-substack'

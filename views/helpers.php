@@ -108,31 +108,16 @@ if (!function_exists('seismo_parl_press_commission_from_guid')) {
 
 if (!function_exists('seismo_feed_item_pill_label')) {
     /**
-     * Timeline / preview pill text for a feed_item (RSS, Substack).
+     * Timeline / preview pill text for a feed_item (RSS, Substack, Media).
      *
-     * Uses {@see feeds.category} when it is an outlet bucket (e.g. "NZZ").
-     * Module routing values such as {@see \Seismo\Feed\FeedModule::CATEGORY_MEDIA}
-     * and {@code scraper} are ignored so the feed title is shown instead.
+     * Always {@see feeds.title} (`feed_title` / `feed_name`). {@see feeds.category}
+     * is routing / future classification only — not shown on cards or filter pills.
      */
     function seismo_feed_item_pill_label(array $item, int $maxLen = 32): string
     {
-        $feedCategory = trim((string)($item['feed_category'] ?? ''));
-        $routingOnly  = [
-            \Seismo\Feed\FeedModule::CATEGORY_MEDIA,
-            'scraper',
-            'unsortiert',
-        ];
-        $catLower = strtolower($feedCategory);
-        $useCategory = $feedCategory !== ''
-            && !in_array($catLower, $routingOnly, true);
-
-        if ($useCategory) {
-            $feedLabel = $feedCategory;
-        } else {
-            $feedLabel = trim((string)($item['feed_title'] ?? ''));
-            if ($feedLabel === '') {
-                $feedLabel = trim((string)($item['feed_name'] ?? ''));
-            }
+        $feedLabel = trim((string)($item['feed_title'] ?? ''));
+        if ($feedLabel === '') {
+            $feedLabel = trim((string)($item['feed_name'] ?? ''));
         }
 
         if ($maxLen > 0 && mb_strlen($feedLabel) > $maxLen) {
