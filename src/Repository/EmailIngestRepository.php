@@ -68,8 +68,7 @@ final class EmailIngestRepository
             body_text = VALUES(body_text),
             body_html = VALUES(body_html),
             raw_headers = VALUES(raw_headers),
-            text_body = VALUES(text_body),
-            html_body = VALUES(html_body)';
+            ' . $this->bodyDuplicateUpdateSql() . '';
 
         $existingImap = $this->existingImapUids($rows);
 
@@ -139,8 +138,9 @@ final class EmailIngestRepository
             body_html = VALUES(body_html),
             raw_headers = VALUES(raw_headers),
             metadata = VALUES(metadata),
-            text_body = VALUES(text_body),
-            html_body = VALUES(html_body)';
+            ' . $this->bodyDuplicateUpdateSql() . '';
+
+        $existingGmail = $this->existingGmailMessageIds($rows);
 
         $existingGmail = $this->existingGmailMessageIds($rows);
 
@@ -237,6 +237,14 @@ final class EmailIngestRepository
         $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
+        if (!$hydrateHostedBody) {
+            $profile    = EmailLocaleGuesser::profileForEmail((string)($row['subject'] ?? ''), $plainAfterNormalize);
+            $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
+            $resolution = EmailWebViewUrlExtractor::resolve($htmlBeforeNormalize, $plainAfterNormalize, $ranks);
+            if (EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)) {
+                $hydrateHostedBody = true;
+            }
+        }
         // Before listing/subscription stripping — those remove “view in browser” lines from plain text.
         $row = $this->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, $hydrateHostedBody);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
@@ -287,9 +295,6 @@ final class EmailIngestRepository
      * @param string $htmlForExtract  Raw HTML as stored on fetch (before any body stripping).
      * @param string $plainForExtract Plain body right after {@see EmailIngestNormalizer}, before listing/subscription processors.
      * @return array<string, mixed>
-     */
-    /**
-     * Resolve locale-specific web-view links and optionally hydrate plain text from hosted DE/EN editions.
      */
     public function applyWebViewProcessing(
         array $row,
@@ -422,6 +427,18 @@ final class EmailIngestRepository
         }
 
         return $found;
+    }
+
+    /** SQL fragment: do not overwrite bodies already hydrated from a hosted DE/EN web view. */
+    private function bodyDuplicateUpdateSql(): string
+    {
+        $preserve = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.body_source')), '') = '"
+            . EmailMetadata::BODY_SOURCE_WEB_VIEW . "'";
+
+        return 'text_body = IF(' . $preserve . ', text_body, VALUES(text_body)), '
+            . 'html_body = IF(' . $preserve . ', html_body, VALUES(html_body)), '
+            . 'body_text = IF(' . $preserve . ', body_text, VALUES(body_text)), '
+            . 'body_html = IF(' . $preserve . ', body_html, VALUES(body_html))';
     }
 
     private function nullStr(mixed $v): ?string

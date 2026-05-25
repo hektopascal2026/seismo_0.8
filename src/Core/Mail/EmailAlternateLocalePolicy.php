@@ -64,4 +64,37 @@ final class EmailAlternateLocalePolicy
             default => 'other',
         };
     }
+
+    /**
+     * Inbox still has default-locale text (e.g. Ukrainian) but a DE/EN hosted edition link exists — fetch once.
+     */
+    public static function needsHostedHydrationRetry(
+        array $row,
+        EmailWebViewResolution $resolution,
+        string $plain,
+    ): bool {
+        if (!$resolution->hydrateBody
+            || $resolution->url === null
+            || $resolution->localeRank === null
+        ) {
+            return false;
+        }
+        if (EmailMetadata::bodySourceFromRow($row) === EmailMetadata::BODY_SOURCE_WEB_VIEW) {
+            return false;
+        }
+        $plain = trim($plain);
+        if ($plain === '') {
+            return false;
+        }
+        if (preg_match('/[\p{Cyrillic}]/u', $plain) === 1) {
+            return true;
+        }
+
+        $lower = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
+
+        return str_contains($lower, 'read the english version')
+            || str_contains($lower, 'english version of our newsletter')
+            || str_contains($lower, 'newsletter auf deutsch')
+            || str_contains($lower, 'version anglaise');
+    }
 }

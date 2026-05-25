@@ -58,6 +58,27 @@ final class EmailLocalePolicyTest extends TestCase
         self::assertSame(EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH, $resolution->localeRank);
     }
 
+    public function testNeedsHostedHydrationRetryForCyrillicInboxWithEnglishLink(): void
+    {
+        $plain = "Read the English version ( https://news.example.net/en )\n\nСпільна заява";
+        $resolution = new \Seismo\Core\Mail\EmailWebViewResolution(
+            'https://news.example.net/en',
+            \Seismo\Core\Mail\EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH,
+            true
+        );
+
+        self::assertTrue(
+            \Seismo\Core\Mail\EmailAlternateLocalePolicy::needsHostedHydrationRetry([], $resolution, $plain)
+        );
+        self::assertFalse(
+            \Seismo\Core\Mail\EmailAlternateLocalePolicy::needsHostedHydrationRetry(
+                ['metadata' => json_encode(['body_source' => 'web_view'])],
+                $resolution,
+                $plain
+            )
+        );
+    }
+
     public function testGenericWebViewDoesNotHydrate(): void
     {
         $resolution = EmailWebViewUrlExtractor::resolve(
