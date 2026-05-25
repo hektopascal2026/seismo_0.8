@@ -9,6 +9,7 @@ use Seismo\Core\Fetcher\RssArticleHydrator;
 use Seismo\Core\Fetcher\RssFetchService;
 use Seismo\Feed\FeedModule;
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -99,20 +100,26 @@ final class FeedModuleHandler
 
     public function refreshSources(): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             $this->redirect([]);
 
             return;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterRefresh();
+            $finish();
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
-            $this->redirectAfterRefresh();
+            $finish();
 
             return;
         }
@@ -126,19 +133,19 @@ final class FeedModuleHandler
                 : $service->runFeedModuleCoreFetchers(true);
         } catch (RefreshMutexBusyException $e) {
             $_SESSION['error'] = $e->getMessage();
-            $this->redirectAfterRefresh();
+            $finish();
 
             return;
         } catch (\Throwable $e) {
             error_log('Seismo ' . $this->module->refreshAction . ': ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
-            $this->redirectAfterRefresh();
+            $finish();
 
             return;
         }
 
         RefreshAllService::applySessionFlashForAggregateResults($results, $this->module->refreshFlashLabel);
-        $this->redirectAfterRefresh();
+        $finish();
     }
 
     public function save(): void

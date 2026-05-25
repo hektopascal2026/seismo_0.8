@@ -332,47 +332,47 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
         <?php if (!$satellite): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Refresh legislation sources</h2>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_all" class="admin-inline-form" style="margin-bottom: 1rem;">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_all" class="admin-inline-form seismo-ajax-refresh-form" style="margin-bottom: 1rem;">
                 <?= $csrfField ?>
                 <?= $lexReturnViewHidden ?>
-                <button type="submit" class="btn btn-primary">Refresh all Lex sources</button>
+                <button type="submit" class="btn btn-primary" data-refresh-label="Refresh all Lex sources">Refresh all Lex sources</button>
             </form>
             <p class="admin-intro">Runs every enabled Lex plugin (EUR-Lex, Fedlex, DE, FR, Jus) in one request. Below: one plugin per button (same as Diagnostics).</p>
             <div class="admin-form-actions">
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_lex_eu" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh EUR-Lex (EU)</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh EUR-Lex (EU)">Refresh EUR-Lex (EU)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_fedlex" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh Fedlex (CH)</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh Fedlex (CH)">Refresh Fedlex (CH)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_recht_bund" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh recht.bund (DE)</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh recht.bund (DE)">Refresh recht.bund (DE)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_legifrance" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh Légifrance (FR)</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh Légifrance (FR)">Refresh Légifrance (FR)</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bger" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bger" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh Jus: BGer</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh Jus: BGer">Refresh Jus: BGer</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bge" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bge" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh Jus: BGE</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh Jus: BGE">Refresh Jus: BGE</button>
                 </form>
-                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bvger" class="admin-inline-form">
+                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_jus_bvger" class="admin-inline-form seismo-ajax-refresh-form">
                     <?= $csrfField ?>
                     <?= $lexReturnViewHidden ?>
-                    <button type="submit" class="btn btn-primary">Refresh Jus: BVGer</button>
+                    <button type="submit" class="btn btn-primary" data-refresh-label="Refresh Jus: BVGer">Refresh Jus: BVGer</button>
                 </form>
             </div>
         </div>

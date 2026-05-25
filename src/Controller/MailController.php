@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Controller;
 
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -121,19 +122,25 @@ final class MailController
 
     public function refreshMailIngest(): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterMailRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             header('Location: ?action=mail', true, 303);
             exit;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterMailRefresh();
+            $finish();
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
-            $this->redirectAfterMailRefresh();
+            $finish();
 
             return;
         }
@@ -145,13 +152,13 @@ final class MailController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_mail_ingest: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
-            $this->redirectAfterMailRefresh();
+            $finish();
 
             return;
         }
 
         RefreshAllService::applySessionFlashForAggregateResults($results, 'Mail (IMAP)');
-        $this->redirectAfterMailRefresh();
+        $finish();
     }
 
     private function redirectAfterMailRefresh(): void

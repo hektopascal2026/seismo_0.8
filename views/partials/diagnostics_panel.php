@@ -74,9 +74,9 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                 Runs every registered plugin now, ignoring throttle (except mail/Gmail — same 15&nbsp;min window as cron). The CLI cron
                 <code>refresh_cron.php</code> calls the same code with throttle on.
             </p>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_all" class="admin-inline-form seismo-ajax-refresh-form">
                 <?= $csrfField ?>
-                <button type="submit" class="btn btn-primary"<?= $satellite ? ' disabled' : '' ?>>Refresh all now</button>
+                <button type="submit" class="btn btn-primary" data-refresh-label="Refresh all now"<?= $satellite ? ' disabled' : '' ?>>Refresh all now</button>
             </form>
         </div>
 
@@ -292,10 +292,10 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
 
                         <div class="entry-actions diag-actions">
                             <div class="admin-table-actions">
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form seismo-ajax-refresh-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
-                                    <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
+                                    <button type="submit" class="btn btn-secondary" data-refresh-label="Refresh now"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
                                 </form>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=plugin_test" class="admin-inline-form">
                                     <?= $csrfField ?>

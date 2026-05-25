@@ -6,6 +6,7 @@ namespace Seismo\Controller;
 
 use Seismo\Config\CalendarConfigStore;
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Plugin\PluginLanguage;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\EntryScoreRepository;
@@ -117,15 +118,21 @@ final class LegController
 
     public function refreshParlCh(): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterLegRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectAfterLegRefresh();
+            $finish();
 
             return;
         }
 
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterLegRefresh();
+            $finish();
 
             return;
         }
@@ -136,7 +143,7 @@ final class LegController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_parl_ch: ' . $e->getMessage());
             $_SESSION['error'] = 'Parlament CH refresh failed: ' . $e->getMessage();
-            $this->redirectAfterLegRefresh();
+            $finish();
 
             return;
         }
@@ -149,7 +156,7 @@ final class LegController
             $_SESSION['error'] = 'Parlament CH refresh failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectAfterLegRefresh();
+        $finish();
     }
 
     public function saveLegParlCh(): void

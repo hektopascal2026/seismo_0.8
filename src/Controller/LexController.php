@@ -6,6 +6,7 @@ namespace Seismo\Controller;
 
 use Seismo\Config\LexConfigStore;
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Plugin\LexEu\LexEuPlugin;
 use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
 use Seismo\Plugin\LexLegifrance\LexLegifrancePlugin;
@@ -87,20 +88,26 @@ final class LexController
 
     public function refreshAllLex(): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterLexRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
@@ -112,50 +119,18 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo refresh_lex_all: ' . $e->getMessage());
             $_SESSION['error'] = 'Lex refresh failed: ' . $e->getMessage();
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
 
         RefreshAllService::applySessionFlashForAggregateResults($results, 'Lex legislation sources');
-        $this->redirectAfterLexRefresh();
+        $finish();
     }
 
     public function refreshFedlex(): void
     {
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectAfterLexRefresh();
-
-            return;
-        }
-
-        if (!CsrfToken::verifyRequest()) {
-            $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterLexRefresh();
-
-            return;
-        }
-
-        try {
-            $pdo = getDbConnection();
-            $result = RefreshAllService::boot($pdo)->runPlugin('fedlex', true);
-        } catch (\Throwable $e) {
-            error_log('Seismo refresh_fedlex: ' . $e->getMessage());
-            $_SESSION['error'] = 'Fedlex refresh failed: ' . $e->getMessage();
-            $this->redirectAfterLexRefresh();
-
-            return;
-        }
-
-        if ($result->isOk()) {
-            $_SESSION['success'] = 'Fedlex refresh finished: ' . $result->count . ' row(s) processed.';
-        } elseif ($result->status === 'skipped') {
-            $_SESSION['error'] = $result->message ?? 'Fedlex refresh skipped.';
-        } else {
-            $_SESSION['error'] = 'Fedlex refresh failed: ' . ($result->message ?? 'unknown error');
-        }
-
-        $this->redirectAfterLexRefresh();
+        $this->runLexPluginRefresh('fedlex', 'Fedlex');
     }
 
     public function saveLexCh(): void
@@ -473,14 +448,20 @@ final class LexController
 
     private function runLexPluginRefresh(string $pluginId, string $label): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterLexRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
@@ -491,7 +472,7 @@ final class LexController
         } catch (\Throwable $e) {
             error_log('Seismo refresh ' . $pluginId . ': ' . $e->getMessage());
             $_SESSION['error'] = $label . ' refresh failed: ' . $e->getMessage();
-            $this->redirectAfterLexRefresh();
+            $finish();
 
             return;
         }
@@ -504,7 +485,7 @@ final class LexController
             $_SESSION['error'] = $label . ' refresh failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectAfterLexRefresh();
+        $finish();
     }
 
     /**

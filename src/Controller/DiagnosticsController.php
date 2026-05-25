@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Repository\PluginRunLogRepository;
 use Seismo\Repository\SourceHealthRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -390,6 +391,12 @@ final class DiagnosticsController
             return;
         }
 
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectToDiagnostics();
+            });
+        };
+
         set_time_limit(300);
 
         $id = trim((string)($_POST['plugin_id'] ?? ''));
@@ -401,7 +408,7 @@ final class DiagnosticsController
                 && !in_array($id, $mediaCoreIds, true)
                 && !$registry->has($id))) {
             $_SESSION['error'] = 'Unknown plugin or core fetcher id.';
-            $this->redirectToDiagnostics();
+            $finish();
 
             return;
         }
@@ -418,13 +425,13 @@ final class DiagnosticsController
             }
         } catch (RefreshMutexBusyException $e) {
             $_SESSION['error'] = $e->getMessage();
-            $this->redirectToDiagnostics();
+            $finish();
 
             return;
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics refresh_plugin: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . $e->getMessage();
-            $this->redirectToDiagnostics();
+            $finish();
 
             return;
         }
@@ -444,7 +451,7 @@ final class DiagnosticsController
             $_SESSION['error'] = 'Refresh ' . $id . ' failed: ' . ($result->message ?? 'unknown error');
         }
 
-        $this->redirectToDiagnostics();
+        $finish();
     }
 
     public function test(): void
@@ -484,14 +491,21 @@ final class DiagnosticsController
 
     private function guardPost(): bool
     {
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        $redirect = function (): void {
             $this->redirectToTarget($this->resolvePostReturnTarget());
+        };
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            if (RefreshAjax::wantsJson()) {
+                RefreshAjax::json(false, null, 'Method not allowed', 405);
+            }
+            $redirect();
 
             return false;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectToTarget($this->resolvePostReturnTarget());
+            RefreshAjax::respondOrRedirect($redirect);
 
             return false;
         }

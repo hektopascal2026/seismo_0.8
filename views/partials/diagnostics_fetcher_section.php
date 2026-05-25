@@ -66,10 +66,10 @@ if ($diagCards === []) {
                         <?php endif; ?>
                     </div>
                     <div class="entry-actions diag-actions">
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form">
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form seismo-ajax-refresh-form">
                             <?= $csrfField ?>
                             <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
-                            <button type="submit" class="btn btn-secondary"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
+                            <button type="submit" class="btn btn-secondary" data-refresh-label="Refresh now"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
                         </form>
                     </div>
                     <?php

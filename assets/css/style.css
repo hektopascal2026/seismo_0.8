@@ -567,6 +567,12 @@ textarea.search-input.setup-code-preview {
     }
 }
 
+.btn.is-refreshing,
+.top-bar-btn.is-refreshing {
+    cursor: wait;
+    opacity: 0.7;
+}
+
 .magnitu-field-hint--spaced {
     margin-bottom: 0.75rem;
 }

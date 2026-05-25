@@ -6,6 +6,7 @@ namespace Seismo\Controller;
 
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Http\CsrfToken;
+use Seismo\Http\RefreshAjax;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\ScraperConfigRepository;
@@ -75,19 +76,25 @@ final class ScraperController
 
     public function refreshScraperSources(): void
     {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirectAfterScraperRefresh();
+            });
+        };
+
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             header('Location: ?action=scraper', true, 303);
             exit;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
-            $this->redirectAfterScraperRefresh();
+            $finish();
 
             return;
         }
         if (isSatellite()) {
             $_SESSION['error'] = 'Satellite mode: refresh runs on the mothership.';
-            $this->redirectAfterScraperRefresh();
+            $finish();
 
             return;
         }
@@ -98,19 +105,19 @@ final class ScraperController
             $results = RefreshAllService::boot($pdo)->runScraperModuleCoreFetcher(true);
         } catch (RefreshMutexBusyException $e) {
             $_SESSION['error'] = $e->getMessage();
-            $this->redirectAfterScraperRefresh();
+            $finish();
 
             return;
         } catch (\Throwable $e) {
             error_log('Seismo refresh_scraper_sources: ' . $e->getMessage());
             $_SESSION['error'] = 'Refresh failed: ' . $e->getMessage();
-            $this->redirectAfterScraperRefresh();
+            $finish();
 
             return;
         }
 
         RefreshAllService::applySessionFlashForAggregateResults($results, 'Scraper sources');
-        $this->redirectAfterScraperRefresh();
+        $finish();
     }
 
     private function redirectAfterScraperRefresh(): void

@@ -64,7 +64,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     $timelineRefreshRet = $timelineRefreshReturnAction ?? 'index';
                     ?>
                 <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
-                    <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap">
+                    <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap seismo-ajax-refresh-form">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
                         <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Triggers mothership refresh (feeds, press, scrapers, mail, Leg — Lex omitted, same as mothership toolbar)' : 'Refresh feeds, press, scrapers, parliament calendar, and mail when due (mail/Gmail at most every 15 minutes). Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
@@ -76,10 +76,10 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 $moduleRv  = (string)($moduleRefreshReturnView ?? '');
                 ?>
                 <?php if (($showModuleRefresh ?? false) && $moduleAct !== '' && $moduleLab !== ''): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($moduleAct) ?>" class="admin-inline-form top-bar-form-gap">
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($moduleAct) ?>" class="admin-inline-form top-bar-form-gap seismo-ajax-refresh-form">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_view" value="<?= e($moduleRv) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text"><?= e($moduleLab) ?></button>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="<?= e($moduleLab) ?>"><?= e($moduleLab) ?></button>
                     </form>
                 <?php endif; ?>
                 <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
@@ -90,66 +90,74 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 <?php endif; ?>
             </div>
         </div>
-        <?php if (!empty($showTimelineRefresh) && ($activeNav === 'index' || $activeNav === 'filter')): ?>
         <script>
         (function() {
-            var form = document.getElementById('seismo-timeline-refresh-form');
-            if (!form) return;
-            var button = form.querySelector('button[type=submit]');
-            if (!button) return;
-            var defaultLabel = (button.getAttribute('data-refresh-label') || 'Refresh');
-            function setButtonLoading() {
-                button.disabled = true;
-                button.classList.add('is-refreshing');
-                button.setAttribute('aria-busy', 'true');
-                button.innerHTML = 'Refreshing<span class="loading-dots" aria-hidden="true">'
-                    + '<span class="loading-dots-char">.</span><span class="loading-dots-char">.</span>'
-                    + '<span class="loading-dots-char">.</span></span>';
-            }
-            function setButtonDefault() {
-                button.disabled = false;
-                button.classList.remove('is-refreshing');
-                button.removeAttribute('aria-busy');
-                button.textContent = defaultLabel;
-            }
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                setButtonLoading();
-                var fd = new FormData(form);
-                fd.set('ajax', '1');
-                fetch(form.getAttribute('action') || form.action, {
-                    method: 'POST',
-                    body: fd,
-                    credentials: 'same-origin',
-                    headers: { 'Accept': 'application/json, text/plain, */*' }
-                })
-                    .then(function(r) { return r.text().then(function(t) { return { r: r, t: t }; }); })
-                    .then(function(v) {
-                        var data;
-                        try {
-                            data = v.t ? JSON.parse(v.t) : null;
-                        } catch (e2) {
-                            throw new Error('Server did not return JSON. If this persists, check Diagnostics or server logs (HTTP ' + v.r.status + ').');
-                        }
-                        if (!data) {
-                            throw new Error('Empty response (HTTP ' + v.r.status + ').');
-                        }
-                        if (data.ok === true) {
-                            window.location.reload();
-                            return;
-                        }
-                        var err = (typeof data.error === 'string' && data.error !== '') ? data.error : 'Refresh could not be completed.';
-                        throw new Error(err);
+            function bindAjaxRefreshForm(form) {
+                var button = form.querySelector('button[type=submit]');
+                if (!button) {
+                    return;
+                }
+                var defaultLabel = (button.getAttribute('data-refresh-label') || button.textContent || 'Refresh').trim();
+                function setButtonLoading() {
+                    button.disabled = true;
+                    button.classList.add('is-refreshing');
+                    button.setAttribute('aria-busy', 'true');
+                    button.innerHTML = 'Refreshing<span class="loading-dots" aria-hidden="true">'
+                        + '<span class="loading-dots-char">.</span><span class="loading-dots-char">.</span>'
+                        + '<span class="loading-dots-char">.</span></span>';
+                }
+                function setButtonDefault() {
+                    button.disabled = false;
+                    button.classList.remove('is-refreshing');
+                    button.removeAttribute('aria-busy');
+                    button.textContent = defaultLabel;
+                }
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    setButtonLoading();
+                    var fd = new FormData(form);
+                    fd.set('ajax', '1');
+                    fetch(form.getAttribute('action') || form.action, {
+                        method: 'POST',
+                        body: fd,
+                        credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json, text/plain, */*' }
                     })
-                    .catch(function(err) {
-                        setButtonDefault();
-                        var msg = (err && err.message) ? err.message : 'Refresh request failed.';
-                        window.alert(msg);
-                    });
-            });
+                        .then(function(r) { return r.text().then(function(t) { return { r: r, t: t }; }); })
+                        .then(function(v) {
+                            var data;
+                            try {
+                                data = v.t ? JSON.parse(v.t) : null;
+                            } catch (e2) {
+                                throw new Error('Server did not return JSON. If this persists, check Diagnostics or server logs (HTTP ' + v.r.status + ').');
+                            }
+                            if (!data) {
+                                throw new Error('Empty response (HTTP ' + v.r.status + ').');
+                            }
+                            if (data.ok === true) {
+                                window.location.reload();
+                                return;
+                            }
+                            var err = (typeof data.error === 'string' && data.error !== '') ? data.error : 'Refresh could not be completed.';
+                            throw new Error(err);
+                        })
+                        .catch(function(err) {
+                            setButtonDefault();
+                            var msg = (err && err.message) ? err.message : 'Refresh request failed.';
+                            window.alert(msg);
+                        });
+                });
+            }
+            function initSeismoAjaxRefreshForms() {
+                document.querySelectorAll('form.seismo-ajax-refresh-form').forEach(bindAjaxRefreshForm);
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initSeismoAjaxRefreshForms);
+            } else {
+                initSeismoAjaxRefreshForms();
+            }
         })();
         </script>
-        <?php endif; ?>
 
         <nav id="seismo-nav-drawer" class="nav-drawer" aria-label="Main navigation" aria-hidden="true">
             <a href="<?= e($basePath) ?>/index.php?action=index" class="nav-link<?= $activeNav === 'index' ? ' active' : '' ?>">Timeline</a>
