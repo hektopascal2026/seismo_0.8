@@ -28,6 +28,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
+use Seismo\Service\BriefingLookback;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
 
@@ -76,7 +77,7 @@ final class MagnituExportRepository
     {
         $limit = $this->clampLimit($limit);
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
-                       fi.published_date,
+                       fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
                        f.source_type AS source_type
@@ -86,9 +87,10 @@ final class MagnituExportRepository
                    AND fi.hidden = 0'
             . $this->feedModuleSqlExtra($moduleScope);
         $params = [];
-        if ($since !== null && $since !== '') {
-            $sql .= ' AND fi.published_date >= ?';
-            $params[] = $since;
+        $lookback = BriefingLookback::feedItemsSinceClause($since);
+        $sql .= $lookback['sql'];
+        foreach ($lookback['params'] as $p) {
+            $params[] = $p;
         }
         $sql .= ' ORDER BY fi.published_date DESC LIMIT ' . $limit;
 
@@ -256,7 +258,7 @@ final class MagnituExportRepository
 
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
-                       fi.published_date,
+                       fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
                        f.source_type AS source_type
@@ -266,9 +268,10 @@ final class MagnituExportRepository
                    AND fi.hidden = 0
                    AND fi.id IN (' . $placeholders . ')';
         $params = $ids;
-        if ($since !== null && $since !== '') {
-            $sql .= ' AND fi.published_date >= ?';
-            $params[] = $since;
+        $lookback = BriefingLookback::feedItemsSinceClause($since);
+        $sql .= $lookback['sql'];
+        foreach ($lookback['params'] as $p) {
+            $params[] = $p;
         }
 
         return $this->selectOrEmpty($sql, $params);

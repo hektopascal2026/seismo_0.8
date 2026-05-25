@@ -185,6 +185,9 @@ PROMPT;
                 'entry_count'    => $entryCount,
                 'markdown_chars' => $gathered['markdownChars'],
             ];
+            if ($gathered['gatherStats'] !== null) {
+                $meta['gather_stats'] = $gathered['gatherStats'];
+            }
             if ($gathered['contextWarning'] !== null) {
                 $meta['context_warning'] = $gathered['contextWarning'];
             }
@@ -782,7 +785,8 @@ PROMPT;
      *     scoresByKey: array<string, array<string, mixed>>,
      *     markdown: string,
      *     markdownChars: int,
-     *     contextWarning: ?string
+     *     contextWarning: ?string,
+     *     gatherStats: ?array{entries_before_score_filter: int, entries_after_score_filter: int}
      * }
      */
     private function gatherBriefingContext(PDO $pdo, array $filters): array
@@ -818,6 +822,7 @@ PROMPT;
             'markdown'       => $markdown,
             'markdownChars'  => $markdownChars,
             'contextWarning' => $this->contextSizeWarning($markdownChars),
+            'gatherStats'    => $gatherer->lastGatherStats(),
         ];
     }
 

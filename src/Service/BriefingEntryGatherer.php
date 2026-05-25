@@ -19,6 +19,19 @@ use Seismo\Repository\MagnituExportRepository;
  */
 final class BriefingEntryGatherer
 {
+    /** @var array{entries_before_score_filter: int, entries_after_score_filter: int}|null */
+    private ?array $lastGatherStats = null;
+
+    /**
+     * Stats from the latest {@see gatherForBriefingBuilder()} run (builder mode only).
+     *
+     * @return array{entries_before_score_filter: int, entries_after_score_filter: int}|null
+     */
+    public function lastGatherStats(): ?array
+    {
+        return $this->lastGatherStats;
+    }
+
     /**
      * @param array<int, string>|null $labelFilter Export only: Magnitu `predicted_label` list.
      * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
@@ -75,6 +88,7 @@ final class BriefingEntryGatherer
         BriefingSourceSelection $selection,
         BriefingScoreFilter $scoreFilter,
     ): array {
+        $this->lastGatherStats = null;
         $repo      = new MagnituExportRepository($pdo);
         $entryRepo = new EntryRepository($pdo);
 
@@ -119,6 +133,9 @@ final class BriefingEntryGatherer
         }
 
         foreach ($this->hydrateMissingEntries($repo, $since, $missingIdsByType) as $e) {
+            if (!BriefingLookback::entryInWindow($e, $since)) {
+                continue;
+            }
             $k = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
             if ($k !== ':') {
                 $byKey[$k] = $e;
@@ -133,10 +150,14 @@ final class BriefingEntryGatherer
         }
         $scoresByKey = $repo->scoresByEntryKey($pairs);
 
+        $entriesBeforeScoreFilter = count($entries);
         $entries = array_values(array_filter(
             $entries,
-            function (array $e) use ($scoresByKey, $selection, $scoreFilter): bool {
+            function (array $e) use ($scoresByKey, $selection, $scoreFilter, $since): bool {
                 if (!$this->entryMatchesModuleSelection($e, $selection)) {
+                    return false;
+                }
+                if (!BriefingLookback::entryInWindow($e, $since)) {
                     return false;
                 }
                 $key = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
@@ -149,6 +170,11 @@ final class BriefingEntryGatherer
                 );
             }
         ));
+
+        $this->lastGatherStats = [
+            'entries_before_score_filter' => $entriesBeforeScoreFilter,
+            'entries_after_score_filter'  => count($entries),
+        ];
 
         return [$entries, $scoresByKey];
     }

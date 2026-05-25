@@ -139,7 +139,8 @@ $moduleOptions = [
                         <strong>Source modules:</strong> only checked families (Feeds, Media, Scraper, Mail, Lex, Leg).
                     </li>
                     <li>
-                        <strong>Lookback:</strong> only entries whose published/event date falls inside the window.
+                        <strong>Lookback:</strong> entries whose official date or Seismo ingest time falls inside the window
+                        (feeds: published or cached; Leg: event or fetch date).
                     </li>
                     <li>
                         <strong>Per-module limit:</strong> caps how many recent rows are loaded per module before
@@ -933,6 +934,21 @@ $moduleOptions = [
                 }
                 if (prep.meta && prep.meta.entry_count !== undefined) {
                     applyStatusEntryCount(prep.meta.entry_count);
+                }
+                if (prep.meta && prep.meta.gather_stats && warnEl) {
+                    var gs = prep.meta.gather_stats;
+                    var before = parseInt(gs.entries_before_score_filter, 10);
+                    var after = parseInt(gs.entries_after_score_filter, 10);
+                    if (!isNaN(before) && !isNaN(after) && before > after) {
+                        var dropped = before - after;
+                        var dropNote = dropped + ' in-window '
+                            + (dropped === 1 ? 'entry' : 'entries')
+                            + ' dropped by relevance filter (unscored or below 50% / Highlights bar).';
+                        warnEl.textContent = warnEl.textContent
+                            ? warnEl.textContent + ' ' + dropNote
+                            : dropNote;
+                        warnEl.hidden = false;
+                    }
                 }
                 return postBriefingAction(generateUrl, fd);
             })
