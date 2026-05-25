@@ -7,6 +7,7 @@ namespace Seismo\Service;
 use Seismo\Controller\SettingsController;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\Http\BaseClient;
+use Seismo\Util\LenientJsonParser;
 use Seismo\Service\Http\HttpClientException;
 use Seismo\Service\Http\Response;
 
@@ -250,23 +251,32 @@ final class GeminiBriefingService
             $json = $response->json();
         } catch (\JsonException $e) {
             error_log('GeminiBriefingService response JSON: ' . $e->getMessage());
-            throw GeminiBriefingException::badResponse();
+            throw GeminiBriefingException::badResponse('Could not parse API JSON: ' . $e->getMessage());
         }
 
         if (isset($json['error']) && is_array($json['error'])) {
-            $msg = (string)($json['error']['message'] ?? 'unknown');
-            error_log('GeminiBriefingService API error: ' . $msg);
-            throw GeminiBriefingException::badResponse();
+            $msg = trim((string)($json['error']['message'] ?? ''));
+            error_log('GeminiBriefingService API error: ' . ($msg !== '' ? $msg : 'unknown'));
+            if ($msg !== '') {
+                throw GeminiBriefingException::fromApiMessage(400, $msg);
+            }
+
+            throw GeminiBriefingException::badResponse('API returned an error object without a message.');
         }
 
         $candidates = $json['candidates'] ?? null;
         if (!is_array($candidates) || $candidates === []) {
-            throw GeminiBriefingException::emptyResponse();
+            $block = $json['promptFeedback']['blockReason'] ?? null;
+            if (is_string($block) && $block !== '') {
+                throw GeminiBriefingException::blocked($block);
+            }
+
+            throw GeminiBriefingException::emptyResponse('API response had no candidates.');
         }
 
         $first = $candidates[0];
         if (!is_array($first)) {
-            throw GeminiBriefingException::badResponse();
+            throw GeminiBriefingException::badResponse('First candidate is not a valid object.');
         }
 
         $finish = (string)($first['finishReason'] ?? '');
@@ -279,12 +289,15 @@ final class GeminiBriefingService
 
         $content = $first['content'] ?? null;
         if (!is_array($content)) {
-            throw GeminiBriefingException::badResponse();
+            throw GeminiBriefingException::badResponse(
+                'Candidate missing content'
+                . ($finish !== '' ? ' (finish: ' . $finish . ').' : '.')
+            );
         }
 
         $parts = $content['parts'] ?? null;
         if (!is_array($parts)) {
-            throw GeminiBriefingException::badResponse();
+            throw GeminiBriefingException::badResponse('Candidate content has no text parts.');
         }
 
         $text = '';
@@ -307,30 +320,138 @@ final class GeminiBriefingService
      */
     private function parseBriefingFromModelOutput(string $raw): GeminiBriefingResult
     {
-        $jsonText = $this->stripJsonCodeFence($raw);
+        $decoded = $this->decodeBriefingJsonObject($raw);
+        if ($decoded !== null) {
+            return $this->briefingResultFromDecoded($decoded, true);
+        }
+
+        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
+        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
+        if ($salvaged !== null) {
+            error_log('GeminiBriefingService briefing: recovered markdown without valid JSON attribution.');
+
+            return $salvaged;
+        }
+
+        if (!str_contains($raw, '"briefing_markdown"')) {
+            return new GeminiBriefingResult(trim($raw), [], false);
+        }
+
+        throw GeminiBriefingException::badResponse(
+            'Briefing JSON could not be parsed or repaired.'
+        );
+    }
+
+    /**
+     * Strict json_decode first, then tourdesuisse-style lenient repair pipeline.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function decodeBriefingJsonObject(string $raw): ?array
+    {
+        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
 
         try {
             $decoded = json_decode($jsonText, true, 512, JSON_THROW_ON_ERROR);
+
+            return is_array($decoded) ? $decoded : null;
         } catch (\JsonException $e) {
-            error_log('GeminiBriefingService briefing JSON parse: ' . $e->getMessage());
-            // Custom prompts may still return plain Markdown.
-            if (!str_contains($raw, '"briefing_markdown"')) {
-                return new GeminiBriefingResult($raw, []);
-            }
-
-            throw GeminiBriefingException::badResponse();
+            error_log('GeminiBriefingService briefing JSON strict parse: ' . $e->getMessage());
         }
 
-        if (!is_array($decoded)) {
-            throw GeminiBriefingException::badResponse();
+        $repaired = LenientJsonParser::parseObject($raw);
+        if ($repaired !== null) {
+            error_log('GeminiBriefingService briefing JSON repaired via lenient parser.');
         }
 
+        return $repaired;
+    }
+
+    /**
+     * @param array<string, mixed> $decoded
+     * @throws GeminiBriefingException
+     */
+    private function briefingResultFromDecoded(array $decoded, bool $attributionParsed): GeminiBriefingResult
+    {
         $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
         if ($markdown === '') {
-            throw GeminiBriefingException::emptyResponse();
+            throw GeminiBriefingException::emptyResponse(
+                'JSON response is missing a non-empty briefing_markdown field.'
+            );
         }
 
-        return new GeminiBriefingResult($markdown, $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null));
+        return new GeminiBriefingResult(
+            $markdown,
+            $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null),
+            $attributionParsed,
+        );
+    }
+
+    /**
+     * Recover briefing text when JSON mode returns malformed JSON; skip attribution cards.
+     */
+    private function salvageBriefingFromBrokenJson(string $jsonText): ?GeminiBriefingResult
+    {
+        $needle = '"briefing_markdown"';
+        $pos    = strpos($jsonText, $needle);
+        if ($pos === false) {
+            return null;
+        }
+
+        $after = substr($jsonText, $pos + strlen($needle));
+        if (!preg_match('/^\s*:\s*"/', $after)) {
+            return null;
+        }
+
+        $after = (string)preg_replace('/^\s*:\s*"/', '', $after, 1);
+        $markdown = $this->readJsonStringLiteral($after);
+        if ($markdown === null || trim($markdown) === '') {
+            return null;
+        }
+
+        return new GeminiBriefingResult($markdown, [], false);
+    }
+
+    /**
+     * Read a JSON double-quoted string from the start of $input (handles escapes; tolerates truncation).
+     */
+    private function readJsonStringLiteral(string $input): ?string
+    {
+        $len = strlen($input);
+        if ($len === 0) {
+            return null;
+        }
+
+        $out = '';
+        for ($i = 0; $i < $len; $i++) {
+            $c = $input[$i];
+            if ($c === '"') {
+                $backslashes = 0;
+                for ($j = $i - 1; $j >= 0 && $input[$j] === '\\'; $j--) {
+                    $backslashes++;
+                }
+                if ($backslashes % 2 === 0) {
+                    break;
+                }
+            }
+            if ($c === '\\' && $i + 1 < $len) {
+                $next = $input[$i + 1];
+                $out .= match ($next) {
+                    'n' => "\n",
+                    'r' => "\r",
+                    't' => "\t",
+                    '"' => '"',
+                    '\\' => '\\',
+                    default => $next,
+                };
+                $i++;
+
+                continue;
+            }
+            $out .= $c;
+        }
+
+        return $out;
     }
 
     /**
@@ -357,13 +478,4 @@ final class GeminiBriefingService
         return $keys;
     }
 
-    private function stripJsonCodeFence(string $raw): string
-    {
-        $raw = trim($raw);
-        if (preg_match('/^```(?:json)?\s*\n?(.*?)\n?```\s*$/si', $raw, $m) === 1) {
-            return trim($m[1]);
-        }
-
-        return $raw;
-    }
 }

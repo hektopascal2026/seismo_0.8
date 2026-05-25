@@ -188,8 +188,23 @@ PROMPT;
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
             $result = $gemini->generateSummary($systemPrompt, $markdown);
 
-            [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries($entries, $result->usedEntryKeys);
-            $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
+            $entriesHtml     = '';
+            $attributionMeta = [
+                'context_entry_count'    => count($entries),
+                'attributed_entry_count' => 0,
+                'used_entry_keys'        => $result->usedEntryKeys,
+                'attribution_filtered'   => false,
+            ];
+
+            if ($result->attributionParsed) {
+                [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries($entries, $result->usedEntryKeys);
+                if ($cardsEntries !== []) {
+                    $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
+                }
+            } else {
+                $attributionMeta['attribution_warning'] =
+                    'Attribution JSON could not be parsed; briefing text is shown without source cards.';
+            }
 
             $meta = [
                 'entry_count'    => count($entries),
@@ -325,18 +340,16 @@ PROMPT;
 
         if ($usedEntryKeys === []) {
             $meta['attribution_warning'] =
-                'Gemini returned no used_entry_keys; showing all entries sent as context.';
-            $meta['attribution_filtered'] = false;
+                'Gemini returned no used_entry_keys; source cards are omitted.';
 
-            return [$entries, $meta];
+            return [[], $meta];
         }
 
         if ($attributed === []) {
             $meta['attribution_warning'] =
-                'None of the cited entry IDs matched gathered entries; showing all context entries.';
-            $meta['attribution_filtered'] = false;
+                'None of the cited entry IDs matched gathered entries; source cards are omitted.';
 
-            return [$entries, $meta];
+            return [[], $meta];
         }
 
         $unmatched = count($usedEntryKeys) - count($attributed);

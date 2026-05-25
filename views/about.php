@@ -212,12 +212,21 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.1 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.2 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Briefing JSON repair &amp; clearer errors</div>
+                        <ul>
+                            <li><strong>LenientJsonParser:</strong> multi-layer repair for Gemini JSON (fences, balanced braces, trailing commas) ported from tourdesuisse; fixes many &ldquo;Syntax error&rdquo; responses.</li>
+                            <li><strong>Degraded mode:</strong> if attribution JSON cannot be parsed, the executive briefing still appears; source cards are omitted with a warning (no &ldquo;show all entries&rdquo; fallback).</li>
+                            <li><strong>UI:</strong> Gemini failures show the specific reason in the Summary box, not only &ldquo;check the server log.&rdquo;</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.1</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">AI Briefing: attribution cards</div>
                         <ul>
                             <li><strong>Grounding:</strong> Gemini returns <code>used_entry_keys</code>; the Briefing page shows only the matching timeline cards under <strong>Referenced source entries</strong> (citation order).</li>
                             <li><strong>Context IDs:</strong> each entry in the LLM payload is tagged <code>[ID: entry_type:entry_id]</code> so citations map back to Seismo rows.</li>
-                            <li><strong>Fallbacks:</strong> warnings when the model omits IDs or cites unknown keys; full context list shown only in those cases.</li>
+                            <li><strong>Fallbacks:</strong> warnings when the model omits IDs or cites unknown keys.</li>
                         </ul>
                     </div>
                     <div class="about-timeline-entry">

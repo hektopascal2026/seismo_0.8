@@ -46,7 +46,10 @@ final class GeminiBriefingException extends \RuntimeException
             ),
             $status === 429 => new self('Gemini rate limit exceeded. Try again in a few minutes.'),
             $status >= 500 => new self('Gemini service is temporarily unavailable. Try again later.'),
-            default => new self('Gemini request failed. Check the server error log.'),
+            default => new self(
+                'Gemini request failed'
+                . ($status > 0 ? ' (HTTP ' . $status . ').' : '.')
+            ),
         };
     }
 
@@ -87,13 +90,23 @@ final class GeminiBriefingException extends \RuntimeException
         return $message;
     }
 
-    public static function badResponse(): self
+    public static function badResponse(string $detail = ''): self
     {
-        return new self('Gemini returned an unexpected response. Check the server error log.');
+        $detail = trim(preg_replace('/\s+/', ' ', $detail) ?? $detail);
+        if ($detail !== '') {
+            return new self('Gemini returned an unexpected response: ' . self::truncateForUi($detail));
+        }
+
+        return new self('Gemini returned an unexpected response.');
     }
 
-    public static function emptyResponse(): self
+    public static function emptyResponse(string $detail = ''): self
     {
+        $detail = trim(preg_replace('/\s+/', ' ', $detail) ?? $detail);
+        if ($detail !== '') {
+            return new self(self::truncateForUi($detail));
+        }
+
         return new self('Gemini returned no summary text. Try different filters or a shorter window.');
     }
 

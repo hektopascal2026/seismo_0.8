@@ -62,6 +62,11 @@ $moduleOptions = [
         content: '\2713  ';
         color: var(--seismo-accent, #2563eb);
     }
+    .briefing-output-error-inline {
+        margin: 0;
+        color: #b91c1c;
+        font-weight: 600;
+    }
     </style>
 </head>
 <body>
@@ -369,11 +374,18 @@ $moduleOptions = [
                     return;
                 }
                 if (!data.ok) {
+                    var errMsg = data.error || 'Generation failed.';
                     if (errEl) {
-                        errEl.textContent = data.error || 'Generation failed.';
+                        errEl.textContent = errMsg;
                         errEl.hidden = false;
                     }
-                    restoreOutputPlaceholder();
+                    hideProcessingStatus();
+                    out.style.whiteSpace = 'pre-wrap';
+                    out.innerHTML = '';
+                    var errInBox = document.createElement('p');
+                    errInBox.className = 'briefing-output-error-inline';
+                    errInBox.textContent = errMsg;
+                    out.appendChild(errInBox);
                     return;
                 }
                 if (warnEl) {
