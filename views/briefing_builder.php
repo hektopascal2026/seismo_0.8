@@ -8,6 +8,7 @@
  * @var string $systemPrompt
  * @var bool $defaultPromptStored
  * @var list<array{id: string, name: string, content: string}> $savedPrompts
+ * @var string|null $initialActivePromptTabId
  * @var int $defaultLookbackDays
  * @var int $defaultLimit
  * @var int $maxLimit
@@ -31,14 +32,13 @@ $saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
 $deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
 
 $defaultPromptStored = $defaultPromptStored ?? false;
+$initialActivePromptTabId = $initialActivePromptTabId ?? null;
 $saveDefaultPromptLabel = $defaultPromptStored ? 'Update prompt' : 'Save prompt';
 $saveDefaultPromptTitle = $defaultPromptStored
     ? 'Update the default prompt for this instance'
     : 'Save as the default prompt for this instance';
 
 $alertThresholdPct = (int)round(max(0.0, min(1.0, (float)($alertThreshold ?? 0.60))) * 100);
-$magnituSettingsUrl = $basePath . '/index.php?action=settings&amp;tab=magnitu';
-
 $moduleOptions = [
     ['key' => 'feeds', 'label' => 'Feeds'],
     ['key' => 'media', 'label' => 'Media'],
@@ -235,10 +235,10 @@ $moduleOptions = [
                     <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                         <?php foreach ($savedPrompts as $i => $sp): ?>
                         <div class="prompt-tab-wrap">
-                            <button type="button" class="prompt-tab<?= $i === 0 ? ' is-active' : '' ?>"
+                            <button type="button" class="prompt-tab<?= $initialActivePromptTabId === $sp['id'] ? ' is-active' : '' ?>"
                                     role="tab"
                                     data-id="<?= e($sp['id']) ?>"
-                                    aria-selected="<?= $i === 0 ? 'true' : 'false' ?>">
+                                    aria-selected="<?= $initialActivePromptTabId === $sp['id'] ? 'true' : 'false' ?>">
                                 <span class="prompt-tab__label"><?= e($sp['name']) ?></span>
                             </button>
                             <button type="button" class="prompt-tab-delete"
@@ -313,8 +313,10 @@ $moduleOptions = [
         var promptTabsEl = document.getElementById('prompt-tabs');
         var promptLibraryMsg = document.getElementById('prompt-library-msg');
         var promptTextarea = document.getElementById('briefing_system_prompt');
-        var activePromptId = savedPrompts.length ? savedPrompts[0].id : null;
+        var activePromptId = null;
+        var initialActivePromptTabId = <?= json_encode($initialActivePromptTabId, JSON_UNESCAPED_UNICODE) ?>;
         var defaultPromptStored = <?= $defaultPromptStored ? 'true' : 'false' ?>;
+        var PROMPT_TAB_DEFAULT_NAME = 'Default';
         var copyBtn = document.getElementById('briefing-copy-btn');
         var lastBriefingText = '';
         var COPY_BTN_LABEL = 'Copy to clipboard';
@@ -628,15 +630,63 @@ $moduleOptions = [
                 : 'Add the current textarea as a named prompt in the library';
         }
 
-        function setActivePromptTab(id) {
-            if (!promptTabsEl) return;
+        function syncInstanceSaveButton() {
+            if (!savePromptBtn) return;
+            var editingLibrary = activePromptId !== null;
+            savePromptBtn.disabled = editingLibrary;
+            savePromptBtn.title = editingLibrary
+                ? 'Select the Default tab to update the reload default for this desk'
+                : (defaultPromptStored
+                    ? 'Update the default prompt for this instance'
+                    : 'Save as the default prompt for this instance');
+        }
+
+        function syncPromptSaveButtons() {
+            syncLibrarySaveButtonLabel();
+            syncInstanceSaveButton();
+        }
+
+        function highlightPromptTab(id) {
+            if (!promptTabsEl || !id) return;
             promptTabsEl.querySelectorAll('.prompt-tab').forEach(function(tab) {
                 var on = tab.getAttribute('data-id') === id;
                 tab.classList.toggle('is-active', on);
                 tab.setAttribute('aria-selected', on ? 'true' : 'false');
             });
+        }
+
+        function highlightedPromptTabId() {
+            if (activePromptId) {
+                return activePromptId;
+            }
+            var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+            return def ? def.id : null;
+        }
+
+        function selectInstanceDefaultPrompt() {
+            var row = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+            activePromptId = null;
+            if (row && promptTextarea) {
+                promptTextarea.value = row.content;
+                highlightPromptTab(row.id);
+            } else {
+                highlightPromptTab(null);
+            }
+            syncPromptSaveButtons();
+        }
+
+        function selectLibraryPrompt(row) {
+            if (!row || !promptTextarea) return;
+            activePromptId = row.id;
+            promptTextarea.value = row.content;
+            highlightPromptTab(row.id);
+            syncPromptSaveButtons();
+        }
+
+        function setActivePromptTab(id) {
+            highlightPromptTab(id);
             activePromptId = id;
-            syncLibrarySaveButtonLabel();
+            syncPromptSaveButtons();
         }
 
         function renderPromptTabs(prompts) {
@@ -645,14 +695,10 @@ $moduleOptions = [
             promptTabsEl.innerHTML = '';
             if (!savedPrompts.length) {
                 activePromptId = null;
-                syncLibrarySaveButtonLabel();
+                syncPromptSaveButtons();
                 return;
             }
-            var keepActive = activePromptId;
-            var hasActive = savedPrompts.some(function(p) { return p.id === keepActive; });
-            if (!hasActive) {
-                keepActive = savedPrompts[0].id;
-            }
+            var keepActive = highlightedPromptTabId();
             savedPrompts.forEach(function(p) {
                 var wrap = document.createElement('div');
                 wrap.className = 'prompt-tab-wrap';
@@ -680,9 +726,8 @@ $moduleOptions = [
                 wrap.appendChild(del);
                 promptTabsEl.appendChild(wrap);
             });
-            activePromptId = keepActive;
             bindPromptTabEvents();
-            syncLibrarySaveButtonLabel();
+            syncPromptSaveButtons();
         }
 
         function bindPromptTabEvents() {
@@ -691,9 +736,12 @@ $moduleOptions = [
                 tab.addEventListener('click', function() {
                     var id = tab.getAttribute('data-id');
                     var row = savedPrompts.find(function(p) { return p.id === id; });
-                    if (!row || !promptTextarea) return;
-                    promptTextarea.value = row.content;
-                    setActivePromptTab(id);
+                    if (!row) return;
+                    if (row.name === PROMPT_TAB_DEFAULT_NAME) {
+                        selectInstanceDefaultPrompt();
+                    } else {
+                        selectLibraryPrompt(row);
+                    }
                     showPromptLibraryMsg('', false);
                 });
             });
@@ -733,9 +781,12 @@ $moduleOptions = [
                         }
                         savedPrompts = savedPrompts.filter(function(p) { return p.id !== id; });
                         if (activePromptId === id) {
-                            activePromptId = savedPrompts.length ? savedPrompts[0].id : null;
+                            activePromptId = null;
                         }
                         renderPromptTabs(savedPrompts);
+                        if (activePromptId === null) {
+                            selectInstanceDefaultPrompt();
+                        }
                         showPromptLibraryMsg('', false);
                     })
                     .catch(function() {
@@ -749,7 +800,10 @@ $moduleOptions = [
         }
 
         bindPromptTabEvents();
-        syncLibrarySaveButtonLabel();
+        if (initialActivePromptTabId) {
+            highlightPromptTab(initialActivePromptTabId);
+        }
+        syncPromptSaveButtons();
 
         if (saveLibraryBtn && saveLibraryUrl && promptTextarea) {
             saveLibraryBtn.addEventListener('click', function() {
@@ -795,20 +849,24 @@ $moduleOptions = [
                         showPromptLibraryMsg(data.error || 'Could not save prompt to library.', true);
                         return;
                     }
+                    savedPrompts = data.prompts;
+                    renderPromptTabs(data.prompts);
                     if (updating) {
-                        savedPrompts = data.prompts;
-                        renderPromptTabs(data.prompts);
-                        setActivePromptTab(activePromptId);
+                        var row = savedPrompts.find(function(p) { return p.id === activePromptId; });
+                        if (row) {
+                            selectLibraryPrompt(row);
+                        }
                         showPromptLibraryMsg('Prompt updated.', false);
                     } else {
                         var newId = null;
                         if (data.prompts.length) {
                             newId = data.prompts[data.prompts.length - 1].id;
                         }
-                        activePromptId = newId;
-                        renderPromptTabs(data.prompts);
                         if (newId) {
-                            setActivePromptTab(newId);
+                            var created = savedPrompts.find(function(p) { return p.id === newId; });
+                            if (created) {
+                                selectLibraryPrompt(created);
+                            }
                         }
                         showPromptLibraryMsg('Prompt saved to library.', false);
                     }
@@ -818,13 +876,22 @@ $moduleOptions = [
                 })
                 .finally(function() {
                     saveLibraryBtn.disabled = false;
-                    syncLibrarySaveButtonLabel();
+                    syncPromptSaveButtons();
                 });
             });
         }
 
         if (savePromptBtn && savePromptUrl) {
             savePromptBtn.addEventListener('click', function() {
+                if (activePromptId !== null) {
+                    if (savePromptMsg) {
+                        savePromptMsg.textContent =
+                            'Select the Default tab to update the reload default (or use Update prompt on the library tab).';
+                        savePromptMsg.classList.add('message-error');
+                        savePromptMsg.hidden = false;
+                    }
+                    return;
+                }
                 var promptEl = document.getElementById('briefing_system_prompt');
                 if (!promptEl) return;
                 if (savePromptMsg) {
@@ -871,7 +938,11 @@ $moduleOptions = [
                     var firstDefaultSave = !defaultPromptStored;
                     defaultPromptStored = true;
                     savePromptBtn.textContent = 'Update prompt';
-                    savePromptBtn.title = 'Update the default prompt for this instance';
+                    var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+                    if (def) {
+                        def.content = promptEl.value;
+                    }
+                    syncInstanceSaveButton();
                     if (savePromptMsg) {
                         savePromptMsg.textContent = firstDefaultSave
                             ? 'Prompt saved for this instance.'
@@ -888,10 +959,10 @@ $moduleOptions = [
                     }
                 })
                 .finally(function() {
-                    savePromptBtn.disabled = false;
                     if (savePromptBtn.textContent === 'Saving…') {
                         savePromptBtn.textContent = defaultPromptStored ? 'Update prompt' : 'Save prompt';
                     }
+                    syncPromptSaveButtons();
                 });
             });
         }

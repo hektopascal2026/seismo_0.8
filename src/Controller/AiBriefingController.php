@@ -109,10 +109,11 @@ PROMPT;
         $csrfField = CsrfToken::field();
         $basePath  = getBasePath();
 
-        $geminiConfigured      = false;
-        $systemPrompt          = self::DEFAULT_SYSTEM_PROMPT;
-        $savedPrompts          = [];
-        $defaultPromptStored   = false;
+        $geminiConfigured           = false;
+        $systemPrompt               = self::DEFAULT_SYSTEM_PROMPT;
+        $savedPrompts               = [];
+        $defaultPromptStored        = false;
+        $initialActivePromptTabId   = null;
 
         try {
             $config = new SystemConfigRepository(getDbConnection());
@@ -120,10 +121,19 @@ PROMPT;
             $geminiConfigured = $key !== null && trim($key) !== '';
             $storedDefault    = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
             $defaultPromptStored = $storedDefault !== null && trim($storedDefault) !== '';
-            $systemPrompt     = self::resolveStoredSystemPrompt($config);
-            $savedPrompts     = self::ensurePromptLibrarySeeded($config, $systemPrompt);
+            $instancePrompt = self::resolveStoredSystemPrompt($config);
+            $savedPrompts   = self::ensurePromptLibrarySeeded($config, $instancePrompt);
+            $defaultRow     = self::findPromptLibraryEntryByName($savedPrompts, self::PROMPT_LIBRARY_SEED_NAME);
+            $systemPrompt   = $defaultRow !== null ? $defaultRow['content'] : $instancePrompt;
         } catch (\Throwable $e) {
             error_log('Seismo briefing_builder show: ' . $e->getMessage());
+        }
+
+        foreach ($savedPrompts as $row) {
+            if ($row['name'] === self::PROMPT_LIBRARY_SEED_NAME) {
+                $initialActivePromptTabId = $row['id'];
+                break;
+            }
         }
 
         $defaultLookbackDays = self::DEFAULT_LOOKBACK_DAYS;
@@ -392,6 +402,9 @@ PROMPT;
             $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
             $config       = new SystemConfigRepository(getDbConnection());
             $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, $systemPrompt);
+            $library = self::loadPromptLibrary($config);
+            $library = self::upsertDefaultLibraryEntry($library, $systemPrompt);
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
@@ -562,6 +575,43 @@ PROMPT;
         }
 
         return $out;
+    }
+
+    /**
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    /**
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return array{id: string, name: string, content: string}|null
+     */
+    public static function findPromptLibraryEntryByName(array $library, string $name): ?array
+    {
+        foreach ($library as $row) {
+            if (($row['name'] ?? '') === $name) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    public static function upsertDefaultLibraryEntry(array $library, string $content): array
+    {
+        foreach ($library as $i => $row) {
+            if (($row['name'] ?? '') !== self::PROMPT_LIBRARY_SEED_NAME) {
+                continue;
+            }
+            $library[$i]['content'] = $content;
+
+            return $library;
+        }
+
+        return $library;
     }
 
     /**
