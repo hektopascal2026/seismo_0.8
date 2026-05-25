@@ -72,7 +72,9 @@ final class MarkdownBriefingFormatter
             $lines[] = '- Since: ' . (string)$meta['since'];
         }
         $lines[] = '- Total entries: ' . count($entries);
-        if (isset($meta['label_filter']) && $meta['label_filter'] !== null) {
+        if (isset($meta['score_selection']) && $meta['score_selection'] !== '') {
+            $lines[] = '- Score selection: ' . (string)$meta['score_selection'];
+        } elseif (isset($meta['label_filter']) && $meta['label_filter'] !== null) {
             $labels = is_array($meta['label_filter']) ? implode(', ', $meta['label_filter']) : (string)$meta['label_filter'];
             $lines[] = '- Label filter: ' . $labels;
         }
@@ -163,7 +165,9 @@ final class MarkdownBriefingFormatter
         if (isset($meta['since']) && $meta['since'] !== null && $meta['since'] !== '') {
             $parts[] = ' since="' . self::escapeXmlAttribute((string)$meta['since']) . '"';
         }
-        if (isset($meta['label_filter']) && $meta['label_filter'] !== null) {
+        if (isset($meta['score_selection']) && $meta['score_selection'] !== '') {
+            $parts[] = ' score_selection="' . self::escapeXmlAttribute((string)$meta['score_selection']) . '"';
+        } elseif (isset($meta['label_filter']) && $meta['label_filter'] !== null) {
             $labels = is_array($meta['label_filter'])
                 ? implode(', ', $meta['label_filter'])
                 : (string)$meta['label_filter'];

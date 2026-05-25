@@ -12,6 +12,7 @@
  * @var int $maxLimit
  * @var int $defaultItemCount
  * @var list<int> $itemCountOptions
+ * @var float $alertThreshold Magnitu alert threshold (0–1) for this desk
  */
 
 declare(strict_types=1);
@@ -27,6 +28,9 @@ $generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
 $savePromptUrl      = $basePath . '/index.php?action=briefing_builder_save_prompt';
 $saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
 $deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
+
+$alertThresholdPct = (int)round(max(0.0, min(1.0, (float)($alertThreshold ?? 0.60))) * 100);
+$magnituSettingsUrl = $basePath . '/index.php?action=settings&amp;tab=magnitu';
 
 $moduleOptions = [
     ['key' => 'feeds', 'label' => 'Feeds'],
@@ -109,6 +113,43 @@ $moduleOptions = [
         <?php endif; ?>
 
         <div class="latest-entries-section">
+            <div class="admin-form-card briefing-selection-help" style="margin-bottom:1rem;">
+                <h2 class="section-title" style="margin-top:0;">What gets selected</h2>
+                <p class="admin-intro" style="margin:0.5rem 0 0;">
+                    Entries sent to Gemini are chosen by <strong>relevance score</strong> (same rules as the
+                    <a href="<?= e($basePath) ?>/index.php?action=magnitu">Highlights</a> tab), then narrowed by your
+                    choices below.
+                </p>
+                <ul class="admin-intro" style="margin:0.5rem 0 0;padding-left:1.25rem;">
+                    <li>
+                        <strong>Always:</strong> scored items at or above the Highlights bar —
+                        relevance ≥ <strong><?= (int)$alertThresholdPct ?>%</strong>
+                        (<a href="<?= e($magnituSettingsUrl) ?>">Settings → Magnitu → Alert threshold</a>).
+                        Badge colour (important vs investigation) still uses fixed bands at 50% and 75%;
+                        both bands above your threshold are included.
+                    </li>
+                    <li>
+                        <strong>Source modules:</strong> only checked families (Feeds, Media, Scraper, Mail, Lex, Leg).
+                    </li>
+                    <li>
+                        <strong>Lookback:</strong> only entries whose published/event date falls inside the window.
+                    </li>
+                    <li>
+                        <strong>Per-module limit:</strong> caps how many recent rows are loaded per module before
+                        score filtering; raise it if the context count looks too low.
+                    </li>
+                    <li>
+                        <strong>Optional — Also include important band below threshold:</strong> adds scored items
+                        with relevance <strong>&gt; 50%</strong> and <strong>&lt; <?= (int)$alertThresholdPct ?>%</strong>
+                        (the yellow “important” band under your Highlights bar).
+                    </li>
+                </ul>
+                <p class="admin-intro" style="margin:0.5rem 0 0;">
+                    <strong>Number of items</strong> is separate: it fixes how many core items Gemini must cite in the
+                    briefing, not how many sources are loaded.
+                </p>
+            </div>
+
             <form id="briefing-builder-form" class="admin-form-card">
                 <div class="filter-page-actions" style="margin-bottom:0.75rem;">
                     <button type="button" class="btn btn-primary" id="briefing-modules-all">All sources</button>
@@ -128,11 +169,13 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label>Labels</label>
-                    <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">Investigation lead (always included)</p>
+                    <label>Relevance</label>
+                    <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
+                        Highlights tier (≥ <?= (int)$alertThresholdPct ?>%) is always included.
+                    </p>
                     <label>
                         <input type="checkbox" name="include_important" value="1">
-                        Also include important
+                        Also include important band below threshold (&gt; 50%, &lt; <?= (int)$alertThresholdPct ?>%)
                     </label>
                 </div>
 

@@ -11,8 +11,10 @@ use Seismo\Formatter\MarkdownBriefingFormatter;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Core\MagnituScoreBands;
 use Seismo\Service\BriefingEntryCardPresenter;
 use Seismo\Service\BriefingEntryGatherer;
+use Seismo\Service\BriefingScoreFilter;
 use Seismo\Service\BriefingSourceSelection;
 use Seismo\Service\GeminiBriefingException;
 use Seismo\Service\GeminiBriefingService;
@@ -126,6 +128,13 @@ PROMPT;
         $maxLimit            = MagnituExportRepository::MAX_LIMIT;
         $defaultItemCount    = self::DEFAULT_ITEM_COUNT;
         $itemCountOptions    = self::ALLOWED_ITEM_COUNTS;
+        $alertThreshold      = 0.60;
+
+        try {
+            $alertThreshold = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
+        } catch (\Throwable $e) {
+            error_log('Seismo briefing_builder show alert_threshold: ' . $e->getMessage());
+        }
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/briefing_builder.php';
@@ -239,7 +248,7 @@ PROMPT;
             $contextWarning = $gathered['contextWarning'];
             $since          = $filters['since'];
             $limit          = $filters['limit'];
-            $labelFilter    = $filters['labelFilter'];
+            $scoreFilter    = $filters['scoreFilter'];
             $lookbackDays   = $filters['lookbackDays'];
             $selection      = $filters['selection'];
 
@@ -303,7 +312,12 @@ PROMPT;
                 'lookback_days'    => $lookbackDays,
                 'limit'            => $limit,
                 'modules'          => $this->enabledModuleNames($selection),
-                'labels'           => $labelFilter,
+                'alert_threshold'  => $scoreFilter->alertThreshold,
+                'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
+                'score_selection'  => MagnituScoreBands::describeBriefingPool(
+                    $scoreFilter->alertThreshold,
+                    $scoreFilter->includeImportantBelowThreshold,
+                ),
                 'citation_slots'   => $citationSlots,
             ];
             $meta = array_merge($meta, $attributionMeta);
@@ -663,7 +677,7 @@ PROMPT;
      *     since: string,
      *     limit: int,
      *     lookbackDays: int,
-     *     labelFilter: list<string>,
+     *     scoreFilter: BriefingScoreFilter,
      *     selection: BriefingSourceSelection
      * }
      * @throws \InvalidArgumentException
@@ -677,17 +691,15 @@ PROMPT;
             ->format('Y-m-d\TH:i:s\Z');
         $limit = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
 
-        $includeImportant = (string)($_POST['include_important'] ?? '0') === '1';
-        $labelFilter      = ['investigation_lead'];
-        if ($includeImportant) {
-            $labelFilter[] = 'important';
-        }
+        $includeImportantBelow = (string)($_POST['include_important'] ?? '0') === '1';
+        $alertThreshold        = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
+        $scoreFilter           = new BriefingScoreFilter($alertThreshold, $includeImportantBelow);
 
         return [
             'since'        => $since,
             'limit'        => $limit,
             'lookbackDays' => $lookbackDays,
-            'labelFilter'  => $labelFilter,
+            'scoreFilter'  => $scoreFilter,
             'selection'    => $selection,
         ];
     }
@@ -697,7 +709,7 @@ PROMPT;
      *     since: string,
      *     limit: int,
      *     lookbackDays: int,
-     *     labelFilter: list<string>,
+     *     scoreFilter: BriefingScoreFilter,
      *     selection: BriefingSourceSelection
      * } $filters
      * @return array{
@@ -716,16 +728,21 @@ PROMPT;
             $filters['since'],
             $filters['limit'],
             $filters['selection'],
-            $filters['labelFilter'],
+            null,
+            $filters['scoreFilter'],
         );
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
 
+        $scoreFilter = $filters['scoreFilter'];
         // XML entries with <id> for Gemini extraction; export path stays markdown.
         $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
-            'since'        => $filters['since'],
-            'limit'        => $filters['limit'],
-            'label_filter' => $filters['labelFilter'],
-            'total'        => count($entries),
+            'since'          => $filters['since'],
+            'limit'          => $filters['limit'],
+            'score_selection' => MagnituScoreBands::describeBriefingPool(
+                $scoreFilter->alertThreshold,
+                $scoreFilter->includeImportantBelowThreshold,
+            ),
+            'total'          => count($entries),
         ], true, MarkdownBriefingFormatter::FORMAT_XML);
 
         $markdownChars = strlen($markdown);

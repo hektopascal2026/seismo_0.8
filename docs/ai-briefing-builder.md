@@ -14,7 +14,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Source toggles | **Six nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, Lex, Leg |
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::MAX_LIMIT` (2000)** per enabled feed-family query (same ceiling as export) |
-| Labels | **Always `investigation_lead`**; optional checkbox **“Also include important”** |
+| Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Score-based, not `predicted_label`. |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
@@ -87,7 +87,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - `?string $since` — from lookback days (1–7 → UTC ISO timestamp)
 - `int $limit` — clamp 1 … `MAX_LIMIT`
 - Module flags: `includeFeeds`, `includeMedia`, `includeScraper`, `includeEmail`, `includeLex`, `includeLeg` (at least one must be true)
-- `array $labelFilter` — `['investigation_lead']` or `['investigation_lead', 'important']`
+- `BriefingScoreFilter` (builder) — Highlights tier + optional important band below threshold; export still uses `array $labelFilter` on labels
 
 **Behavior**
 
@@ -193,7 +193,7 @@ $router->register('delete_briefing_prompt', AiBriefingController::class . '::del
 
 - `partials/site_header.php`
 - Six module checkboxes (Feeds / Media / Scraper / Mail / Lex / Leg), all checked by default; optional All / None shortcuts (Filter-style)
-- Label copy: investigation lead always; checkbox “Also include important”
+- UI copy: “What gets selected” panel + Relevance field (Highlights tier; optional important band below threshold)
 - Lookback: 1 / 3 / 7 days
 - Limit: number input, max 2000
 - System prompt `<textarea>` (sensible default)

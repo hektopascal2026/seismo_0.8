@@ -6,19 +6,21 @@ namespace Seismo\Service;
 
 use PDO;
 use Seismo\Controller\MagnituController;
+use Seismo\Core\MagnituScoreBands;
+use Seismo\Repository\EntryRepository;
 use Seismo\Repository\MagnituExportRepository;
 
 /**
  * Shared pipeline for export briefing and AI Briefing Builder.
  *
  * Pulls per-family rows, shapes them to the Magnitu contract, attaches local
- * scores, optionally filters by predicted_label.
+ * scores. Export uses optional {@see $labelFilter}; the Briefing Builder uses
+ * {@see BriefingScoreFilter} (Highlights tier + optional Important band).
  */
 final class BriefingEntryGatherer
 {
     /**
-     * @param array<int, string>|null $labelFilter When set, only entries whose
-     *     Magnitu/recipe `predicted_label` is in the list are kept.
+     * @param array<int, string>|null $labelFilter Export only: Magnitu `predicted_label` list.
      * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
      */
     public function gather(
@@ -27,9 +29,14 @@ final class BriefingEntryGatherer
         int $limit,
         BriefingSourceSelection $selection,
         ?array $labelFilter,
+        ?BriefingScoreFilter $scoreFilter = null,
     ): array {
         if (!$selection->isExportMode() && !$selection->hasAnyModule()) {
             return [[], []];
+        }
+
+        if ($scoreFilter !== null && !$selection->isExportMode()) {
+            return $this->gatherForBriefingBuilder($pdo, $since, $limit, $selection, $scoreFilter);
         }
 
         $repo    = new MagnituExportRepository($pdo);
@@ -52,6 +59,96 @@ final class BriefingEntryGatherer
                 }
             ));
         }
+
+        return [$entries, $scoresByKey];
+    }
+
+    /**
+     * Score-first gather: same relevance rules as Highlights, scoped by lookback + modules.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
+     */
+    private function gatherForBriefingBuilder(
+        PDO $pdo,
+        ?string $since,
+        int $limit,
+        BriefingSourceSelection $selection,
+        BriefingScoreFilter $scoreFilter,
+    ): array {
+        $repo      = new MagnituExportRepository($pdo);
+        $entryRepo = new EntryRepository($pdo);
+
+        $scoreRows = $entryRepo->listBriefingScoreCandidates(
+            $scoreFilter->alertThreshold,
+            $scoreFilter->includeImportantBelowThreshold,
+            MagnituExportRepository::MAX_LIMIT,
+        );
+
+        $entries = $this->collectShapedEntries($repo, $since, $limit, $selection);
+        /** @var array<string, array<string, mixed>> $byKey */
+        $byKey = [];
+        foreach ($entries as $e) {
+            $k = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
+            if ($k !== ':') {
+                $byKey[$k] = $e;
+            }
+        }
+
+        /** @var array<string, list<int>> $missingIdsByType */
+        $missingIdsByType = [
+            'feed_item'       => [],
+            'email'           => [],
+            'lex_item'        => [],
+            'calendar_event'  => [],
+        ];
+
+        foreach ($scoreRows as $row) {
+            $type = (string)($row['entry_type'] ?? '');
+            $id   = (int)($row['entry_id'] ?? 0);
+            if ($id <= 0 || $type === '') {
+                continue;
+            }
+            $key = $type . ':' . $id;
+            if (isset($byKey[$key])) {
+                continue;
+            }
+            if (!isset($missingIdsByType[$type])) {
+                continue;
+            }
+            $missingIdsByType[$type][$id] = $id;
+        }
+
+        foreach ($this->hydrateMissingEntries($repo, $since, $missingIdsByType) as $e) {
+            $k = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
+            if ($k !== ':') {
+                $byKey[$k] = $e;
+            }
+        }
+
+        $entries = array_values($byKey);
+
+        $pairs = [];
+        foreach ($entries as $e) {
+            $pairs[] = [(string)($e['entry_type'] ?? ''), (int)($e['entry_id'] ?? 0)];
+        }
+        $scoresByKey = $repo->scoresByEntryKey($pairs);
+
+        $entries = array_values(array_filter(
+            $entries,
+            function (array $e) use ($scoresByKey, $selection, $scoreFilter): bool {
+                if (!$this->entryMatchesModuleSelection($e, $selection)) {
+                    return false;
+                }
+                $key = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
+                $rel = (float)($scoresByKey[$key]['relevance_score'] ?? 0);
+
+                return MagnituScoreBands::passesBriefingPool(
+                    $rel,
+                    $scoreFilter->alertThreshold,
+                    $scoreFilter->includeImportantBelowThreshold,
+                );
+            }
+        ));
 
         return [$entries, $scoresByKey];
     }
@@ -86,6 +183,85 @@ final class BriefingEntryGatherer
 
             return ((int)($a['entry_id'] ?? 0)) <=> ((int)($b['entry_id'] ?? 0));
         });
+    }
+
+    /**
+     * @param array<string, list<int>> $missingIdsByType
+     * @return array<int, array<string, mixed>>
+     */
+    private function hydrateMissingEntries(
+        MagnituExportRepository $repo,
+        ?string $since,
+        array $missingIdsByType,
+    ): array {
+        $out = [];
+
+        $feedIds = array_values($missingIdsByType['feed_item'] ?? []);
+        if ($feedIds !== []) {
+            foreach ($repo->listFeedItemsByIds($feedIds, $since) as $row) {
+                $out[] = MagnituController::shapeFeedItem($row);
+            }
+        }
+
+        $emailIds = array_values($missingIdsByType['email'] ?? []);
+        if ($emailIds !== []) {
+            foreach ($repo->listEmailsByIds($emailIds, $since) as $row) {
+                $out[] = MagnituController::shapeEmail($row);
+            }
+        }
+
+        $lexIds = array_values($missingIdsByType['lex_item'] ?? []);
+        if ($lexIds !== []) {
+            foreach ($repo->listLexItemsByIds($lexIds, $since) as $row) {
+                $out[] = MagnituController::shapeLexItem($row);
+            }
+        }
+
+        $legIds = array_values($missingIdsByType['calendar_event'] ?? []);
+        if ($legIds !== []) {
+            foreach ($repo->listCalendarEventsByIds($legIds, $since) as $row) {
+                $out[] = MagnituController::shapeCalendarEvent($row);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $entry Shaped Magnitu export row.
+     */
+    private function entryMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    {
+        $type = (string)($entry['entry_type'] ?? '');
+
+        return match ($type) {
+            'feed_item' => $this->feedItemMatchesModuleSelection($entry, $selection),
+            'email' => $selection->moduleEmail(),
+            'lex_item' => $selection->moduleLex(),
+            'calendar_event' => $selection->moduleLeg(),
+            default => false,
+        };
+    }
+
+    /**
+     * Heuristic partition (feeds / media / scraper) from shaped feed metadata.
+     *
+     * @param array<string, mixed> $entry
+     */
+    private function feedItemMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    {
+        $sourceType = strtolower((string)($entry['source_type'] ?? ''));
+        $category   = strtolower((string)($entry['source_category'] ?? ''));
+
+        $isMedia = $category === 'media';
+        $isScraper = $sourceType === 'scraper'
+            || $category === 'scraper';
+        $isFeeds = !$isMedia && !$isScraper
+            && in_array($sourceType, ['rss', 'substack', 'parl_press'], true);
+
+        return ($selection->moduleFeeds() && $isFeeds)
+            || ($selection->moduleMedia() && $isMedia)
+            || ($selection->moduleScraper() && $isScraper);
     }
 
     /**

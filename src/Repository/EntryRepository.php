@@ -306,6 +306,59 @@ final class EntryRepository
     }
 
     /**
+     * Scored rows eligible for AI Briefing Builder (score-first gather).
+     *
+     * Same score sources and entry types as {@see getHighlightsTimeline()}, but can
+     * union the Important band below the configured alert threshold.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function listBriefingScoreCandidates(
+        float $alertThreshold,
+        bool $includeImportantBelowThreshold,
+        int $limit,
+    ): array {
+        $limit = $this->clampLimit($limit);
+        $alertThreshold = max(0.0, min(1.0, $alertThreshold));
+
+        $sql = 'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label,
+                       es.explanation, es.score_source
+                  FROM entry_scores es
+                 WHERE es.score_source IN (\'magnitu\', \'recipe\')
+                   AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')';
+
+        $params = [];
+        if ($includeImportantBelowThreshold) {
+            $sql .= ' AND (
+                       es.relevance_score >= ?
+                       OR (es.relevance_score > ? AND es.relevance_score < ?)
+                   )';
+            $params = [$alertThreshold, 0.50, $alertThreshold];
+        } else {
+            $sql .= ' AND es.relevance_score >= ?';
+            $params = [$alertThreshold];
+        }
+
+        $sql .= ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
+                  LIMIT ' . (int)$limit;
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll();
+
+            return is_array($rows) ? $rows : [];
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            error_log('EntryRepository listBriefingScoreCandidates: ' . $e->getMessage());
+
+            return [];
+        }
+    }
+
+    /**
      * Upper bound on score rows loaded before PHP chronological sort on Highlights.
      */
     private function highlightsChronologicalFetchCap(): int

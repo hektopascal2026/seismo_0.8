@@ -47,16 +47,7 @@ $entryLoopIndex                 = 0;
                         $predictedLabel = $entryScore['predicted_label'] ?? null;
                         $scoreBadgeClass = '';
                         if ($relevanceScore !== null) {
-                            $scorePercent = (int)round($relevanceScore * 100);
-                            if ($scorePercent <= 25) {
-                                $scoreBadgeClass = 'magnitu-badge-noise';
-                            } elseif ($scorePercent <= 50) {
-                                $scoreBadgeClass = 'magnitu-badge-background';
-                            } elseif ($scorePercent <= 75) {
-                                $scoreBadgeClass = 'magnitu-badge-important';
-                            } else {
-                                $scoreBadgeClass = 'magnitu-badge-investigation';
-                            }
+                            $scoreBadgeClass = \Seismo\Core\MagnituScoreBands::badgeCssClass((float)$relevanceScore);
                         }
                         $favouriteEntryType = $itemWrapper['entry_type'] ?? '';
                         $favouriteEntryId = (int)($itemWrapper['entry_id'] ?? 0);

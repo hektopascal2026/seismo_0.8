@@ -244,6 +244,153 @@ final class MagnituExportRepository
     }
 
     /**
+     * @param list<int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function listFeedItemsByIds(array $ids, ?string $since): array
+    {
+        $ids = $this->normalizePositiveIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
+                       fi.published_date,
+                       f.title       AS feed_title,
+                       f.category    AS feed_category,
+                       f.source_type AS source_type
+                  FROM ' . entryTable('feed_items') . ' fi
+                  JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
+                 WHERE f.disabled = 0
+                   AND fi.hidden = 0
+                   AND fi.id IN (' . $placeholders . ')';
+        $params = $ids;
+        if ($since !== null && $since !== '') {
+            $sql .= ' AND fi.published_date >= ?';
+            $params[] = $since;
+        }
+
+        return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function listEmailsByIds(array $ids, ?string $since): array
+    {
+        $ids = $this->normalizePositiveIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        $table = entryTable(getEmailTableName());
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                    AND TABLE_NAME = ?'
+            );
+            $stmt->execute([getEmailTableName()]);
+            $cols = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (PDOException $e) {
+            return [];
+        }
+        if ($cols === []) {
+            return [];
+        }
+
+        $dateCol = $this->pickColumn($cols, ['date_utc', 'date_received', 'created_at', 'date_sent']);
+        $textBodyCol = $this->pickColumn($cols, ['text_body', 'body_text']);
+        $htmlBodyCol = $this->pickColumn($cols, ['html_body', 'body_html']);
+        $fromEmailCol = $this->pickColumn($cols, ['from_email', 'from_addr']);
+        if ($dateCol === null || $textBodyCol === null || $htmlBodyCol === null || $fromEmailCol === null) {
+            return [];
+        }
+
+        $fromNameExpr = in_array('from_name', $cols, true) ? 'e.from_name' : "''";
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT e.id,
+                       e.subject,
+                       e.`{$fromEmailCol}` AS from_email,
+                       {$fromNameExpr}     AS from_name,
+                       e.`{$textBodyCol}`  AS text_body,
+                       e.`{$htmlBodyCol}`  AS html_body,
+                       e.`{$dateCol}`      AS entry_date,
+                       COALESCE(st.tag, 'unclassified') AS sender_tag
+                  FROM {$table} e
+             LEFT JOIN " . entryTable('sender_tags') . " st
+                    ON st.from_email = e.`{$fromEmailCol}`
+                   AND st.removed_at IS NULL
+                   AND st.disabled = 0
+                 WHERE e.id IN ({$placeholders})";
+        $params = $ids;
+        $hiddenClause = in_array('hidden', $cols, true) ? ' AND e.hidden = 0' : '';
+        $sql .= $hiddenClause;
+        if ($since !== null && $since !== '') {
+            $sql .= " AND e.`{$dateCol}` >= ?";
+            $params[] = $since;
+        }
+
+        return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function listLexItemsByIds(array $ids, ?string $since): array
+    {
+        $ids = $this->normalizePositiveIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $sql = 'SELECT id, celex, title, description, content, document_date, document_type, eurlex_url, source
+                  FROM ' . entryTable('lex_items') . '
+                 WHERE id IN (' . $placeholders . ')';
+        $params = $ids;
+        if ($since !== null && $since !== '') {
+            $sql .= ' AND document_date >= ?';
+            $params[] = $since;
+        }
+
+        return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function listCalendarEventsByIds(array $ids, ?string $since): array
+    {
+        $ids = $this->normalizePositiveIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        $table = entryTable('calendar_events');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $sql = "SELECT id, source, title, description, content, event_date, event_end_date,
+                       event_type, status, council, url
+                  FROM {$table}
+                 WHERE id IN ({$placeholders})";
+        $params = $ids;
+        if ($since !== null && $since !== '') {
+            $sql .= ' AND (
+                (event_date IS NOT NULL AND event_date >= DATE(?))
+                OR (event_date IS NULL AND fetched_at >= ?)
+            )';
+            $params[] = $since;
+            $params[] = $since;
+        }
+
+        return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
      * Fetch entry_scores rows for a list of (entry_type, entry_id) pairs.
      *
      * Local-only — `entry_scores` never lives on the mothership in satellite
@@ -448,6 +595,23 @@ final class MagnituExportRepository
             return 1;
         }
         return min($limit, self::MAX_LIMIT);
+    }
+
+    /**
+     * @param list<int> $ids
+     * @return list<int>
+     */
+    private function normalizePositiveIds(array $ids): array
+    {
+        $out = [];
+        foreach ($ids as $id) {
+            $n = (int)$id;
+            if ($n > 0) {
+                $out[$n] = $n;
+            }
+        }
+
+        return array_values($out);
     }
 
     /**
