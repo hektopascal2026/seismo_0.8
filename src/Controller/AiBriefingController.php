@@ -266,7 +266,26 @@ PROMPT;
             $citationSlots     = min($itemCount, $contextEntryCount);
 
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
-            $result = $gemini->generateSummary($systemPrompt, $markdown, $itemCount, $contextEntryCount);
+            $briefingMeta = [
+                'since'           => $since,
+                'limit'           => $limit,
+                'score_selection' => MagnituScoreBands::describeBriefingPool(
+                    $scoreFilter->alertThreshold,
+                    $scoreFilter->includeImportantBelowThreshold,
+                ),
+                'total'           => $contextEntryCount,
+            ];
+            $twoPass = $this->parseTwoPassEnabled($_POST['two_pass'] ?? null);
+            $result  = $gemini->generateSummary(
+                $systemPrompt,
+                $markdown,
+                $itemCount,
+                $contextEntryCount,
+                $entries,
+                $scoresByKey,
+                $briefingMeta,
+                $twoPass,
+            );
 
             $entriesHtml     = '';
             $usedEntryKeys   = $result->usedEntryKeys;
@@ -319,6 +338,7 @@ PROMPT;
                     $scoreFilter->includeImportantBelowThreshold,
                 ),
                 'citation_slots'   => $citationSlots,
+                'two_pass'         => $twoPass,
             ];
             $meta = array_merge($meta, $attributionMeta);
             if ($contextWarning !== null) {
@@ -648,6 +668,17 @@ PROMPT;
         $n = (int)$raw;
 
         return in_array($n, self::ALLOWED_ITEM_COUNTS, true) ? $n : self::DEFAULT_ITEM_COUNT;
+    }
+
+    private function parseTwoPassEnabled(mixed $raw): bool
+    {
+        if ($raw === true || $raw === 1) {
+            return true;
+        }
+
+        $s = strtolower(trim((string)$raw));
+
+        return $s === '1' || $s === 'on' || $s === 'true' || $s === 'yes';
     }
 
     private function clampLimit(mixed $raw): int

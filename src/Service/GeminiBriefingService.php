@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 use Seismo\Controller\SettingsController;
+use Seismo\Formatter\MarkdownBriefingFormatter;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\Http\BaseClient;
 use Seismo\Util\LenientJsonParser;
@@ -14,15 +15,12 @@ use Seismo\Service\Http\Response;
 /**
  * Calls Google Gemini `generateContent` for the AI Briefing Builder.
  *
- * Single-pass only: builder context uses XML entries (up to {@see MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS} chars of body per item).
+ * Default: single-pass (selection + prose in one call, thinking off, scaled output tokens).
+ * Optional two-pass: capped thinking for entry selection, then prose on selected entries only.
  */
 final class GeminiBriefingService
 {
-    /**
-     * App-owned output contract (not user-editable). `{itemCount}` and
-     * `{markdownContext}` are substituted before the Gemini call.
-     */
-    private const BRIEFING_OUTPUT_CONTRACT = <<<'CONTRACT'
+    private const SINGLE_PASS_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — STRICT COMPLIANCE REQUIRED:
 You are the backend engine for the Seismo AI Briefing Builder.
 
@@ -52,6 +50,39 @@ ENTRIES_DATA:
 {markdownContext}
 CONTRACT;
 
+    private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
+SYSTEM DIRECTIVE — ENTRY SELECTION (PASS 1 OF 2):
+You choose which entries merit inclusion in an executive briefing. The user persona and prose style apply in pass 2; here you judge strategic fit only.
+
+RULES:
+- ENTRIES_DATA contains XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
+- Select exactly {effectiveItemCount} distinct entries when at least that many exist; otherwise select every available entry.
+- Prefer entries that are timely, non-redundant, and material for Swiss decision-makers (CEOs, boards, associations).
+- used_entry_keys must list the chosen <id> values in briefing order (most important first).
+- selection_notes: one short sentence per chosen entry (why it made the cut). Not shown to end users.
+- Never invent IDs. Only keys from ENTRIES_DATA <id> elements.
+
+ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
+
+    private const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
+SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
+The entries for this briefing are already chosen. Write the full executive briefing in briefing_markdown only.
+
+RULES:
+- SELECTED_ENTRIES_DATA lists exactly the entries you must cover — one core item per entry, in the same order as SELECTED_ENTRY_KEYS.
+- Each core item must cite its entry_type:entry_id (e.g. in parentheses: feed_item:123) matching SELECTED_ENTRY_KEYS.
+- Do not add entries that are not in SELECTED_ENTRY_KEYS. Do not skip any listed entry.
+- Follow the user persona above for tone, structure, intro/outro, and headings.
+
+SELECTED_ENTRY_KEYS (ordered):
+{selectedEntryKeys}
+
+SELECTED_ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
+
     /** Override via `system_config` key `gemini:model`. */
     public const CONFIG_KEY_MODEL = 'gemini:model';
 
@@ -64,9 +95,30 @@ CONTRACT;
 
     private const HTTP_TIMEOUT_SECONDS = 120;
 
+    private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 180;
+
     private const DEFAULT_TEMPERATURE = 0.2;
 
+    private const OUTPUT_TOKEN_CAP = 32768;
+
     private const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+
+    private const OUTPUT_TOKEN_FLOOR = 4096;
+
+    private const OUTPUT_TOKENS_PER_ITEM = 1000;
+
+    private const THINKING_BUDGET_BASE = 512;
+
+    private const THINKING_BUDGET_PER_ITEM = 256;
+
+    private const THINKING_BUDGET_CAP = 4096;
+
+    /** Candidate pool size for pass 1 (× requested items). */
+    private const SELECTION_POOL_MULTIPLIER = 3;
+
+    private const SELECTION_VISIBLE_TOKENS_BASE = 768;
+
+    private const SELECTION_VISIBLE_TOKENS_PER_ITEM = 96;
 
     private const DEFAULT_MAX_RETRIES = 4;
 
@@ -79,6 +131,8 @@ CONTRACT;
 
     private readonly int $maxOutputTokens;
 
+    private int $lastEffectiveCitationCount = 1;
+
     public function __construct(
         private readonly SystemConfigRepository $config,
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
@@ -88,13 +142,42 @@ CONTRACT;
 
         $rawTokens = trim((string)($config->get(self::CONFIG_KEY_MAX_OUTPUT_TOKENS) ?? ''));
         if ($rawTokens !== '' && ctype_digit($rawTokens)) {
-            $this->maxOutputTokens = max(256, min(8192, (int)$rawTokens));
+            $this->maxOutputTokens = max(256, min(self::OUTPUT_TOKEN_CAP, (int)$rawTokens));
         } else {
             $this->maxOutputTokens = self::DEFAULT_MAX_OUTPUT_TOKENS;
         }
     }
 
+    public static function resolveThinkingBudget(int $itemCount): int
+    {
+        return min(
+            self::THINKING_BUDGET_CAP,
+            self::THINKING_BUDGET_BASE + max(1, $itemCount) * self::THINKING_BUDGET_PER_ITEM,
+        );
+    }
+
+    /** Pass 2 visible output budget (thinking disabled). */
+    public static function resolveOutputTokenBudget(int $itemCount, int $configuredMax): int
+    {
+        $configuredMax = max(256, min(self::OUTPUT_TOKEN_CAP, $configuredMax));
+        $scaled        = 2048 + max(1, $itemCount) * self::OUTPUT_TOKENS_PER_ITEM;
+
+        return min(self::OUTPUT_TOKEN_CAP, max($configuredMax, self::OUTPUT_TOKEN_FLOOR, $scaled));
+    }
+
+    /** Pass 1 total maxOutputTokens (thinking + small JSON envelope share one budget on 2.5 Flash). */
+    public static function resolveSelectionPassTokenBudget(int $itemCount, int $configuredMax): int
+    {
+        $thinking = self::resolveThinkingBudget($itemCount);
+        $visible  = self::SELECTION_VISIBLE_TOKENS_BASE + max(1, $itemCount) * self::SELECTION_VISIBLE_TOKENS_PER_ITEM;
+
+        return min(self::OUTPUT_TOKEN_CAP, max($configuredMax, $thinking + $visible));
+    }
+
     /**
+     * @param list<array<string, mixed>> $contextEntries  Shaped Magnitu rows (relevance-sorted).
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta         Passed to {@see MarkdownBriefingFormatter::format}.
      * @throws GeminiBriefingException
      */
     public function generateSummary(
@@ -102,6 +185,10 @@ CONTRACT;
         string $markdownContext,
         int $itemCount = 5,
         int $contextEntryCount = 0,
+        array $contextEntries = [],
+        array $scoresByKey = [],
+        array $briefingMeta = [],
+        bool $twoPass = false,
     ): GeminiBriefingResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
@@ -117,41 +204,44 @@ CONTRACT;
             $itemCount = 5;
         }
 
-        $url     = self::API_BASE . rawurlencode($this->model) . ':generateContent';
-        $payload = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount, $contextEntryCount, true);
+        $effectiveCount = $this->effectiveCitationCount($itemCount, $contextEntryCount);
+        $this->lastEffectiveCitationCount = $effectiveCount;
 
-        $response = $this->postWithRetries($url, $payload, $apiKey);
-
-        if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
-            error_log(
-                'GeminiBriefingService: responseSchema rejected for model ' . $this->model . '; retrying without schema'
+        if (!$twoPass) {
+            return $this->generateSummarySinglePass(
+                $userSystemPrompt,
+                $markdownContext,
+                $itemCount,
+                $effectiveCount,
+                $apiKey,
             );
-            $payload  = $this->buildPayload($userSystemPrompt, $markdownContext, $itemCount, $contextEntryCount, false);
-            $response = $this->postWithRetries($url, $payload, $apiKey);
         }
 
-        if (!$response->isOk()) {
-            throw $this->exceptionFromFailedResponse($response);
-        }
-
-        return $this->parseBriefingResponse($response);
+        return $this->generateSummaryTwoPass(
+            $userSystemPrompt,
+            $markdownContext,
+            $itemCount,
+            $effectiveCount,
+            $contextEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $apiKey,
+        );
     }
 
     /**
-     * @return array<string, mixed>
+     * @throws GeminiBriefingException
      */
-    private function buildPayload(
+    private function generateSummarySinglePass(
         string $userSystemPrompt,
         string $markdownContext,
         int $itemCount,
-        int $contextEntryCount,
-        bool $useStructuredSchema,
-    ): array {
-        $markdownContext  = trim($markdownContext);
-        $effectiveCount   = $this->effectiveCitationCount($itemCount, $contextEntryCount);
-        $systemText       = $this->composeSystemInstruction(
+        int $effectiveCount,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $systemText = $this->composeSinglePassSystemInstruction(
             $userSystemPrompt,
-            $markdownContext,
+            trim($markdownContext),
             $itemCount,
             $effectiveCount,
         );
@@ -161,52 +251,581 @@ CONTRACT;
             . 'Du MUSST ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys liefern '
             . '(sofern genügend <entry>-Blöcke in ENTRIES_DATA vorhanden sind; sonst alle verfügbaren).';
 
-        return [
-            'systemInstruction' => [
-                'parts' => [
-                    ['text' => $systemText],
-                ],
-            ],
-            'contents' => [
-                [
-                    'role'  => 'user',
-                    'parts' => [
-                        ['text' => $userText],
-                    ],
-                ],
-            ],
-            'generationConfig' => $this->generationConfig($itemCount, $effectiveCount, $useStructuredSchema),
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $systemText]]],
+            'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
+            'generationConfig'  => $this->singlePassGenerationConfig($itemCount, $effectiveCount, true),
         ];
+
+        $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'single');
+
+        return $this->parseSinglePassResponse($response);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $contextEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta
+     * @throws GeminiBriefingException
+     */
+    private function generateSummaryTwoPass(
+        string $userSystemPrompt,
+        string $markdownContext,
+        int $itemCount,
+        int $effectiveCount,
+        array $contextEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $poolEntries = $this->selectionPoolEntries($contextEntries, $effectiveCount);
+        $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $briefingMeta, $markdownContext);
+        $poolCount    = $poolEntries !== [] ? count($poolEntries) : $this->countXmlEntries($poolContext);
+        $selectionTarget = min($effectiveCount, max(1, $poolCount));
+
+        $selectedKeys = $this->runSelectionPass($poolContext, $itemCount, $selectionTarget, $apiKey);
+        $selectedKeys = $this->finalizeSelectedKeys($selectedKeys, $poolEntries, $selectionTarget);
+
+        $summaryEntries = $this->entriesForKeys($contextEntries, $selectedKeys);
+        if ($summaryEntries === []) {
+            $summaryContext = $this->filterXmlContextByKeys($markdownContext, $selectedKeys);
+        } else {
+            $summaryMeta              = $briefingMeta;
+            $summaryMeta['total']     = count($summaryEntries);
+            $summaryMeta['selected']  = count($selectedKeys);
+            $summaryContext           = $this->buildEntryXmlContext(
+                $summaryEntries,
+                $scoresByKey,
+                $summaryMeta,
+                $markdownContext,
+            );
+        }
+
+        $finalCount = count($selectedKeys);
+        $this->lastEffectiveCitationCount = max(1, $finalCount);
+
+        return $this->runSummaryPass(
+            $userSystemPrompt,
+            $summaryContext,
+            $selectedKeys,
+            $itemCount,
+            $finalCount,
+            $apiKey,
+        );
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function generationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
+    private function singlePassGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
     {
         $config = [
-            'temperature'      => self::DEFAULT_TEMPERATURE,
-            'maxOutputTokens'  => $this->maxOutputTokens,
+            'temperature'     => self::DEFAULT_TEMPERATURE,
+            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens),
+            'thinkingConfig'  => [
+                'thinkingBudget' => 0,
+            ],
             'responseMimeType' => 'application/json',
         ];
         if ($useStructuredSchema) {
-            $config['responseSchema'] = $this->briefingResponseSchema($itemCount, $effectiveCount);
+            $config['responseSchema'] = $this->singlePassResponseSchema($itemCount, $effectiveCount);
         }
 
         return $config;
     }
 
-    private function shouldRetryWithoutResponseSchema(Response $response): bool
+    /**
+     * @return array<string, mixed>
+     */
+    private function singlePassResponseSchema(int $itemCount, int $effectiveCount): array
     {
-        if ($response->status !== 400) {
-            return false;
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'drafting_thoughts' => [
+                    'type'        => 'STRING',
+                    'description' => 'Before briefing_markdown: list exactly ' . $effectiveCount
+                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements only.',
+                ],
+                'briefing_markdown' => [
+                    'type'        => 'STRING',
+                    'description' => 'Complete briefing Markdown with ' . $effectiveCount
+                        . ' distinct core items (one cited entry each), up to ' . $itemCount . ' requested.',
+                ],
+                'used_entry_keys' => [
+                    'type'        => 'ARRAY',
+                    'description' => 'Exact entry_type:entry_id strings for each core item, same order as briefing_markdown.',
+                    'items'       => ['type' => 'STRING'],
+                    'minItems'    => $effectiveCount,
+                    'maxItems'    => $effectiveCount,
+                ],
+            ],
+            'required' => ['drafting_thoughts', 'briefing_markdown', 'used_entry_keys'],
+        ];
+    }
+
+    private function composeSinglePassSystemInstruction(
+        string $userSystemPrompt,
+        string $markdownContext,
+        int $itemCount,
+        int $effectiveItemCount,
+    ): string {
+        $envelope = str_replace(
+            ['{itemCount}', '{effectiveItemCount}', '{markdownContext}'],
+            [(string)$itemCount, (string)$effectiveItemCount, $markdownContext],
+            self::SINGLE_PASS_OUTPUT_CONTRACT,
+        );
+        $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
+
+        if (str_contains($combined, '{markdownContext}')) {
+            return str_replace('{markdownContext}', $markdownContext, $combined);
         }
 
-        $body = strtolower($response->body);
+        return $combined;
+    }
 
-        return str_contains($body, 'response_schema')
-            || str_contains($body, 'responseschema')
-            || str_contains($body, 'response schema');
+    /**
+     * @throws GeminiBriefingException
+     */
+    private function parseSinglePassResponse(Response $response): GeminiBriefingResult
+    {
+        $raw     = $this->extractCandidateText($response);
+        $decoded = $this->decodeBriefingJsonObject($raw);
+        if ($decoded !== null) {
+            $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
+            if ($markdown === '') {
+                throw GeminiBriefingException::emptyResponse(
+                    'JSON response is missing a non-empty briefing_markdown field.'
+                );
+            }
+
+            $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);
+            $result = new GeminiBriefingResult($markdown, $keys, true);
+            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+
+            return $result;
+        }
+
+        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
+        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
+        if ($salvaged !== null) {
+            error_log('GeminiBriefingService single-pass: recovered markdown without valid JSON attribution.');
+            $this->assertBriefingNotTruncated($salvaged, $this->lastEffectiveCitationCount);
+
+            return $salvaged;
+        }
+
+        if (!str_contains($raw, '"briefing_markdown"')) {
+            $fallback = new GeminiBriefingResult(trim($raw), [], false);
+            $this->assertBriefingNotTruncated($fallback, $this->lastEffectiveCitationCount);
+
+            return $fallback;
+        }
+
+        throw GeminiBriefingException::badResponse('Briefing JSON could not be parsed or repaired.');
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @return list<array<string, mixed>>
+     */
+    private function selectionPoolEntries(array $entries, int $effectiveCount): array
+    {
+        if ($entries === []) {
+            return [];
+        }
+
+        $cap = max($effectiveCount + 2, $effectiveCount * self::SELECTION_POOL_MULTIPLIER);
+        $cap = min(count($entries), $cap);
+
+        return array_slice($entries, 0, $cap);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $meta
+     */
+    private function buildEntryXmlContext(
+        array $entries,
+        array $scoresByKey,
+        array $meta,
+        string $fallbackXml,
+    ): string {
+        if ($entries === []) {
+            return trim($fallbackXml);
+        }
+
+        return MarkdownBriefingFormatter::format(
+            $entries,
+            $scoresByKey,
+            $meta,
+            true,
+            MarkdownBriefingFormatter::FORMAT_XML,
+        );
+    }
+
+    /**
+     * @return list<string>
+     * @throws GeminiBriefingException
+     */
+    private function runSelectionPass(
+        string $poolContext,
+        int $itemCount,
+        int $selectionTarget,
+        string $apiKey,
+    ): array {
+        $systemText = str_replace(
+            ['{itemCount}', '{effectiveItemCount}', '{markdownContext}'],
+            [(string)$itemCount, (string)$selectionTarget, trim($poolContext)],
+            self::SELECTION_OUTPUT_CONTRACT,
+        );
+
+        $userText = 'Wähle genau ' . $selectionTarget . ' Einträge für das Executive Briefing. '
+            . 'Fülle selection_notes und used_entry_keys (gleiche Reihenfolge).';
+
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $systemText]]],
+            'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
+            'generationConfig'  => $this->selectionGenerationConfig($itemCount, $selectionTarget, true),
+        ];
+
+        $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
+
+        return $this->parseSelectionResponse($response);
+    }
+
+    /**
+     * @param list<string> $selectedKeys
+     * @throws GeminiBriefingException
+     */
+    private function runSummaryPass(
+        string $userSystemPrompt,
+        string $summaryContext,
+        array $selectedKeys,
+        int $itemCount,
+        int $effectiveCount,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $keysBlock = implode("\n", $selectedKeys);
+        $envelope  = str_replace(
+            ['{selectedEntryKeys}', '{markdownContext}'],
+            [$keysBlock, trim($summaryContext)],
+            self::SUMMARY_OUTPUT_CONTRACT,
+        );
+        $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
+
+        $userText = 'Schreibe das vollständige Executive Briefing in briefing_markdown. '
+            . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab.';
+
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $systemText]]],
+            'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
+            'generationConfig'  => $this->summaryGenerationConfig($itemCount, $effectiveCount, true),
+        ];
+
+        $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'summary');
+
+        return $this->parseSummaryResponse($response, $selectedKeys);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @throws GeminiBriefingException
+     */
+    private function postPayloadWithSchemaFallback(array $payload, string $apiKey, string $phase): Response
+    {
+        $url      = self::API_BASE . rawurlencode($this->model) . ':generateContent';
+        $response = $this->postWithRetries($url, $payload, $apiKey, $phase === 'selection' || $phase === 'summary');
+
+        if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
+            error_log(
+                'GeminiBriefingService: responseSchema rejected for ' . $phase
+                . ' on model ' . $this->model . '; retrying without schema'
+            );
+            $config = $payload['generationConfig'] ?? [];
+            if (is_array($config)) {
+                unset($config['responseSchema']);
+                $payload['generationConfig'] = $config;
+            }
+            $response = $this->postWithRetries($url, $payload, $apiKey, $phase === 'selection' || $phase === 'summary');
+        }
+
+        if (!$response->isOk()) {
+            throw $this->exceptionFromFailedResponse($response);
+        }
+
+        return $response;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectionGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
+    {
+        $config = [
+            'temperature'     => self::DEFAULT_TEMPERATURE,
+            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens),
+            'thinkingConfig'  => [
+                'thinkingBudget' => self::resolveThinkingBudget($itemCount),
+            ],
+            'responseMimeType' => 'application/json',
+        ];
+        if ($useStructuredSchema) {
+            $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
+        }
+
+        return $config;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function summaryGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
+    {
+        $config = [
+            'temperature'     => self::DEFAULT_TEMPERATURE,
+            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens),
+            'thinkingConfig'  => [
+                'thinkingBudget' => 0,
+            ],
+            'responseMimeType' => 'application/json',
+        ];
+        if ($useStructuredSchema) {
+            $config['responseSchema'] = $this->summaryResponseSchema($effectiveCount);
+        }
+
+        return $config;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectionResponseSchema(int $selectionTarget): array
+    {
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'selection_notes' => [
+                    'type'        => 'STRING',
+                    'description' => 'Brief rationale: one short line per chosen entry, same order as used_entry_keys.',
+                ],
+                'used_entry_keys' => [
+                    'type'        => 'ARRAY',
+                    'description' => 'Exactly ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id>, briefing order.',
+                    'items'       => ['type' => 'STRING'],
+                    'minItems'    => $selectionTarget,
+                    'maxItems'    => $selectionTarget,
+                ],
+            ],
+            'required' => ['selection_notes', 'used_entry_keys'],
+        ];
+    }
+
+    private function countXmlEntries(string $xml): int
+    {
+        if ($xml === '') {
+            return 0;
+        }
+
+        $count = preg_match_all('/<entry>/', $xml);
+
+        return $count === false ? 0 : $count;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function summaryResponseSchema(int $effectiveCount): array
+    {
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'briefing_markdown' => [
+                    'type'        => 'STRING',
+                    'description' => 'Complete executive briefing Markdown covering all ' . $effectiveCount
+                        . ' selected entries in SELECTED_ENTRY_KEYS order.',
+                ],
+            ],
+            'required' => ['briefing_markdown'],
+        ];
+    }
+
+    /**
+     * @return list<string>
+     * @throws GeminiBriefingException
+     */
+    private function parseSelectionResponse(Response $response): array
+    {
+        $raw     = $this->extractCandidateText($response);
+        $decoded = $this->decodeBriefingJsonObject($raw);
+        if ($decoded === null) {
+            throw GeminiBriefingException::badResponse('Selection pass JSON could not be parsed.');
+        }
+
+        $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);
+        if ($keys === []) {
+            throw GeminiBriefingException::emptyResponse('Selection pass returned no used_entry_keys.');
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @param list<string> $selectedKeys
+     * @throws GeminiBriefingException
+     */
+    private function parseSummaryResponse(Response $response, array $selectedKeys): GeminiBriefingResult
+    {
+        $raw     = $this->extractCandidateText($response);
+        $decoded = $this->decodeBriefingJsonObject($raw);
+        if ($decoded !== null) {
+            $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
+            if ($markdown === '') {
+                throw GeminiBriefingException::emptyResponse('Summary pass missing briefing_markdown.');
+            }
+
+            $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
+            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+
+            return $result;
+        }
+
+        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
+        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
+        if ($salvaged !== null) {
+            error_log('GeminiBriefingService summary pass: recovered markdown from broken JSON.');
+            $result = new GeminiBriefingResult($salvaged->markdown, $selectedKeys, false);
+            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+
+            return $result;
+        }
+
+        throw GeminiBriefingException::badResponse('Summary pass JSON could not be parsed.');
+    }
+
+    /**
+     * @param list<string> $selectedKeys
+     * @param list<array<string, mixed>> $poolEntries
+     * @return list<string>
+     */
+    private function finalizeSelectedKeys(array $selectedKeys, array $poolEntries, int $effectiveCount): array
+    {
+        if (count($selectedKeys) >= $effectiveCount) {
+            return array_slice($selectedKeys, 0, $effectiveCount);
+        }
+
+        if ($poolEntries !== []) {
+            error_log(
+                'GeminiBriefingService: selection returned ' . count($selectedKeys)
+                . ' keys, padding to ' . $effectiveCount . ' from relevance order'
+            );
+
+            return $this->padSelectedKeys($selectedKeys, $poolEntries, $effectiveCount);
+        }
+
+        return $selectedKeys;
+    }
+
+    /**
+     * @param list<string> $selectedKeys
+     * @param list<array<string, mixed>> $poolEntries
+     * @return list<string>
+     */
+    private function padSelectedKeys(array $selectedKeys, array $poolEntries, int $needed): array
+    {
+        $out = $selectedKeys;
+        foreach ($poolEntries as $entry) {
+            if (count($out) >= $needed) {
+                break;
+            }
+            $key = $this->entryKey($entry);
+            if ($key === null || in_array($key, $out, true)) {
+                continue;
+            }
+            $out[] = $key;
+        }
+
+        return array_slice($out, 0, $needed);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param list<string> $keys
+     * @return list<array<string, mixed>>
+     */
+    private function entriesForKeys(array $entries, array $keys): array
+    {
+        if ($entries === [] || $keys === []) {
+            return [];
+        }
+
+        $byKey = [];
+        foreach ($entries as $entry) {
+            $key = $this->entryKey($entry);
+            if ($key !== null) {
+                $byKey[$key] = $entry;
+            }
+        }
+
+        $ordered = [];
+        foreach ($keys as $key) {
+            $normalized = strtolower(trim($key));
+            if (isset($byKey[$normalized])) {
+                $ordered[] = $byKey[$normalized];
+            }
+        }
+
+        return $ordered;
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function entryKey(array $entry): ?string
+    {
+        $type = (string)($entry['entry_type'] ?? '');
+        $id   = (string)($entry['entry_id'] ?? '');
+        if ($type === '' || $id === '' || !ctype_digit($id)) {
+            return null;
+        }
+
+        return strtolower($type . ':' . $id);
+    }
+
+    /**
+     * @param list<string> $keys
+     */
+    private function filterXmlContextByKeys(string $xml, array $keys): string
+    {
+        $wanted = [];
+        foreach ($keys as $key) {
+            $wanted[strtolower(trim($key))] = true;
+        }
+        if ($wanted === []) {
+            return trim($xml);
+        }
+
+        if (!preg_match_all('/<entry>(.*?)<\/entry>/s', $xml, $matches)) {
+            return trim($xml);
+        }
+
+        $blocks = [];
+        foreach ($matches[1] as $inner) {
+            if (!preg_match('/<id>([^<]+)<\/id>/', $inner, $idMatch)) {
+                continue;
+            }
+            $id = strtolower(trim($idMatch[1]));
+            if (isset($wanted[$id])) {
+                $blocks[] = '<entry>' . $inner . '</entry>';
+            }
+        }
+
+        if ($blocks === []) {
+            return trim($xml);
+        }
+
+        return '<seismo_briefing selected_only="true"><entries>' . implode('', $blocks) . '</entries></seismo_briefing>';
     }
 
     private function effectiveCitationCount(int $itemCount, int $contextEntryCount): int
@@ -219,71 +838,21 @@ CONTRACT;
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    private function briefingResponseSchema(int $itemCount, int $effectiveCount): array
-    {
-        return [
-            'type'       => 'OBJECT',
-            'properties' => [
-                'drafting_thoughts' => [
-                    'type'        => 'STRING',
-                    'description' => 'Before briefing_markdown: list exactly ' . $effectiveCount
-                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements only. '
-                        . 'No prose, no invented IDs.',
-                ],
-                'briefing_markdown' => [
-                    'type'        => 'STRING',
-                    'description' => 'Complete briefing Markdown: follow the user persona above; include optional intro/outro; '
-                        . 'must contain ' . $effectiveCount . ' distinct core items (one cited entry each) when data allows, '
-                        . 'up to ' . $itemCount . ' requested.',
-                ],
-                'used_entry_keys' => [
-                    'type'        => 'ARRAY',
-                    'description' => 'Exact entry_type:entry_id strings from ENTRIES_DATA <id> for each core item, '
-                        . 'same keys and order as drafting_thoughts and briefing_markdown core items.',
-                    'items'       => ['type' => 'STRING'],
-                    'minItems'    => $effectiveCount,
-                    'maxItems'    => $effectiveCount,
-                ],
-            ],
-            'required' => ['drafting_thoughts', 'briefing_markdown', 'used_entry_keys'],
-        ];
-    }
-
-    private function composeSystemInstruction(
-        string $userSystemPrompt,
-        string $markdownContext,
-        int $itemCount,
-        int $effectiveItemCount,
-    ): string {
-        $envelope = str_replace(
-            ['{itemCount}', '{effectiveItemCount}'],
-            [(string)$itemCount, (string)$effectiveItemCount],
-            self::BRIEFING_OUTPUT_CONTRACT,
-        );
-        $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
-
-        if (str_contains($combined, '{markdownContext}')) {
-            return str_replace('{markdownContext}', $markdownContext, $combined);
-        }
-
-        return $combined . "\n\nENTRIES_DATA:\n\n" . $markdownContext;
-    }
-
-    /**
      * @param array<string, mixed> $payload
      * @throws GeminiBriefingException
      */
-    private function postWithRetries(string $url, array $payload, string $apiKey): Response
+    private function postWithRetries(string $url, array $payload, string $apiKey, bool $extendedTimeout = false): Response
     {
         $headers = ['x-goog-api-key' => $apiKey];
         $attempts = self::DEFAULT_MAX_RETRIES + 1;
         $lastTransport = null;
+        $client = $extendedTimeout
+            ? new BaseClient(self::HTTP_TIMEOUT_TWO_PASS_SECONDS)
+            : $this->http;
 
         for ($attempt = 0; $attempt < $attempts; $attempt++) {
             try {
-                $response = $this->http->postJson($url, $payload, $headers);
+                $response = $client->postJson($url, $payload, $headers);
             } catch (HttpClientException $e) {
                 $lastTransport = $e;
                 if ($attempt >= $attempts - 1) {
@@ -316,6 +885,19 @@ CONTRACT;
         }
 
         throw GeminiBriefingException::transportFailed();
+    }
+
+    private function shouldRetryWithoutResponseSchema(Response $response): bool
+    {
+        if ($response->status !== 400) {
+            return false;
+        }
+
+        $body = strtolower($response->body);
+
+        return str_contains($body, 'response_schema')
+            || str_contains($body, 'responseschema')
+            || str_contains($body, 'response schema');
     }
 
     private function isTransientHttp(int $status): bool
@@ -381,16 +963,6 @@ CONTRACT;
     /**
      * @throws GeminiBriefingException
      */
-    private function parseBriefingResponse(Response $response): GeminiBriefingResult
-    {
-        $raw = $this->extractCandidateText($response);
-
-        return $this->parseBriefingFromModelOutput($raw);
-    }
-
-    /**
-     * @throws GeminiBriefingException
-     */
     private function extractCandidateText(Response $response): string
     {
         try {
@@ -429,7 +1001,7 @@ CONTRACT;
         if ($finish === 'SAFETY' || $finish === 'RECITATION') {
             throw GeminiBriefingException::blocked($finish);
         }
-        if ($finish === 'MAX_TOKENS') {
+        if ($this->isOutputTruncatedFinishReason($finish)) {
             throw GeminiBriefingException::outputTruncated();
         }
 
@@ -462,35 +1034,6 @@ CONTRACT;
     }
 
     /**
-     * @throws GeminiBriefingException
-     */
-    private function parseBriefingFromModelOutput(string $raw): GeminiBriefingResult
-    {
-        $decoded = $this->decodeBriefingJsonObject($raw);
-        if ($decoded !== null) {
-            return $this->briefingResultFromDecoded($decoded, true);
-        }
-
-        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
-        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
-        if ($salvaged !== null) {
-            error_log('GeminiBriefingService briefing: recovered markdown without valid JSON attribution.');
-
-            return $salvaged;
-        }
-
-        if (!str_contains($raw, '"briefing_markdown"')) {
-            return new GeminiBriefingResult(trim($raw), [], false);
-        }
-
-        throw GeminiBriefingException::badResponse(
-            'Briefing JSON could not be parsed or repaired.'
-        );
-    }
-
-    /**
-     * Strict json_decode first, then tourdesuisse-style lenient repair pipeline.
-     *
      * @return array<string, mixed>|null
      */
     private function decodeBriefingJsonObject(string $raw): ?array
@@ -502,46 +1045,77 @@ CONTRACT;
 
             return is_array($decoded) ? $decoded : null;
         } catch (\JsonException $e) {
-            error_log('GeminiBriefingService briefing JSON strict parse: ' . $e->getMessage());
+            error_log('GeminiBriefingService JSON strict parse: ' . $e->getMessage());
         }
 
         $repaired = LenientJsonParser::parseObject($raw);
         if ($repaired !== null) {
-            error_log('GeminiBriefingService briefing JSON repaired via lenient parser.');
+            error_log('GeminiBriefingService JSON repaired via lenient parser.');
         }
 
         return $repaired;
     }
 
-    /**
-     * @param array<string, mixed> $decoded
-     * @throws GeminiBriefingException
-     */
-    private function briefingResultFromDecoded(array $decoded, bool $attributionParsed): GeminiBriefingResult
+    private function isOutputTruncatedFinishReason(string $finishReason): bool
     {
-        $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
-        if ($markdown === '') {
-            throw GeminiBriefingException::emptyResponse(
-                'JSON response is missing a non-empty briefing_markdown field.'
-            );
-        }
-
-        $rawKeys = $decoded['used_entry_keys'] ?? null;
-        $keys    = $this->normalizeUsedEntryKeys($rawKeys);
-        if ($keys === [] && is_array($rawKeys) && $rawKeys !== []) {
-            error_log('GeminiBriefingService: used_entry_keys present but none passed validation');
-        }
-
-        return new GeminiBriefingResult(
-            $markdown,
-            $keys,
-            $attributionParsed,
-        );
+        return in_array($finishReason, ['MAX_TOKENS', 'LENGTH'], true);
     }
 
     /**
-     * Recover briefing text when JSON mode returns malformed JSON; skip attribution cards.
+     * @throws GeminiBriefingException
      */
+    private function assertBriefingNotTruncated(GeminiBriefingResult $result, int $expectedItemCount): void
+    {
+        if ($expectedItemCount < 2) {
+            return;
+        }
+
+        $keysInMarkdown = $this->countDistinctEntryKeysInMarkdown($result->markdown);
+        $citedKeys      = count($result->usedEntryKeys);
+
+        if ($citedKeys > 0 && $keysInMarkdown > 0 && $keysInMarkdown < $citedKeys) {
+            error_log(
+                'GeminiBriefingService: briefing_markdown cites ' . $keysInMarkdown
+                . ' entries but used_entry_keys has ' . $citedKeys
+            );
+            throw GeminiBriefingException::outputTruncated();
+        }
+
+        if ($keysInMarkdown >= $expectedItemCount) {
+            return;
+        }
+
+        if ($citedKeys >= $expectedItemCount && $keysInMarkdown < $expectedItemCount) {
+            error_log(
+                'GeminiBriefingService: expected ' . $expectedItemCount
+                . ' cited items in markdown, found ' . $keysInMarkdown
+            );
+            throw GeminiBriefingException::outputTruncated();
+        }
+
+        $minChars = $expectedItemCount * 220;
+        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($expectedItemCount * 0.75)) {
+            error_log(
+                'GeminiBriefingService: briefing_markdown length ' . strlen($result->markdown)
+                . ' below heuristic for ' . $expectedItemCount . ' items'
+            );
+            throw GeminiBriefingException::outputTruncated();
+        }
+    }
+
+    private function countDistinctEntryKeysInMarkdown(string $markdown): int
+    {
+        if ($markdown === '') {
+            return 0;
+        }
+
+        if (!preg_match_all('/\b([a-z][a-z0-9_]*:\d+)\b/', $markdown, $matches)) {
+            return 0;
+        }
+
+        return count(array_unique($matches[1]));
+    }
+
     private function salvageBriefingFromBrokenJson(string $jsonText): ?GeminiBriefingResult
     {
         $needle = '"briefing_markdown"';
@@ -555,7 +1129,7 @@ CONTRACT;
             return null;
         }
 
-        $after = (string)preg_replace('/^\s*:\s*"/', '', $after, 1);
+        $after    = (string)preg_replace('/^\s*:\s*"/', '', $after, 1);
         $markdown = $this->readJsonStringLiteral($after);
         if ($markdown === null || trim($markdown) === '') {
             return null;
@@ -564,9 +1138,6 @@ CONTRACT;
         return new GeminiBriefingResult($markdown, [], false);
     }
 
-    /**
-     * Read a JSON double-quoted string from the start of $input (handles escapes; tolerates truncation).
-     */
     private function readJsonStringLiteral(string $input): ?string
     {
         $len = strlen($input);
@@ -620,7 +1191,7 @@ CONTRACT;
             if (!is_string($item)) {
                 continue;
             }
-            $key = trim($item);
+            $key = strtolower(trim($item));
             if ($key === '' || !preg_match('/^[a-z][a-z0-9_]*:\d+$/', $key)) {
                 continue;
             }
@@ -629,5 +1200,4 @@ CONTRACT;
 
         return $keys;
     }
-
 }

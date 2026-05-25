@@ -209,6 +209,20 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
+                    <label class="admin-checkbox-label" style="display:flex; align-items:flex-start; gap:0.5rem; cursor:pointer;">
+                        <input type="checkbox" id="briefing_two_pass" name="two_pass" value="1"
+                               style="margin-top:0.2rem;">
+                        <span>
+                            <strong>Two-pass generation</strong> (experimental)
+                            <span class="admin-intro" style="display:block; margin:0.25rem 0 0;">
+                                Pass 1 selects entries with capped thinking; pass 2 writes the briefing from those only.
+                                Slower (~2× API calls) but can improve story picking on large pools. Off by default.
+                            </span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="admin-form-field">
                     <label for="briefing_system_prompt">System prompt</label>
                     <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                         <?php foreach ($savedPrompts as $i => $sp): ?>
@@ -299,13 +313,30 @@ $moduleOptions = [
         var btnAll = document.getElementById('briefing-modules-all');
         var btnNone = document.getElementById('briefing-modules-none');
         var statusTimerIds = [];
-        var STATUS_STEPS = [
+        var STATUS_STEPS_SINGLE = [
             { id: 'send', label: 'Sending request to the server' },
             { id: 'load', label: 'Loading and filtering entries from selected modules' },
             { id: 'context', label: 'Building markdown source context' },
             { id: 'gemini', label: 'Generating executive briefing with Gemini (often 20\u201360 seconds)' },
             { id: 'cards', label: 'Preparing source entry cards for validation' }
         ];
+        var STATUS_STEPS_TWO_PASS = [
+            { id: 'send', label: 'Sending request to the server' },
+            { id: 'load', label: 'Loading and filtering entries from selected modules' },
+            { id: 'context', label: 'Building markdown source context' },
+            { id: 'select', label: 'Gemini pass 1: selecting top entries (thinking)' },
+            { id: 'write', label: 'Gemini pass 2: writing executive briefing' },
+            { id: 'cards', label: 'Preparing source entry cards for validation' }
+        ];
+
+        function isTwoPassEnabled() {
+            var cb = document.getElementById('briefing_two_pass');
+            return cb && cb.checked;
+        }
+
+        function statusStepsForMode() {
+            return isTwoPassEnabled() ? STATUS_STEPS_TWO_PASS : STATUS_STEPS_SINGLE;
+        }
 
         function clearStatusTimers() {
             statusTimerIds.forEach(function(id) { clearTimeout(id); });
@@ -356,11 +387,23 @@ $moduleOptions = [
             }
             setStatusStepLabel('load', 'Loaded and filtered ' + n + ' ' + entryWord + ' from selected modules');
             setStatusStepLabel('context', 'Built markdown source context from ' + n + ' ' + entryWord);
-            setStatusStepLabel(
-                'gemini',
-                'Sent ' + n + ' ' + entryWord + ' to Gemini — generating executive briefing (often 20\u201360 seconds)'
-            );
-            setActiveStatusStep('gemini');
+            if (isTwoPassEnabled()) {
+                setStatusStepLabel(
+                    'select',
+                    'Sent ' + n + ' ' + entryWord + ' to Gemini — pass 1: selecting top items'
+                );
+                setStatusStepLabel(
+                    'write',
+                    'Gemini pass 2: writing full executive briefing (often 30\u201390 seconds total)'
+                );
+                setActiveStatusStep('select');
+            } else {
+                setStatusStepLabel(
+                    'gemini',
+                    'Sent ' + n + ' ' + entryWord + ' to Gemini — generating executive briefing (often 20\u201360 seconds)'
+                );
+                setActiveStatusStep('gemini');
+            }
         }
 
         function postBriefingAction(url, formData) {
@@ -418,7 +461,7 @@ $moduleOptions = [
             var list = document.createElement('ol');
             list.id = 'briefing-status-steps';
             list.className = 'briefing-output-status__steps';
-            STATUS_STEPS.forEach(function(step, idx) {
+            statusStepsForMode().forEach(function(step, idx) {
                 var li = document.createElement('li');
                 li.className = 'briefing-output-status__step' + (idx === 0 ? ' is-active' : '');
                 li.setAttribute('data-step', step.id);
@@ -433,7 +476,12 @@ $moduleOptions = [
             setActiveStatusStep('send');
             scheduleStatus(400, 'load');
             scheduleStatus(2000, 'context');
-            scheduleStatus(5000, 'gemini');
+            if (isTwoPassEnabled()) {
+                scheduleStatus(5000, 'select');
+                scheduleStatus(14000, 'write');
+            } else {
+                scheduleStatus(5000, 'gemini');
+            }
         }
 
         function hideProcessingStatus() {
@@ -884,6 +932,9 @@ $moduleOptions = [
                         }
                         if (payload.meta.cited_entry_count !== undefined) {
                             parts.push(String(payload.meta.cited_entry_count) + ' cited');
+                        }
+                        if (payload.meta.two_pass) {
+                            parts.push('two-pass');
                         }
                         if (payload.meta.markdown_chars !== undefined) {
                             parts.push(Math.round(payload.meta.markdown_chars / 1024) + ' KB source context');
