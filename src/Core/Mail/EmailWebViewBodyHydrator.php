@@ -58,17 +58,22 @@ final class EmailWebViewBodyHydrator
 
     private function fetchPageHtml(string $url): string
     {
-        $res = $this->http->getWebPage($url);
+        // Brevo / Tamedia-style redirects often need a cookie jar (entitlementToken) before rm.coe.int serves HTML.
+        $res = $this->http->getWebPage($url, true);
         if (!$res->isOk() || trim($res->body) === '') {
             throw new HttpClientException('HTTP ' . $res->status . ' fetching ' . $url);
         }
 
         $redirect = self::parseHtmlRedirectTarget($res->body);
         if ($redirect !== null && $redirect !== $url && $redirect !== $res->finalUrl) {
-            $res = $this->http->getWebPage($redirect);
+            $res = $this->http->getWebPage($redirect, true);
             if (!$res->isOk() || trim($res->body) === '') {
                 throw new HttpClientException('HTTP ' . $res->status . ' fetching redirect ' . $redirect);
             }
+        }
+
+        if (self::looksLikeBlockedPage($res->body)) {
+            throw new HttpClientException('Blocked or challenge page for ' . $url);
         }
 
         return $res->body;
@@ -76,13 +81,36 @@ final class EmailWebViewBodyHydrator
 
     private function extractPlainText(string $html): string
     {
+        if (self::looksLikeBlockedPage($html)) {
+            return '';
+        }
+
         $read = ScraperContentExtractor::extractReadableContent($html);
         $plain = trim((string)($read['content'] ?? ''));
-        if (mb_strlen($plain, 'UTF-8') >= self::MIN_PLAIN_CHARS) {
+        if (mb_strlen($plain, 'UTF-8') >= self::MIN_PLAIN_CHARS && !self::looksLikeBlockedPlainText($plain)) {
             return $plain;
         }
 
-        return NewsletterBodyExtractor::fromHtml($html);
+        $plain = NewsletterBodyExtractor::fromHtml($html);
+
+        return self::looksLikeBlockedPlainText($plain) ? '' : $plain;
+    }
+
+    private static function looksLikeBlockedPage(string $html): bool
+    {
+        $lower = mb_strtolower($html, 'UTF-8');
+
+        return str_contains($lower, 'you have been blocked')
+            || str_contains($lower, 'attention required! | cloudflare')
+            || (str_contains($lower, 'cloudflare') && str_contains($lower, 'cf-error-details'));
+    }
+
+    private static function looksLikeBlockedPlainText(string $plain): bool
+    {
+        $lower = mb_strtolower(trim($plain), 'UTF-8');
+
+        return str_contains($lower, 'you have been blocked')
+            || str_contains($lower, 'unable to access');
     }
 
     public static function parseHtmlRedirectTarget(string $html): ?string

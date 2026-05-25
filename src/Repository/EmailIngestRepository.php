@@ -307,6 +307,21 @@ final class EmailIngestRepository
             );
         }
 
+        if ($resolution->localeRank !== null
+            && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW
+        ) {
+            $subj = trim((string)($row['subject'] ?? ''));
+            foreach (['text_body', 'body_text'] as $key) {
+                $t = (string)($row[$key] ?? '');
+                if ($t !== '') {
+                    $row[$key] = EmailListingBoilerplateStripper::strip(
+                        $t,
+                        $subj !== '' ? $subj : null
+                    );
+                }
+            }
+        }
+
         return $row;
     }
 

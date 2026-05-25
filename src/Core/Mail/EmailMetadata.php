@@ -44,6 +44,17 @@ final class EmailMetadata
 
     /**
      * @param array<string, mixed> $row
+     */
+    public static function bodySourceFromRow(array $row): string
+    {
+        $meta = self::decode($row['metadata'] ?? null);
+        $src  = trim((string)($meta[self::KEY_BODY_SOURCE] ?? ''));
+
+        return $src !== '' ? $src : self::BODY_SOURCE_INBOX;
+    }
+
+    /**
+     * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
     public static function mergeWebViewHydration(array $row, string $url, int $localeRank): array

@@ -71,11 +71,13 @@ final class EmailListingBoilerplateStripper
                 continue;
             }
             $lower = mb_strtolower($t, 'UTF-8');
-            $drop  = false;
-            foreach ($prefixes as $p) {
-                if (str_starts_with($lower, $p)) {
-                    $drop = true;
-                    break;
+            $drop  = self::lineLooksLikeNewsletterShell($t, $lower);
+            if (!$drop) {
+                foreach ($prefixes as $p) {
+                    if (str_starts_with($lower, $p)) {
+                        $drop = true;
+                        break;
+                    }
                 }
             }
             if (!$drop) {
@@ -96,6 +98,24 @@ final class EmailListingBoilerplateStripper
      *
      * @return list<string>
      */
+    private static function lineLooksLikeNewsletterShell(string $line, string $lower): bool
+    {
+        if (preg_match('#^\(?\s*https?://#i', $line) === 1
+            && preg_replace('#https?://\S+#iu', '', $line) !== null
+            && mb_strlen(trim(preg_replace('#https?://\S+#iu', '', $line) ?? ''), 'UTF-8') < 12
+        ) {
+            return true;
+        }
+        if (preg_match('#^logo council of europe\b#', $lower) === 1) {
+            return true;
+        }
+        if (str_contains($lower, 'click here ( https://') && str_contains($lower, 'brevo.net')) {
+            return true;
+        }
+
+        return false;
+    }
+
     private static function newsletterLinePrefixes(): array
     {
         return [
@@ -110,7 +130,13 @@ final class EmailListingBoilerplateStripper
             'if you are unable to see the message',
             "if you can't read this email",
             "if you can't read this e-mail",
+            'if you cannot read this email',
+            'if you cannot read this e-mail',
             "if you can't read this e-mail in your",
+            'read the english version of our newsletter',
+            'read the english version',
+            'si ce message ne s\'affiche pas correctement',
+            'newsletter_council of europe',
             'this email is best viewed in your browser',
             'this e-mail is best viewed in your browser',
             'this email requires a modern e-mail reader',
