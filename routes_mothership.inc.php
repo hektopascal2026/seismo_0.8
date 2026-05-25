@@ -398,6 +398,11 @@ $router->register(
     true
 );
 $router->register(
+    'briefing_builder_prepare',
+    \Seismo\Controller\AiBriefingController::class . '::prepare',
+    false
+);
+$router->register(
     'briefing_builder_generate',
     \Seismo\Controller\AiBriefingController::class . '::generate',
     false

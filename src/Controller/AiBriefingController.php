@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use PDO;
 use DateTimeImmutable;
 use DateTimeZone;
 use Seismo\Formatter\MarkdownBriefingFormatter;
@@ -130,6 +131,63 @@ PROMPT;
         require SEISMO_ROOT . '/views/briefing_builder.php';
     }
 
+    /**
+     * Gather and filter entries only — returns counts for the UI before Gemini runs.
+     */
+    public function prepare(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $filters = $this->parseBriefingFiltersFromPost();
+            $gathered = $this->gatherBriefingContext(getDbConnection(), $filters);
+            $entryCount = count($gathered['entries']);
+            if ($entryCount === 0) {
+                http_response_code(400);
+                echo json_encode(
+                    ['ok' => false, 'error' => 'No entries matched your filters.'],
+                    JSON_UNESCAPED_UNICODE
+                );
+
+                return;
+            }
+
+            $meta = [
+                'entry_count'    => $entryCount,
+                'markdown_chars' => $gathered['markdownChars'],
+            ];
+            if ($gathered['contextWarning'] !== null) {
+                $meta['context_warning'] = $gathered['contextWarning'];
+            }
+
+            echo json_encode(['ok' => true, 'meta' => $meta], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo briefing_builder_prepare: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not load entries.'], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
     public function generate(): void
     {
         header('Content-Type: application/json; charset=utf-8');
@@ -152,7 +210,7 @@ PROMPT;
         }
 
         try {
-            $selection = $this->parseModuleSelection($_POST['modules'] ?? null);
+            $filters = $this->parseBriefingFiltersFromPost();
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -160,12 +218,6 @@ PROMPT;
             return;
         }
 
-        $lookbackDays = $this->parseLookbackDays($_POST['lookback_days'] ?? null);
-        $since        = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-            ->modify('-' . $lookbackDays . ' days')
-            ->format('Y-m-d\TH:i:s\Z');
-
-        $limit     = $this->clampLimit($_POST['limit'] ?? self::DEFAULT_LIMIT);
         $itemCount = $this->parseItemCount($_POST['item_count'] ?? null);
 
         try {
@@ -177,47 +229,62 @@ PROMPT;
             return;
         }
 
-        $includeImportant = (string)($_POST['include_important'] ?? '0') === '1';
-        $labelFilter      = ['investigation_lead'];
-        if ($includeImportant) {
-            $labelFilter[] = 'important';
-        }
-
         try {
             $pdo      = getDbConnection();
-            $gatherer = new BriefingEntryGatherer();
-            [$entries, $scoresByKey] = $gatherer->gather($pdo, $since, $limit, $selection, $labelFilter);
-            $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+            $gathered = $this->gatherBriefingContext($pdo, $filters);
+            $entries      = $gathered['entries'];
+            $scoresByKey  = $gathered['scoresByKey'];
+            $markdown     = $gathered['markdown'];
+            $markdownChars  = $gathered['markdownChars'];
+            $contextWarning = $gathered['contextWarning'];
+            $since          = $filters['since'];
+            $limit          = $filters['limit'];
+            $labelFilter    = $filters['labelFilter'];
+            $lookbackDays   = $filters['lookbackDays'];
+            $selection      = $filters['selection'];
 
-            $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
-                'since'        => $since,
-                'limit'        => $limit,
-                'label_filter' => $labelFilter,
-                'total'        => count($entries),
-            ], true);
+            if ($entries === []) {
+                http_response_code(400);
+                echo json_encode(
+                    ['ok' => false, 'error' => 'No entries matched your filters.'],
+                    JSON_UNESCAPED_UNICODE
+                );
 
-            $markdownChars   = strlen($markdown);
-            $contextWarning  = $this->contextSizeWarning($markdownChars);
+                return;
+            }
 
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
             $result = $gemini->generateSummary($systemPrompt, $markdown, $itemCount);
 
             $entriesHtml     = '';
+            $usedEntryKeys   = $result->usedEntryKeys;
+            $keysInferred    = false;
+            if ($usedEntryKeys === []) {
+                $usedEntryKeys = $this->inferUsedEntryKeysFromBriefing($result->markdown, $entries, $itemCount);
+                $keysInferred  = $usedEntryKeys !== [];
+            }
+
             $attributionMeta = [
                 'context_entry_count'    => count($entries),
                 'attributed_entry_count' => 0,
-                'used_entry_keys'        => $result->usedEntryKeys,
+                'used_entry_keys'        => $usedEntryKeys,
                 'attribution_filtered'   => false,
                 'item_count'             => $itemCount,
-                'cited_entry_count'      => count($result->usedEntryKeys),
+                'cited_entry_count'      => count($usedEntryKeys),
             ];
 
-            if ($result->attributionParsed) {
+            if ($result->attributionParsed || $keysInferred) {
                 [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries(
                     $entries,
-                    $result->usedEntryKeys,
+                    $usedEntryKeys,
                     $itemCount,
                 );
+                if ($keysInferred) {
+                    $inferredMsg = 'Citations inferred from briefing text (Gemini omitted or invalid used_entry_keys).';
+                    $attributionMeta['attribution_warning'] = isset($attributionMeta['attribution_warning'])
+                        ? $attributionMeta['attribution_warning'] . ' ' . $inferredMsg
+                        : $inferredMsg;
+                }
                 if ($cardsEntries !== []) {
                     $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
                 }
@@ -588,6 +655,57 @@ PROMPT;
     }
 
     /**
+     * When Gemini omits used_entry_keys, match entry_type:entry_id tokens in the briefing
+     * against gathered entries (order of first appearance, capped at $maxKeys).
+     *
+     * @param list<array<string, mixed>> $entries
+     * @return list<string>
+     */
+    private function inferUsedEntryKeysFromBriefing(string $markdown, array $entries, int $maxKeys): array
+    {
+        if ($markdown === '' || $entries === [] || $maxKeys < 1) {
+            return [];
+        }
+
+        $valid = [];
+        foreach ($entries as $e) {
+            $type = (string)($e['entry_type'] ?? '');
+            $id   = (string)($e['entry_id'] ?? '');
+            if ($type !== '' && $id !== '' && ctype_digit($id)) {
+                $valid[$type . ':' . $id] = true;
+            }
+        }
+        if ($valid === []) {
+            return [];
+        }
+
+        $found = [];
+        $patterns = [
+            '/\[ID:\s*([a-z][a-z0-9_]*:\d+)\s*\]/i',
+            '/\b([a-z][a-z0-9_]*:\d+)\b/',
+        ];
+        foreach ($patterns as $pattern) {
+            if (!preg_match_all($pattern, $markdown, $matches)) {
+                continue;
+            }
+            foreach ($matches[1] as $raw) {
+                $key = strtolower(trim((string)$raw));
+                if (!isset($valid[$key])) {
+                    continue;
+                }
+                if (!in_array($key, $found, true)) {
+                    $found[] = $key;
+                }
+                if (count($found) >= $maxKeys) {
+                    return $found;
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * @param list<array<string, mixed>> $entries
      * @param list<string> $usedEntryKeys
      * @return array{0: list<array<string, mixed>>, 1: array<string, mixed>}
@@ -621,7 +739,8 @@ PROMPT;
 
         if ($usedEntryKeys === []) {
             $meta['attribution_warning'] =
-                'Gemini returned no used_entry_keys; source cards are omitted.';
+                'Gemini returned no used_entry_keys (requested ' . $expectedItemCount
+                . ' items); source cards are omitted. Try again or use a prompt that cites [ID: entry_type:entry_id] in each core item.';
 
             return [[], $meta];
         }

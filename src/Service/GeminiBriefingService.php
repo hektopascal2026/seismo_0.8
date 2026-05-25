@@ -27,7 +27,7 @@ OUTPUT CONTRACT (platform — binding for item count and citations):
 - Respond with a single JSON object only (no Markdown code fence): "briefing_markdown" (string) and "used_entry_keys" (array).
 - Your prompt above defines tone, role, headings, and layout (optional intro, sections before/after, any titles). The platform fixes only the number of core items.
 - CORE ITEMS: Include exactly {itemCount} core items sourced from ENTRIES_DATA — the main cited signals/developments, in relevance order. Each core item is one distinct entry (bullet, numbered point, or clearly separated block). Surrounding prose is free-form.
-- used_entry_keys: JSON array of exactly {itemCount} strings — IDs of those core items only, in the same order as they appear in briefing_markdown (format entry_type:entry_id as in [ID: entry_type:entry_id] tags). The app shows validation cards for these IDs.
+- used_entry_keys (REQUIRED): non-empty JSON array of exactly {itemCount} strings — IDs of those core items only, in the same order as in briefing_markdown (format entry_type:entry_id exactly as in ENTRIES_DATA [ID: …] tags, e.g. feed_item:123). Never omit this field; never return [] when the briefing lists core items.
 - Use only facts and sources from ENTRIES_DATA; do not invent entries or citations.
 
 ENTRIES_DATA:
@@ -411,9 +411,15 @@ CONTRACT;
             );
         }
 
+        $rawKeys = $decoded['used_entry_keys'] ?? null;
+        $keys    = $this->normalizeUsedEntryKeys($rawKeys);
+        if ($keys === [] && is_array($rawKeys) && $rawKeys !== []) {
+            error_log('GeminiBriefingService: used_entry_keys present but none passed validation');
+        }
+
         return new GeminiBriefingResult(
             $markdown,
-            $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null),
+            $keys,
             $attributionParsed,
         );
     }

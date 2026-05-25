@@ -22,6 +22,7 @@ $headerTitle    = 'Briefing';
 $headerSubtitle = '';
 $activeNav      = 'briefing_builder';
 
+$prepareUrl         = $basePath . '/index.php?action=briefing_builder_prepare';
 $generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
 $savePromptUrl      = $basePath . '/index.php?action=briefing_builder_save_prompt';
 $saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
@@ -235,6 +236,7 @@ $moduleOptions = [
         var sourcesCards = document.getElementById('briefing-sources-cards');
         var sourcesIntro = document.getElementById('briefing-sources-intro');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
+        var prepareUrl = <?= json_encode($prepareUrl, JSON_UNESCAPED_SLASHES) ?>;
         var generateUrl = <?= json_encode($generateUrl, JSON_UNESCAPED_SLASHES) ?>;
         var savePromptUrl = <?= json_encode($savePromptUrl, JSON_UNESCAPED_SLASHES) ?>;
         var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_UNESCAPED_SLASHES) ?>;
@@ -300,18 +302,44 @@ $moduleOptions = [
         }
 
         function applyStatusEntryCount(entryCount) {
+            clearStatusTimers();
             var n = parseInt(entryCount, 10);
-            if (!n || n < 1) return;
+            if (isNaN(n) || n < 0) return;
             var entryWord = n === 1 ? 'entry' : 'entries';
-            setStatusStepLabel(
-                'context',
-                'Built markdown source context from ' + n + ' ' + entryWord
-            );
+            if (n === 0) {
+                setStatusStepLabel('load', 'No entries matched your filters');
+                setActiveStatusStep('load');
+                return;
+            }
+            setStatusStepLabel('load', 'Loaded and filtered ' + n + ' ' + entryWord + ' from selected modules');
+            setStatusStepLabel('context', 'Built markdown source context from ' + n + ' ' + entryWord);
             setStatusStepLabel(
                 'gemini',
-                'Sent ' + n + ' ' + entryWord + ' to Gemini (executive briefing)'
+                'Sent ' + n + ' ' + entryWord + ' to Gemini — generating executive briefing (often 20\u201360 seconds)'
             );
             setActiveStatusStep('gemini');
+        }
+
+        function postBriefingAction(url, formData) {
+            return fetch(url, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            }).then(function(r) {
+                return r.text().then(function(t) {
+                    var data;
+                    try {
+                        data = JSON.parse(t);
+                    } catch (e) {
+                        return { ok: false, error: 'Invalid response (HTTP ' + r.status + ').' };
+                    }
+                    if (!data.ok) {
+                        data.error = data.error || 'Request failed.';
+                    }
+                    return data;
+                });
+            });
         }
 
         function showProcessingStatus() {
@@ -750,30 +778,22 @@ $moduleOptions = [
             btn.textContent = 'Generating…';
             showProcessingStatus();
 
-            fetch(generateUrl, {
-                method: 'POST',
-                body: fd,
-                credentials: 'same-origin',
-                headers: { 'Accept': 'application/json' }
-            })
-            .then(function(r) {
-                return r.text().then(function(t) {
-                    return { status: r.status, body: t };
-                });
-            })
-            .then(function(res) {
-                var data;
-                try {
-                    data = JSON.parse(res.body);
-                } catch (e) {
-                    if (errEl) {
-                        errEl.textContent = 'Invalid response (HTTP ' + res.status + ').';
-                        errEl.hidden = false;
-                    }
-                    hideCopyBtn();
-                    restoreOutputPlaceholder();
-                    return;
+            postBriefingAction(prepareUrl, fd)
+            .then(function(prep) {
+                if (!prep.ok) {
+                    throw prep;
                 }
+                if (prep.meta && prep.meta.context_warning && warnEl) {
+                    warnEl.textContent = prep.meta.context_warning;
+                    warnEl.hidden = false;
+                }
+                if (prep.meta && prep.meta.entry_count !== undefined) {
+                    applyStatusEntryCount(prep.meta.entry_count);
+                }
+                return postBriefingAction(generateUrl, fd);
+            })
+            .then(function(data) {
+                if (!data) return;
                 if (!data.ok) {
                     hideCopyBtn();
                     var errMsg = data.error || 'Generation failed.';
@@ -863,22 +883,28 @@ $moduleOptions = [
 
                 if (data.meta && data.meta.entry_count !== undefined) {
                     applyStatusEntryCount(data.meta.entry_count);
-                    setTimeout(function() {
-                        setActiveStatusStep('cards');
-                        renderBriefingSuccess(data);
-                    }, 900);
-                } else {
-                    setActiveStatusStep('cards');
-                    renderBriefingSuccess(data);
                 }
+                setActiveStatusStep('cards');
+                renderBriefingSuccess(data);
             })
-            .catch(function() {
+            .catch(function(err) {
                 hideCopyBtn();
+                var msg = (err && err.error) ? err.error : 'Network error — could not reach the server.';
                 if (errEl) {
-                    errEl.textContent = 'Network error — could not reach the server.';
+                    errEl.textContent = msg;
                     errEl.hidden = false;
                 }
-                restoreOutputPlaceholder();
+                hideProcessingStatus();
+                out.style.whiteSpace = 'pre-wrap';
+                out.innerHTML = '';
+                if (msg) {
+                    var errInBox = document.createElement('p');
+                    errInBox.className = 'briefing-output-error-inline';
+                    errInBox.textContent = msg;
+                    out.appendChild(errInBox);
+                } else {
+                    restoreOutputPlaceholder();
+                }
             })
             .finally(function() {
                 clearStatusTimers();
