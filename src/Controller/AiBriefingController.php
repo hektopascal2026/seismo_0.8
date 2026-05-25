@@ -867,12 +867,7 @@ PROMPT;
             null,
             $filters['scoreFilter'],
         );
-        $scoreFilter = $filters['scoreFilter'];
-        if ($scoreFilter->disregardMagnitu) {
-            $gatherer->sortByPublishedDateDesc($entries);
-        } else {
-            $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
-        }
+        $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
 
         $geminiContext   = new BriefingGeminiContext(new SystemConfigRepository($pdo));
         $capped          = $geminiContext->capEntries($entries);
@@ -894,7 +889,7 @@ PROMPT;
                 . ($contextTruncated === 1 ? 'entry was' : 'entries were')
                 . ' omitted from the Gemini context cap (max '
                 . $geminiContext->maxContextEntries()
-                . ' by sort order).';
+                . '; highest relevance, then newest).';
             $contextWarning = $contextWarning !== null
                 ? $contextWarning . ' ' . $capNote
                 : $capNote;

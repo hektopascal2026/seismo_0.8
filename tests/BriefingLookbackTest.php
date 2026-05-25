@@ -39,4 +39,18 @@ final class BriefingLookbackTest extends TestCase
         self::assertStringContainsString('cached_at', $clause['sql']);
         self::assertSame(['2026-05-18T00:00:00Z', '2026-05-18T00:00:00Z'], $clause['params']);
     }
+
+    public function testEntrySortTimestampUsesLatestFeedInstant(): void
+    {
+        $entry = [
+            'entry_type'     => 'feed_item',
+            'published_date' => '2026-05-01T10:00:00Z',
+            'cached_at'      => '2026-05-22T08:00:00Z',
+        ];
+
+        self::assertSame(
+            BriefingLookback::instantUnix('2026-05-22T08:00:00Z'),
+            BriefingLookback::entrySortTimestamp($entry),
+        );
+    }
 }

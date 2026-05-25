@@ -181,6 +181,8 @@ final class BriefingEntryGatherer
             'entries_after_score_filter'  => count($entries),
         ];
 
+        $this->sortByRelevanceDesc($entries, $scoresByKey);
+
         return [$entries, $scoresByKey];
     }
 
@@ -213,12 +215,14 @@ final class BriefingEntryGatherer
         }
         $scoresByKey = $repo->scoresByEntryKey($pairs);
 
+        $this->sortByRelevanceDesc($entries, $scoresByKey);
+
         return [$entries, $scoresByKey];
     }
 
     /**
-     * Primary: relevance_score desc. Secondary: published_date desc,
-     * then (entry_type, entry_id) for full determinism.
+     * Briefing priority: highest relevance_score, then newest entry time,
+     * then (entry_type, entry_id) for determinism. Used for Gemini context cap.
      *
      * @param array<int, array<string, mixed>> $entries
      * @param array<string, array<string, mixed>> $scoresByKey
@@ -233,10 +237,10 @@ final class BriefingEntryGatherer
             if ($sa !== $sb) {
                 return $sb <=> $sa;
             }
-            $da = (string)($a['published_date'] ?? '');
-            $db = (string)($b['published_date'] ?? '');
-            if ($da !== $db) {
-                return strcmp($db, $da);
+            $ta = BriefingLookback::entrySortTimestamp($a);
+            $tb = BriefingLookback::entrySortTimestamp($b);
+            if ($ta !== $tb) {
+                return $tb <=> $ta;
             }
             $ta = (string)($a['entry_type'] ?? '');
             $tb = (string)($b['entry_type'] ?? '');

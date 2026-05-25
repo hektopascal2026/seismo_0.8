@@ -34,9 +34,40 @@ final class BriefingLookback
         if ($since === null || $since === '') {
             return null;
         }
-        $ts = strtotime($since);
 
-        return $ts !== false ? $ts : null;
+        return self::instantUnix($since) ?: null;
+    }
+
+    /**
+     * Unix timestamp for briefing sort tie-break (newer = larger). Feed/calendar
+     * use the latest of publication vs ingestion/fetch instants.
+     *
+     * @param array<string, mixed> $entry Shaped Magnitu row.
+     */
+    public static function entrySortTimestamp(array $entry): int
+    {
+        return match ((string)($entry['entry_type'] ?? '')) {
+            'feed_item' => max(
+                self::instantUnix((string)($entry['published_date'] ?? '')),
+                self::instantUnix((string)($entry['cached_at'] ?? '')),
+            ),
+            'calendar_event' => max(
+                self::instantUnix((string)($entry['published_date'] ?? '')),
+                self::instantUnix((string)($entry['fetched_at'] ?? '')),
+            ),
+            default => self::instantUnix((string)($entry['published_date'] ?? '')),
+        };
+    }
+
+    public static function instantUnix(string $stored): int
+    {
+        $stored = trim($stored);
+        if ($stored === '') {
+            return 0;
+        }
+        $ts = strtotime($stored);
+
+        return $ts !== false ? $ts : 0;
     }
 
     /**
@@ -89,12 +120,8 @@ final class BriefingLookback
 
     private static function storedInstantInWindow(string $stored, int $sinceTs): bool
     {
-        $stored = trim($stored);
-        if ($stored === '') {
-            return false;
-        }
-        $ts = strtotime($stored);
+        $ts = self::instantUnix($stored);
 
-        return $ts !== false && $ts >= $sinceTs;
+        return $ts > 0 && $ts >= $sinceTs;
     }
 }

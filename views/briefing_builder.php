@@ -152,7 +152,7 @@ $moduleOptions = [
                         Disregard Magnitu (experimental)
                     </label>
                     <p class="admin-intro" id="briefing-disregard-magnitu-hint" style="margin:0.25rem 0 0;" hidden>
-                        All in-window entries from selected modules are sent to Gemini (newest first). Magnitu scores are not used for filtering or ordering.
+                        All in-window entries from selected modules are eligible; Gemini receives up to the context cap ordered by highest relevance, then newest. Magnitu score thresholds are not applied.
                     </p>
                 </div>
 
@@ -1038,7 +1038,7 @@ $moduleOptions = [
                         var dropped = before - after;
                         var dropNote = dropped + ' in-window '
                             + (dropped === 1 ? 'entry' : 'entries')
-                            + ' dropped by relevance filter (unscored or below 50% / Highlights bar).';
+                            + ' dropped by relevance filter (unscored or below 50% / Highlights bar). Remaining rows use highest relevance, then newest.';
                         warnEl.textContent = warnEl.textContent
                             ? warnEl.textContent + ' ' + dropNote
                             : dropNote;
