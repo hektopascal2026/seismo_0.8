@@ -28,6 +28,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
+use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
 
 final class MagnituExportRepository
@@ -47,6 +48,32 @@ final class MagnituExportRepository
      */
     public function listFeedItemsSince(?string $since, int $limit): array
     {
+        return $this->listFeedItemsQuery($since, $limit, null);
+    }
+
+    /**
+     * Feed items for one admin module partition (Feeds / Media / Scraper).
+     *
+     * Predicates match {@see EntryRepository::fetchFeedItemsForModule()}.
+     *
+     * @param string $module `feeds` | `media` | `scraper`
+     * @return array<int, array<string, mixed>>
+     */
+    public function listFeedItemsForModule(?string $since, int $limit, string $module): array
+    {
+        if (!in_array($module, ['feeds', 'media', 'scraper'], true)) {
+            return [];
+        }
+
+        return $this->listFeedItemsQuery($since, $limit, $module);
+    }
+
+    /**
+     * @param ?string $moduleScope null = all feed_items; else feeds|media|scraper
+     * @return array<int, array<string, mixed>>
+     */
+    private function listFeedItemsQuery(?string $since, int $limit, ?string $moduleScope): array
+    {
         $limit = $this->clampLimit($limit);
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
                        fi.published_date,
@@ -56,7 +83,8 @@ final class MagnituExportRepository
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0
-                   AND fi.hidden = 0';
+                   AND fi.hidden = 0'
+            . $this->feedModuleSqlExtra($moduleScope);
         $params = [];
         if ($since !== null && $since !== '') {
             $sql .= ' AND fi.published_date >= ?';
@@ -65,6 +93,33 @@ final class MagnituExportRepository
         $sql .= ' ORDER BY fi.published_date DESC LIMIT ' . $limit;
 
         return $this->selectOrEmpty($sql, $params);
+    }
+
+    /**
+     * @param ?string $module `feeds` | `media` | `scraper`, or null for no extra filter.
+     */
+    private function feedModuleSqlExtra(?string $module): string
+    {
+        if ($module === null) {
+            return '';
+        }
+
+        $sc = entryTable('scraper_configs');
+
+        return match ($module) {
+            'feeds' => " AND (f.source_type IN ('rss', 'substack', 'parl_press'))
+                AND (IFNULL(f.category, '') NOT IN ('scraper', 'media'))
+                AND NOT EXISTS (SELECT 1 FROM {$sc} sc WHERE "
+                . ScraperListingUrl::sqlColumnsEqual('sc.url', 'f.url') . ' AND sc.disabled = 0)',
+            'media' => " AND IFNULL(f.category, '') = 'media' ",
+            'scraper' => " AND (
+                f.source_type = 'scraper'
+                OR IFNULL(f.category, '') = 'scraper'
+                OR EXISTS (SELECT 1 FROM {$sc} sc2 WHERE "
+                . ScraperListingUrl::sqlColumnsEqual('sc2.url', 'f.url') . " AND sc2.disabled = 0)
+            )",
+            default => '',
+        };
     }
 
     /**

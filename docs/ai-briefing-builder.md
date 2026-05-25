@@ -2,7 +2,7 @@
 
 Plan for an in-app page that filters recent Seismo entries and generates a narrative summary via the Gemini API. Vanilla PHP 8.2+, existing MVC/routing — no Laravel/Symfony.
 
-**Status:** in progress — Slice 1 done.
+**Status:** in progress — Slices 1–2 done.
 
 ---
 
@@ -72,7 +72,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 ---
 
-## Slice 2 — `BriefingEntryGatherer` + export refactor
+## Slice 2 — `BriefingEntryGatherer` + export refactor ✅
 
 **Goal:** Single pipeline for export briefing and AI builder; no duplicated `ExportController::gatherEntriesAndScores()` logic.
 
