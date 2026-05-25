@@ -393,6 +393,16 @@ $router->register(
     true
 );
 $router->register(
+    'briefing_builder',
+    \Seismo\Controller\AiBriefingController::class . '::show',
+    true
+);
+$router->register(
+    'briefing_builder_generate',
+    \Seismo\Controller\AiBriefingController::class . '::generate',
+    false
+);
+$router->register(
     'label',
     \Seismo\Controller\MagnituLabelUiController::class . '::show',
     true

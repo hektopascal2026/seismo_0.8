@@ -2,7 +2,7 @@
 
 Plan for an in-app page that filters recent Seismo entries and generates a narrative summary via the Gemini API. Vanilla PHP 8.2+, existing MVC/routing — no Laravel/Symfony.
 
-**Status:** in progress — Slices 1–3 done.
+**Status:** complete (slices 1–5). Slice 6 = manual smoke on deploy.
 
 ---
 
@@ -130,7 +130,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 ---
 
-## Slice 4 — Controller, routes, router CSRF list
+## Slice 4 — Controller, routes, router CSRF list ✅
 
 **Goal:** Page + JSON generate endpoint.
 
@@ -174,7 +174,7 @@ $router->register('briefing_builder_generate', AiBriefingController::class . '::
 
 ---
 
-## Slice 5 — View, JS, navigation
+## Slice 5 — View, JS, navigation ✅
 
 **Goal:** Usable UI.
 

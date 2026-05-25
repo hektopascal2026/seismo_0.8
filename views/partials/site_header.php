@@ -5,7 +5,7 @@
  * @var string $basePath
  * @var string $headerTitle
  * @var string|null $headerSubtitle
- * @var string $activeNav index|filter|about|magnitu|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide|logbook
+ * @var string $activeNav index|filter|about|magnitu|briefing_builder|label|feeds|scraper|mail|lex|leg|settings|configuration|styleguide|logbook
  * @var string $csrfField
  * @var bool $showModuleRefresh Optional — Feeds / Scraper / Mail top-bar module refresh (mothership).
  * @var string|null $moduleRefreshAction e.g. refresh_feed_sources
@@ -157,6 +157,9 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?<?= e($filterNavQs) ?>" class="nav-link<?= $activeNav === 'filter' ? ' active' : '' ?>">Filter</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
+            <?php if (!isSatellite()): ?>
+            <a href="<?= e($basePath) ?>/index.php?action=briefing_builder" class="nav-link<?= $activeNav === 'briefing_builder' ? ' active' : '' ?>">Briefing</a>
+            <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=label" class="nav-link<?= $activeNav === 'label' ? ' active' : '' ?>">Label</a>
             <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
