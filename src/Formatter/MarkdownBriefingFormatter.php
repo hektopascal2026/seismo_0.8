@@ -31,8 +31,9 @@ final class MarkdownBriefingFormatter
      * @param array<int, array<string, mixed>> $entries Shaped Magnitu-contract rows.
      * @param array<string, array<string, mixed>> $scoresByKey "type:id" → score row.
      * @param array<string, mixed> $meta               Printed in the preamble (since, total, etc.).
+     * @param bool $includeEntryIds                    When true, each item is tagged `[ID: type:id]` for LLM attribution.
      */
-    public static function format(array $entries, array $scoresByKey, array $meta): string
+    public static function format(array $entries, array $scoresByKey, array $meta, bool $includeEntryIds = false): string
     {
         $generatedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->format('Y-m-d\TH:i:s\Z');
@@ -79,6 +80,10 @@ final class MarkdownBriefingFormatter
                 $link  = self::sanitizeLinkUrl((string)($e['link'] ?? ''));
                 $header = $link !== '' ? "- [{$title}]({$link})" : "- {$title}";
                 $lines[] = $header;
+
+                if ($includeEntryIds && $key !== '' && $key !== ':') {
+                    $lines[] = '  - [ID: ' . $key . ']';
+                }
 
                 $bits = [];
                 if (!empty($e['published_date'])) {

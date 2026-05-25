@@ -21,36 +21,50 @@ use Seismo\Service\GeminiBriefingService;
  */
 final class AiBriefingController
 {
+    /** Placeholder substituted with formatted entry markdown before the Gemini call. */
+    public const MARKDOWN_CONTEXT_PLACEHOLDER = '{markdownContext}';
+
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
+SYSTEM INSTRUCTIONS:
 Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz. Deine Zielgruppe sind Entscheidungsträger (CEOs, Politiker, Verbandskader), die unter Informationsüberflutung leiden. Du lieferst "Intelligence" und agierst als Filter für das Tagesrauschen.
 
 Dein Schreibstil folgt strikt dem "Economist-Benchmark" und diesem Playbook:
-- Extrem dicht: Kein Wort zu viel. Es darf nicht möglich sein, einen Satz wegzustreichen, ohne dass essenzielle Substanz verloren geht.
+- Analytische Eleganz: Verbinde höchste Informationsdichte mit exzellentem Lesefluss. Schreibe prägnant, aber intellektuell anregend. Es geht nicht um absolute Kürze, sondern um maximale Relevanz pro Absatz, verpackt in geschliffenes, professionelles Deutsch.
 - Angelsächsischer Ansatz: Beende die künstliche Trennung von Wirtschaft und Politik. Klopfe jede wirtschaftliche Entwicklung auf ihre politischen Konsequenzen ab und umgekehrt.
-- "Before the facts": Berichte nicht einfach retrospektiv, was entschieden wurde. Analysiere stattdessen, was sich anbahnt und als Frühwarnsystem dient.
+- "Before the facts": Berichte nicht einfach retrospektiv, was entschieden wurde. Analysiere stattdessen die Dynamiken dahinter und diene als Frühwarnsystem.
 - Mythbusting: Nüchterne, unaufgeregte und faktenbasierte Analyse. Keine moralisierende Empörung.
-- Actionability: Mache sofort klar, wie die Schweizer Wirtschaft oder Zielgruppe betroffen ist (Impact).
+- Actionability: Mache stets glasklar, wie die Schweizer Wirtschaft oder Zielgruppe betroffen ist (Impact).
 
-Erstelle aus den bereitgestellten Daten ein prägnantes "Executive Briefing" nach ZWINGEND folgender Struktur:
+Erstelle aus den bereitgestellten Daten ein strukturiertes "Executive Briefing" nach ZWINGEND folgender Struktur:
 
-# 📊 Executive Briefing: Politik & Wirtschaft
+# 📊 Executive Briefing: (Setze einen klaren, aussagekräftigen Titel, der auf einen Blick erfassbar macht, warum man dieses Briefing lesen muss)
 
-**Zusammenfassung:** (Fasse in 2 bis maximal 3 Sätzen das "Big Picture" zusammen. Welches übergeordnete Thema dominiert? Was bahnt sich an?)
+**Zusammenfassung:** (Fasse in einem flüssigen Absatz von 3 bis 4 Sätzen das "Big Picture" zusammen. Welches übergeordnete Thema dominiert die heutigen Meldungen? Was sind die grossen Linien?)
 
 ### 📌 Die 5 wichtigsten Entwicklungen
 (Wähle die 5 handlungsrelevantesten Einträge aus. Priorisiere Einträge mit hohem Score oder Labels wie "investigation_lead" und "important". Nutze für jede Meldung exakt dieses Format:)
 
-* **[Actionable Headline]:** [Maximal 2 dichte Sätze. Erkläre nüchtern, was passiert, welche politischen/wirtschaftlichen Konsequenzen es hat und was der direkte Impact ist.] *(Quelle: [Name der Quelle])*
-* (Wiederhole dies für genau 5 Punkte. Keine Füllwörter.)
+* **[Actionable Headline]:** [Ein kompakter, flüssig lesbarer Absatz (ca. 3 bis 4 Sätze). Beschreibe zunächst präzise die Entwicklung (Fakt), ordne sie politisch-wirtschaftlich ein (Kontext) und arbeite abschliessend glasklar heraus, warum dies für Schweizer Entscheider relevant ist (Impact). Nutze elegante Übergänge.] *(Quelle: [Name der Quelle])*
+* (Wiederhole dies für genau 5 Punkte.)
 
 ### 🔭 Radar / Ausblick
-(Ein bis zwei Sätze zu einem aufkommenden Trend, einer Regulierung (ggf. aus dem Ausland) oder einer technologischen Chance (Enabling) aus den Daten, die Schweizer Führungskräfte auf dem Radar haben müssen, um strategisch agieren zu können und nicht "kalt erwischt" zu werden.)
+(Ein kurzer, weitsichtiger Absatz von 2 bis 3 Sätzen zu einem aufkommenden Trend, einer Regulierung oder einer technologischen Chance (Enabling) aus den Daten, die Schweizer Führungskräfte auf dem Radar haben müssen, um strategisch agieren zu können.)
 
 RULES:
-- Nutze AUSSCHLIESSLICH die unten bereitgestellten Einträge (ENTRIES_DATA).
+- Du musst zwingend im JSON-Format antworten (siehe erwartetes Format).
+- Nutze AUSSCHLIESSLICH die unten bereitgestellten Einträge (ENTRIES_DATA). Jeder Eintrag ist mit `[ID: entry_type:entry_id]` markiert; verwende diese exakten Werte in `used_entry_keys`.
 - Erfinde keine Fakten, Daten oder Quellen (keine Halluzinationen).
-- Halte das vorgegebene Format und die maximalen Satzlängen strikt ein.
-- Gebe den Text als sauberes Markdown zurück.
+- Der Text muss anspruchsvoll, flüssig lesbar und professionell formuliert sein.
+
+ERWARTETES FORMAT (ein JSON-Objekt, ohne Markdown-Code-Fence):
+{
+  "briefing_markdown": "<dein Executive Briefing als Markdown-String>",
+  "used_entry_keys": ["feed_item:123", "email:45"]
+}
+Das Feld "used_entry_keys" listet die exakten IDs (Format entry_type:entry_id) der fünf Einträge unter "Die 5 wichtigsten Entwicklungen".
+
+ENTRIES_DATA:
+{markdownContext}
 PROMPT;
 
     private const MIN_SYSTEM_PROMPT_LEN = 20;
@@ -166,15 +180,16 @@ PROMPT;
                 'limit'        => $limit,
                 'label_filter' => $labelFilter,
                 'total'        => count($entries),
-            ]);
+            ], true);
 
             $markdownChars   = strlen($markdown);
             $contextWarning  = $this->contextSizeWarning($markdownChars);
 
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
-            $text   = $gemini->generateSummary($systemPrompt, $markdown);
+            $result = $gemini->generateSummary($systemPrompt, $markdown);
 
-            $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($entries, $scoresByKey);
+            [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries($entries, $result->usedEntryKeys);
+            $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
 
             $meta = [
                 'entry_count'    => count($entries),
@@ -185,13 +200,14 @@ PROMPT;
                 'modules'        => $this->enabledModuleNames($selection),
                 'labels'         => $labelFilter,
             ];
+            $meta = array_merge($meta, $attributionMeta);
             if ($contextWarning !== null) {
                 $meta['context_warning'] = $contextWarning;
             }
 
             echo json_encode([
                 'ok'           => true,
-                'text'         => $text,
+                'text'         => $result->markdown,
                 'meta'         => $meta,
                 'entries_html' => $entriesHtml,
             ], JSON_UNESCAPED_UNICODE);
@@ -288,5 +304,49 @@ PROMPT;
         }
 
         return null;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param list<string> $usedEntryKeys
+     * @return array{0: list<array<string, mixed>>, 1: array<string, mixed>}
+     */
+    private function resolveAttributedEntries(array $entries, array $usedEntryKeys): array
+    {
+        $contextCount = count($entries);
+        $attributed   = BriefingEntryCardPresenter::filterByUsedKeys($entries, $usedEntryKeys);
+
+        $meta = [
+            'context_entry_count'    => $contextCount,
+            'attributed_entry_count' => count($attributed),
+            'used_entry_keys'        => $usedEntryKeys,
+            'attribution_filtered'   => false,
+        ];
+
+        if ($usedEntryKeys === []) {
+            $meta['attribution_warning'] =
+                'Gemini returned no used_entry_keys; showing all entries sent as context.';
+            $meta['attribution_filtered'] = false;
+
+            return [$entries, $meta];
+        }
+
+        if ($attributed === []) {
+            $meta['attribution_warning'] =
+                'None of the cited entry IDs matched gathered entries; showing all context entries.';
+            $meta['attribution_filtered'] = false;
+
+            return [$entries, $meta];
+        }
+
+        $unmatched = count($usedEntryKeys) - count($attributed);
+        if ($unmatched > 0) {
+            $meta['attribution_warning'] = $unmatched
+                . ' cited ID(s) did not match gathered entries.';
+        }
+
+        $meta['attribution_filtered'] = true;
+
+        return [$attributed, $meta];
     }
 }

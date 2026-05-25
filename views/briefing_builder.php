@@ -130,7 +130,7 @@ $moduleOptions = [
 
                 <div class="admin-form-field">
                     <label for="briefing_system_prompt">System prompt</label>
-                    <textarea id="briefing_system_prompt" name="system_prompt" rows="14" class="search-input"
+                    <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
                               style="width:100%; max-width:40rem;"><?= e($defaultSystemPrompt) ?></textarea>
                 </div>
 
@@ -151,9 +151,9 @@ $moduleOptions = [
         </div>
 
         <div class="latest-entries-section module-section-spaced" id="briefing-sources-section" hidden>
-            <h2 class="section-title">Source entries</h2>
+            <h2 class="section-title">Referenced source entries</h2>
             <p class="admin-intro" id="briefing-sources-intro">
-                Same entries sent to Gemini, in relevance order (for validation).
+                Entry cards cited for the top developments (attribution).
             </p>
             <div id="briefing-sources-cards"></div>
         </div>
@@ -376,9 +376,18 @@ $moduleOptions = [
                     restoreOutputPlaceholder();
                     return;
                 }
-                if (data.meta && data.meta.context_warning && warnEl) {
-                    warnEl.textContent = data.meta.context_warning;
-                    warnEl.hidden = false;
+                if (warnEl) {
+                    var warnParts = [];
+                    if (data.meta && data.meta.context_warning) {
+                        warnParts.push(data.meta.context_warning);
+                    }
+                    if (data.meta && data.meta.attribution_warning) {
+                        warnParts.push(data.meta.attribution_warning);
+                    }
+                    if (warnParts.length) {
+                        warnEl.textContent = warnParts.join(' ');
+                        warnEl.hidden = false;
+                    }
                 }
                 hideProcessingStatus();
                 out.style.whiteSpace = 'pre-wrap';
@@ -404,10 +413,27 @@ $moduleOptions = [
                 }
                 if (data.entries_html && sourcesCards) {
                     sourcesCards.innerHTML = data.entries_html;
-                    if (sourcesIntro && data.meta && data.meta.entry_count !== undefined) {
-                        sourcesIntro.textContent =
-                            String(data.meta.entry_count) +
-                            ' entries sent to Gemini, in relevance order (for validation).';
+                    if (sourcesIntro && data.meta) {
+                        var introParts = [];
+                        if (data.meta.attribution_filtered && data.meta.attributed_entry_count !== undefined) {
+                            introParts.push(
+                                String(data.meta.attributed_entry_count) +
+                                ' entries cited in the briefing (attribution order)'
+                            );
+                            if (data.meta.context_entry_count !== undefined) {
+                                introParts.push(
+                                    String(data.meta.context_entry_count) + ' sent as context'
+                                );
+                            }
+                        } else if (data.meta.context_entry_count !== undefined) {
+                            introParts.push(
+                                String(data.meta.context_entry_count) +
+                                ' context entries shown (attribution unavailable)'
+                            );
+                        }
+                        if (introParts.length) {
+                            sourcesIntro.textContent = introParts.join(' · ') + '.';
+                        }
                     }
                     if (sourcesSection) sourcesSection.hidden = false;
                 }

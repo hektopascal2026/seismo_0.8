@@ -10,6 +10,44 @@ namespace Seismo\Service;
 final class BriefingEntryCardPresenter
 {
     /**
+     * Keep entries whose keys appear in $usedKeys, in model citation order.
+     *
+     * @param list<array<string, mixed>> $entries
+     * @param list<string> $usedKeys
+     * @return list<array<string, mixed>>
+     */
+    public static function filterByUsedKeys(array $entries, array $usedKeys): array
+    {
+        if ($usedKeys === []) {
+            return [];
+        }
+
+        $byKey = [];
+        foreach ($entries as $entry) {
+            $key = self::entryKey($entry);
+            if ($key !== '' && !isset($byKey[$key])) {
+                $byKey[$key] = $entry;
+            }
+        }
+
+        $filtered = [];
+        $seen     = [];
+        foreach ($usedKeys as $rawKey) {
+            if (!is_string($rawKey)) {
+                continue;
+            }
+            $key = trim($rawKey);
+            if ($key === '' || isset($seen[$key]) || !isset($byKey[$key])) {
+                continue;
+            }
+            $filtered[]  = $byKey[$key];
+            $seen[$key] = true;
+        }
+
+        return $filtered;
+    }
+
+    /**
      * @param list<array<string, mixed>> $entries Magnitu-shaped rows from {@see BriefingEntryGatherer}
      * @param array<string, array<string, mixed>> $scoresByKey "entry_type:entry_id" → score row
      */
@@ -222,5 +260,19 @@ final class BriefingEntryCardPresenter
         }
 
         return $sourceType !== '' ? $sourceType : 'eu';
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private static function entryKey(array $entry): string
+    {
+        $type = (string)($entry['entry_type'] ?? '');
+        $id   = (int)($entry['entry_id'] ?? 0);
+        if ($type === '' || $id <= 0) {
+            return '';
+        }
+
+        return $type . ':' . $id;
     }
 }

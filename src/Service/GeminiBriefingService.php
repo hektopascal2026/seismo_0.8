@@ -62,7 +62,7 @@ final class GeminiBriefingService
     /**
      * @throws GeminiBriefingException
      */
-    public function generateSummary(string $systemPrompt, string $markdownContext): string
+    public function generateSummary(string $systemPrompt, string $markdownContext): GeminiBriefingResult
     {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
@@ -83,7 +83,7 @@ final class GeminiBriefingService
             throw $this->exceptionFromFailedResponse($response);
         }
 
-        return $this->extractText($response);
+        return $this->parseBriefingResponse($response);
     }
 
     /**
@@ -91,25 +91,35 @@ final class GeminiBriefingService
      */
     private function buildPayload(string $systemPrompt, string $markdownContext): array
     {
+        $markdownContext = trim($markdownContext);
+        $systemPrompt    = trim($systemPrompt);
+        $userText        = 'Erstelle das Executive Briefing gemäss den System Instructions.';
+
+        if (str_contains($systemPrompt, '{markdownContext}')) {
+            $systemText = str_replace('{markdownContext}', $markdownContext, $systemPrompt);
+        } else {
+            $systemText = $systemPrompt;
+            $userText   = "ENTRIES_DATA:\n\n" . $markdownContext;
+        }
+
         return [
             'systemInstruction' => [
                 'parts' => [
-                    ['text' => $systemPrompt],
+                    ['text' => $systemText],
                 ],
             ],
             'contents' => [
                 [
                     'role'  => 'user',
                     'parts' => [
-                        [
-                            'text' => "ENTRIES_DATA:\n\n" . trim($markdownContext),
-                        ],
+                        ['text' => $userText],
                     ],
                 ],
             ],
             'generationConfig' => [
-                'temperature'     => self::DEFAULT_TEMPERATURE,
-                'maxOutputTokens' => $this->maxOutputTokens,
+                'temperature'      => self::DEFAULT_TEMPERATURE,
+                'maxOutputTokens'  => $this->maxOutputTokens,
+                'responseMimeType' => 'application/json',
             ],
         ];
     }
@@ -224,7 +234,17 @@ final class GeminiBriefingService
     /**
      * @throws GeminiBriefingException
      */
-    private function extractText(Response $response): string
+    private function parseBriefingResponse(Response $response): GeminiBriefingResult
+    {
+        $raw = $this->extractCandidateText($response);
+
+        return $this->parseBriefingFromModelOutput($raw);
+    }
+
+    /**
+     * @throws GeminiBriefingException
+     */
+    private function extractCandidateText(Response $response): string
     {
         try {
             $json = $response->json();
@@ -280,5 +300,70 @@ final class GeminiBriefingService
         }
 
         return $text;
+    }
+
+    /**
+     * @throws GeminiBriefingException
+     */
+    private function parseBriefingFromModelOutput(string $raw): GeminiBriefingResult
+    {
+        $jsonText = $this->stripJsonCodeFence($raw);
+
+        try {
+            $decoded = json_decode($jsonText, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            error_log('GeminiBriefingService briefing JSON parse: ' . $e->getMessage());
+            // Custom prompts may still return plain Markdown.
+            if (!str_contains($raw, '"briefing_markdown"')) {
+                return new GeminiBriefingResult($raw, []);
+            }
+
+            throw GeminiBriefingException::badResponse();
+        }
+
+        if (!is_array($decoded)) {
+            throw GeminiBriefingException::badResponse();
+        }
+
+        $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
+        if ($markdown === '') {
+            throw GeminiBriefingException::emptyResponse();
+        }
+
+        return new GeminiBriefingResult($markdown, $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function normalizeUsedEntryKeys(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($raw as $item) {
+            if (!is_string($item)) {
+                continue;
+            }
+            $key = trim($item);
+            if ($key === '' || !preg_match('/^[a-z][a-z0-9_]*:\d+$/', $key)) {
+                continue;
+            }
+            $keys[] = $key;
+        }
+
+        return $keys;
+    }
+
+    private function stripJsonCodeFence(string $raw): string
+    {
+        $raw = trim($raw);
+        if (preg_match('/^```(?:json)?\s*\n?(.*?)\n?```\s*$/si', $raw, $m) === 1) {
+            return trim($m[1]);
+        }
+
+        return $raw;
     }
 }
