@@ -1615,7 +1615,11 @@ final class EntryRepository
         $rows   = $this->fetchFeedItemsForModule($mode, $limit, $offset);
         $items  = [];
         foreach ($rows as $row) {
-            $items[] = $this->wrapFeedItem($row);
+            $wrapper = $this->wrapFeedItem($row);
+            if ($mode === 'media') {
+                $wrapper['timeline_media'] = true;
+            }
+            $items[] = $wrapper;
         }
         $this->attachScores($items);
         $this->attachFavourites($items);

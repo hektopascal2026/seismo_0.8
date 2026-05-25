@@ -113,29 +113,10 @@ $entryLoopIndex                 = 0;
                     <?php elseif ($itemWrapper['type'] === 'lex'): ?>
                         <?php $lexItem = $itemWrapper['data']; ?>
                         <?php
-                            $lexSource = $lexItem['source'] ?? 'eu';
-                            if ($lexSource === 'ch_bger') {
-                                $lexSourceEmoji = '⚖️';
-                                $lexSourceLabel = 'BGer';
-                            } elseif ($lexSource === 'ch_bge') {
-                                $lexSourceEmoji = '⚖️';
-                                $lexSourceLabel = 'BGE';
-                            } elseif ($lexSource === 'ch_bvger') {
-                                $lexSourceEmoji = '⚖️';
-                                $lexSourceLabel = 'BVGer';
-                            } elseif ($lexSource === 'de') {
-                                $lexSourceEmoji = '🇩🇪';
-                                $lexSourceLabel = 'DE';
-                            } elseif ($lexSource === 'ch') {
-                                $lexSourceEmoji = '🇨🇭';
-                                $lexSourceLabel = 'CH';
-                            } elseif ($lexSource === 'fr') {
-                                $lexSourceEmoji = '🇫🇷';
-                                $lexSourceLabel = 'FR';
-                            } else {
-                                $lexSourceEmoji = '🇪🇺';
-                                $lexSourceLabel = 'EU';
-                            }
+                            $lexSource = (string)($lexItem['source'] ?? 'eu');
+                            $lexPillParts = seismo_lex_source_pill_parts($lexSource);
+                            $lexSourceEmoji = $lexPillParts['emoji'];
+                            $lexSourceLabel = $lexPillParts['label'];
                             $lexDocType = $lexItem['document_type'] ?? 'Legislation';
                             if (($lexSource === 'eu')) {
                                 $lexDocType = function_exists('seismo_lex_eu_document_type_for_display')

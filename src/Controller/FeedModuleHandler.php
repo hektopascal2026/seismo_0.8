@@ -77,9 +77,10 @@ final class FeedModuleHandler
 
         require_once SEISMO_ROOT . '/views/helpers.php';
 
-        $showDaySeparators = true;
-        $showFavourites    = true;
-        $searchQuery       = '';
+        $showDaySeparators            = true;
+        $showFavourites               = true;
+        $timelineMediaToggleFeature   = $this->module->isMedia();
+        $searchQuery                  = '';
         $returnQuery       = $this->buildReturnQuery();
         $currentView       = 'newest';
         $emptyTimelineHint = 'default';

@@ -100,7 +100,6 @@ $legOn = !$timelineFilter->excludeCalendar;
 
 $feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
 $feedPillKinds      = $filterPillOptions['feed_pill_kinds'] ?? [];
-$lexSourceLabels    = $filterPillOptions['lex_source_labels'] ?? [];
 
 $formAction = $basePath . '/index.php';
 ?>
@@ -189,7 +188,7 @@ $formAction = $basePath . '/index.php';
                     <?php foreach ($filterPillOptions['lex_sources'] as $src): ?>
                         <?php
                         $cid       = 'df-lex-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $src);
-                        $lexLabel  = $lexSourceLabels[$src] ?? $src;
+                        $lexLabel  = seismo_lex_filter_pill_label($src);
                         ?>
                         <label class="filter-pill-label" for="<?= e($cid) ?>">
                             <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"
@@ -221,7 +220,7 @@ $formAction = $basePath . '/index.php';
                     <label class="filter-pill-label" for="df-cal">
                         <input type="checkbox" class="filter-pill-input" id="df-cal" name="filters[calendar]" value="1"
                             <?= $legOn ? ' checked' : '' ?>>
-                        <span class="filter-pill-text filter-pill-text--leg" title="Parliamentary calendar (Leg)">Leg</span>
+                        <span class="filter-pill-text filter-pill-text--leg" title="Parliamentary calendar (Leg)"><?= e(seismo_leg_filter_pill_label()) ?></span>
                     </label>
                 </div>
             </form>

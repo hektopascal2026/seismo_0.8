@@ -57,7 +57,7 @@ $activeNav = 'styleguide';
                 <tr><td>RSS / default feed</td><td><code>entry-tag--feed-rss</code></td><td><code>filter-pill-text--feed</code></td><td><code>#add8e6</code></td></tr>
                 <tr><td>Substack</td><td><code>entry-tag--feed-substack</code></td><td><code>filter-pill-text--feed-substack</code></td><td><code>#c5b4d1</code></td></tr>
                 <tr><td>Scraper</td><td><code>entry-tag--scraper</code></td><td><code>filter-pill-text--scraper</code></td><td><code>#add8e6</code> (blue)</td></tr>
-                <tr><td>Media</td><td><code>entry-tag--feed-media</code></td><td><code>filter-pill-text--feed-media</code></td><td><code>#ffdede</code> (light red)</td></tr>
+                <tr><td>Media</td><td><code>entry-tag--feed-media</code></td><td><code>filter-pill-text--feed-media</code></td><td><code>#ffc4c4</code> (light red)</td></tr>
                 <tr><td>Lex</td><td><code>entry-tag--lex-source</code></td><td><code>filter-pill-text--lex</code></td><td><code>#f5f562</code></td></tr>
                 <tr><td>Leg</td><td><code>entry-tag--leg-type</code></td><td><code>filter-pill-text--leg</code></td><td><code>#d4edda</code></td></tr>
                 <tr><td>Email</td><td><code>entry-tag--email-sender</code></td><td><code>filter-pill-text--mail</code></td><td><code>#ffdbbb</code></td></tr>
@@ -72,8 +72,8 @@ $activeNav = 'styleguide';
                 <span class="entry-tag entry-tag--feed-substack">Substack</span>
                 <span class="entry-tag entry-tag--feed-media">Media</span>
                 <span class="entry-tag entry-tag--scraper">🌐 Scraper</span>
-                <span class="entry-tag entry-tag--lex-source">🇪🇺 Lex</span>
-                <span class="entry-tag entry-tag--leg-type">Leg</span>
+                <span class="entry-tag entry-tag--lex-source"><?= e(seismo_lex_filter_pill_label('de')) ?></span>
+                <span class="entry-tag entry-tag--leg-type"><?= e(seismo_leg_filter_pill_label()) ?></span>
                 <span class="entry-tag entry-tag--email-sender">Email</span>
             </div>
         </div>
@@ -91,8 +91,8 @@ $activeNav = 'styleguide';
             </div>
             <div class="filter-toolbar__row">
                 <span class="filter-toolbar__hint">Lex / Leg / Mail</span>
-                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--lex">Lex</span></label>
-                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--leg">Leg</span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--lex"><?= e(seismo_lex_filter_pill_label('de')) ?></span></label>
+                <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--leg"><?= e(seismo_leg_filter_pill_label()) ?></span></label>
                 <label class="filter-pill-label"><input type="checkbox" class="filter-pill-input" checked disabled><span class="filter-pill-text filter-pill-text--mail">Mail</span></label>
             </div>
         </div>

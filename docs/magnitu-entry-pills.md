@@ -109,7 +109,7 @@ Timeline JOIN exposes: `feed_source_type`, `feed_category`, `feed_title` / `feed
 | Condition | CSS class | Background | Pill text |
 |-----------|-----------|------------|-----------|
 | `source_type === 'substack'` | `entry-tag entry-tag--feed-substack` | `#c5b4d1` | feed title |
-| `feeds.category === 'media'` | `entry-tag entry-tag--feed-media` | `#ffdede` | feed title |
+| `feeds.category === 'media'` | `entry-tag entry-tag--feed-media` | `#ffc4c4` | feed title |
 | `source_type === 'scraper'` | `entry-tag entry-tag--scraper` | `#add8e6` | `🌐 ` + feed title (default “Scraper”) |
 | `source_type === 'rss'` (and other non-special) | `entry-tag entry-tag--feed-rss` | `#add8e6` | feed title |
 | `source_type === 'parl_press'` | see Parl table | | |
@@ -251,7 +251,7 @@ Council codes from Parlament.ch (e.g. `NR` → Nationalrat, `SR` → Ständerat,
 |-----------|-----|----------|
 | `entry-tag--feed-rss` / `filter-pill-text--feed` | `#add8e6` | RSS / default feeds |
 | `entry-tag--feed-substack` / `filter-pill-text--feed-substack` | `#c5b4d1` | Substack |
-| `entry-tag--feed-media` / `filter-pill-text--feed-media` | `#ffdede` | Media module (light red) |
+| `entry-tag--feed-media` / `filter-pill-text--feed-media` | `#ffc4c4` | Media module (light red) |
 | `entry-tag--scraper` / `filter-pill-text--scraper` | `#add8e6` | Scraper (`🌐` prefix in UI) |
 | `entry-tag--email-sender` / `filter-pill-text--mail` | `#ffdbbb` | Email |
 | `entry-tag--parl` | `#f5f562` | Parl press primary |

@@ -152,13 +152,51 @@ if (!function_exists('seismo_feed_item_entry_tag_class')) {
      * @param array<string, mixed> $item Feed row (`feed_source_type`, `feed_category`, …)
      * @param string               $wrapperType `rss` or `substack` from {@see EntryRepository::wrapFeedItem()}.
      */
-    function seismo_feed_item_entry_tag_class(array $item, string $wrapperType = 'rss'): string
+    function seismo_feed_item_entry_tag_class(array $item, string $wrapperType = 'rss', bool $timelineMedia = false): string
     {
-        if (seismo_feed_item_is_timeline_media($item)) {
+        if ($timelineMedia || seismo_feed_item_is_timeline_media($item)) {
             return 'entry-tag--feed-media';
         }
 
         return $wrapperType === 'substack' ? 'entry-tag--feed-substack' : 'entry-tag--feed-rss';
+    }
+}
+
+if (!function_exists('seismo_lex_source_pill_parts')) {
+    /**
+     * Emoji + short label for Lex / Jus source pills (timeline cards and filter page).
+     *
+     * @return array{emoji: string, label: string}
+     */
+    function seismo_lex_source_pill_parts(string $source): array
+    {
+        return match ($source) {
+            'ch_bger'  => ['emoji' => '⚖️', 'label' => 'BGer'],
+            'ch_bge'   => ['emoji' => '⚖️', 'label' => 'BGE'],
+            'ch_bvger' => ['emoji' => '⚖️', 'label' => 'BVGer'],
+            'de'       => ['emoji' => '🇩🇪', 'label' => 'DE'],
+            'ch'       => ['emoji' => '🇨🇭', 'label' => 'CH'],
+            'fr'       => ['emoji' => '🇫🇷', 'label' => 'FR'],
+            default    => ['emoji' => '🇪🇺', 'label' => 'EU'],
+        };
+    }
+}
+
+if (!function_exists('seismo_lex_filter_pill_label')) {
+    /** Filter-page Lex pill text (e.g. `🇩🇪 DE`). */
+    function seismo_lex_filter_pill_label(string $source): string
+    {
+        $p = seismo_lex_source_pill_parts($source);
+
+        return $p['emoji'] . ' ' . $p['label'];
+    }
+}
+
+if (!function_exists('seismo_leg_filter_pill_label')) {
+    /** Filter-page Leg (calendar) pill text — matches Parlament.ch source family. */
+    function seismo_leg_filter_pill_label(): string
+    {
+        return '🇨🇭 PARL';
     }
 }
 
