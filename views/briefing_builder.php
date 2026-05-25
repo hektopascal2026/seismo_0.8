@@ -18,8 +18,8 @@ declare(strict_types=1);
 
 $accent = seismoBrandAccent();
 
-$headerTitle    = 'AI Briefing';
-$headerSubtitle = 'Executive Briefing (Politik & Wirtschaft)';
+$headerTitle    = 'Briefing';
+$headerSubtitle = '';
 $activeNav      = 'briefing_builder';
 
 $generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
@@ -108,15 +108,6 @@ $moduleOptions = [
         <?php endif; ?>
 
         <div class="latest-entries-section">
-            <h2 class="section-title">Filters</h2>
-            <p class="admin-intro">
-                Entries are scored labels from Magnitu or the recipe scorer on this instance<?= isSatellite() ? ' (desk scores, not mothership)' : '' ?>.
-                Only <strong>investigation lead</strong> rows are included by default; optionally add <strong>important</strong>.
-                Each enabled module loads up to the entry limit below (default <?= (int)$defaultLimit ?>, maximum <?= (int)$maxLimit ?>).
-                Up to <?= (int)\Seismo\Formatter\MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS ?> characters of each entry body
-                (full content when stored, otherwise the summary) is sent to Gemini in one pass.
-            </p>
-
             <form id="briefing-builder-form" class="admin-form-card">
                 <div class="filter-page-actions" style="margin-bottom:0.75rem;">
                     <button type="button" class="btn btn-primary" id="briefing-modules-all">All sources</button>
