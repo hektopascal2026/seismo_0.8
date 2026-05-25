@@ -157,7 +157,7 @@ final class LexContentBackfillService
                 continue;
             }
 
-            $content = $this->eurLex->fetchPlainTextFromUrl($url);
+            $content = $this->eurLex->fetchPlainTextFromRow($row);
             if ($content === null || $content === '') {
                 $skipped++;
                 $this->noteReason($reasons, 'empty_corpus');
