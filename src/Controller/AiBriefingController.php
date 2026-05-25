@@ -15,6 +15,7 @@ use Seismo\Core\MagnituScoreBands;
 use Seismo\Service\BriefingEntryCardPresenter;
 use Seismo\Service\BriefingEntryGatherer;
 use Seismo\Service\BriefingGeminiContext;
+use Seismo\Service\BriefingModuleGuard;
 use Seismo\Service\BriefingScoreFilter;
 use Seismo\Service\BriefingSourceSelection;
 use Seismo\Service\GeminiBriefingException;
@@ -303,6 +304,7 @@ PROMPT;
                 $scoresByKey,
                 $briefingMeta,
                 $twoPass,
+                $selection,
             );
 
             $entriesHtml     = '';
@@ -868,28 +870,39 @@ PROMPT;
             $filters['scoreFilter'],
         );
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+        $entries = $gatherer->filterByModuleSelection($entries, $filters['selection']);
 
-        $geminiContext   = new BriefingGeminiContext(new SystemConfigRepository($pdo));
-        $capped          = $geminiContext->capEntries($entries);
-        $entries         = $capped['entries'];
+        $geminiContext = new BriefingGeminiContext(new SystemConfigRepository($pdo));
+        $capped        = $geminiContext->capEntriesForModules(
+            $entries,
+            $scoresByKey,
+            $gatherer,
+            $filters['selection'],
+        );
+        $entries          = $capped['entries'];
         $contextTruncated = $capped['truncated'];
+        $stratifiedCap    = $capped['stratified'];
 
-        // XML entries with <id> for Gemini extraction; export path stays markdown.
-        $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
-            'since'          => $filters['since'],
-            'limit'          => $filters['limit'],
-            'score_selection' => MagnituScoreBands::describeBriefingGather($scoreFilter),
-            'total'          => count($entries),
-        ], true, MarkdownBriefingFormatter::FORMAT_XML);
+        $guard = new BriefingModuleGuard($gatherer);
+        $sealed = $guard->sealGeminiContext($entries, $scoresByKey, [
+            'since'           => $filters['since'],
+            'limit'           => $filters['limit'],
+            'score_selection' => MagnituScoreBands::describeBriefingGather($filters['scoreFilter']),
+        ], $filters['selection']);
+        $entries       = $sealed['entries'];
+        $markdown      = $sealed['markdown'];
+        $markdownChars = $sealed['markdownChars'];
 
-        $markdownChars = strlen($markdown);
         $contextWarning = $this->contextSizeWarning($markdownChars);
         if ($contextTruncated > 0) {
             $capNote = $contextTruncated . ' additional '
                 . ($contextTruncated === 1 ? 'entry was' : 'entries were')
                 . ' omitted from the Gemini context cap (max '
                 . $geminiContext->maxContextEntries()
-                . '; highest relevance, then newest).';
+                . ($stratifiedCap
+                    ? '; fair share per enabled source module, then relevance'
+                    : '; highest relevance, then newest')
+                . ').';
             $contextWarning = $contextWarning !== null
                 ? $contextWarning . ' ' . $capNote
                 : $capNote;

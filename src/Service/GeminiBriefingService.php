@@ -58,6 +58,7 @@ You choose which entries merit inclusion in an executive briefing. The user pers
 RULES:
 - ENTRIES_DATA contains XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
 - Select UP TO {maxCoreItems} distinct entries that satisfy the user system prompt (audience, jurisdictions, topics, named entities). Selecting fewer is correct when strict criteria apply — do not pad with high-relevance entries that fail the prompt.
+- When the user prompt restricts jurisdictions or legal corpora (e.g. DE/FR/AT statutes, EU law), EXCLUDE entries whose <jurisdiction> is missing or does not match — even if relevance is high. Prefer lex_item rows over feed_item or calendar_event for legal/regulatory prompts.
 - Prefer entries that are timely, non-redundant, and fit the user system prompt. Use <jurisdiction> and <source_type> when the prompt targets specific countries or legal corpora.
 - used_entry_keys must list the chosen <id> values in briefing order (most important first).
 - selection_notes: one short sentence per chosen entry (why it made the cut). Not shown to end users.
@@ -209,6 +210,7 @@ CONTRACT;
         array $scoresByKey = [],
         array $briefingMeta = [],
         bool $twoPass = false,
+        ?BriefingSourceSelection $moduleSelection = null,
     ): GeminiBriefingResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
@@ -229,6 +231,7 @@ CONTRACT;
                 $briefingMeta,
                 $apiKey,
                 $twoPass,
+                $moduleSelection,
             );
         } catch (GeminiBriefingException $e) {
             if (!$e->isRateLimitExceeded() || $this->rateLimitFallbackUsed) {
@@ -245,6 +248,7 @@ CONTRACT;
                 $contextEntries,
                 $scoresByKey,
                 $briefingMeta,
+                $moduleSelection,
             );
 
             $this->lastGenerationMeta = [
@@ -263,6 +267,7 @@ CONTRACT;
                 $briefingMeta,
                 $apiKey,
                 true,
+                $moduleSelection,
             );
         }
     }
@@ -283,7 +288,16 @@ CONTRACT;
         array $briefingMeta,
         string $apiKey,
         bool $twoPass,
+        ?BriefingSourceSelection $moduleSelection = null,
     ): GeminiBriefingResult {
+        [$contextEntries, $markdownContext, $contextEntryCount] = $this->sealContextForGemini(
+            $contextEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $markdownContext,
+            $moduleSelection,
+        );
+
         $userSystemPrompt = trim($userSystemPrompt);
         if ($userSystemPrompt === '') {
             throw GeminiBriefingException::invalidInput('System prompt is required.');
@@ -342,7 +356,24 @@ CONTRACT;
         array $contextEntries,
         array $scoresByKey,
         array $briefingMeta,
+        ?BriefingSourceSelection $moduleSelection,
     ): array {
+        $gatherer = new BriefingEntryGatherer();
+        if ($moduleSelection !== null) {
+            $capped = BriefingGeminiContext::capEntryListStratified(
+                $contextEntries,
+                $this->briefingContext->rateLimitFallbackMaxEntries(),
+                $scoresByKey,
+                $gatherer,
+                $moduleSelection,
+            );
+            $entries = $capped['entries'];
+            $guard   = new BriefingModuleGuard($gatherer);
+            $sealed  = $guard->sealGeminiContext($entries, $scoresByKey, $briefingMeta, $moduleSelection);
+
+            return [$sealed['entries'], $sealed['markdown'], count($sealed['entries'])];
+        }
+
         $capped  = BriefingGeminiContext::capEntryList(
             $contextEntries,
             $this->briefingContext->rateLimitFallbackMaxEntries(),
@@ -359,6 +390,34 @@ CONTRACT;
         );
 
         return [$entries, $markdown, count($entries)];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $contextEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta
+     * @return array{0: list<array<string, mixed>>, 1: string, 2: int}
+     */
+    private function sealContextForGemini(
+        array $contextEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $markdownContext,
+        ?BriefingSourceSelection $moduleSelection,
+    ): array {
+        if ($moduleSelection === null) {
+            return [$contextEntries, $markdownContext, count($contextEntries)];
+        }
+
+        $guard  = new BriefingModuleGuard(new BriefingEntryGatherer());
+        $sealed = $guard->sealGeminiContext(
+            $contextEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $moduleSelection,
+        );
+
+        return [$sealed['entries'], $sealed['markdown'], count($sealed['entries'])];
     }
 
     /**
@@ -705,13 +764,6 @@ CONTRACT;
         if (count($merged) <= $selectionTarget) {
             return $merged;
         }
-
-        usort($merged, function (string $a, string $b) use ($scoresByKey): int {
-            $sa = (float)($scoresByKey[strtolower($a)]['relevance_score'] ?? 0);
-            $sb = (float)($scoresByKey[strtolower($b)]['relevance_score'] ?? 0);
-
-            return $sb <=> $sa;
-        });
 
         return array_slice($merged, 0, $selectionTarget);
     }

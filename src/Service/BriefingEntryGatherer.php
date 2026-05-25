@@ -127,6 +127,9 @@ final class BriefingEntryGatherer
             if ($id <= 0 || $type === '') {
                 continue;
             }
+            if (!$this->entryTypeGatherable($type, $selection)) {
+                continue;
+            }
             $key = $type . ':' . $id;
             if (isset($byKey[$key])) {
                 continue;
@@ -141,13 +144,16 @@ final class BriefingEntryGatherer
             if (!BriefingLookback::entryInWindow($e, $since)) {
                 continue;
             }
+            if (!$this->entryMatchesModuleSelection($e, $selection)) {
+                continue;
+            }
             $k = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
             if ($k !== ':') {
                 $byKey[$k] = $e;
             }
         }
 
-        $entries = array_values($byKey);
+        $entries = $this->filterByModuleSelection(array_values($byKey), $selection);
 
         $pairs = [];
         foreach ($entries as $e) {
@@ -175,6 +181,8 @@ final class BriefingEntryGatherer
                 );
             }
         ));
+
+        $entries = $this->filterByModuleSelection($entries, $selection);
 
         $this->lastGatherStats = [
             'entries_before_score_filter' => $entriesBeforeScoreFilter,
@@ -208,6 +216,8 @@ final class BriefingEntryGatherer
                 return BriefingLookback::entryInWindow($e, $since);
             },
         ));
+
+        $entries = $this->filterByModuleSelection($entries, $selection);
 
         $pairs = [];
         foreach ($entries as $e) {
@@ -316,40 +326,80 @@ final class BriefingEntryGatherer
     }
 
     /**
+     * Keep only rows from enabled nav modules (Feeds / Media / …).
+     *
+     * @param list<array<string, mixed>> $entries
+     * @return list<array<string, mixed>>
+     */
+    public function filterByModuleSelection(array $entries, BriefingSourceSelection $selection): array
+    {
+        return array_values(array_filter(
+            $entries,
+            fn(array $e): bool => $this->entryMatchesModuleSelection($e, $selection),
+        ));
+    }
+
+    /**
      * @param array<string, mixed> $entry Shaped Magnitu export row.
      */
-    private function entryMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    public function entryMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    {
+        return $this->moduleBucketForEntry($entry, $selection) !== null;
+    }
+
+    /**
+     * Nav module bucket for stratified Gemini context caps (feeds / media / …).
+     *
+     * @param array<string, mixed> $entry Shaped Magnitu export row.
+     */
+    public function moduleBucketForEntry(array $entry, BriefingSourceSelection $selection): ?string
     {
         $type = (string)($entry['entry_type'] ?? '');
 
+        if ($type === 'feed_item') {
+            $sourceType = strtolower((string)($entry['source_type'] ?? ''));
+            $category   = strtolower((string)($entry['source_category'] ?? ''));
+
+            $isMedia   = $category === 'media';
+            $isScraper = $sourceType === 'scraper' || $category === 'scraper';
+            $isFeeds   = !$isMedia && !$isScraper
+                && in_array($sourceType, ['rss', 'substack', 'parl_press'], true);
+
+            if ($selection->moduleFeeds() && $isFeeds) {
+                return 'feeds';
+            }
+            if ($selection->moduleMedia() && $isMedia) {
+                return 'media';
+            }
+            if ($selection->moduleScraper() && $isScraper) {
+                return 'scraper';
+            }
+
+            return null;
+        }
+
         return match ($type) {
-            'feed_item' => $this->feedItemMatchesModuleSelection($entry, $selection),
-            'email' => $selection->moduleEmail(),
-            'lex_item' => $selection->moduleLex(),
-            'calendar_event' => $selection->moduleLeg(),
-            default => false,
+            'email' => $selection->moduleEmail() ? 'email' : null,
+            'lex_item' => $selection->moduleLex() ? 'lex' : null,
+            'calendar_event' => $selection->moduleLeg() ? 'leg' : null,
+            default => null,
         };
     }
 
     /**
-     * Heuristic partition (feeds / media / scraper) from shaped feed metadata.
-     *
-     * @param array<string, mixed> $entry
+     * Whether Magnitu score hydration may fetch this entry_type at all.
      */
-    private function feedItemMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    private function entryTypeGatherable(string $entryType, BriefingSourceSelection $selection): bool
     {
-        $sourceType = strtolower((string)($entry['source_type'] ?? ''));
-        $category   = strtolower((string)($entry['source_category'] ?? ''));
-
-        $isMedia = $category === 'media';
-        $isScraper = $sourceType === 'scraper'
-            || $category === 'scraper';
-        $isFeeds = !$isMedia && !$isScraper
-            && in_array($sourceType, ['rss', 'substack', 'parl_press'], true);
-
-        return ($selection->moduleFeeds() && $isFeeds)
-            || ($selection->moduleMedia() && $isMedia)
-            || ($selection->moduleScraper() && $isScraper);
+        return match ($entryType) {
+            'email' => $selection->moduleEmail(),
+            'lex_item' => $selection->moduleLex(),
+            'calendar_event' => $selection->moduleLeg(),
+            'feed_item' => $selection->moduleFeeds()
+                || $selection->moduleMedia()
+                || $selection->moduleScraper(),
+            default => false,
+        };
     }
 
     /**
