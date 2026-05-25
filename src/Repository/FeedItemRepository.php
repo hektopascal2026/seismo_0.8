@@ -9,6 +9,7 @@ use PDO;
 use PDOException;
 use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 use Seismo\Core\Fetcher\ScraperListingUrl;
+use Seismo\Core\PlainTextNormalizer;
 
 /**
  * RSS / Substack / scraper rows in `feed_items` + `feeds` metadata.
@@ -405,8 +406,8 @@ final class FeedItemRepository
                 if ($guid === '') {
                     $guid = substr(sha1($link . "\0" . $title), 0, 32);
                 }
-                $desc = (string)($row['description'] ?? '');
-                $content = (string)($row['content'] ?? '');
+                $desc = PlainTextNormalizer::forIngest((string)($row['description'] ?? ''));
+                $content = PlainTextNormalizer::forIngest((string)($row['content'] ?? ''));
                 if ($content === '' && $desc !== '') {
                     $content = $desc;
                 }

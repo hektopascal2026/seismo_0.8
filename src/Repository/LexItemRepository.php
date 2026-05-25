@@ -9,6 +9,7 @@ use PDO;
 use PDOException;
 use Seismo\Core\Lex\LexCardPreview;
 use Seismo\Core\Lex\LexPlainText;
+use Seismo\Core\PlainTextNormalizer;
 
 /**
  * Lex family table — bounded reads, transactional upserts, satellite-safe entryTable().
@@ -186,6 +187,10 @@ final class LexItemRepository
         if ($id <= 0 || trim($content) === '') {
             return false;
         }
+        $content = PlainTextNormalizer::forIngest($content);
+        if ($description !== null && $description !== '') {
+            $description = PlainTextNormalizer::forIngest($description);
+        }
 
         $table = entryTable('lex_items');
         if ($description !== null && trim($description) !== '') {
@@ -281,13 +286,19 @@ final class LexItemRepository
             foreach ($rows as $row) {
                 $desc = $row['description'] ?? null;
                 if ($desc !== null && $desc !== '') {
-                    $desc = (string)$desc;
+                    $desc = PlainTextNormalizer::forIngest((string)$desc);
+                    if ($desc === '') {
+                        $desc = null;
+                    }
                 } else {
                     $desc = null;
                 }
                 $content = $row['content'] ?? null;
                 if ($content !== null && $content !== '') {
-                    $content = (string)$content;
+                    $content = PlainTextNormalizer::forIngest((string)$content);
+                    if ($content === '') {
+                        $content = null;
+                    }
                 } else {
                     $content = null;
                 }

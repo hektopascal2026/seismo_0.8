@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Core\Mail;
 
+use Seismo\Core\PlainTextNormalizer;
 use Seismo\Core\Fetcher\ScraperContentExtractor;
 use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Service\Http\BaseClient;
@@ -37,7 +38,7 @@ final class EmailWebViewBodyHydrator
 
         try {
             $html  = $this->fetchPageHtml($url);
-            $plain = $this->extractPlainText($html);
+            $plain = PlainTextNormalizer::forIngest($this->extractPlainText($html));
             if (mb_strlen($plain, 'UTF-8') < self::MIN_PLAIN_CHARS) {
                 return $row;
             }

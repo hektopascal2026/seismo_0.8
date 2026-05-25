@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Repository;
 
 use PDO;
+use Seismo\Core\PlainTextNormalizer;
 use Seismo\Core\Mail\EmailAlternateLocalePolicy;
 use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
@@ -70,6 +71,8 @@ final class EmailIngestRepository
             text_body = VALUES(text_body),
             html_body = VALUES(html_body)';
 
+        $existingImap = $this->existingImapUids($rows);
+
         return $this->executeBatch($sql, $rows, static function (array $row): ?int {
             $uid = isset($row['imap_uid']) ? (int)$row['imap_uid'] : 0;
 
@@ -94,7 +97,7 @@ final class EmailIngestRepository
                 $row['text_body'],
                 $row['html_body'],
             ];
-        });
+        }, $existingImap, 'imap_uid');
     }
 
     /**
@@ -139,6 +142,8 @@ final class EmailIngestRepository
             text_body = VALUES(text_body),
             html_body = VALUES(html_body)';
 
+        $existingGmail = $this->existingGmailMessageIds($rows);
+
         $n = $this->executeBatch($sql, $rows, static function (array $row): ?string {
             $id = trim((string)($row['gmail_message_id'] ?? ''));
 
@@ -164,7 +169,7 @@ final class EmailIngestRepository
                 $row['text_body'],
                 $row['html_body'],
             ];
-        });
+        }, $existingGmail, 'gmail_message_id');
 
         if ($n > 0) {
             try {
@@ -180,9 +185,17 @@ final class EmailIngestRepository
     /**
      * @param callable(array<string, mixed>): (int|string|null) $keyFilter
      * @param callable(array<string, mixed>): list<mixed> $bindRow
+     * @param array<string|int, true> $existingIngestKeys Keys already in DB for this batch (skip hosted fetch).
+     * @param 'gmail_message_id'|'imap_uid'|null $ingestKeyField Row field used with $existingIngestKeys.
      */
-    private function executeBatch(string $sql, array $rows, callable $keyFilter, callable $bindRow): int
-    {
+    private function executeBatch(
+        string $sql,
+        array $rows,
+        callable $keyFilter,
+        callable $bindRow,
+        array $existingIngestKeys = [],
+        ?string $ingestKeyField = null,
+    ): int {
         $stmt = $this->pdo->prepare($sql);
         $subs = (new EmailSubscriptionRepository($this->pdo))
             ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
@@ -194,7 +207,14 @@ final class EmailIngestRepository
                 if ($keyFilter($row) === null) {
                     continue;
                 }
-                $row = $this->prepareRow($row, $subs);
+                $hydrateHosted = true;
+                if ($ingestKeyField !== null) {
+                    $key = $ingestKeyField === 'imap_uid'
+                        ? (int)($row['imap_uid'] ?? 0)
+                        : trim((string)($row[$ingestKeyField] ?? ''));
+                    $hydrateHosted = $key === '' || $key === 0 || !isset($existingIngestKeys[$key]);
+                }
+                $row = $this->prepareRow($row, $subs, $hydrateHosted);
                 $stmt->execute($bindRow($row));
                 ++$n;
             }
@@ -212,13 +232,13 @@ final class EmailIngestRepository
      * @param list<array<string, mixed>> $subs
      * @return array<string, mixed>
      */
-    private function prepareRow(array $row, array $subs): array
+    private function prepareRow(array $row, array $subs, bool $hydrateHostedBody = false): array
     {
         $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
         // Before listing/subscription stripping — those remove “view in browser” lines from plain text.
-        $row = $this->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize);
+        $row = $this->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, $hydrateHostedBody);
         $row = $this->maybeStripListingBoilerplate($row, $subs);
         $row = EmailSubscriptionProcessor::apply($row, $subs);
         $row = $this->syncAndCapBodies($row);
@@ -275,6 +295,7 @@ final class EmailIngestRepository
         array $row,
         string $htmlForExtract = '',
         string $plainForExtract = '',
+        bool $hydrateHostedBody = false,
     ): array {
         $html = trim($htmlForExtract);
         if ($html === '') {
@@ -296,9 +317,11 @@ final class EmailIngestRepository
             $row = EmailMetadata::mergeWebViewUrl($row, $resolution->url);
         }
 
-        if ($resolution->hydrateBody
+        if ($hydrateHostedBody
+            && $resolution->hydrateBody
             && $resolution->url !== null
             && $resolution->localeRank !== null
+            && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW
         ) {
             $row = (new EmailWebViewBodyHydrator())->hydrateRow(
                 $row,
@@ -331,7 +354,74 @@ final class EmailIngestRepository
         string $htmlForExtract = '',
         string $plainForExtract = '',
     ): array {
-        return $this->applyWebViewProcessing($row, $htmlForExtract, $plainForExtract);
+        return $this->applyWebViewProcessing($row, $htmlForExtract, $plainForExtract, false);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return array<string, true>
+     */
+    private function existingGmailMessageIds(array $rows): array
+    {
+        $ids = [];
+        foreach ($rows as $row) {
+            $id = trim((string)($row['gmail_message_id'] ?? ''));
+            if ($id !== '') {
+                $ids[$id] = true;
+            }
+        }
+
+        return $this->lookupExistingColumn($ids, 'gmail_message_id');
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return array<int, true>
+     */
+    private function existingImapUids(array $rows): array
+    {
+        $uids = [];
+        foreach ($rows as $row) {
+            $uid = (int)($row['imap_uid'] ?? 0);
+            if ($uid > 0) {
+                $uids[$uid] = true;
+            }
+        }
+
+        return $this->lookupExistingColumn($uids, 'imap_uid');
+    }
+
+    /**
+     * @param array<string|int, true> $keys
+     * @return array<string|int, true>
+     */
+    private function lookupExistingColumn(array $keys, string $column): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+        if ($column !== 'gmail_message_id' && $column !== 'imap_uid') {
+            return [];
+        }
+
+        $t     = entryTable('emails');
+        $found = [];
+        foreach (array_chunk(array_keys($keys), 200, true) as $chunk) {
+            $placeholders = implode(',', array_fill(0, count($chunk), '?'));
+            $stmt         = $this->pdo->prepare(
+                'SELECT ' . $column . ' FROM ' . $t . ' WHERE ' . $column . ' IN (' . $placeholders . ')'
+            );
+            $stmt->execute(array_values($chunk));
+            while (($val = $stmt->fetchColumn()) !== false) {
+                if ($column === 'imap_uid') {
+                    $found[(int)$val] = true;
+                } else {
+                    $found[(string)$val] = true;
+                }
+            }
+        }
+
+        return $found;
     }
 
     private function nullStr(mixed $v): ?string
@@ -385,6 +475,10 @@ final class EmailIngestRepository
 
     private function capBodyBytes(string $body): string
     {
+        $body = PlainTextNormalizer::forIngest($body);
+        if ($body === '') {
+            return '';
+        }
         if (strlen($body) <= self::MAX_BODY_BYTES) {
             return $body;
         }
