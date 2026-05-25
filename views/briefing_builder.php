@@ -120,44 +120,6 @@ $moduleOptions = [
         <?php endif; ?>
 
         <div class="latest-entries-section">
-            <div class="admin-form-card briefing-selection-help" style="margin-bottom:1rem;">
-                <h2 class="section-title" style="margin-top:0;">What gets selected</h2>
-                <p class="admin-intro" style="margin:0.5rem 0 0;">
-                    Entries sent to Gemini are chosen by <strong>relevance score</strong> (same rules as the
-                    <a href="<?= e($basePath) ?>/index.php?action=magnitu">Highlights</a> tab), then narrowed by your
-                    choices below.
-                </p>
-                <ul class="admin-intro" style="margin:0.5rem 0 0;padding-left:1.25rem;">
-                    <li>
-                        <strong>Always:</strong> scored items at or above the Highlights bar —
-                        relevance ≥ <strong><?= (int)$alertThresholdPct ?>%</strong>
-                        (<a href="<?= e($magnituSettingsUrl) ?>">Settings → Magnitu → Alert threshold</a>).
-                        Badge colour (important vs investigation) still uses fixed bands at 50% and 75%;
-                        both bands above your threshold are included.
-                    </li>
-                    <li>
-                        <strong>Source modules:</strong> only checked families (Feeds, Media, Scraper, Mail, Lex, Leg).
-                    </li>
-                    <li>
-                        <strong>Lookback:</strong> entries whose official date or Seismo ingest time falls inside the window
-                        (feeds: published or cached; Leg: event or fetch date).
-                    </li>
-                    <li>
-                        <strong>Per-module limit:</strong> caps how many recent rows are loaded per module before
-                        score filtering; raise it if the context count looks too low.
-                    </li>
-                    <li>
-                        <strong>Optional — Also include important band below threshold:</strong> adds scored items
-                        with relevance <strong>&gt; 50%</strong> and <strong>&lt; <?= (int)$alertThresholdPct ?>%</strong>
-                        (the yellow “important” band under your Highlights bar).
-                    </li>
-                </ul>
-                <p class="admin-intro" style="margin:0.5rem 0 0;">
-                    <strong>Number of items</strong> is separate: it fixes how many core items Gemini must cite in the
-                    briefing, not how many sources are loaded.
-                </p>
-            </div>
-
             <form id="briefing-builder-form" class="admin-form-card">
                 <div class="filter-page-actions" style="margin-bottom:0.75rem;">
                     <button type="button" class="btn btn-primary" id="briefing-modules-all">All sources</button>
