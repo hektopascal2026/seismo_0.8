@@ -11,6 +11,7 @@
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn
  * @var bool $legacyRssScraperRefresh
+ * @var bool $geminiApiKeyOnFile Mothership: Gemini key stored in system_config
  */
 
 declare(strict_types=1);
@@ -44,6 +45,18 @@ declare(strict_types=1);
                     <p class="admin-intro" style="margin-top:0.5rem;">
                         Default is <strong>chunked</strong> refresh: each cron tick (and each manual refresh up to a short time budget) pulls a limited batch; the cycle continues in the background. Turn this on only if you need the old single-pass behaviour.
                     </p>
+                </div>
+                <?php endif; ?>
+                <?php if (empty($satellite)): ?>
+                <div class="admin-form-field">
+                    <label for="gemini_api_key">Gemini API key (AI Briefing Builder)</label>
+                    <input type="password" id="gemini_api_key" name="gemini_api_key" class="search-input" style="width:100%; max-width:28rem;"
+                           value="" placeholder="Leave blank to keep current key" autocomplete="off">
+                    <?php if (!empty($geminiApiKeyOnFile)): ?>
+                        <div class="magnitu-field-hint">A Gemini API key is already stored. Used server-side only for <code>?action=briefing_builder</code>.</div>
+                    <?php else: ?>
+                        <div class="magnitu-field-hint">Required for the AI Briefing Builder page. Create a key in <a href="https://aistudio.google.com/apikey" rel="noopener noreferrer">Google AI Studio</a>.</div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 <div class="admin-form-actions">

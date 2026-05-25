@@ -29,6 +29,9 @@ final class SettingsController
      */
     public const KEY_NAV_LEADING_THROTTLE = 'ui:nav_leading_throttle';
 
+    /** Google Gemini API key for Settings → General / AI Briefing Builder (mothership). */
+    public const KEY_GEMINI_API_KEY = 'gemini:api_key';
+
     /**
      * `system_config` keys rendered on the Magnitu tab. Kept here (not in the
      * partial) so the controller stays the single place that decides which
@@ -134,6 +137,7 @@ final class SettingsController
         $configLocalWritable       = false;
         $adminPasswordPasteBlock   = null;
         $sessionAuthEnabled        = AuthGate::isEnabled();
+        $geminiApiKeyOnFile        = false;
 
         $diagStatus     = [];
         $diagCoreStatus = [];
@@ -151,6 +155,10 @@ final class SettingsController
             if (isset($_SESSION['settings_admin_password_paste']) && is_string($_SESSION['settings_admin_password_paste'])) {
                 $adminPasswordPasteBlock = $_SESSION['settings_admin_password_paste'];
                 unset($_SESSION['settings_admin_password_paste']);
+            }
+            if (!$satellite) {
+                $geminiKey = $config->get(self::KEY_GEMINI_API_KEY);
+                $geminiApiKeyOnFile = $geminiKey !== null && trim($geminiKey) !== '';
             }
         }
 
@@ -385,6 +393,11 @@ final class SettingsController
                 $config->set(CoreRunner::CONFIG_KEY_LEGACY_RSS_SCRAPER_REFRESH, $newLegacy ? '1' : '0');
                 if ($oldLegacy !== $newLegacy) {
                     CoreRunner::clearChunkedFeedRefreshState($config);
+                }
+
+                $geminiApiKey = trim((string)($_POST['gemini_api_key'] ?? ''));
+                if ($geminiApiKey !== '') {
+                    $config->set(self::KEY_GEMINI_API_KEY, $geminiApiKey);
                 }
             }
 
