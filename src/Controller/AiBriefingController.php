@@ -720,13 +720,13 @@ PROMPT;
         );
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
 
-        // includeEntryIds=true — each row gets [ID: entry_type:entry_id] for used_entry_keys / cards
+        // XML entries with <id> for Gemini extraction; export path stays markdown.
         $markdown = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
             'since'        => $filters['since'],
             'limit'        => $filters['limit'],
             'label_filter' => $filters['labelFilter'],
             'total'        => count($entries),
-        ], true);
+        ], true, MarkdownBriefingFormatter::FORMAT_XML);
 
         $markdownChars = strlen($markdown);
 
@@ -825,7 +825,7 @@ PROMPT;
         if ($usedEntryKeys === []) {
             $meta['attribution_warning'] =
                 'Gemini returned no used_entry_keys (requested ' . $expectedItemCount
-                . ' items); source cards are omitted. Try again or use a prompt that cites [ID: entry_type:entry_id] in each core item.';
+                . ' items); source cards are omitted. Try again or use a prompt that cites entry_type:entry_id in each core item.';
 
             return [[], $meta];
         }

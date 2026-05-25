@@ -14,7 +14,7 @@ use Seismo\Service\Http\Response;
 /**
  * Calls Google Gemini `generateContent` for the AI Briefing Builder.
  *
- * Single-pass only: entry markdown includes up to {@see MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS} chars of body per item.
+ * Single-pass only: builder context uses XML entries (up to {@see MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS} chars of body per item).
  */
 final class GeminiBriefingService
 {
@@ -30,15 +30,23 @@ You are the backend engine for the Seismo AI Briefing Builder.
    - The prompt above defines your PERSONA, TONE, and OPTIONAL WRAPPERS (intro, radar, outro, headings). Follow it creatively.
    - The rules below are absolute platform constraints. They override the creative prompt when they conflict.
 
-2. CORE ITEMS:
+2. ENTRIES_DATA SHAPE:
+   - Source rows are XML <entry> blocks. Each has <id>entry_type:entry_id</id> (e.g. feed_item:123).
+   - Only cite IDs that appear in ENTRIES_DATA <id> elements. Never invent IDs.
+
+3. CORE ITEMS:
    - Extract and detail up to {itemCount} separate core developments from ENTRIES_DATA (relevance order).
    - Target exactly {effectiveItemCount} core items in briefing_markdown and in used_entry_keys when enough distinct entries exist.
    - If ENTRIES_DATA contains fewer than {effectiveItemCount} entries, use every available entry — do not invent rows.
    - Do not merge multiple distinct entries into one bullet if that would drop below the number of entries you can cite.
 
-3. CITATIONS:
-   - Each core item must map to one entry in ENTRIES_DATA.
-   - Populate used_entry_keys with the exact [ID: entry_type:entry_id] strings for the entries you selected, in the same order as the core items in briefing_markdown.
+4. DRAFTING (JSON field drafting_thoughts — not shown to users):
+   - Before briefing_markdown, list exactly the {effectiveItemCount} entry_type:entry_id keys you will cite (one per line), taken only from <id> values in ENTRIES_DATA.
+   - used_entry_keys must match that list in the same order.
+
+5. CITATIONS:
+   - Each core item must map to one <entry> in ENTRIES_DATA.
+   - Populate used_entry_keys with the exact entry_type:entry_id strings from the chosen <id> values, in the same order as the core items in briefing_markdown.
 
 ENTRIES_DATA:
 {markdownContext}
@@ -148,8 +156,10 @@ CONTRACT;
             $effectiveCount,
         );
         $userText = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract. '
+            . 'Fülle zuerst drafting_thoughts mit den exakten entry_type:entry_id-Werten aus ENTRIES_DATA <id>, '
+            . 'dann briefing_markdown, dann used_entry_keys (gleiche Reihenfolge). '
             . 'Du MUSST ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys liefern '
-            . '(sofern genügend Einträge in ENTRIES_DATA vorhanden sind; sonst alle verfügbaren).';
+            . '(sofern genügend <entry>-Blöcke in ENTRIES_DATA vorhanden sind; sonst alle verfügbaren).';
 
         return [
             'systemInstruction' => [
@@ -216,6 +226,12 @@ CONTRACT;
         return [
             'type'       => 'OBJECT',
             'properties' => [
+                'drafting_thoughts' => [
+                    'type'        => 'STRING',
+                    'description' => 'Before briefing_markdown: list exactly ' . $effectiveCount
+                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements only. '
+                        . 'No prose, no invented IDs.',
+                ],
                 'briefing_markdown' => [
                     'type'        => 'STRING',
                     'description' => 'Complete briefing Markdown: follow the user persona above; include optional intro/outro; '
@@ -224,14 +240,14 @@ CONTRACT;
                 ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
-                    'description' => 'Exact entry_type:entry_id strings from ENTRIES_DATA [ID: …] tags for each core item, '
-                        . 'same order as in briefing_markdown.',
+                    'description' => 'Exact entry_type:entry_id strings from ENTRIES_DATA <id> for each core item, '
+                        . 'same keys and order as drafting_thoughts and briefing_markdown core items.',
                     'items'       => ['type' => 'STRING'],
                     'minItems'    => $effectiveCount,
                     'maxItems'    => $effectiveCount,
                 ],
             ],
-            'required' => ['briefing_markdown', 'used_entry_keys'],
+            'required' => ['drafting_thoughts', 'briefing_markdown', 'used_entry_keys'],
         ];
     }
 

@@ -19,7 +19,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
 | Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
-| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure; platform **SYSTEM DIRECTIVE** + Gemini **`responseSchema`** enforce **`used_entry_keys`** length = `min(item_count, entries gathered)`. Context always includes `[ID: type:id]` (`MarkdownBriefingFormatter` 4th arg `true`). |
+| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure; platform **SYSTEM DIRECTIVE** + Gemini **`responseSchema`** enforce **`used_entry_keys`** length = `min(item_count, entries gathered)`. Context uses XML `<entry>` blocks with `<id>type:id</id>` (`MarkdownBriefingFormatter::FORMAT_XML`). Schema includes internal **`drafting_thoughts`** (listed IDs before markdown; not shown in UI). |
 | Prepare step | **`briefing_builder_prepare`** — gather-only POST returns `entry_count` before Gemini (UI status line). |
 
 ### Why six toggles (not four `entry_type` values)
@@ -50,7 +50,7 @@ Filter-page **per-outlet pills** are out of scope for v1; module-level toggles m
 | `SettingsController` + `settings_general.php` | Persist `gemini:api_key` |
 | `BriefingEntryGatherer` | Fetch + shape entries + scores + label filter (shared with export) |
 | `MagnituExportRepository` | SQL only; add scoped `listFeedItemsSince` variants if needed |
-| `MarkdownBriefingFormatter` | Markdown context (unchanged) |
+| `MarkdownBriefingFormatter` | Markdown for export; XML (`FORMAT_XML`) for AI builder context |
 | `GeminiBriefingService` | HTTP to Gemini, parse response, safe errors |
 | `AiBriefingController` | Orchestrate `show()` / `generate()` only |
 | `views/briefing_builder.php` | Form + vanilla JS `fetch` |
