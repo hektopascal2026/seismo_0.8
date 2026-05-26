@@ -385,11 +385,6 @@ $moduleOptions = [
             return STATUS_STEPS;
         }
 
-        /** Server always runs skinny two-pass (selection JSON → Markdown). */
-        function isTwoPassEnabled() {
-            return true;
-        }
-
         function clearStatusTimers() {
             statusTimerIds.forEach(function(id) { clearTimeout(id); });
             statusTimerIds = [];
@@ -439,23 +434,15 @@ $moduleOptions = [
             }
             setStatusStepLabel('load', 'Loaded and filtered ' + n + ' ' + entryWord + ' from selected modules');
             setStatusStepLabel('context', 'Built markdown source context from ' + n + ' ' + entryWord);
-            if (isTwoPassEnabled()) {
-                setStatusStepLabel(
-                    'select',
-                    'Sent ' + n + ' ' + entryWord + ' to Gemini — pass 1: selecting top items'
-                );
-                setStatusStepLabel(
-                    'write',
-                    'Gemini pass 2: writing full executive briefing (often 30\u201390 seconds total)'
-                );
-                setActiveStatusStep('select');
-            } else {
-                setStatusStepLabel(
-                    'gemini',
-                    'Sent ' + n + ' ' + entryWord + ' to Gemini — generating executive briefing (often 20\u201360 seconds)'
-                );
-                setActiveStatusStep('gemini');
-            }
+            setStatusStepLabel(
+                'select',
+                'Sent ' + n + ' ' + entryWord + ' to Gemini — pass 1: selecting top items'
+            );
+            setStatusStepLabel(
+                'write',
+                'Gemini pass 2: writing full executive briefing (often 30\u201390 seconds total)'
+            );
+            setActiveStatusStep('select');
         }
 
         function postBriefingAction(url, formData) {
@@ -549,12 +536,8 @@ $moduleOptions = [
             setActiveStatusStep('send');
             scheduleStatus(400, 'load');
             scheduleStatus(2000, 'context');
-            if (isTwoPassEnabled()) {
-                scheduleStatus(5000, 'select');
-                scheduleStatus(14000, 'write');
-            } else {
-                scheduleStatus(5000, 'gemini');
-            }
+            scheduleStatus(5000, 'select');
+            scheduleStatus(14000, 'write');
         }
 
         function hideProcessingStatus() {
