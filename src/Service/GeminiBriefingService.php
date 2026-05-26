@@ -745,7 +745,32 @@ CONTRACT;
 
     private function shouldRetrySummaryInBatches(GeminiBriefingException $e, int $effectiveCount): bool
     {
-        return $effectiveCount >= 1 && $e->shouldRetryWithBatchedSummary();
+        if ($effectiveCount < 1) {
+            return false;
+        }
+
+        if ($e->shouldRetryWithBatchedSummary()) {
+            return true;
+        }
+
+        if ($effectiveCount < 2) {
+            return false;
+        }
+
+        // Pass 2 sometimes returns malformed / empty content without an explicit MAX_TOKENS finish reason.
+        // When multiple items are expected, a batched retry is often the safest recovery.
+        if ($e->httpStatus !== null && $e->httpStatus !== 400) {
+            return false;
+        }
+
+        $msg = strtolower($e->getMessage());
+
+        return str_contains($msg, 'summary pass')
+            || str_contains($msg, 'unexpected response')
+            || str_contains($msg, 'no summary')
+            || str_contains($msg, 'candidate missing content')
+            || str_contains($msg, 'no text parts')
+            || str_contains($msg, 'no candidates');
     }
 
     /**

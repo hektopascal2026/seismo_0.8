@@ -110,6 +110,29 @@ $moduleOptions = [
     #briefing-copy-btn.briefing-copy-btn--visible {
         display: inline-block;
     }
+    .briefing-output-meta {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 0.0625rem solid #000000;
+        max-width: 100%;
+    }
+    .briefing-output-meta__title {
+        margin: 0 0 0.35rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+    }
+    .briefing-output-meta__pre {
+        margin: 0;
+        padding: 0.5rem 0.65rem;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        background: #f8f8f8;
+        border: 0.0625rem solid #000000;
+        overflow-x: auto;
+        white-space: pre;
+        max-height: 24rem;
+        overflow-y: auto;
+    }
     </style>
 </head>
 <body>
@@ -616,6 +639,31 @@ $moduleOptions = [
                 copyBtn.tabIndex = -1;
                 copyBtn.textContent = COPY_BTN_LABEL;
             }
+        }
+
+        function appendBriefingMetaDebug(container, meta) {
+            if (!container || !meta || typeof meta !== 'object') {
+                return;
+            }
+            var keys = Object.keys(meta);
+            if (!keys.length) {
+                return;
+            }
+            var wrap = document.createElement('div');
+            wrap.className = 'briefing-output-meta';
+            var title = document.createElement('p');
+            title.className = 'briefing-output-meta__title';
+            title.textContent = 'Generation meta (debug)';
+            var pre = document.createElement('pre');
+            pre.className = 'briefing-output-meta__pre';
+            try {
+                pre.textContent = JSON.stringify(meta, null, 2);
+            } catch (e) {
+                pre.textContent = String(meta);
+            }
+            wrap.appendChild(title);
+            wrap.appendChild(pre);
+            container.appendChild(wrap);
         }
 
         function showCopyBtn(text) {
@@ -1234,6 +1282,7 @@ $moduleOptions = [
                     errInBox.className = 'briefing-output-error-inline';
                     errInBox.textContent = errMsg;
                     out.appendChild(errInBox);
+                    appendBriefingMetaDebug(out, data.meta);
                     return;
                 }
                 function renderBriefingSuccess(payload) {
@@ -1261,47 +1310,12 @@ $moduleOptions = [
                         }
                         out.textContent = emptyMsg;
                         hideCopyBtn();
+                        appendBriefingMetaDebug(out, payload.meta);
                         return;
                     }
                     out.textContent = briefingText;
                     showCopyBtn(briefingText);
-                    if (payload.meta) {
-                        var note = document.createElement('p');
-                        note.className = 'admin-intro';
-                        note.style.marginTop = '1rem';
-                        var parts = [];
-                        if (payload.meta.entry_count !== undefined) {
-                            parts.push(String(payload.meta.entry_count) + ' entries in context');
-                        }
-                        if (payload.meta.item_count !== undefined) {
-                            parts.push(String(payload.meta.item_count) + ' developments requested');
-                        }
-                        if (payload.meta.cited_entry_count !== undefined) {
-                            parts.push(String(payload.meta.cited_entry_count) + ' cited');
-                        }
-                        if (payload.meta.batched_selection && payload.meta.selection_batches) {
-                            parts.push('batched selection (' + payload.meta.selection_batches + ' batches)');
-                        }
-                        if (payload.meta.batched_summary && payload.meta.summary_batches) {
-                            parts.push('batched summary (' + payload.meta.summary_batches + ' parts, ' + payload.meta.summary_batch_size + ' items each)');
-                        }
-                        if (payload.meta.context_truncated) {
-                            parts.push(payload.meta.context_truncated + ' entries capped (max ' + payload.meta.max_context_entries + ')');
-                        }
-                        if (payload.meta.rate_limit_fallback) {
-                            parts.push('rate-limit auto-retry');
-                        }
-                        if (payload.meta.markdown_chars !== undefined) {
-                            parts.push(Math.round(payload.meta.markdown_chars / 1024) + ' KB source context');
-                        }
-                        if (payload.meta.since) {
-                            parts.push('since ' + payload.meta.since);
-                        }
-                        if (parts.length) {
-                            note.textContent = 'Based on ' + parts.join(' · ') + '.';
-                            out.appendChild(note);
-                        }
-                    }
+                    appendBriefingMetaDebug(out, payload.meta);
                     if (payload.entries_html && sourcesCards) {
                         try {
                             sourcesCards.innerHTML = payload.entries_html;
@@ -1356,12 +1370,14 @@ $moduleOptions = [
                     if (data.text && String(data.text).trim()) {
                         out.textContent = String(data.text);
                         showCopyBtn(String(data.text));
+                        appendBriefingMetaDebug(out, data.meta);
                     } else {
                         out.innerHTML = '';
                         var renderInBox = document.createElement('p');
                         renderInBox.className = 'briefing-output-error-inline';
                         renderInBox.textContent = renderMsg;
                         out.appendChild(renderInBox);
+                        appendBriefingMetaDebug(out, data.meta);
                     }
                 }
             })
@@ -1388,6 +1404,7 @@ $moduleOptions = [
                     errInBox.className = 'briefing-output-error-inline';
                     errInBox.textContent = msg;
                     out.appendChild(errInBox);
+                    appendBriefingMetaDebug(out, err && err.meta ? err.meta : null);
                 } else {
                     restoreOutputPlaceholder();
                 }
