@@ -397,7 +397,7 @@ final class MagnituController
                 (string)($row['from_email'] ?? ''),
                 self::$emailSubscriptionListCache
             );
-            if (!empty($ui['strip_listing_boilerplate'])) {
+            if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui)) {
                 $body = EmailListingBoilerplateStripper::strip(
                     $body,
                     $subject !== '' ? $subject : null

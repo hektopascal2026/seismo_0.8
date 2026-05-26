@@ -9,6 +9,7 @@
  * @var bool $mailGoogleSecretOnFile
  * @var bool $mailGmailConnected
  * @var string $mailOAuthRedirectUri
+ * @var bool $mailStripListingBoilerplate
  */
 
 declare(strict_types=1);
@@ -42,7 +43,36 @@ if ($criteriaVal === '') {
 $markSeen = ($mailConfig['mail_mark_seen'] ?? '0') === '1' || ($mailConfig['mail_mark_seen'] ?? '') === 'true';
 
 $imapExt = extension_loaded('imap');
+$mailStripListingBoilerplate = !empty($mailStripListingBoilerplate);
 ?>
+        <div class="latest-entries-section">
+            <h2 class="section-title">Mail processing</h2>
+            <p class="admin-intro">
+                Applies to all subscriptions unless a sender already has its own
+                <strong>Strip typical boilerplate</strong> option on the
+                <a href="<?= e($basePath) ?>/index.php?action=mail">Mail</a> page.
+            </p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_save_mail" class="admin-form-card">
+                <?= $csrfField ?>
+                <input type="hidden" name="mail_settings_form" value="processing">
+                <div class="admin-form-field">
+                    <label>
+                        <input type="checkbox" name="mail_strip_listing_boilerplate" value="1"<?= $mailStripListingBoilerplate ? ' checked' : '' ?>>
+                        Strip typical boilerplate for all mail
+                    </label>
+                    <div class="magnitu-field-hint">
+                        Removes leading lines such as &ldquo;view in browser&rdquo;, image-display warnings,
+                        repeated subject, and Admin.ch-style datelines from inbox bodies at ingest, on dashboard
+                        cards, in recipe scoring, and in Magnitu export. Reprocess stored mail on a subscription
+                        to refresh bodies already in the database.
+                    </div>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="btn btn-success">Save processing settings</button>
+                </div>
+            </form>
+        </div>
+
         <div class="latest-entries-section">
             <h2 class="section-title">Gmail (recommended)</h2>
             <p class="admin-intro">

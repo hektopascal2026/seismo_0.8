@@ -215,7 +215,7 @@ $sourcesQs = 'action=mail&view=sources';
                 </div>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate (example: email subject repeated in body, &ldquo;Medienmitteilung&rdquo;, &ldquo;view in browser&rdquo; and image display lines, etc., including EN/DE; applies to new mail in the DB, recipe scoring, Magnitu sync, and dashboard cards)</label>
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate for this sender (also available globally under Settings → Mail; applies at ingest, on cards, recipe scoring, and Magnitu export)</label>
                 </div>
                 <div class="admin-form-field">
                     <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>
@@ -286,7 +286,7 @@ $sourcesQs = 'action=mail&view=sources';
                 </div>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate</label>
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate for this sender</label>
                 </div>
                 <div class="admin-form-field">
                     <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>

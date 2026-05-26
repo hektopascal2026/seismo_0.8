@@ -549,8 +549,9 @@ if (!function_exists('seismo_strip_email_listing_boilerplate')) {
     /**
      * Remove fixed “News Service Bund … | date … / … , place , date -” listing lines
      * (Admin.ch-style digests). Only runs when the matching subscription’s
-     * apply flag is true (set from {@see email_subscriptions.strip_listing_boilerplate} on the
-     * dashboard). Logic matches {@see \Seismo\Core\Mail\EmailListingBoilerplateStripper}
+     * apply flag is true (Settings → Mail global default and/or per-subscription
+     * {@see email_subscriptions.strip_listing_boilerplate} on the dashboard).
+     * Logic matches {@see \Seismo\Core\Mail\EmailListingBoilerplateStripper}
      * (used at ingest, recipe rescoring, and Magnitu export for consistency).
      */
     function seismo_strip_email_listing_boilerplate(string $body, ?string $fromEmail, ?string $subject = null, bool $apply = false): string

@@ -146,7 +146,7 @@ final class ScoringService
                 $scoreTitle = $subject;
             }
             $ui      = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
-            if ($body !== '' && !empty($ui['strip_listing_boilerplate'])) {
+            if ($body !== '' && \Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui)) {
                 $body = EmailListingBoilerplateStripper::strip($body, $subject !== '' ? $subject : null);
             }
             $result = RecipeScorer::score($recipe, $scoreTitle, $body, 'email');

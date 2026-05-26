@@ -8,7 +8,8 @@ namespace Seismo\Core\Mail;
  * Strips common newsletter / press-mail noise from the start of a plain body:
  * “view in browser” lines, image-display warnings, then Admin.ch-style meta, repeated
  * subject, and dateline. Used at ingest, recipe rescoring, Magnitu export, and
- * dashboard when {@see strip_listing_boilerplate} is enabled for a subscription.
+ * dashboard when {@see EmailListingBoilerplatePolicy} is enabled (global Settings → Mail
+ * and/or per-subscription {@see strip_listing_boilerplate}).
  */
 final class EmailListingBoilerplateStripper
 {

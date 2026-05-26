@@ -8,6 +8,7 @@ use PDO;
 use Seismo\Core\PlainTextNormalizer;
 use Seismo\Core\Mail\EmailAlternateLocalePolicy;
 use Seismo\Core\Mail\EmailIngestNormalizer;
+use Seismo\Core\Mail\EmailListingBoilerplatePolicy;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 use Seismo\Core\Mail\EmailLocaleGuesser;
 use Seismo\Core\Mail\EmailMetadata;
@@ -301,7 +302,7 @@ final class EmailIngestRepository
     private function maybeStripListingBoilerplate(array $row, array $subs): array
     {
         $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
-        if (empty($ui['strip_listing_boilerplate'])) {
+        if (!EmailListingBoilerplatePolicy::shouldStrip($ui)) {
             return $row;
         }
         $subj = (string)($row['subject'] ?? '');

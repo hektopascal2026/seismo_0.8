@@ -22,6 +22,9 @@ final class MailConfigKeys
     public const GMAIL_CATCHUP_DAYS     = 'mail_gmail_catchup_days';
     public const MAX_MESSAGES           = 'mail_max_messages';
 
+    /** When `1`, strip listing boilerplate for all mail (Settings → Mail). */
+    public const STRIP_LISTING_BOILERPLATE = 'mail:strip_listing_boilerplate';
+
     /** @return list<string> */
     public static function gmailSettingsKeys(): array
     {

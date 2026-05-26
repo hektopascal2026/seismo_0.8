@@ -6,6 +6,7 @@ namespace Seismo\Service;
 
 use PDO;
 use Seismo\Core\Mail\EmailIngestNormalizer;
+use Seismo\Core\Mail\EmailListingBoilerplatePolicy;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
 use Seismo\Core\Mail\EmailSubscriptionProcessor;
 use Seismo\Repository\EmailIngestRepository;
@@ -57,7 +58,7 @@ final class EmailSubscriptionReprocessService
                 $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
                 $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true);
                 $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
-                if (!empty($ui['strip_listing_boilerplate'])) {
+                if (EmailListingBoilerplatePolicy::shouldStrip($ui)) {
                     $subj = trim((string)($row['subject'] ?? ''));
                     foreach (['text_body', 'body_text'] as $key) {
                         $t = (string)($row[$key] ?? '');

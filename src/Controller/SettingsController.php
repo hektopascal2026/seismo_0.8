@@ -65,6 +65,7 @@ final class SettingsController
         MailConfigKeys::GMAIL_LAST_SYNC_AT,
         MailConfigKeys::GMAIL_CATCHUP_DAYS,
         MailConfigKeys::MAX_MESSAGES,
+        MailConfigKeys::STRIP_LISTING_BOILERPLATE,
         'mail_imap_mailbox',
         'mail_imap_username',
         'mail_imap_password',
@@ -128,11 +129,12 @@ final class SettingsController
         $satellitesMothershipDb               = '';
         $satellitesHighlightSlug              = '';
 
-        $mailConfig              = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
-        $mailPasswordOnFile      = false;
-        $mailGoogleSecretOnFile  = false;
-        $mailGmailConnected      = false;
-        $mailOAuthRedirectUri    = '';
+        $mailConfig                   = array_fill_keys(self::MAIL_CONFIG_KEYS, null);
+        $mailPasswordOnFile           = false;
+        $mailGoogleSecretOnFile       = false;
+        $mailGmailConnected           = false;
+        $mailOAuthRedirectUri         = '';
+        $mailStripListingBoilerplate  = false;
 
         $configLocalWritable       = false;
         $adminPasswordPasteBlock   = null;
@@ -173,6 +175,8 @@ final class SettingsController
                 $oauth = new GmailOAuthService($config);
                 $mailGmailConnected   = $oauth->isConnected();
                 $mailOAuthRedirectUri = $oauth->redirectUri();
+                $stripRaw = $config->get(MailConfigKeys::STRIP_LISTING_BOILERPLATE);
+                $mailStripListingBoilerplate = $stripRaw === '1' || $stripRaw === 'true';
             } catch (\Throwable $e) {
                 error_log('Seismo settings mail: ' . $e->getMessage());
                 $pageError = 'Could not load mail settings. Check error_log for details.';
@@ -280,7 +284,11 @@ final class SettingsController
         try {
             $cfg = new SystemConfigRepository(getDbConnection());
 
-            if ($form === 'imap_legacy') {
+            if ($form === 'processing') {
+                $stripGlobal = isset($_POST['mail_strip_listing_boilerplate']) ? '1' : '0';
+                $cfg->set(MailConfigKeys::STRIP_LISTING_BOILERPLATE, $stripGlobal);
+                $_SESSION['success'] = 'Mail processing settings saved.';
+            } elseif ($form === 'imap_legacy') {
                 $mailbox  = trim((string)($_POST['mail_imap_mailbox'] ?? ''));
                 $username = trim((string)($_POST['mail_imap_username'] ?? ''));
                 $host     = trim((string)($_POST['mail_imap_host'] ?? ''));

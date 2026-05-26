@@ -1811,6 +1811,7 @@ final class EntryRepository
         } catch (\Throwable) {
             return;
         }
+        $globalStripBoilerplate = \Seismo\Core\Mail\EmailListingBoilerplatePolicy::readGlobalDefault();
         foreach ($items as &$it) {
             if (($it['type'] ?? '') !== 'email') {
                 continue;
@@ -1823,7 +1824,7 @@ final class EntryRepository
             if ($ui['display_name'] !== null && $ui['display_name'] !== '') {
                 $it['data']['subscription_display_name'] = $ui['display_name'];
             }
-            if (!empty($ui['strip_listing_boilerplate'])) {
+            if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui, $globalStripBoilerplate)) {
                 $it['data']['subscription_strip_listing_boilerplate'] = true;
             }
         }
