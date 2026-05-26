@@ -32,12 +32,18 @@ final class GeminiBriefingServiceTest extends TestCase
         self::assertSame(2912, GeminiBriefingService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
     }
 
-    public function testResolveSelectionPassTokenBudgetIsSmall(): void
+    public function testResolveThinkingBudgetScalesWithPool(): void
     {
-        self::assertSame(272, GeminiBriefingService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-3.5-flash'));
-        self::assertLessThan(
-            1024,
-            GeminiBriefingService::resolveSelectionPassTokenBudget(10, 8192, 'gemini-2.5-flash'),
+        self::assertSame(2048, GeminiBriefingService::resolveThinkingBudget(6));
+        self::assertSame(3072, GeminiBriefingService::resolveThinkingBudget(10));
+    }
+
+    public function testResolveSelectionPassTokenBudgetIncludesThinkingOn25(): void
+    {
+        self::assertSame(512, GeminiBriefingService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-3.5-flash'));
+        self::assertSame(
+            2320,
+            GeminiBriefingService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-2.5-flash'),
         );
     }
 }

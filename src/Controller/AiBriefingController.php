@@ -85,7 +85,7 @@ PROMPT;
 
     private const MIN_SYSTEM_PROMPT_LEN = 20;
 
-    private const MAX_SYSTEM_PROMPT_LEN = 8000;
+    private const MAX_SYSTEM_PROMPT_LEN = 32000;
 
     private const MIN_LOOKBACK_DAYS = 1;
 

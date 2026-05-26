@@ -49,13 +49,14 @@ CONTRACT;
 
     private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
-You see the full ENTRIES_DATA pool at once. Pick the best stories globally. Prose style is pass 2 only.
+The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
+You see the full ENTRIES_DATA pool at once. Pick the best matching entries globally. Prose style is pass 2 only.
 
 RULES:
 - ENTRIES_DATA: XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
 - Return JSON with used_entry_keys only: up to {maxCoreItems} distinct <id> values, most important first.
-- Selecting fewer is correct when strict criteria apply — never pad with high-relevance rows that fail the user prompt.
-- When the prompt restricts jurisdictions or legal corpora, EXCLUDE non-matching <jurisdiction>. Prefer lex_item for legal/regulatory prompts.
+- Selecting fewer is correct when strict USER PROMPT criteria apply — never pad with high-relevance rows that fail the USER PROMPT.
+- When the USER PROMPT restricts jurisdictions or legal corpora, EXCLUDE non-matching <jurisdiction>. Prefer lex_item for legal/regulatory USER PROMPTs.
 - Never invent IDs.
 
 ENTRIES_DATA:
@@ -113,6 +114,17 @@ CONTRACT;
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
     private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 24;
+
+    private const THINKING_BUDGET_BASE = 512;
+
+    private const THINKING_BUDGET_PER_ITEM = 256;
+
+    private const THINKING_BUDGET_CAP = 4096;
+
+    /** Gemini 3.x {@see thinkingConfigForPhase()} levels (REST uses uppercase). */
+    private const THINKING_LEVEL_SELECTION = 'LOW';
+
+    private const THINKING_LEVEL_SUMMARY = 'LOW';
 
     private const DEFAULT_MAX_RETRIES = 4;
 
@@ -179,7 +191,15 @@ CONTRACT;
         return $this->lastGenerationMeta;
     }
 
-    /** Pass 2 prose output budget (thinking off). */
+    public static function resolveThinkingBudget(int $itemCount): int
+    {
+        return min(
+            self::THINKING_BUDGET_CAP,
+            self::THINKING_BUDGET_BASE + max(1, $itemCount) * self::THINKING_BUDGET_PER_ITEM,
+        );
+    }
+
+    /** Pass 2 visible prose budget (thinking is configured separately per model). */
     public static function resolveOutputTokenBudget(
         int $itemCount,
         int $configuredMax,
@@ -193,7 +213,7 @@ CONTRACT;
         return min($practical, $configuredMax, max(self::OUTPUT_TOKEN_FLOOR, $scaled));
     }
 
-    /** Pass 1 skinny JSON (IDs only, no thinking). */
+    /** Pass 1 JSON envelope + model thinking headroom (2.5 shares one output budget). */
     public static function resolveSelectionPassTokenBudget(
         int $itemCount,
         int $configuredMax,
@@ -202,7 +222,11 @@ CONTRACT;
         $hardCap = self::modelHardOutputCapFor($model);
         $visible = self::SELECTION_OUTPUT_TOKENS_BASE + max(1, $itemCount) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM;
 
-        return min($hardCap, max(256, $visible));
+        if (self::usesGemini35Family($model)) {
+            return min($hardCap, max(512, $visible));
+        }
+
+        return min($hardCap, max(256, self::resolveThinkingBudget($itemCount) + $visible));
     }
 
     /**
@@ -329,9 +353,18 @@ CONTRACT;
             $autoTwoPass = true;
         }
 
+        $thinkingItemCount = max(1, $itemCount);
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'two_pass'      => $twoPass,
-            'auto_two_pass' => $autoTwoPass,
+            'two_pass'             => $twoPass,
+            'auto_two_pass'        => $autoTwoPass,
+            'model'                => $this->model,
+            'thinking_selection'   => self::usesGemini35Family($this->model)
+                ? self::THINKING_LEVEL_SELECTION
+                : self::resolveThinkingBudget($thinkingItemCount),
+            'thinking_summary'     => self::usesGemini35Family($this->model)
+                ? self::THINKING_LEVEL_SUMMARY
+                : 0,
+            'rate_limit_thinking'  => $this->rateLimitFallbackMode,
         ]);
 
         if (!$twoPass) {
@@ -485,9 +518,10 @@ CONTRACT;
 
         if ($poolCount >= $this->batchedSelectionMinEntries()) {
             $selectedKeys = $this->runBatchedSelectionPasses(
+                $userSystemPrompt,
                 $poolEntries,
                 $scoresByKey,
-                $selectionMeta,
+                $briefingMeta,
                 $poolContext,
                 $itemCount,
                 $selectionTarget,
@@ -497,7 +531,13 @@ CONTRACT;
                 'batched_selection' => true,
             ]);
         } else {
-            $selectedKeys = $this->runSelectionPass($poolContext, $itemCount, $selectionTarget, $apiKey);
+            $selectedKeys = $this->runSelectionPass(
+                $userSystemPrompt,
+                $poolContext,
+                $itemCount,
+                $selectionTarget,
+                $apiKey,
+            );
             $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
                 'skinny_global_selection' => true,
             ]);
@@ -541,7 +581,7 @@ CONTRACT;
         $config = $this->applyModelGenerationDefaults([
             'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'application/json',
-        ]);
+        ], 'summary', $itemCount);
         if ($useStructuredSchema) {
             $config['responseSchema'] = $this->singlePassResponseSchema($itemCount, $effectiveCount);
         }
@@ -572,6 +612,21 @@ CONTRACT;
             ],
             'required' => ['briefing_markdown', 'used_entry_keys'],
         ];
+    }
+
+    private function composeSelectionSystemInstruction(
+        string $userSystemPrompt,
+        string $poolContext,
+        int $itemCount,
+        int $selectionTarget,
+    ): string {
+        $envelope = str_replace(
+            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
+            [(string)$itemCount, (string)$selectionTarget, trim($poolContext)],
+            self::SELECTION_OUTPUT_CONTRACT,
+        );
+
+        return trim($userSystemPrompt) . "\n\n" . $envelope;
     }
 
     private function composeSinglePassSystemInstruction(
@@ -664,19 +719,21 @@ CONTRACT;
      * @throws GeminiBriefingException
      */
     private function runSelectionPass(
+        string $userSystemPrompt,
         string $poolContext,
         int $itemCount,
         int $selectionTarget,
         string $apiKey,
     ): array {
-        $systemText = str_replace(
-            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
-            [(string)$itemCount, (string)$selectionTarget, trim($poolContext)],
-            self::SELECTION_OUTPUT_CONTRACT,
+        $systemText = $this->composeSelectionSystemInstruction(
+            $userSystemPrompt,
+            $poolContext,
+            $itemCount,
+            $selectionTarget,
         );
 
         $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge global aus ENTRIES_DATA. '
-            . 'Nur wenn sie den User-Prompt erfüllen (weniger ist korrekt). '
+            . 'Strikte Einhaltung des USER PROMPT (weniger ist korrekt). '
             . 'JSON: used_entry_keys in Briefing-Reihenfolge.';
 
         $payload = [
@@ -700,6 +757,7 @@ CONTRACT;
      * @throws GeminiBriefingException
      */
     private function runBatchedSelectionPasses(
+        string $userSystemPrompt,
         array $poolEntries,
         array $scoresByKey,
         array $briefingMeta,
@@ -726,7 +784,13 @@ CONTRACT;
 
             $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $briefingMeta, $fallbackXml);
             $batchTarget  = min($perBatch, count($batch), $selectionTarget);
-            $keys         = $this->runSelectionPass($batchContext, $itemCount, $batchTarget, $apiKey);
+            $keys         = $this->runSelectionPass(
+                $userSystemPrompt,
+                $batchContext,
+                $itemCount,
+                $batchTarget,
+                $apiKey,
+            );
 
             foreach ($keys as $key) {
                 $normalized = strtolower(trim($key));
@@ -831,7 +895,7 @@ CONTRACT;
         $config = $this->applyModelGenerationDefaults([
             'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'application/json',
-        ]);
+        ], 'selection', $itemCount);
         if ($useStructuredSchema) {
             $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
         }
@@ -847,14 +911,14 @@ CONTRACT;
         return $this->applyModelGenerationDefaults([
             'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'text/plain',
-        ]);
+        ], 'summary', $itemCount);
     }
 
     /**
      * @param array<string, mixed> $config
      * @return array<string, mixed>
      */
-    private function applyModelGenerationDefaults(array $config): array
+    private function applyModelGenerationDefaults(array $config, string $phase, int $itemCount): array
     {
         $config['maxOutputTokens'] = min(
             (int)($config['maxOutputTokens'] ?? $this->maxOutputTokens),
@@ -864,7 +928,42 @@ CONTRACT;
             $config['temperature'] = self::DEFAULT_TEMPERATURE;
         }
 
+        $thinking = $this->thinkingConfigForPhase($phase, $itemCount);
+        if ($thinking !== []) {
+            $config['thinkingConfig'] = $thinking;
+        }
+
         return $config;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function thinkingConfigForPhase(string $phase, int $itemCount): array
+    {
+        if ($this->rateLimitFallbackMode) {
+            return self::usesGemini35Family($this->model)
+                ? ['thinkingLevel' => 'MINIMAL']
+                : ['thinkingBudget' => 0];
+        }
+
+        if (self::usesGemini35Family($this->model)) {
+            $level = match ($phase) {
+                'selection' => self::THINKING_LEVEL_SELECTION,
+                'summary'   => self::THINKING_LEVEL_SUMMARY,
+                default     => self::THINKING_LEVEL_SUMMARY,
+            };
+
+            return ['thinkingLevel' => $level];
+        }
+
+        $budget = match ($phase) {
+            'selection' => self::resolveThinkingBudget($itemCount),
+            'summary'   => 0,
+            default     => 0,
+        };
+
+        return ['thinkingBudget' => $budget];
     }
 
     /**
@@ -1303,9 +1402,13 @@ CONTRACT;
 
         $text = '';
         foreach ($parts as $part) {
-            if (is_array($part) && isset($part['text']) && is_string($part['text'])) {
-                $text .= $part['text'];
+            if (!is_array($part) || !isset($part['text']) || !is_string($part['text'])) {
+                continue;
             }
+            if (($part['thought'] ?? false) === true) {
+                continue;
+            }
+            $text .= $part['text'];
         }
 
         $text = trim($text);

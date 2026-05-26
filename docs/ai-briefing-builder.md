@@ -17,7 +17,9 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
 | Gemini context cap | **`briefing:max_context_entries`** (default **100**) — top entries by sort order are sent to Gemini, with a **fair share per enabled source module** when multiple modules are on (so Lex/Leg rows are not dropped because Feeds score higher). UI warns when rows are dropped. **`BriefingModuleGuard`** re-filters and rebuilds XML after the cap; the same guard runs again immediately before every Gemini API call (including rate-limit retry). |
 | Gemini model | Default **`gemini-3.5-flash`** (`system_config` **`gemini:model`**). Gemini 3.5 family omits `temperature` in API payloads. |
-| Gemini two-pass | **Skinny two-pass by default** (UI checkbox on): pass 1 = one **global** selection call (full entry bodies up to 1000 chars, JSON `used_entry_keys` only); pass 2 = **plain Markdown** on selected rows only. Auto-enabled when pool ≥ **1** entry. Legacy single-pass if two-pass unchecked. |
+| Gemini two-pass | **Skinny two-pass by default** (UI checkbox on): pass 1 = one **global** selection call (**USER PROMPT** + full entry bodies up to 1000 chars, JSON `used_entry_keys` only); pass 2 = **plain Markdown** on selected rows only (same USER PROMPT). Auto-enabled when pool ≥ **1** entry. Legacy single-pass if two-pass unchecked. |
+| System prompt limit | **32 000** characters (`AiBriefingController::MAX_SYSTEM_PROMPT_LEN`) on generate, save-default, and library save. |
+| Gemini thinking | **Re-enabled per pass:** `gemini-3.5-flash` uses `thinkingLevel` **LOW** for selection and summary; `gemini-2.5-flash` uses scaled `thinkingBudget` on selection only (summary **0** so prose is not truncated). HTTP **429** retry drops to **MINIMAL** / budget **0**. Response parsing skips `thought` parts. Meta: `thinking_selection`, `thinking_summary`. |
 | Gemini batching | Batched selection **disabled** for normal runs (`BATCHED_SELECTION_MIN_ENTRIES` very high). Rate-limit retry still uses module-aware cap + guard. |
 | Rate-limit fallback | On **HTTP 429**, waits **12s**, caps context to **`rateLimitFallbackMaxEntries()`** (default ≤ **50**), forces **two-pass + batched selection** (batch **20**, **8s** pause), and retries **once**. UI meta: `rate_limit_fallback`. |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
@@ -160,7 +162,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - POST only → 405
 - `CsrfToken::verifyRequest(false)` → 403 (no rotation on long AJAX)
 - `session_write_close()` after CSRF verify
-- Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `disregard_magnitu`, `system_prompt` (min/max length), `limit`
+- Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `disregard_magnitu`, `system_prompt` (min 20 / max **32 000** chars), `limit`
 - Pipeline: `gatherBriefingContext()` → `MarkdownBriefingFormatter::format(..., includeEntryIds: true)` → `GeminiBriefingService` (`responseSchema` + envelope; falls back if model rejects schema)
 - Response: `{ "ok": true, "text": "...", "meta": { "entry_count", "since", "modules", "labels" } }` or `{ "ok": false, "error": "..." }`
 
