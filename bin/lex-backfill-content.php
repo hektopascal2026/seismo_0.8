@@ -5,8 +5,9 @@
  * Usage:
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
  *   php bin/lex-backfill-content.php --de         # fetch BGBl PDF corpus (requires pdftotext)
- *   php bin/lex-backfill-content.php --ch         # Fedlex OC acts: Akoma Ntoso XML corpus
+ *   php bin/lex-backfill-content.php --ch         # Fedlex OC acts: Akoma XML (empty + synopsis-only content)
  *   php bin/lex-backfill-content.php --ch-promote # Vernehmlassungen: description → content
+ *   php bin/lex-backfill-content.php --stats      # includes Fedlex OC corpus breakdown
  *   php bin/lex-backfill-content.php --eu         # fetch EUR-Lex HTML corpus
  *   php bin/lex-backfill-content.php --fr         # fetch Légifrance JORF corpus via PISTE API
  *   php bin/lex-backfill-content.php --limit=100
@@ -57,6 +58,17 @@ if ($stats) {
             (int)($row['has_description'] ?? 0),
         );
     }
+    echo "\nFedlex CH (eli/oc official compilation) corpus:\n";
+    $fx = $service->fedlexCorpusBreakdown();
+    echo sprintf("  total_ch=%d oc_acts=%d consultations=%d\n", $fx['total_ch'], $fx['oc_acts'], $fx['consultations']);
+    echo sprintf(
+        "  oc_empty_content=%d oc_synopsis_only=%d oc_has_corpus=%d oc_unavailable=%d\n",
+        $fx['oc_empty_content'],
+        $fx['oc_synopsis_only'],
+        $fx['oc_has_corpus'],
+        $fx['oc_unavailable'],
+    );
+    echo sprintf("  oc_needs_backfill (next --ch run, up to limit)=%d\n", $fx['oc_needs_backfill']);
     if (!$deOnly && !$chOnly && !$chPromoteOnly && !$euOnly && !$frOnly && !in_array('--stats-only', $argv, true)) {
         echo "\n";
     } else {

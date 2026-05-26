@@ -147,7 +147,7 @@ final class LexContentBackfillService
         }
 
         $limit = max(1, min($limit, LexItemRepository::MAX_LIMIT));
-        $rows  = $this->lex->listMissingContentBySources(['ch'], $limit);
+        $rows  = $this->lex->listFedlexOcForCorpusBackfill($limit);
 
         $updated = 0;
         $skipped = 0;
@@ -158,12 +158,6 @@ final class LexContentBackfillService
             if ($id <= 0) {
                 $skipped++;
                 $this->noteReason($reasons, 'invalid_row');
-                continue;
-            }
-
-            if (!LexFedlexContentFetcher::isOfficialCompilationAct($row)) {
-                $skipped++;
-                $this->noteReason($reasons, 'not_oc_act');
                 continue;
             }
 
@@ -493,6 +487,27 @@ final class LexContentBackfillService
         }
 
         return $this->lex->contentBackfillStatsBySource();
+    }
+
+    /**
+     * @return array{
+     *   total_ch: int,
+     *   oc_acts: int,
+     *   consultations: int,
+     *   oc_empty_content: int,
+     *   oc_synopsis_only: int,
+     *   oc_has_corpus: int,
+     *   oc_unavailable: int,
+     *   oc_needs_backfill: int
+     * }
+     */
+    public function fedlexCorpusBreakdown(): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill stats must run on the mothership.');
+        }
+
+        return $this->lex->fedlexCorpusBreakdown();
     }
 
     /**

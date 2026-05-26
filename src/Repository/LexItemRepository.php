@@ -19,6 +19,12 @@ final class LexItemRepository
     /** Backfill tombstone — non-empty so the row leaves the missing-content queue. */
     public const CONTENT_FETCH_UNAVAILABLE = "\n\n[seismo:content_unavailable]\n\n";
 
+    /**
+     * Fedlex OC rows with longer Akoma corpus are treated as already backfilled.
+     * Shorter bodies are usually description-promote synopses from legacy `--ch-promote`.
+     */
+    public const FEDLEX_OC_SYNOPSIS_MAX_BYTES = 2800;
+
     public const MAX_LIMIT = 200;
 
     /** Lex Items view filter pills (EU/CH/DE/FR) — not JUS; Parl MM is a `feed_item`. */
@@ -134,6 +140,131 @@ final class LexItemRepository
             }
             throw $e;
         }
+    }
+
+    /**
+     * Fedlex official compilation acts (`eli/oc/…`) queued for Akoma XML corpus backfill.
+     *
+     * Includes empty `content` and legacy rows where `promoteDescriptionToContent` copied
+     * the card synopsis into `content` (short body, usually a prefix of `description`).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listFedlexOcForCorpusBackfill(int $limit): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::listFedlexOcForCorpusBackfill must not run on a satellite.');
+        }
+
+        $limit = max(1, min($limit, self::MAX_LIMIT));
+        $table = entryTable('lex_items');
+        $max   = self::FEDLEX_OC_SYNOPSIS_MAX_BYTES;
+        $sql   = "SELECT id, celex, work_uri, eurlex_url, source, title, description, content
+                    FROM {$table}
+                   WHERE source = 'ch'
+                     AND celex LIKE 'eli/oc/%'
+                     AND (
+                           content IS NULL OR TRIM(content) = ''
+                           OR (
+                               content NOT LIKE '%[seismo:content_unavailable]%'
+                               AND CHAR_LENGTH(content) < {$max}
+                               AND (
+                                   description IS NULL OR TRIM(description) = ''
+                                   OR content = description
+                                   OR content LIKE CONCAT(description, '%')
+                               )
+                           )
+                     )
+                   ORDER BY document_date DESC, id DESC
+                   LIMIT " . (int)$limit;
+
+        try {
+            $stmt = $this->pdo->query($sql);
+
+            return $stmt === false ? [] : ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Counts for Fedlex corpus backfill diagnostics (`php bin/lex-backfill-content.php --stats`).
+     *
+     * @return array{
+     *   total_ch: int,
+     *   oc_acts: int,
+     *   consultations: int,
+     *   oc_empty_content: int,
+     *   oc_synopsis_only: int,
+     *   oc_has_corpus: int,
+     *   oc_unavailable: int,
+     *   oc_needs_backfill: int
+     * }
+     */
+    public function fedlexCorpusBreakdown(): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('LexItemRepository::fedlexCorpusBreakdown must not run on a satellite.');
+        }
+
+        $table = entryTable('lex_items');
+        $max   = self::FEDLEX_OC_SYNOPSIS_MAX_BYTES;
+        $sql   = "SELECT
+                    COUNT(*) AS total_ch,
+                    SUM(celex LIKE 'eli/oc/%') AS oc_acts,
+                    SUM(celex NOT LIKE 'eli/oc/%') AS consultations,
+                    SUM(celex LIKE 'eli/oc/%' AND (content IS NULL OR TRIM(content) = '')) AS oc_empty_content,
+                    SUM(
+                        celex LIKE 'eli/oc/%'
+                        AND content IS NOT NULL AND TRIM(content) <> ''
+                        AND content NOT LIKE '%[seismo:content_unavailable]%'
+                        AND CHAR_LENGTH(content) < {$max}
+                        AND description IS NOT NULL AND TRIM(description) <> ''
+                        AND (content = description OR content LIKE CONCAT(description, '%'))
+                    ) AS oc_synopsis_only,
+                    SUM(
+                        celex LIKE 'eli/oc/%'
+                        AND content IS NOT NULL
+                        AND CHAR_LENGTH(content) >= {$max}
+                        AND content NOT LIKE '%[seismo:content_unavailable]%'
+                    ) AS oc_has_corpus,
+                    SUM(
+                        celex LIKE 'eli/oc/%'
+                        AND content LIKE '%[seismo:content_unavailable]%'
+                    ) AS oc_unavailable
+                  FROM {$table}
+                 WHERE source = 'ch'";
+
+        try {
+            $stmt = $this->pdo->query($sql);
+            $row  = $stmt === false ? [] : ($stmt->fetch(PDO::FETCH_ASSOC) ?: []);
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [
+                    'total_ch' => 0, 'oc_acts' => 0, 'consultations' => 0,
+                    'oc_empty_content' => 0, 'oc_synopsis_only' => 0, 'oc_has_corpus' => 0,
+                    'oc_unavailable' => 0, 'oc_needs_backfill' => 0,
+                ];
+            }
+            throw $e;
+        }
+
+        $empty   = (int)($row['oc_empty_content'] ?? 0);
+        $synopsis = (int)($row['oc_synopsis_only'] ?? 0);
+
+        return [
+            'total_ch'          => (int)($row['total_ch'] ?? 0),
+            'oc_acts'           => (int)($row['oc_acts'] ?? 0),
+            'consultations'     => (int)($row['consultations'] ?? 0),
+            'oc_empty_content'  => $empty,
+            'oc_synopsis_only'  => $synopsis,
+            'oc_has_corpus'     => (int)($row['oc_has_corpus'] ?? 0),
+            'oc_unavailable'    => (int)($row['oc_unavailable'] ?? 0),
+            'oc_needs_backfill' => $empty + $synopsis,
+        ];
     }
 
     /**
