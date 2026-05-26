@@ -159,6 +159,41 @@ final class EntryScoreRepository
     }
 
     /**
+     * Remove score rows whose parent entry was deleted by retention (no FK cascade).
+     */
+    public function pruneOrphans(): int
+    {
+        $deleted = 0;
+        foreach (self::ALL_ENTRY_TYPES as $entryType) {
+            $parentTable = match ($entryType) {
+                'feed_item'       => entryTable('feed_items'),
+                'email'           => entryTable('emails'),
+                'lex_item'        => entryTable('lex_items'),
+                'calendar_event'  => entryTable('calendar_events'),
+                default           => null,
+            };
+            if ($parentTable === null) {
+                continue;
+            }
+            try {
+                $stmt = $this->pdo->prepare(
+                    'DELETE es FROM entry_scores es
+                     LEFT JOIN ' . $parentTable . ' p ON es.entry_id = p.id
+                     WHERE es.entry_type = ? AND p.id IS NULL'
+                );
+                $stmt->execute([$entryType]);
+                $deleted += $stmt->rowCount();
+            } catch (PDOException $e) {
+                if (!PdoMysqlDiagnostics::isMissingTable($e)) {
+                    throw $e;
+                }
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
      * Batch-read score rows for Leg / diagnostics-style callers.
      *
      * @param array<int, array{0: string, 1: int}> $pairs (entry_type, entry_id)

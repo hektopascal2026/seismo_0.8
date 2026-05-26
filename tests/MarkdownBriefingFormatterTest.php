@@ -64,6 +64,19 @@ final class MarkdownBriefingFormatterTest extends TestCase
         }
     }
 
+    public function testSanitizeLinkUrlEncodesParenthesesForMarkdown(): void
+    {
+        $method = new ReflectionMethod(MarkdownBriefingFormatter::class, 'sanitizeLinkUrl');
+        $method->setAccessible(true);
+
+        $raw = 'https://en.wikipedia.org/wiki/Economy_of_Switzerland_(2020)';
+        $out = $method->invoke(null, $raw);
+
+        self::assertStringContainsString('%28', $out);
+        self::assertStringContainsString('%29', $out);
+        self::assertStringNotContainsString('(2020)', $out);
+    }
+
     public function testMarkdownFormatUnchangedForExportStyle(): void
     {
         $entries = [[

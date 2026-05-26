@@ -401,7 +401,8 @@ final class MarkdownBriefingFormatter
      */
     private static function sanitizeLinkUrl(string $raw): string
     {
-        $u = str_replace([')', '(', "\r", "\n", ' '], ['', '', '', '', '%20'], $raw);
+        $u = str_replace(["\r", "\n", ' '], ['', '', '%20'], $raw);
+        $u = str_replace(['(', ')'], ['%28', '%29'], $u);
 
         return trim($u);
     }

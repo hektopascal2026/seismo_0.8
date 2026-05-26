@@ -17,6 +17,9 @@ final class LexRechtBundContentFetcher
 {
     public const MAX_CONTENT_BYTES = 1_048_576;
 
+    /** Wall-clock cap so a hung pdftotext cannot hold refresh_cron's MySQL lock forever. */
+    private const PDFTOTEXT_TIMEOUT_SECONDS = 90;
+
     private const PDF_SUFFIX = 'regelungstext.pdf?__blob=publicationFile&v=1';
 
     public function __construct(
@@ -160,17 +163,11 @@ final class LexRechtBundContentFetcher
             }
 
             $cmd = 'pdftotext -enc UTF-8 -nopgbrk ' . escapeshellarg($pdfPath) . ' ' . escapeshellarg($txtPath);
-            $proc = proc_open(
+            $exitCode = $this->runCommandWithTimeout(
                 $cmd,
                 [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-                $pipes,
+                self::PDFTOTEXT_TIMEOUT_SECONDS,
             );
-            if (!is_resource($proc)) {
-                return null;
-            }
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $exitCode = proc_close($proc);
             if ($exitCode !== 0 || !is_file($txtPath)) {
                 return null;
             }
@@ -187,6 +184,37 @@ final class LexRechtBundContentFetcher
         } finally {
             @unlink($pdfPath);
             @unlink($txtPath);
+        }
+    }
+
+    /**
+     * @param array<int|string, mixed> $descriptor
+     */
+    private function runCommandWithTimeout(string $command, array $descriptor, int $timeoutSeconds): ?int
+    {
+        $proc = proc_open($command, $descriptor, $pipes);
+        if (!is_resource($proc)) {
+            return null;
+        }
+        foreach ($pipes as $pipe) {
+            if (is_resource($pipe)) {
+                fclose($pipe);
+            }
+        }
+
+        $deadline = time() + max(1, $timeoutSeconds);
+        while (true) {
+            $status = proc_get_status($proc);
+            if (!$status['running']) {
+                return proc_close($proc);
+            }
+            if (time() >= $deadline) {
+                proc_terminate($proc);
+                proc_close($proc);
+
+                return null;
+            }
+            usleep(100_000);
         }
     }
 }

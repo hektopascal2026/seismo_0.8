@@ -293,7 +293,7 @@ final class ScraperFetchService
             }
             $targetParts = parse_url($absolute);
             $targetHost  = strtolower((string)($targetParts['host'] ?? ''));
-            if ($listingHost === '' || $targetHost !== $listingHost) {
+            if ($listingHost === '' || !$this->scrapeHostsMatch($listingHost, $targetHost)) {
                 continue;
             }
             $canon = $this->stripFragment($absolute);
@@ -315,6 +315,21 @@ final class ScraperFetchService
         }
 
         return $out;
+    }
+
+    /**
+     * Same host or equivalent after optional www. prefix (example.com vs www.example.com).
+     */
+    private function scrapeHostsMatch(string $listingHost, string $targetHost): bool
+    {
+        if ($listingHost === $targetHost) {
+            return true;
+        }
+        $bare = static fn (string $host): string => str_starts_with($host, 'www.')
+            ? substr($host, 4)
+            : $host;
+
+        return $bare($listingHost) === $bare($targetHost);
     }
 
     private function stripFragment(string $url): string

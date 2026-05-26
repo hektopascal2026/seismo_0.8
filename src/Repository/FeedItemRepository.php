@@ -381,8 +381,10 @@ final class FeedItemRepository
             $stmt = $this->pdo->prepare($sql);
             $upgradeStmt = $this->pdo->prepare(
                 'UPDATE ' . $table . '
-                 SET title = ?,
+                 SET feed_id = ?,
+                     title = ?,
                      link = ?,
+                     link_normalized = ?,
                      description = ?,
                      content = ?,
                      author = ?,
@@ -434,8 +436,10 @@ final class FeedItemRepository
                         $existingLen = (int)($existing['content_len'] ?? 0);
                         if (strlen($content) > $existingLen) {
                             $upgradeStmt->execute([
+                                $feedId,
                                 $title,
                                 $link,
+                                $linkNorm !== '' ? $linkNorm : null,
                                 $desc,
                                 $content,
                                 (string)($row['author'] ?? ''),

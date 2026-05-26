@@ -64,8 +64,11 @@ use DateTimeZone;
 use PDO;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\EmailRepository;
+use Seismo\Repository\EntryFavouriteRepository;
+use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
+use Seismo\Repository\MagnituLabelRepository;
 use Seismo\Repository\PluginRunLogRepository;
 use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -155,6 +158,9 @@ final class RetentionService
         $logCutoff = self::cutoff(self::DIAGNOSTIC_LOG_RETENTION_DAYS);
         $results['plugin_run_log'] = (new PluginRunLogRepository($this->pdo))->pruneOlderThan($logCutoff);
         $results['source_log']     = (new SourceLogRepository($this->pdo))->pruneOlderThan($logCutoff);
+        $results['entry_scores_orphans']    = (new EntryScoreRepository($this->pdo))->pruneOrphans();
+        $results['entry_favourites_orphans'] = (new EntryFavouriteRepository($this->pdo))->pruneOrphans();
+        $results['magnitu_labels_orphans']   = (new MagnituLabelRepository($this->pdo))->pruneOrphans();
 
         return $results;
     }

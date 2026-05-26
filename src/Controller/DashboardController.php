@@ -22,10 +22,10 @@ final class DashboardController
     public const DEFAULT_LIMIT_FALLBACK = 30;
 
     /**
-     * Deep-paging guard — merged timeline pool is bounded per family in
-     * {@see EntryRepository::getLatestTimeline()}; offset only pages within that pool.
+     * Deep-paging guard — must stay within {@see EntryRepository::MERGE_PER_SOURCE_CAP}
+     * minus the largest allowed page size.
      */
-    private const MAX_OFFSET = 5000;
+    private const MAX_OFFSET = EntryRepository::MERGE_PER_SOURCE_CAP - EntryRepository::MAX_LIMIT;
 
     /** Session key for timeline newest vs favourites-only view. */
     private const SESSION_TIMELINE_VIEW = '_seismo_timeline_view';

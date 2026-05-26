@@ -198,21 +198,25 @@ final class EmailIngestRepository
         $subs = (new EmailSubscriptionRepository($this->pdo))
             ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
 
+        $prepared = [];
+        foreach ($rows as $row) {
+            if ($keyFilter($row) === null) {
+                continue;
+            }
+            $hydrateHosted = true;
+            if ($ingestKeyField !== null) {
+                $key = $ingestKeyField === 'imap_uid'
+                    ? (int)($row['imap_uid'] ?? 0)
+                    : trim((string)($row[$ingestKeyField] ?? ''));
+                $hydrateHosted = $key === '' || $key === 0 || !isset($existingIngestKeys[$key]);
+            }
+            $prepared[] = $this->prepareRow($row, $subs, $hydrateHosted);
+        }
+
         $this->pdo->beginTransaction();
         try {
             $n = 0;
-            foreach ($rows as $row) {
-                if ($keyFilter($row) === null) {
-                    continue;
-                }
-                $hydrateHosted = true;
-                if ($ingestKeyField !== null) {
-                    $key = $ingestKeyField === 'imap_uid'
-                        ? (int)($row['imap_uid'] ?? 0)
-                        : trim((string)($row[$ingestKeyField] ?? ''));
-                    $hydrateHosted = $key === '' || $key === 0 || !isset($existingIngestKeys[$key]);
-                }
-                $row = $this->prepareRow($row, $subs, $hydrateHosted);
+            foreach ($prepared as $row) {
                 $stmt->execute($bindRow($row));
                 ++$n;
             }

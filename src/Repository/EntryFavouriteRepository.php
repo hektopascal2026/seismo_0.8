@@ -56,4 +56,37 @@ final class EntryFavouriteRepository
             throw $e;
         }
     }
+
+    /** Remove favourites pointing at entries deleted by retention. */
+    public function pruneOrphans(): int
+    {
+        $deleted = 0;
+        foreach (self::ALLOWED_ENTRY_TYPES as $entryType) {
+            $parentTable = match ($entryType) {
+                'feed_item'       => entryTable('feed_items'),
+                'email'           => entryTable('emails'),
+                'lex_item'        => entryTable('lex_items'),
+                'calendar_event'  => entryTable('calendar_events'),
+                default           => null,
+            };
+            if ($parentTable === null) {
+                continue;
+            }
+            try {
+                $stmt = $this->pdo->prepare(
+                    'DELETE ef FROM entry_favourites ef
+                     LEFT JOIN ' . $parentTable . ' p ON ef.entry_id = p.id
+                     WHERE ef.entry_type = ? AND p.id IS NULL'
+                );
+                $stmt->execute([$entryType]);
+                $deleted += $stmt->rowCount();
+            } catch (PDOException $e) {
+                if (!PdoMysqlDiagnostics::isMissingTable($e)) {
+                    throw $e;
+                }
+            }
+        }
+
+        return $deleted;
+    }
 }

@@ -96,6 +96,11 @@ final class EntryRepository
      */
     public const MAX_LIMIT = 200;
 
+    /**
+     * Per-family row cap before merge/sort. Must be ≥ {@see MAX_LIMIT} + max dashboard offset.
+     */
+    public const MERGE_PER_SOURCE_CAP = 1000;
+
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const SQL_EMAIL_VISIBLE = 'e.hidden = 0';
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
@@ -117,15 +122,10 @@ final class EntryRepository
     /**
      * Merged newest-first timeline across every entry family.
      *
-     * **Paging caveat.** Per-source fetches use {@see mergePerSourceFetchCap()}
-     * ({@see MAX_LIMIT} rows each). The final page
-     * is still sliced from the globally sorted pool — relevance sort pushes
-     * unscored rows after Magnitu-scored ones (see Settings → sort-by-relevance).
-     *
-     * Slice 1 has no pagination UI, so `DashboardController` clamps
-     * `MAX_OFFSET = 0` in practice. When paging UI returns we'll switch to
-     * cursor-based paging (e.g. `?since_id=<id>` per family) rather than
-     * offset, which side-steps the skew problem entirely.
+     * **Paging.** Per-source fetches pull up to {@see mergePerSourceFetchCap()}
+     * rows (`limit + offset`, capped at {@see MERGE_PER_SOURCE_CAP}) so
+     * `array_slice` after the global merge can reach deeper pages. Relevance
+     * sort pushes unscored rows after Magnitu-scored ones (Settings).
      *
      * @return array<int, array<string, mixed>>
      */
@@ -2858,12 +2858,13 @@ final class EntryRepository
 
     /**
      * Newest-first rows per SQL family merged into {@see getLatestTimeline()}
-     * and {@see searchTimeline()}. Always use {@see MAX_LIMIT}: a smaller cap
-     * starves quieter families before the global sort (feeds crowd out Lex/mail).
+     * and {@see searchTimeline()}.
      */
     private function mergePerSourceFetchCap(int $limit, int $offset): int
     {
-        return self::MAX_LIMIT;
+        $need = max(1, $limit + max(0, $offset));
+
+        return min(self::MERGE_PER_SOURCE_CAP, max(self::MAX_LIMIT, $need));
     }
 
     /**

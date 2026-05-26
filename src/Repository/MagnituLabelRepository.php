@@ -102,6 +102,41 @@ final class MagnituLabelRepository
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Remove labels whose parent entry was deleted (no FK cascade on shared hosts).
+     */
+    public function pruneOrphans(): int
+    {
+        $deleted = 0;
+        foreach (self::LABELED_ENTRY_TYPES as $entryType) {
+            $parentTable = match ($entryType) {
+                'feed_item'       => entryTable('feed_items'),
+                'email'           => entryTable('emails'),
+                'lex_item'        => entryTable('lex_items'),
+                'calendar_event'  => entryTable('calendar_events'),
+                default           => null,
+            };
+            if ($parentTable === null) {
+                continue;
+            }
+            try {
+                $stmt = $this->pdo->prepare(
+                    'DELETE ml FROM magnitu_labels ml
+                     LEFT JOIN ' . $parentTable . ' p ON ml.entry_id = p.id
+                     WHERE ml.entry_type = ? AND p.id IS NULL'
+                );
+                $stmt->execute([$entryType]);
+                $deleted += $stmt->rowCount();
+            } catch (PDOException $e) {
+                if (!PdoMysqlDiagnostics::isMissingTable($e)) {
+                    throw $e;
+                }
+            }
+        }
+
+        return $deleted;
+    }
+
     public function listAll(int $limit = self::MAX_LIST_LIMIT, int $offset = 0): array
     {
         $limit  = max(1, min(self::MAX_LIST_LIMIT, $limit));
