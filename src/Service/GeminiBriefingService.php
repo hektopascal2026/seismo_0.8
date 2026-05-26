@@ -70,7 +70,7 @@ CONTRACT;
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
 
     /** Practical prose cap per briefing (cost/latency), below model hard cap. */
-    public const BRIEFING_SUMMARY_OUTPUT_CAP = 8192;
+    public const BRIEFING_SUMMARY_OUTPUT_CAP = 24576;
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -82,7 +82,8 @@ CONTRACT;
 
     private const OUTPUT_TOKEN_FLOOR = 2048;
 
-    private const OUTPUT_TOKENS_PER_ITEM = 400;
+    /** Visible pass-2 tokens scaled per cited item (structured / legal blocks need more than one paragraph). */
+    private const OUTPUT_TOKENS_PER_ITEM = 1100;
 
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
@@ -1347,8 +1348,8 @@ CONTRACT;
             return;
         }
 
-        $minChars = $itemsToCheck * 220;
-        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($itemsToCheck * 0.75)) {
+        $minChars = $itemsToCheck * 400;
+        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($itemsToCheck * 0.5)) {
             error_log(
                 'GeminiBriefingService: briefing_markdown length ' . strlen($result->markdown)
                 . ' below heuristic for ' . $itemsToCheck . ' items (max requested ' . $maxItemCount . ')'

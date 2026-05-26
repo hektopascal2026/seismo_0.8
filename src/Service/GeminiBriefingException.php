@@ -37,8 +37,8 @@ final class GeminiBriefingException extends \RuntimeException
     public static function outputTruncated(): self
     {
         return new self(
-            'Gemini ran out of output space for the full briefing (often with many long items). '
-            . 'Try again, reduce “Number of items”, or shorten the system prompt.'
+            'Gemini ran out of output space for the full briefing (common with multi-section prompts or many items). '
+            . 'Try again, reduce “Number of items”, use a shorter template, or set system_config gemini:max_output_tokens higher.'
         );
     }
 
