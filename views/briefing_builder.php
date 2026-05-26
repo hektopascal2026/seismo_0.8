@@ -385,6 +385,11 @@ $moduleOptions = [
             return STATUS_STEPS;
         }
 
+        /** Server always runs skinny two-pass (selection JSON → Markdown). */
+        function isTwoPassEnabled() {
+            return true;
+        }
+
         function clearStatusTimers() {
             statusTimerIds.forEach(function(id) { clearTimeout(id); });
             statusTimerIds = [];
