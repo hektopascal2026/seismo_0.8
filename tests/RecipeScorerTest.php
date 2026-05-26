@@ -46,6 +46,32 @@ final class RecipeScorerTest extends TestCase
         );
     }
 
+    public function testNoKeywordMatchPredictsNoise(): void
+    {
+        $result = RecipeScorer::score(
+            $this->minimalRecipe(),
+            'Nothing relevant',
+            'No recipe keywords here.',
+        );
+
+        $this->assertNotNull($result);
+        $this->assertSame('noise', $result['predicted_label']);
+        $this->assertSame('noise', $result['explanation']['prediction']);
+    }
+
+    public function testSourceWeightWithoutKeywordsStillClassifies(): void
+    {
+        $recipe = $this->minimalRecipe();
+        $recipe['source_weights'] = [
+            'rss' => ['investigation_lead' => 2.0],
+        ];
+
+        $result = RecipeScorer::score($recipe, 'Plain title', 'Plain body.', 'rss');
+
+        $this->assertNotNull($result);
+        $this->assertSame('investigation_lead', $result['predicted_label']);
+    }
+
     public function testDistinctKeywordsStillAccumulate(): void
     {
         $recipe = $this->minimalRecipe();

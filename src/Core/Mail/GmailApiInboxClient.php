@@ -44,18 +44,29 @@ final class GmailApiInboxClient
         $profile       = $gmail->users->getProfile('me');
         $currentHistory = (string)($profile->getHistoryId() ?? '');
 
-        $messageIds = [];
+        $messageIds        = [];
+        $historyAdvanceId  = $currentHistory;
         if ($storedHistory === '') {
             $messageIds = $this->bootstrapMessageIds($gmail, $max);
         } else {
-            $messageIds = $this->historyMessageIds($gmail, $storedHistory, $max);
+            $batch        = $this->historyMessageBatch($gmail, $storedHistory, $max);
+            $messageIds   = $batch['message_ids'];
+            if ($batch['truncated']) {
+                $historyAdvanceId = $batch['checkpoint_history_id'] ?? $storedHistory;
+            }
         }
 
         $messageIds = array_values(array_unique(array_filter($messageIds, static fn (string $id) => $id !== '')));
         if (count($messageIds) > $max) {
             $dropped = count($messageIds) - $max;
-            error_log('[seismo] Gmail fetch: cap ' . $max . ' — ' . $dropped . ' message id(s) deferred to next run.');
-            $messageIds = array_slice($messageIds, -$max);
+            error_log(
+                '[seismo] Gmail fetch: safety cap ' . $max . ' — ' . $dropped
+                . ' message id(s) remain for a later run (history cursor not advanced past backlog).'
+            );
+            $messageIds = array_slice($messageIds, 0, $max);
+            if ($storedHistory !== '') {
+                $historyAdvanceId = $storedHistory;
+            }
         }
 
         $rows = [];
@@ -76,8 +87,8 @@ final class GmailApiInboxClient
             }
         }
 
-        if ($currentHistory !== '') {
-            $this->config->set(MailConfigKeys::GMAIL_HISTORY_ID, $currentHistory);
+        if ($historyAdvanceId !== '') {
+            $this->config->set(MailConfigKeys::GMAIL_HISTORY_ID, $historyAdvanceId);
         }
         $this->config->set(MailConfigKeys::GMAIL_LAST_SYNC_AT, gmdate('Y-m-d H:i:s'));
 
@@ -103,51 +114,81 @@ final class GmailApiInboxClient
     }
 
     /**
-     * @return list<string>
+     * @return array{
+     *   message_ids: list<string>,
+     *   checkpoint_history_id: ?string,
+     *   truncated: bool
+     * }
      */
-    private function historyMessageIds(Gmail $gmail, string $startHistoryId, int $max): array
+    private function historyMessageBatch(Gmail $gmail, string $startHistoryId, int $max): array
     {
-        $ids       = [];
-        $pageToken = null;
+        $recordHistoryIds    = [];
+        $messageIdsPerRecord = [];
+        $pageToken           = null;
 
         try {
             do {
                 $params = [
                     'startHistoryId' => $startHistoryId,
                     'historyTypes'   => ['messageAdded'],
-                    'maxResults'     => min(500, $max),
+                    'maxResults'     => 500,
                 ];
                 if ($pageToken !== null) {
                     $params['pageToken'] = $pageToken;
                 }
                 $resp = $gmail->users_history->listUsersHistory('me', $params);
                 foreach ($resp->getHistory() ?? [] as $record) {
+                    $recordHistoryIds[] = (string)($record->getId() ?? '');
+                    $recordMsgs         = [];
                     foreach ($record->getMessagesAdded() ?? [] as $added) {
                         $msg = $added->getMessage();
                         if ($msg !== null) {
                             $id = (string)($msg->getId() ?? '');
                             if ($id !== '') {
-                                $ids[] = $id;
+                                $recordMsgs[] = $id;
                             }
                         }
                     }
+                    $messageIdsPerRecord[] = $recordMsgs;
                 }
                 $pageToken = $resp->getNextPageToken();
-            } while ($pageToken !== null && count($ids) < $max);
+                $batch     = GmailHistoryIngestCap::collect($recordHistoryIds, $messageIdsPerRecord, $max);
+                if ($batch['truncated'] || ($pageToken !== null && count($batch['message_ids']) >= $max)) {
+                    return [
+                        'message_ids'           => $batch['message_ids'],
+                        'checkpoint_history_id' => $batch['checkpoint_history_id'],
+                        'truncated'             => true,
+                    ];
+                }
+            } while ($pageToken !== null);
         } catch (GoogleServiceException $e) {
             // Expired or invalid startHistoryId (Gmail retains history for a limited time).
             error_log(
                 'Seismo Gmail history expired or invalid: ' . $e->getMessage() . ' — falling back to bootstrap.'
             );
 
-            return $this->bootstrapMessageIds($gmail, $max);
+            return [
+                'message_ids'           => $this->bootstrapMessageIds($gmail, $max),
+                'checkpoint_history_id' => null,
+                'truncated'             => false,
+            ];
         }
 
-        if ($ids === []) {
-            return $this->bootstrapMessageIds($gmail, $max);
+        if ($messageIdsPerRecord === []) {
+            return [
+                'message_ids'           => $this->bootstrapMessageIds($gmail, $max),
+                'checkpoint_history_id' => null,
+                'truncated'             => false,
+            ];
         }
 
-        return $ids;
+        $batch = GmailHistoryIngestCap::collect($recordHistoryIds, $messageIdsPerRecord, $max);
+
+        return [
+            'message_ids'           => $batch['message_ids'],
+            'checkpoint_history_id' => $batch['checkpoint_history_id'],
+            'truncated'             => $batch['truncated'],
+        ];
     }
 
     /**

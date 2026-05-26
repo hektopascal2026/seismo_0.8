@@ -107,9 +107,10 @@ final class RecipeScorer
             }
         }
 
-        $classScores   = array_fill_keys($classes, 0.0);
-        $topFeatures   = [];
-        $tokenHitCount = [];
+        $classScores         = array_fill_keys($classes, 0.0);
+        $topFeatures         = [];
+        $tokenHitCount       = [];
+        $hadRecipeKeywordHit = false;
 
         foreach ($tokens as $token) {
             if (!isset($keywords[$token])) {
@@ -120,6 +121,7 @@ final class RecipeScorer
                 continue;
             }
             $tokenHitCount[$token] = $hits + 1;
+            $hadRecipeKeywordHit   = true;
 
             foreach ($keywords[$token] as $class => $weight) {
                 if (!isset($classScores[$class])) {
@@ -164,12 +166,19 @@ final class RecipeScorer
         }
 
         $predictedLabel = $classes[0] ?? 'noise';
-        $maxProb = 0.0;
+        $maxProb        = 0.0;
         foreach ($probabilities as $class => $prob) {
             if ($prob > $maxProb) {
-                $maxProb = $prob;
+                $maxProb        = $prob;
                 $predictedLabel = $class;
             }
+        }
+
+        // Uniform softmax with all-zero logits defaults to the first class; treat that
+        // as noise when no recipe keyword matched (source_weights may still apply).
+        if (!$hadRecipeKeywordHit && $maxScore === 0.0 && in_array('noise', $classes, true)) {
+            $predictedLabel = 'noise';
+            $maxProb        = (float)($probabilities['noise'] ?? $maxProb);
         }
 
         usort($topFeatures, static fn ($a, $b) => abs($b['weight']) <=> abs($a['weight']));
