@@ -37,8 +37,8 @@ final class EntryScoreRepository
      */
     public const MAX_UNSCORED_LIMIT = 500;
 
-    /** Recipe scoring only needs a text prefix; full LONGTEXT bodies OOM at batch size. */
-    private const UNSCORED_EMAIL_BODY_CHARS = 50_000;
+    /** Recipe scoring only needs a text prefix; full LONGTEXT/MEDIUMTEXT OOM at batch size. */
+    private const UNSCORED_BODY_CHARS = 50_000;
 
     public function __construct(private PDO $pdo)
     {
@@ -270,7 +270,11 @@ final class EntryScoreRepository
     public function getUnscoredFeedItems(int $limit, int $recipeVersion): array
     {
         $limit = $this->clampLimit($limit);
-        $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, f.source_type
+        $bodyChars = self::UNSCORED_BODY_CHARS;
+        $sql = 'SELECT fi.id, fi.title,
+                       SUBSTRING(fi.description, 1, ' . $bodyChars . ') AS description,
+                       SUBSTRING(fi.content, 1, ' . $bodyChars . ') AS content,
+                       f.source_type
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0
@@ -354,7 +358,7 @@ final class EntryScoreRepository
 
         $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0 AND ' : '';
 
-        $bodyChars = self::UNSCORED_EMAIL_BODY_CHARS;
+        $bodyChars = self::UNSCORED_BODY_CHARS;
         $sql = "SELECT e.id, e.subject,
                        SUBSTRING(e.`{$textBody}`, 1, {$bodyChars}) AS text_body,
                        SUBSTRING(e.`{$htmlBody}`, 1, {$bodyChars}) AS html_body{$derivedSel}
