@@ -67,7 +67,13 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                     <form id="seismo-timeline-refresh-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($timelineRefreshAct) ?>" class="admin-inline-form top-bar-form-gap seismo-ajax-refresh-form">
                         <?= $csrfField ?>
                         <input type="hidden" name="return_action" value="<?= e($timelineRefreshRet) ?>">
-                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="Refresh" title="<?= isSatellite() ? 'Triggers mothership refresh (feeds, press, scrapers, mail, Leg — Lex omitted, same as mothership toolbar)' : 'Refresh feeds, press, scrapers, parliament calendar, and mail when due (mail/Gmail at most every 15 minutes). Lex legislation uses Diagnostics or cron.' ?>">Refresh</button>
+                        <?php
+                            $timelineRefreshBtnLabel = isSatellite() ? 'Score' : 'Refresh';
+                            $timelineRefreshBtnTitle = isSatellite()
+                                ? 'Apply this desk\'s recipe to unscored entries (local entry_scores only; mothership ingest is via cron).'
+                                : 'Refresh feeds, press, scrapers, parliament calendar, and mail when due (mail/Gmail at most every 15 minutes). Lex legislation uses Diagnostics or cron.';
+                            ?>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="<?= e($timelineRefreshBtnLabel) ?>" title="<?= e($timelineRefreshBtnTitle) ?>"><?= e($timelineRefreshBtnLabel) ?></button>
                     </form>
                 <?php endif; ?>
                 <?php

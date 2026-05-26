@@ -61,4 +61,31 @@ final class CronMutexRepository
         $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(?)');
         $stmt->execute([self::refreshCronLockName()]);
     }
+
+    public static function satelliteRescoreCronLockName(): string
+    {
+        $db   = defined('DB_NAME') ? (string)DB_NAME : '';
+        $safe = preg_replace('/[^a-zA-Z0-9_]/', '_', $db);
+        $full = 'seismo_satellite_rescore_' . $safe;
+
+        return substr($full, 0, 64);
+    }
+
+    public function tryAcquireSatelliteRescoreCron(): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT GET_LOCK(?, 0)');
+        $stmt->execute([self::satelliteRescoreCronLockName()]);
+        $v = $stmt->fetchColumn();
+        if ($v === false || $v === null) {
+            return false;
+        }
+
+        return (int)$v === 1;
+    }
+
+    public function releaseSatelliteRescoreCron(): void
+    {
+        $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $stmt->execute([self::satelliteRescoreCronLockName()]);
+    }
 }

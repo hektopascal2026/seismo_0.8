@@ -228,18 +228,63 @@ final class ScoringService
         EntryScoreRepository $entryScores,
     ): void {
         try {
-            $raw = $systemConfig->get('recipe_json');
-            if ($raw === null || $raw === '') {
-                return;
-            }
-            $recipe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($recipe)) {
-                return;
-            }
-            $scorer = new self($entryScores);
-            $scorer->rescoreAll($recipe);
+            self::rescoreStoredRecipeRoundsForRepos($systemConfig, $entryScores, 1);
         } catch (\Throwable $e) {
             error_log('Seismo recipe rescore after refresh: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Run {@see rescoreAll()} in a loop until a pass scores nothing or {@see $maxRounds}.
+     *
+     * @return array{counts: array{feed_items: int, lex_items: int, emails: int, calendar_events: int}, rounds: int}|null
+     *                                                                                                      null when no recipe_json
+     * @throws \JsonException
+     */
+    public static function rescoreStoredRecipeRoundsForRepos(
+        SystemConfigRepository $systemConfig,
+        EntryScoreRepository $entryScores,
+        int $maxRounds = 20,
+    ): ?array {
+        $raw = $systemConfig->get('recipe_json');
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $recipe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($recipe) || $recipe === [] || empty($recipe['keywords'])) {
+            return null;
+        }
+
+        $maxRounds = max(1, min($maxRounds, 50));
+        $scorer    = new self($entryScores);
+        $totals    = ['feed_items' => 0, 'lex_items' => 0, 'emails' => 0, 'calendar_events' => 0];
+        $rounds    = 0;
+
+        for ($i = 0; $i < $maxRounds; $i++) {
+            $counts = $scorer->rescoreAll($recipe);
+            $rounds++;
+            $batchTotal = 0;
+            foreach ($counts as $family => $n) {
+                $totals[$family] += $n;
+                $batchTotal += $n;
+            }
+            if ($batchTotal === 0) {
+                break;
+            }
+        }
+
+        return ['counts' => $totals, 'rounds' => $rounds];
+    }
+
+    /**
+     * @return array{counts: array{feed_items: int, lex_items: int, emails: int, calendar_events: int}, rounds: int}|null
+     */
+    public static function rescoreStoredRecipeRounds(PDO $pdo, int $maxRounds = 20): ?array
+    {
+        return self::rescoreStoredRecipeRoundsForRepos(
+            new SystemConfigRepository($pdo),
+            new EntryScoreRepository($pdo),
+            $maxRounds,
+        );
     }
 }

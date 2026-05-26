@@ -84,7 +84,7 @@ final class DashboardController
         $showDaySeparators   = true;
         $showFavourites      = true;
         $showTimelineRefresh = self::shouldShowTimelineRefresh();
-        $timelineRefreshAction = isSatellite() ? 'refresh_remote' : 'refresh_all';
+        $timelineRefreshAction = isSatellite() ? 'refresh_scores' : 'refresh_all';
         $timelineRefreshReturnAction = 'index';
         $returnQuery         = $this->buildReturnQuery('index', $currentView);
 
@@ -156,18 +156,17 @@ final class DashboardController
         }
 
         $showTimelineRefresh = self::shouldShowTimelineRefresh();
-        $timelineRefreshAction = isSatellite() ? 'refresh_remote' : 'refresh_all';
+        $timelineRefreshAction = isSatellite() ? 'refresh_scores' : 'refresh_all';
         $timelineRefreshReturnAction = 'filter';
 
         require SEISMO_ROOT . '/views/dashboard_filters.php';
     }
 
     /**
-     * Satellite POST handler — proxies to the mothership {@see DiagnosticsController::refreshAllRemote()}
-     * using {@see seismoMothershipBaseUrl()} and {@see seismoRemoteRefreshKey()}.
-     * Same ingest scope as the mothership timeline toolbar (Lex plugins omitted).
+     * Satellite timeline POST — recipe rescore only (local {@see EntryScoreRepository}).
+     * Does not call the mothership; ingest stays on mothership {@see refresh_cron.php}.
      */
-    public function refreshRemote(): void
+    public function refreshScores(): void
     {
         if (!isSatellite()) {
             http_response_code(404);
@@ -180,7 +179,6 @@ final class DashboardController
             header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
             exit;
         }
-        // Same as mothership refresh_all — do not rotate; other toolbar POSTs reuse this token.
         if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $msg = 'Session expired — please try again.';
             $_SESSION['error'] = $msg;
@@ -197,84 +195,57 @@ final class DashboardController
                 );
                 exit;
             }
-            $this->redirectAfterRemoteRefresh();
+            $this->redirectAfterTimelineRefresh();
         }
 
-        $mother = seismoMothershipBaseUrl();
-        $key = seismoRemoteRefreshKey();
-        if ($key === '') {
-            $_SESSION['error'] = 'Remote refresh is not configured — enable it on the mothership under Settings → Satellites.';
+        try {
+            $result = ScoringService::rescoreStoredRecipeRounds(getDbConnection());
+        } catch (\Throwable $e) {
+            error_log('Seismo refresh_scores: ' . $e->getMessage());
+            $_SESSION['error'] = 'Recipe scoring failed — check error_log.';
 
-            $this->endRemoteRefreshOrJson($ajax);
+            $this->endTimelineRefreshJson($ajax);
 
             return;
         }
 
-        $url = rtrim($mother, '/') . '/index.php?' . http_build_query([
-            'action' => 'refresh_all_remote',
-            'key'    => $key,
-        ]);
+        if ($result === null) {
+            $_SESSION['error'] = 'No recipe on this desk — push recipe from Magnitu (magnitu_recipe) or copy recipe_json into this desk’s system_config.';
 
-        [$status, $body] = self::httpGet($url);
-
-        if ($status === 0 && $body === '') {
-            $_SESSION['error'] = 'Could not reach the mothership for refresh (network or TLS error).';
-
-            $this->endRemoteRefreshOrJson($ajax);
+            $this->endTimelineRefreshJson($ajax);
 
             return;
         }
 
-        /** @var mixed $json */
-        $json = json_decode($body, true);
-        if (!is_array($json)) {
-            $_SESSION['error'] = $status >= 400
-                ? 'Mothership refresh failed (HTTP ' . $status . ').'
-                : 'Mothership returned a non-JSON response.';
+        $counts = $result['counts'];
+        $total  = $counts['feed_items'] + $counts['lex_items'] + $counts['emails'] + $counts['calendar_events'];
+        $rounds = (int)$result['rounds'];
 
-            $this->endRemoteRefreshOrJson($ajax);
-
-            return;
-        }
-
-        $ok = (bool)($json['ok'] ?? false);
-        if ($status === 401 || ($status >= 400 && !$ok && (($json['error'] ?? '') === 'invalid key'))) {
-            $_SESSION['error'] = 'Remote refresh rejected — rotate the refresh key on the mothership (Settings → Satellites).';
-        } elseif ($status === 429) {
-            $retry = (int)($json['retry_after'] ?? 0);
-            $_SESSION['error'] = $retry > 0
-                ? 'Mothership refresh rate limited — retry in ' . $retry . 's.'
-                : 'Mothership refresh rate limited — try again shortly.';
-        } elseif ($status >= 400 && !$ok) {
-            $err = trim((string)($json['error'] ?? ''));
-            $_SESSION['error'] = $err !== ''
-                ? 'Mothership: ' . $err
-                : 'Mothership refresh failed (HTTP ' . $status . ').';
-        } elseif ($ok) {
-            if (function_exists('isSatellite') && isSatellite()) {
-                ScoringService::rescoreStoredRecipeBestEffort(getDbConnection());
-            }
-            $msgs = $json['messages'] ?? [];
-            $summary = is_array($msgs) && $msgs !== []
-                ? implode(' ', array_map(static fn ($m): string => (string)$m, $msgs))
-                : 'Refresh completed.';
-            $_SESSION['success'] = $summary;
+        if ($total === 0) {
+            $_SESSION['success'] = 'Recipe scoring is up to date — no unscored entries matched this desk’s recipe.';
         } else {
-            $err = trim((string)($json['error'] ?? ''));
-            $_SESSION['error'] = $err !== '' ? 'Mothership: ' . $err : 'Refresh finished with errors.';
+            $_SESSION['success'] = sprintf(
+                'Recipe scoring updated %d entries (%d pass%s: feeds %d, lex %d, mail %d, leg %d).',
+                $total,
+                $rounds,
+                $rounds === 1 ? '' : 'es',
+                $counts['feed_items'],
+                $counts['lex_items'],
+                $counts['emails'],
+                $counts['calendar_events'],
+            );
         }
 
-        $this->endRemoteRefreshOrJson($ajax);
+        $this->endTimelineRefreshJson($ajax);
     }
 
     /**
-     * After building flash in {@see self::refreshRemote()}, either JSON (timeline AJAX)
-     * or 303 redirect.
+     * After building flash in {@see self::refreshScores()}, either JSON (timeline AJAX) or 303 redirect.
      */
-    private function endRemoteRefreshOrJson(bool $ajax): void
+    private function endTimelineRefreshJson(bool $ajax): void
     {
         if (!$ajax) {
-            $this->redirectAfterRemoteRefresh();
+            $this->redirectAfterTimelineRefresh();
         }
         $success = $_SESSION['success'] ?? null;
         $error = $_SESSION['error'] ?? null;
@@ -289,61 +260,19 @@ final class DashboardController
         exit;
     }
 
-    /**
-     * Timeline + filter pages: show Refresh when mothership refresh is possible.
-     */
+    /** Timeline + filter: mothership ingest refresh; satellite local recipe rescore. */
     private static function shouldShowTimelineRefresh(): bool
     {
-        if (!isSatellite()) {
-            return true;
-        }
-
-        return seismoRemoteRefreshKeyConfigured();
+        return true;
     }
 
-    private function redirectAfterRemoteRefresh(): void
+    private function redirectAfterTimelineRefresh(): void
     {
         $t = trim((string)($_POST['return_action'] ?? ''));
 
         $action = $t === 'filter' ? 'filter' : 'index';
         header('Location: ' . getBasePath() . '/index.php?action=' . rawurlencode($action), true, 303);
         exit;
-    }
-
-    /**
-     * @return array{0: int, 1: string} HTTP status (0 if unknown), response body
-     */
-    private static function httpGet(string $url): array
-    {
-        if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_TIMEOUT        => 320,
-                CURLOPT_HTTPHEADER     => ['Accept: application/json'],
-            ]);
-            $body = curl_exec($ch);
-            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-            return [$code, $body === false ? '' : (string)$body];
-        }
-
-        $ctx = stream_context_create([
-            'http' => [
-                'timeout'       => 320,
-                'header'        => "Accept: application/json\r\n",
-                'ignore_errors' => true,
-            ],
-        ]);
-
-        $body = @file_get_contents($url, false, $ctx);
-        $code = 0;
-        if (!empty($http_response_header[0]) && preg_match('#HTTP/\S+\s+(\d{3})#', $http_response_header[0], $m)) {
-            $code = (int)$m[1];
-        }
-
-        return [$code, $body === false ? '' : (string)$body];
     }
 
     /**

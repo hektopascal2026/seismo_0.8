@@ -42,7 +42,11 @@ if ($scoresDb !== null && $scoresDb !== '') {
 echo "Seismo migrate — " . SEISMO_VERSION . " ({$target->value})\n";
 
 try {
-    $pdo = seismoPdoForMigrate($scoresDb);
+    $pdo = seismoPdoForScoresCatalog(
+        $scoresDb !== null && $scoresDb !== ''
+            ? $scoresDb
+            : (defined('SEISMO_ENTRIES_DB') ? (string)SEISMO_ENTRIES_DB : DB_NAME),
+    );
 } catch (Throwable $e) {
     fwrite(STDERR, "Database connection failed: " . $e->getMessage() . "\n");
     exit(2);
@@ -77,37 +81,3 @@ try {
 
 echo "Done.\n";
 exit(0);
-
-/**
- * @throws RuntimeException
- */
-function seismoPdoForMigrate(?string $scoresDb): PDO
-{
-    $host = DB_HOST;
-    $port = null;
-    if (preg_match('/^(.+):(\d+)$/', $host, $m)) {
-        $host = $m[1];
-        $port = (int)$m[2];
-    }
-    if (defined('DB_PORT') && DB_PORT !== '' && DB_PORT !== null) {
-        $port = (int)DB_PORT;
-    }
-    $dbName = $scoresDb !== null && $scoresDb !== ''
-        ? $scoresDb
-        : (defined('SEISMO_ENTRIES_DB') ? (string)SEISMO_ENTRIES_DB : DB_NAME);
-    if ($dbName === '') {
-        throw new RuntimeException('Database name is empty — set DB_NAME / SEISMO_ENTRIES_DB in config.local.php');
-    }
-    $dsn = 'mysql:host=' . $host . ';dbname=' . $dbName . ';charset=utf8mb4';
-    if ($port !== null) {
-        $dsn .= ';port=' . $port;
-    }
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
-    ]);
-    $pdo->exec("SET time_zone = '+00:00'");
-
-    return $pdo;
-}

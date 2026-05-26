@@ -9,7 +9,7 @@
  *
  * Path satellites (`/<slug>/`, `SEISMO_SATELLITE_SLUG`) load a minimal route table from
  * `routes_satellite.inc.php` — timeline, highlights, settings (general +
- * Magnitu), Magnitu API, POST `refresh_remote` (proxy to mothership refresh),
+ * Magnitu), Magnitu API, POST `refresh_scores` (local recipe rescore),
  * auth, health. The mothership uses `routes_mothership.inc.php` for
  * the full surface.
  */

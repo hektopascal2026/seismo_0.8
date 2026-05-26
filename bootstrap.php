@@ -206,6 +206,39 @@ function getDbConnection(): PDO
 }
 
 /**
+ * PDO to a scores/config catalog (mothership `seismo` or desk `seismo_<slug>`).
+ * Used by migrate, satellite rescore cron, and CLI tools — not request-scoped {@see getDbConnection()}.
+ */
+function seismoPdoForScoresCatalog(string $scoresDbName): PDO
+{
+    $scoresDbName = trim($scoresDbName);
+    if ($scoresDbName === '') {
+        throw new \InvalidArgumentException('Scores database name is empty.');
+    }
+    $host = DB_HOST;
+    $port = null;
+    if (preg_match('/^(.+):(\d+)$/', $host, $m)) {
+        $host = $m[1];
+        $port = (int)$m[2];
+    }
+    if (defined('DB_PORT') && DB_PORT !== '' && DB_PORT !== null) {
+        $port = (int)DB_PORT;
+    }
+    $dsn = 'mysql:host=' . $host . ';dbname=' . $scoresDbName . ';charset=utf8mb4';
+    if ($port !== null) {
+        $dsn .= ';port=' . $port;
+    }
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ]);
+    $pdo->exec("SET time_zone = '+00:00'");
+
+    return $pdo;
+}
+
+/**
  * True when config.local.php exists, credentials are set, and PDO connects.
  * Used to hide the first-run configuration helper once the app can reach the DB.
  */
