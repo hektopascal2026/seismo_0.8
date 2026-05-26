@@ -155,10 +155,11 @@ final class ScraperFetchService
             ];
         }
 
-        $items   = [];
-        $attempt = 0;
+        $items        = [];
+        $attempt      = 0;
+        $maxAttempts  = $maxArticles * 2;
         foreach ($candidates as $targetUrl) {
-            if (count($items) >= $maxArticles) {
+            if (count($items) >= $maxArticles || $attempt >= $maxAttempts) {
                 break;
             }
             if ($delayBetweenArticleFetches && $attempt > 0) {

@@ -140,7 +140,7 @@ final class BriefingEntryGatherer
             $missingIdsByType[$type][$id] = $id;
         }
 
-        foreach ($this->hydrateMissingEntries($repo, $since, $missingIdsByType) as $e) {
+        foreach ($this->hydrateMissingEntries($repo, $since, $missingIdsByType, false) as $e) {
             if (!BriefingLookback::entryInWindow($e, $since)) {
                 continue;
             }
@@ -291,38 +291,113 @@ final class BriefingEntryGatherer
         MagnituExportRepository $repo,
         ?string $since,
         array $missingIdsByType,
+        bool $includeFullBody,
     ): array {
         $out = [];
 
         $feedIds = array_values($missingIdsByType['feed_item'] ?? []);
         if ($feedIds !== []) {
-            foreach ($repo->listFeedItemsByIds($feedIds, $since) as $row) {
+            foreach ($repo->listFeedItemsByIds($feedIds, $since, $includeFullBody) as $row) {
                 $out[] = MagnituController::shapeFeedItem($row);
             }
         }
 
         $emailIds = array_values($missingIdsByType['email'] ?? []);
         if ($emailIds !== []) {
-            foreach ($repo->listEmailsByIds($emailIds, $since) as $row) {
+            foreach ($repo->listEmailsByIds($emailIds, $since, $includeFullBody) as $row) {
                 $out[] = MagnituController::shapeEmail($row);
             }
         }
 
         $lexIds = array_values($missingIdsByType['lex_item'] ?? []);
         if ($lexIds !== []) {
-            foreach ($repo->listLexItemsByIds($lexIds, $since) as $row) {
+            foreach ($repo->listLexItemsByIds($lexIds, $since, $includeFullBody) as $row) {
                 $out[] = MagnituController::shapeLexItem($row);
             }
         }
 
         $legIds = array_values($missingIdsByType['calendar_event'] ?? []);
         if ($legIds !== []) {
-            foreach ($repo->listCalendarEventsByIds($legIds, $since) as $row) {
+            foreach ($repo->listCalendarEventsByIds($legIds, $since, $includeFullBody) as $row) {
                 $out[] = MagnituController::shapeCalendarEvent($row);
             }
         }
 
         return $out;
+    }
+
+    /**
+     * Load LONGTEXT bodies for the final capped briefing pool only (avoids OOM during score hydration).
+     *
+     * @param list<array<string, mixed>> $entries Shaped Magnitu rows (mutated in place).
+     */
+    public function enrichEntriesWithFullBodies(PDO $pdo, ?string $since, array &$entries): void
+    {
+        if ($entries === []) {
+            return;
+        }
+
+        /** @var array<string, list<int>> $idsByType */
+        $idsByType = [
+            'feed_item'      => [],
+            'email'          => [],
+            'lex_item'       => [],
+            'calendar_event' => [],
+        ];
+        foreach ($entries as $e) {
+            $type = (string)($e['entry_type'] ?? '');
+            $id   = (int)($e['entry_id'] ?? 0);
+            if ($id <= 0 || !isset($idsByType[$type])) {
+                continue;
+            }
+            $idsByType[$type][$id] = $id;
+        }
+
+        $repo = new MagnituExportRepository($pdo);
+        /** @var array<string, array<string, mixed>> $shapedByKey */
+        $shapedByKey = [];
+
+        $feedIds = array_values($idsByType['feed_item']);
+        if ($feedIds !== []) {
+            foreach ($repo->listFeedItemsByIds($feedIds, $since, true) as $row) {
+                $shapedByKey['feed_item:' . (int)$row['id']] = MagnituController::shapeFeedItem($row);
+            }
+        }
+
+        $emailIds = array_values($idsByType['email']);
+        if ($emailIds !== []) {
+            foreach ($repo->listEmailsByIds($emailIds, $since, true) as $row) {
+                $shapedByKey['email:' . (int)$row['id']] = MagnituController::shapeEmail($row);
+            }
+        }
+
+        $lexIds = array_values($idsByType['lex_item']);
+        if ($lexIds !== []) {
+            foreach ($repo->listLexItemsByIds($lexIds, $since, true) as $row) {
+                $shapedByKey['lex_item:' . (int)$row['id']] = MagnituController::shapeLexItem($row);
+            }
+        }
+
+        $legIds = array_values($idsByType['calendar_event']);
+        if ($legIds !== []) {
+            foreach ($repo->listCalendarEventsByIds($legIds, $since, true) as $row) {
+                $shapedByKey['calendar_event:' . (int)$row['id']] = MagnituController::shapeCalendarEvent($row);
+            }
+        }
+
+        foreach ($entries as $i => $e) {
+            $key = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
+            if (!isset($shapedByKey[$key])) {
+                continue;
+            }
+            $full = $shapedByKey[$key];
+            $entries[$i]['description'] = $full['description'];
+            $entries[$i]['content']     = $full['content'];
+            if (($e['entry_type'] ?? '') === 'email') {
+                $entries[$i]['title'] = $full['title'];
+                $entries[$i]['link']  = $full['link'];
+            }
+        }
     }
 
     /**

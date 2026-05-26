@@ -36,39 +36,53 @@ final class EmailSubscriptionReprocessService
         $matchType  = (string)($sub['match_type'] ?? '');
         $matchValue = (string)($sub['match_value'] ?? '');
         $ingest     = new EmailIngestRepository($this->pdo);
-        $rows       = $ingest->fetchRowsForSubscriptionMatch($matchType, $matchValue, self::BATCH_LIMIT);
-        if ($rows === []) {
-            return 0;
-        }
+        $subs       = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+        $total      = 0;
+        $offset     = 0;
 
-        $subs = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
-        $n    = 0;
-        foreach ($rows as $row) {
-            $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
-            $row = EmailIngestNormalizer::normalizeBodies($row);
-            $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
-            $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true);
-            $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
-            if (!empty($ui['strip_listing_boilerplate'])) {
-                $subj = trim((string)($row['subject'] ?? ''));
-                foreach (['text_body', 'body_text'] as $key) {
-                    $t = (string)($row[$key] ?? '');
-                    if ($t !== '') {
-                        $row[$key] = EmailListingBoilerplateStripper::strip($t, $subj !== '' ? $subj : null);
+        while (true) {
+            $rows = $ingest->fetchRowsForSubscriptionMatch(
+                $matchType,
+                $matchValue,
+                self::BATCH_LIMIT,
+                $offset,
+            );
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
+                $row = EmailIngestNormalizer::normalizeBodies($row);
+                $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
+                $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true);
+                $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
+                if (!empty($ui['strip_listing_boilerplate'])) {
+                    $subj = trim((string)($row['subject'] ?? ''));
+                    foreach (['text_body', 'body_text'] as $key) {
+                        $t = (string)($row[$key] ?? '');
+                        if ($t !== '') {
+                            $row[$key] = EmailListingBoilerplateStripper::strip($t, $subj !== '' ? $subj : null);
+                        }
                     }
                 }
+                $row = EmailSubscriptionProcessor::apply($row, $subs);
+                $ingest->updateProcessedContent(
+                    (int)$row['id'],
+                    trim((string)($row['text_body'] ?? $row['body_text'] ?? '')),
+                    self::nullIfEmpty((string)($row['derived_title'] ?? '')),
+                    isset($row['metadata']) && $row['metadata'] !== null ? (string)$row['metadata'] : null
+                );
+                ++$total;
             }
-            $row = EmailSubscriptionProcessor::apply($row, $subs);
-            $ingest->updateProcessedContent(
-                (int)$row['id'],
-                trim((string)($row['text_body'] ?? $row['body_text'] ?? '')),
-                self::nullIfEmpty((string)($row['derived_title'] ?? '')),
-                isset($row['metadata']) && $row['metadata'] !== null ? (string)$row['metadata'] : null
-            );
-            ++$n;
+
+            if (count($rows) < self::BATCH_LIMIT) {
+                break;
+            }
+            $offset += self::BATCH_LIMIT;
         }
 
-        return $n;
+        return $total;
     }
 
     private static function nullIfEmpty(string $value): ?string

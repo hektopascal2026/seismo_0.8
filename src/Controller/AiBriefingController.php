@@ -907,6 +907,8 @@ PROMPT;
         $contextTruncated = $capped['truncated'];
         $stratifiedCap    = $capped['stratified'];
 
+        $gatherer->enrichEntriesWithFullBodies($pdo, $filters['since'], $entries);
+
         $entryBodyMaxChars = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(count($entries));
         $gatherMeta        = [
             'since'                => $filters['since'],

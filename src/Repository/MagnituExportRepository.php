@@ -249,15 +249,16 @@ final class MagnituExportRepository
      * @param list<int> $ids
      * @return array<int, array<string, mixed>>
      */
-    public function listFeedItemsByIds(array $ids, ?string $since): array
+    public function listFeedItemsByIds(array $ids, ?string $since, bool $includeFullBody = true): array
     {
         $ids = $this->normalizePositiveIds($ids);
         if ($ids === []) {
             return [];
         }
 
+        $contentCol = $includeFullBody ? 'fi.content' : 'NULL AS content';
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
+        $sql = 'SELECT fi.id, fi.title, fi.description, ' . $contentCol . ', fi.link, fi.author,
                        fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
@@ -281,7 +282,7 @@ final class MagnituExportRepository
      * @param list<int> $ids
      * @return array<int, array<string, mixed>>
      */
-    public function listEmailsByIds(array $ids, ?string $since): array
+    public function listEmailsByIds(array $ids, ?string $since, bool $includeFullBody = true): array
     {
         $ids = $this->normalizePositiveIds($ids);
         if ($ids === []) {
@@ -313,14 +314,25 @@ final class MagnituExportRepository
         }
 
         $fromNameExpr = in_array('from_name', $cols, true) ? 'e.from_name' : "''";
+        $derivedCol   = in_array('derived_title', $cols, true) ? 'e.derived_title' : "'' AS derived_title";
+        $metaCol      = in_array('metadata', $cols, true) ? 'e.metadata' : 'NULL AS metadata';
+        if ($includeFullBody) {
+            $textSel = "e.`{$textBodyCol}` AS text_body";
+            $htmlSel = "e.`{$htmlBodyCol}` AS html_body";
+        } else {
+            $textSel = "LEFT(e.`{$textBodyCol}`, 512) AS text_body";
+            $htmlSel = "'' AS html_body";
+        }
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $sql = "SELECT e.id,
                        e.subject,
+                       {$derivedCol},
                        e.`{$fromEmailCol}` AS from_email,
                        {$fromNameExpr}     AS from_name,
-                       e.`{$textBodyCol}`  AS text_body,
-                       e.`{$htmlBodyCol}`  AS html_body,
+                       {$textSel},
+                       {$htmlSel},
                        e.`{$dateCol}`      AS entry_date,
+                       {$metaCol},
                        COALESCE(st.tag, 'unclassified') AS sender_tag
                   FROM {$table} e
              LEFT JOIN " . entryTable('sender_tags') . " st
@@ -343,15 +355,16 @@ final class MagnituExportRepository
      * @param list<int> $ids
      * @return array<int, array<string, mixed>>
      */
-    public function listLexItemsByIds(array $ids, ?string $since): array
+    public function listLexItemsByIds(array $ids, ?string $since, bool $includeFullBody = true): array
     {
         $ids = $this->normalizePositiveIds($ids);
         if ($ids === []) {
             return [];
         }
 
+        $contentCol   = $includeFullBody ? 'content' : 'NULL AS content';
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $sql = 'SELECT id, celex, title, description, content, document_date, document_type, eurlex_url, source
+        $sql = 'SELECT id, celex, title, description, ' . $contentCol . ', document_date, document_type, eurlex_url, source
                   FROM ' . entryTable('lex_items') . '
                  WHERE id IN (' . $placeholders . ')';
         $params = $ids;
@@ -367,16 +380,17 @@ final class MagnituExportRepository
      * @param list<int> $ids
      * @return array<int, array<string, mixed>>
      */
-    public function listCalendarEventsByIds(array $ids, ?string $since): array
+    public function listCalendarEventsByIds(array $ids, ?string $since, bool $includeFullBody = true): array
     {
         $ids = $this->normalizePositiveIds($ids);
         if ($ids === []) {
             return [];
         }
 
-        $table = entryTable('calendar_events');
+        $contentCol   = $includeFullBody ? 'content' : 'NULL AS content';
+        $table        = entryTable('calendar_events');
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $sql = "SELECT id, source, title, description, content, event_date, event_end_date,
+        $sql = "SELECT id, source, title, description, {$contentCol}, event_date, event_end_date,
                        event_type, status, council, url
                   FROM {$table}
                  WHERE id IN ({$placeholders})";

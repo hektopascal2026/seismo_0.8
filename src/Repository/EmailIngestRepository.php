@@ -506,13 +506,18 @@ final class EmailIngestRepository
     /**
      * @return list<array<string, mixed>>
      */
-    public function fetchRowsForSubscriptionMatch(string $matchType, string $matchValue, int $limit): array
-    {
+    public function fetchRowsForSubscriptionMatch(
+        string $matchType,
+        string $matchValue,
+        int $limit,
+        int $offset = 0,
+    ): array {
         if (isSatellite()) {
             throw new \RuntimeException('EmailIngestRepository::fetchRowsForSubscriptionMatch must not run on a satellite.');
         }
         $matchType = strtolower(trim($matchType));
         $limit     = max(1, min(500, $limit));
+        $offset    = max(0, $offset);
         $t         = entryTable('emails');
         if ($matchType === 'email') {
             $param = strtolower(trim($matchValue));
@@ -521,7 +526,7 @@ final class EmailIngestRepository
             }
             $stmt = $this->pdo->prepare(
                 'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
-                 FROM ' . $t . ' WHERE LOWER(from_email) = ? ORDER BY id DESC LIMIT ' . $limit
+                 FROM ' . $t . ' WHERE LOWER(from_email) = ? ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
             $stmt->execute([$param]);
         } elseif ($matchType === 'domain') {
@@ -534,7 +539,7 @@ final class EmailIngestRepository
                  FROM ' . $t . '
                  WHERE LOWER(from_email) = ?
                     OR LOWER(from_email) LIKE ?
-                 ORDER BY id DESC LIMIT ' . $limit
+                 ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
             $stmt->execute([$domain, '%@' . $domain]);
         } else {

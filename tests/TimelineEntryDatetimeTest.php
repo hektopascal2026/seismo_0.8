@@ -78,6 +78,19 @@ final class TimelineEntryDatetimeTest extends TestCase
         );
     }
 
+    public function testLegWithoutSignalUsesCreatedAtNotEventDate(): void
+    {
+        $row = [
+            'event_date'  => '2026-06-01 14:00:00',
+            'created_at'  => '2026-05-21 09:45:00',
+        ];
+
+        self::assertSame(
+            TimelineEntryDatetime::storedUtcToUnix('2026-05-21 09:45:00'),
+            TimelineEntryDatetime::calendarEventUnix($row)
+        );
+    }
+
     public function testLegDateOnlyUsesCreatedAtLikeLex(): void
     {
         $row = [

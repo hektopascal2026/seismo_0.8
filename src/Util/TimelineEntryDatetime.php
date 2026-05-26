@@ -308,6 +308,13 @@ final class TimelineEntryDatetime
             return $feedUnix;
         }
 
+        // Mirror {@see CalendarEventRepository::legFeedAtOrderExpression()}:
+        // COALESCE(leg_feed_at, created_at) — not event_date when leg_feed_at is absent.
+        $created = trim((string)($row['created_at'] ?? ''));
+        if ($created !== '') {
+            return self::storedUtcToUnix($created);
+        }
+
         return self::unixForOfficialDateOrIngestion($row, 'event_date');
     }
 

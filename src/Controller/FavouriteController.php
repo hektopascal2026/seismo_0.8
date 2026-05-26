@@ -53,7 +53,7 @@ final class FavouriteController
 
         $returnRaw = trim((string)($_POST['return_query'] ?? ''));
 
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             $_SESSION['error'] = 'Session expired — please try again.';
             $this->redirectFromReturnQuery($returnRaw);
             return;
