@@ -6,6 +6,7 @@ namespace Seismo\Service;
 
 use PDO;
 use Seismo\Controller\MagnituController;
+use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 use Seismo\Core\MagnituScoreBands;
 use Seismo\Repository\EntryRepository;
 use Seismo\Repository\MagnituExportRepository;
@@ -73,7 +74,7 @@ final class BriefingEntryGatherer
             ));
         }
 
-        return [$entries, $scoresByKey];
+        return $this->finalizeGatheredEntries($entries, $scoresByKey);
     }
 
     /**
@@ -191,7 +192,7 @@ final class BriefingEntryGatherer
 
         $this->sortByRelevanceDesc($entries, $scoresByKey);
 
-        return [$entries, $scoresByKey];
+        return $this->finalizeGatheredEntries($entries, $scoresByKey);
     }
 
     /**
@@ -227,7 +228,70 @@ final class BriefingEntryGatherer
 
         $this->sortByRelevanceDesc($entries, $scoresByKey);
 
-        return [$entries, $scoresByKey];
+        return $this->finalizeGatheredEntries($entries, $scoresByKey);
+    }
+
+    /**
+     * Collapse duplicate feed rows that share the same article URL (topic feeds).
+     * Keeps the row with the highest Magnitu relevance score.
+     *
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @return list<array<string, mixed>>
+     */
+    public function deduplicateFeedItemsByLink(array $entries, array $scoresByKey): array
+    {
+        /** @var array<string, int> $indexByLink */
+        $indexByLink = [];
+        $out         = [];
+
+        foreach ($entries as $entry) {
+            if (($entry['entry_type'] ?? '') !== 'feed_item') {
+                $out[] = $entry;
+                continue;
+            }
+
+            $link = trim((string)($entry['link'] ?? ''));
+            if ($link === '') {
+                $out[] = $entry;
+                continue;
+            }
+
+            $normKey = ArticleLinkNormalizer::normalize($link);
+            if ($normKey === '') {
+                $out[] = $entry;
+                continue;
+            }
+
+            if (!isset($indexByLink[$normKey])) {
+                $indexByLink[$normKey] = count($out);
+                $out[]                 = $entry;
+                continue;
+            }
+
+            $existingIdx = $indexByLink[$normKey];
+            $existing    = $out[$existingIdx];
+            $existingKey = ($existing['entry_type'] ?? '') . ':' . ($existing['entry_id'] ?? '');
+            $newKey      = ($entry['entry_type'] ?? '') . ':' . ($entry['entry_id'] ?? '');
+            $existingScore = (float)($scoresByKey[$existingKey]['relevance_score'] ?? -1.0);
+            $newScore      = (float)($scoresByKey[$newKey]['relevance_score'] ?? -1.0);
+
+            if ($newScore > $existingScore) {
+                $out[$existingIdx] = $entry;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @return array{0: list<array<string, mixed>>, 1: array<string, array<string, mixed>>}
+     */
+    private function finalizeGatheredEntries(array $entries, array $scoresByKey): array
+    {
+        return [$this->deduplicateFeedItemsByLink($entries, $scoresByKey), $scoresByKey];
     }
 
     /**

@@ -370,7 +370,11 @@ final class FeedItemRepository
                 VALUES(published_date)
             ),
             content_hash = VALUES(content_hash),
-            cached_at = UTC_TIMESTAMP()';
+            cached_at = IF(
+                VALUES(content_hash) = feed_items.content_hash,
+                feed_items.cached_at,
+                UTC_TIMESTAMP()
+            )';
 
         $this->pdo->beginTransaction();
         try {

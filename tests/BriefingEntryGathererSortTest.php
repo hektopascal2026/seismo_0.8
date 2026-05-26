@@ -27,4 +27,38 @@ final class BriefingEntryGathererSortTest extends TestCase
         self::assertSame(2, $entries[1]['entry_id']);
         self::assertSame(3, $entries[2]['entry_id']);
     }
+
+    public function testDeduplicateFeedItemsByLinkKeepsHigherRelevance(): void
+    {
+        $entries = [
+            [
+                'entry_type' => 'feed_item',
+                'entry_id'   => 1,
+                'link'       => 'https://www.watson.ch/a/123?utm_source=feed-a',
+            ],
+            [
+                'entry_type' => 'feed_item',
+                'entry_id'   => 2,
+                'link'       => 'https://www.watson.ch/a/123?utm_source=feed-b',
+            ],
+            [
+                'entry_type' => 'email',
+                'entry_id'   => 9,
+                'link'       => '',
+            ],
+        ];
+        $scoresByKey = [
+            'feed_item:1' => ['relevance_score' => 0.4],
+            'feed_item:2' => ['relevance_score' => 0.9],
+            'email:9'     => ['relevance_score' => 0.5],
+        ];
+
+        $gatherer = new BriefingEntryGatherer();
+        $deduped  = $gatherer->deduplicateFeedItemsByLink($entries, $scoresByKey);
+
+        self::assertCount(2, $deduped);
+        self::assertSame('feed_item', $deduped[0]['entry_type']);
+        self::assertSame(2, $deduped[0]['entry_id']);
+        self::assertSame('email', $deduped[1]['entry_type']);
+    }
 }

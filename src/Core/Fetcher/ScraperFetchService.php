@@ -352,7 +352,7 @@ final class ScraperFetchService
         if ($candPath === $basePath) {
             return false;
         }
-        $prefix = $basePath . '/';
+        $prefix = $basePath === '/' ? '/' : $basePath . '/';
         if (!str_starts_with($candPath, $prefix)) {
             return false;
         }
