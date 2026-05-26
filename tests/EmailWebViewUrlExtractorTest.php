@@ -170,6 +170,15 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         self::assertSame($url, EmailWebViewUrlExtractor::fromPlainText($plain));
     }
 
+    public function testVorarlbergAngleBracketWebViewLink(): void
+    {
+        $url = 'https://presse.vorarlberg.at/land/dist/vlk-69098.html';
+        $plain = "Zur vollständigen Meldung<{$url}>\n\nLand Vorarlberg — Kurzfassung.";
+
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView('Zur vollständigen Meldung'));
+        self::assertSame($url, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
     public function testBmwkSchlaglichterWebViewFromHtmlFixture(): void
     {
         $html = file_get_contents(__DIR__ . '/fixtures/mail/bmwk_schlaglichter_webview.html');

@@ -205,6 +205,8 @@ final class EmailWebViewPhraseLexicon
             self::phrasesEnglish(),
             self::phrasesGerman(),
             self::phrasesFrench(),
+            self::phrasesItalian(),
+            self::phrasesDutch(),
         );
         $normalized = [];
         foreach ($merged as $phrase) {
@@ -296,6 +298,7 @@ final class EmailWebViewPhraseLexicon
             'online-version',
             'jetzt ansehen',
             'zur webansicht',
+            'volltext',
         ];
     }
 
@@ -547,6 +550,18 @@ final class EmailWebViewPhraseLexicon
             'problems viewing this e-mail',
             'problems displaying this email',
             'problems displaying this e-mail',
+            'having trouble viewing this newsletter',
+            'trouble viewing this newsletter',
+            'view newsletter online',
+            'view entire message',
+            'view entire email',
+            'view entire e-mail',
+            'message clipped',
+            'read the full story',
+            'see the full story',
+            'view as website',
+            'view on website',
+            'show in browser',
         ];
     }
 
@@ -592,6 +607,28 @@ final class EmailWebViewPhraseLexicon
             'zur web-version',
             'zur webansicht',
             'zur online-ansicht',
+            'zur vollstandigen meldung',
+            'zur vollstandigen version',
+            'vollstandige meldung',
+            'vollstandige version',
+            'diese nachricht im browser',
+            'nachricht im browser anzeigen',
+            'zur online-ausgabe',
+            'online-ausgabe',
+            'browser-vorschau',
+            'im internet lesen',
+            'zur gesamten meldung',
+            'gesamte meldung',
+            'komplette meldung',
+            'zum volltext',
+            'volltext lesen',
+            'fur die online-ausgabe',
+            'fuer die online-ausgabe',
+            'hier fur die online-ausgabe',
+            'wenn sie probleme beim lesen',
+            'wenn sie probleme bei der darstellung',
+            'zeigen sie diese e-mail als webseite',
+            'e-mail als webseite anzeigen',
             'online ansehen',
             'online lesen',
             'online offnen',
@@ -611,6 +648,7 @@ final class EmailWebViewPhraseLexicon
             'klicken sie hier',
             'hier klicken',
             'hier ansehen',
+            'mehr im browser',
             'jetzt im browser ansehen',
             'jetzt online lesen',
             'newsletter online lesen',
@@ -770,6 +808,56 @@ final class EmailWebViewPhraseLexicon
             'lien vers la version web',
             'acceder a la version en ligne',
             'acceder a la version web',
+            'si vous ne visualisez pas correctement',
+            'afficher le message dans votre navigateur',
+            'version complete',
+            'article complet en ligne',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesItalian(): array
+    {
+        return [
+            'visualizza nel browser',
+            'visualizza questa email nel browser',
+            'visualizza questa e-mail nel browser',
+            'visualizza nel tuo browser',
+            'apri nel browser',
+            'apri nel tuo browser',
+            'versione online',
+            'versione web',
+            'leggi online',
+            'leggi la versione online',
+            'vedi la versione online',
+            'se non visualizzi correttamente',
+            'problemi di visualizzazione',
+            'clicca qui per visualizzare',
+            'clicca qui per leggere online',
+            'per leggere online',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function phrasesDutch(): array
+    {
+        return [
+            'bekijk in uw browser',
+            'bekijk in je browser',
+            'bekijk in de browser',
+            'bekijk online',
+            'online versie',
+            'webversie',
+            'web versie',
+            'open in browser',
+            'open in uw browser',
+            'lees online',
+            'lees de online versie',
+            'bekijk de online versie',
+            'als u deze e-mail niet goed ziet',
+            'als u deze email niet goed ziet',
+            'problemen met de weergave',
+            'klik hier om online te bekijken',
         ];
     }
 }

@@ -19,7 +19,14 @@ final class EmailListingBoilerplateStripper
         if ($body === '') {
             return $body;
         }
-        $body = self::stripLeadingNewsletterShellLines($body);
+        $body = self::stripCidMarkers($body);
+        $body = trim($body);
+        if ($body === '') {
+            return $body;
+        }
+        $sub = trim((string) $subject);
+        $subjectForLines = ($sub !== '' && $sub !== '(No subject)') ? $sub : null;
+        $body = self::stripLeadingNewsletterShellLines($body, $subjectForLines);
         $body = trim($body);
         if ($body === '') {
             return $body;
@@ -34,12 +41,17 @@ final class EmailListingBoilerplateStripper
         if ($body === '') {
             return $body;
         }
-        $sub = trim((string) $subject);
-        if ($sub !== '' && $sub !== '(No subject)') {
-            if (str_starts_with($body, $sub . "\r\n")) {
-                $body = trim(mb_substr($body, mb_strlen($sub) + 2));
-            } elseif (str_starts_with($body, $sub . "\n")) {
-                $body = trim(mb_substr($body, mb_strlen($sub) + 1));
+        if ($subjectForLines !== null) {
+            while ($body !== '') {
+                if (str_starts_with($body, $subjectForLines . "\r\n")) {
+                    $body = trim(mb_substr($body, mb_strlen($subjectForLines) + 2));
+                } elseif (str_starts_with($body, $subjectForLines . "\n")) {
+                    $body = trim(mb_substr($body, mb_strlen($subjectForLines) + 1));
+                } elseif ($body === $subjectForLines) {
+                    $body = '';
+                } else {
+                    break;
+                }
             }
         }
         if ($body !== '' && str_contains($body, ',')) {
@@ -55,9 +67,20 @@ final class EmailListingBoilerplateStripper
     }
 
     /**
+     * Outlook / MIME inline image placeholders (plain-text part).
+     */
+    private static function stripCidMarkers(string $body): string
+    {
+        $body = (string) preg_replace('/\[cid:[^\]]+\]/iu', '', $body);
+        $body = (string) preg_replace('/[ \t]{2,}/u', ' ', $body);
+
+        return trim($body);
+    }
+
+    /**
      * Remove leading line blocks that are clearly shell UI (EN/DE), not article text.
      */
-    private static function stripLeadingNewsletterShellLines(string $body): string
+    private static function stripLeadingNewsletterShellLines(string $body, ?string $subjectLine = null): string
     {
         $prefixes = self::newsletterLinePrefixes();
         for ($i = 0; $i < 50; $i++) {
@@ -76,7 +99,10 @@ final class EmailListingBoilerplateStripper
                 continue;
             }
             $lower = mb_strtolower($t, 'UTF-8');
-            $drop  = self::lineLooksLikeNewsletterShell($t, $lower);
+            $drop  = $subjectLine !== null && $t === $subjectLine;
+            if (!$drop) {
+                $drop = self::lineLooksLikeNewsletterShell($t, $lower);
+            }
             if (!$drop) {
                 foreach ($prefixes as $p) {
                     if (str_starts_with($lower, $p)) {
@@ -115,6 +141,12 @@ final class EmailListingBoilerplateStripper
             return true;
         }
         if (str_contains($lower, 'click here ( https://') && str_contains($lower, 'brevo.net')) {
+            return true;
+        }
+        if (preg_match('#^ausgabe\s+.+\(dokument ist nicht barrierefrei\)#iu', $line) === 1) {
+            return true;
+        }
+        if (preg_match('#^download\s*\(\s*pdf\b#iu', $line) === 1) {
             return true;
         }
 

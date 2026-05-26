@@ -463,6 +463,15 @@ final class EmailWebViewUrlExtractor
 
     private static function firstHttpUrl(string $text): ?string
     {
+        if (preg_match_all('#<(\s*https?://[^>\s]+)\s*>#iu', $text, $bracketed, PREG_SET_ORDER) !== false) {
+            foreach ($bracketed as $m) {
+                $url = self::normalizeHref((string)($m[1] ?? ''));
+                if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+                    return $url;
+                }
+            }
+        }
+
         if (preg_match_all('#https?://[^\s<>"\'\]]+#iu', $text, $matches) === false) {
             return null;
         }

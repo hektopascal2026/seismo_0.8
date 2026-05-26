@@ -44,6 +44,11 @@ final class EmailInboxTruncationDetector
             'im web nicht enthalten',
             'vollstandige version im web',
             'vollstaendige version im web',
+            'message clipped',
+            'im web weiterlesen',
+            'weiterlesen unter',
+            'rest des artikels im web',
+            'vollstandiger artikel im web',
         ];
         $cache = [];
         foreach ($raw as $phrase) {
