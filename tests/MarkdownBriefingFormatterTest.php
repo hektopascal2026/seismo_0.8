@@ -35,6 +35,35 @@ final class MarkdownBriefingFormatterTest extends TestCase
         self::assertStringNotContainsString('[ID:', $xml);
     }
 
+    public function testXmlTruncatesFeedBodyAtEntryBodyMaxChars(): void
+    {
+        $longBody = str_repeat('x', MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS + 500);
+        $entries  = [[
+            'entry_type' => 'feed_item',
+            'entry_id'   => 1,
+            'title'      => 'Long article',
+            'content'    => $longBody,
+        ]];
+
+        $xml = MarkdownBriefingFormatter::format(
+            $entries,
+            [],
+            [],
+            true,
+            MarkdownBriefingFormatter::FORMAT_XML,
+        );
+
+        self::assertSame(2000, MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS);
+        self::assertStringNotContainsString(str_repeat('x', 2100), $xml);
+        if (preg_match('/<content>(.*)<\/content>/s', $xml, $m) === 1) {
+            $bodyLen = mb_strlen(html_entity_decode($m[1], ENT_XML1, 'UTF-8'), 'UTF-8');
+            self::assertLessThanOrEqual(MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS + 1, $bodyLen);
+            self::assertGreaterThan(1900, $bodyLen);
+        } else {
+            self::fail('Expected <content> in XML output');
+        }
+    }
+
     public function testMarkdownFormatUnchangedForExportStyle(): void
     {
         $entries = [[

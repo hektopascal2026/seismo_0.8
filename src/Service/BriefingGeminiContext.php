@@ -36,7 +36,8 @@ final class BriefingGeminiContext
 
     public const RATE_LIMIT_FALLBACK_BATCH_SIZE = 20;
 
-    public const RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES = 10_000;
+    /** Pool size on 429 retry (≤ {@see RATE_LIMIT_FALLBACK_MAX_ENTRIES}) must meet this to batch. */
+    public const RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES = 2;
 
     /** Wait before automatic retry after rate limit. */
     public const RATE_LIMIT_RETRY_PAUSE_SECONDS = 12;

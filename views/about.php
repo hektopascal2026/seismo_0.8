@@ -252,7 +252,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="v-title">AI Briefing Builder (Gemini)</div>
                         <ul>
                             <li><strong>Page:</strong> <code>?action=briefing_builder</code> — nav link after Highlights (mothership and path satellites; satellites filter/sort by local Magnitu scores).</li>
-                            <li><strong>Pipeline:</strong> <code>BriefingEntryGatherer</code> + Magnitu labels, markdown context (up to 1000 chars of body per entry), single-pass <code>GeminiBriefingService</code> with JSON (<code>briefing_markdown</code>).</li>
+                            <li><strong>Pipeline:</strong> <code>BriefingEntryGatherer</code> + Magnitu labels, markdown context (up to 2000 chars of body per entry), two-pass <code>GeminiBriefingService</code> (JSON selection, plain Markdown summary).</li>
                             <li><strong>Filters:</strong> six module toggles (Feeds, Media, Scraper, Mail, Lex, Leg), lookback window, per-module cap; default <strong>investigation lead</strong> (+ optional important).</li>
                             <li><strong>Config:</strong> <code>gemini:api_key</code> in Settings → General. See <code>docs/ai-briefing-builder.md</code>.</li>
                         </ul>

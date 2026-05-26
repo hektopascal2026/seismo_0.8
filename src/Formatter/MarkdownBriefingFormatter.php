@@ -33,7 +33,7 @@ final class MarkdownBriefingFormatter
     public const FORMAT_XML = 'xml';
 
     /** Max characters of entry body text included per item (content, else description). */
-    public const ENTRY_BODY_MAX_CHARS = 1000;
+    public const ENTRY_BODY_MAX_CHARS = 2000;
 
     /** Lex sources that receive {@see LexCardPreview::briefingText()} in AI briefing context. */
     private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu'];

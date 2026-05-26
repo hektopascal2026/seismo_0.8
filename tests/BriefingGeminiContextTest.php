@@ -97,4 +97,13 @@ final class BriefingGeminiContextTest extends TestCase
 
         self::assertGreaterThanOrEqual(30, $lexKept, 'Lex rows must not be dropped entirely when feeds score higher');
     }
+
+    public function testRateLimitBatchedSelectionThresholdAllowsFallbackPool(): void
+    {
+        self::assertSame(2, BriefingGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES);
+        self::assertGreaterThanOrEqual(
+            BriefingGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES,
+            BriefingGeminiContext::RATE_LIMIT_FALLBACK_MAX_ENTRIES,
+        );
+    }
 }
