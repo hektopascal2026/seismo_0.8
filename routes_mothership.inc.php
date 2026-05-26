@@ -413,6 +413,11 @@ $router->register(
     false
 );
 $router->register(
+    'briefing_prompt_helper',
+    \Seismo\Controller\AiBriefingController::class . '::promptHelper',
+    false
+);
+$router->register(
     'save_briefing_prompt',
     \Seismo\Controller\AiBriefingController::class . '::savePromptLibrary',
     false

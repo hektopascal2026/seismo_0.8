@@ -212,7 +212,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.5 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.6 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Briefing prompt helper</div>
+                        <ul>
+                            <li><strong>View: Prompt | Helper</strong> on <code>?action=briefing_builder</code> &mdash; rough notes in Helper, <strong>Generate prompt</strong> via <code>briefing_prompt_helper</code> (Gemini, style from desk default).</li>
+                            <li><strong>Review &amp; save:</strong> edit the draft, then <strong>Save prompt (default)</strong> or <strong>Save to library</strong> (same as the Prompt editor; saving syncs the Prompt textarea).</li>
+                            <li><strong>Generate briefing</strong> still reads only the Prompt view <code>system_prompt</code> field.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.5</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">AI Briefing: Gemini 3.5 two-pass pipeline</div>
                         <ul>
                             <li><strong>Model:</strong> <code>gemini-3.5-flash</code> only; unsupported <code>gemini:model</code> values are coerced to the default.</li>

@@ -29,6 +29,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
 | Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
 | Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
+| Prompt helper | **View: Prompt \| Helper** on Briefing Builder — **`briefing_prompt_helper`** reformulates rough intent via Gemini using `resolveStoredSystemPrompt()` as style reference; save default/library from Helper result syncs the Prompt textarea |
 | Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure; two-pass: selection JSON then Markdown prose with inline `entry_type:entry_id` citations. Context uses XML `<entry>` blocks with `<id>type:id</id>` (`MarkdownBriefingFormatter::FORMAT_XML`). |
 | Prepare step | **`briefing_builder_prepare`** — gather-only POST returns `entry_count` before Gemini (UI status line). |
 
@@ -62,7 +63,8 @@ Filter-page **per-outlet pills** are out of scope for v1; module-level toggles m
 | `MagnituExportRepository` | SQL only; add scoped `listFeedItemsSince` variants if needed |
 | `MarkdownBriefingFormatter` | Markdown for export; XML (`FORMAT_XML`) for AI builder context |
 | `GeminiBriefingService` | HTTP to Gemini, parse response, safe errors |
-| `AiBriefingController` | Orchestrate `show()` / `generate()` only |
+| `BriefingPromptHelperService` | Single Gemini call to draft a briefing prompt from intent + style reference |
+| `AiBriefingController` | Orchestrate `show()` / `generate()` / `promptHelper()` only |
 | `views/briefing_builder.php` | Form + vanilla JS `fetch` |
 
 Do **not** put Gemini HTTP or SQL in the controller.
@@ -178,6 +180,7 @@ $router->register('briefing_builder_generate', AiBriefingController::class . '::
 $router->register('briefing_builder_save_prompt', AiBriefingController::class . '::savePrompt', false);
 $router->register('save_briefing_prompt', AiBriefingController::class . '::savePromptLibrary', false);
 $router->register('delete_briefing_prompt', AiBriefingController::class . '::deletePromptLibrary', false);
+$router->register('briefing_prompt_helper', AiBriefingController::class . '::promptHelper', false);
 ```
 
 **`src/Http/Router.php`**

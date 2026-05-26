@@ -18,6 +18,7 @@ use Seismo\Service\BriefingGeminiContext;
 use Seismo\Service\BriefingModuleGuard;
 use Seismo\Service\BriefingScoreFilter;
 use Seismo\Service\BriefingSourceSelection;
+use Seismo\Service\BriefingPromptHelperService;
 use Seismo\Service\GeminiBriefingException;
 use Seismo\Service\GeminiBriefingService;
 
@@ -435,6 +436,48 @@ PROMPT;
                 'ok'    => false,
                 'error' => 'Could not generate briefing.',
             ]);
+        }
+    }
+
+    public function promptHelper(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $intent = trim((string)($_POST['intent'] ?? ''));
+            $config = new SystemConfigRepository(getDbConnection());
+            $style  = self::resolveStoredSystemPrompt($config);
+            $helper = new BriefingPromptHelperService($config);
+            $prompt = $helper->reformulate($intent, $style);
+            $prompt = $this->parseSystemPrompt($prompt);
+            echo json_encode(['ok' => true, 'prompt' => $prompt], JSON_UNESCAPED_UNICODE);
+        } catch (GeminiBriefingException $e) {
+            http_response_code($e->httpStatus ?? 400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo briefing_prompt_helper: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not generate prompt.'], JSON_UNESCAPED_UNICODE);
         }
     }
 

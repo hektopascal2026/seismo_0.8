@@ -32,6 +32,7 @@ $activeNav      = 'briefing_builder';
 $prepareUrl         = $basePath . '/index.php?action=briefing_builder_prepare';
 $generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
 $savePromptUrl      = $basePath . '/index.php?action=briefing_builder_save_prompt';
+$promptHelperUrl    = $basePath . '/index.php?action=briefing_prompt_helper';
 $saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
 $deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
 
@@ -203,26 +204,56 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="briefing_system_prompt">System prompt</label>
-                    <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
-                        <?php foreach ($savedPrompts as $i => $sp): ?>
-                        <div class="prompt-tab-wrap">
-                            <button type="button" class="prompt-tab<?= $initialActivePromptTabId === $sp['id'] ? ' is-active' : '' ?>"
-                                    role="tab"
-                                    data-id="<?= e($sp['id']) ?>"
-                                    aria-selected="<?= $initialActivePromptTabId === $sp['id'] ? 'true' : 'false' ?>">
-                                <span class="prompt-tab__label"><?= e($sp['name']) ?></span>
-                            </button>
-                            <button type="button" class="prompt-tab-delete"
-                                    data-id="<?= e($sp['id']) ?>"
-                                    aria-label="Delete prompt <?= e($sp['name']) ?>"
-                                    title="Delete">×</button>
-                        </div>
-                        <?php endforeach; ?>
+                    <label>Briefing prompt</label>
+                    <div class="view-toggle view-toggle-bar" id="briefing-prompt-view-toggle">
+                        <span class="view-toggle-label">View:</span>
+                        <button type="button" class="btn btn-primary" id="briefing-view-prompt" data-view="prompt">Prompt</button>
+                        <button type="button" class="btn btn-secondary" id="briefing-view-helper" data-view="helper">Helper</button>
                     </div>
-                    <span id="prompt-library-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
-                    <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
-                              style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
+
+                    <div id="briefing-prompt-panel">
+                        <label for="briefing_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
+                        <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
+                            <?php foreach ($savedPrompts as $i => $sp): ?>
+                            <div class="prompt-tab-wrap">
+                                <button type="button" class="prompt-tab<?= $initialActivePromptTabId === $sp['id'] ? ' is-active' : '' ?>"
+                                        role="tab"
+                                        data-id="<?= e($sp['id']) ?>"
+                                        aria-selected="<?= $initialActivePromptTabId === $sp['id'] ? 'true' : 'false' ?>">
+                                    <span class="prompt-tab__label"><?= e($sp['name']) ?></span>
+                                </button>
+                                <button type="button" class="prompt-tab-delete"
+                                        data-id="<?= e($sp['id']) ?>"
+                                        aria-label="Delete prompt <?= e($sp['name']) ?>"
+                                        title="Delete">×</button>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <span id="prompt-library-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
+                        <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
+                                  style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
+                    </div>
+
+                    <div id="briefing-helper-panel" hidden>
+                        <label for="briefing_helper_intent">What should this briefing focus on?</label>
+                        <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
+                            Rough notes are enough. Gemini drafts a full prompt in the style of your desk default.
+                        </p>
+                        <textarea id="briefing_helper_intent" rows="5" class="search-input"
+                                  style="width:100%; max-width:40rem;"
+                                  placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
+                        <div style="margin:0.5rem 0;">
+                            <button type="button" class="btn btn-secondary" id="briefing-helper-generate-btn"
+                                    <?= $geminiConfigured ? '' : ' disabled' ?>>Generate prompt</button>
+                        </div>
+                        <span id="briefing-helper-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
+                        <label for="briefing_helper_result">Generated prompt</label>
+                        <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
+                            Review and edit, then save to the library or as the instance default. Generate briefing uses the Prompt view only.
+                        </p>
+                        <textarea id="briefing_helper_result" rows="22" class="search-input"
+                                  style="width:100%; max-width:40rem;"></textarea>
+                    </div>
                 </div>
 
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
@@ -276,6 +307,7 @@ $moduleOptions = [
         var prepareUrl = <?= json_encode($prepareUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var generateUrl = <?= json_encode($generateUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var savePromptUrl = <?= json_encode($savePromptUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
+        var promptHelperUrl = <?= json_encode($promptHelperUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var deleteLibraryUrl = <?= json_encode($deleteLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var savedPrompts = <?= json_encode($savedPrompts, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
@@ -285,6 +317,15 @@ $moduleOptions = [
         var promptTabsEl = document.getElementById('prompt-tabs');
         var promptLibraryMsg = document.getElementById('prompt-library-msg');
         var promptTextarea = document.getElementById('briefing_system_prompt');
+        var helperIntentEl = document.getElementById('briefing_helper_intent');
+        var helperResultEl = document.getElementById('briefing_helper_result');
+        var helperGenerateBtn = document.getElementById('briefing-helper-generate-btn');
+        var helperMsgEl = document.getElementById('briefing-helper-msg');
+        var promptPanelEl = document.getElementById('briefing-prompt-panel');
+        var helperPanelEl = document.getElementById('briefing-helper-panel');
+        var viewPromptBtn = document.getElementById('briefing-view-prompt');
+        var viewHelperBtn = document.getElementById('briefing-view-helper');
+        var briefingPromptView = 'prompt';
         var activePromptId = null;
         var initialActivePromptTabId = <?= json_encode($initialActivePromptTabId, JSON_UNESCAPED_UNICODE) ?>;
         var defaultPromptStored = <?= $defaultPromptStored ? 'true' : 'false' ?>;
@@ -642,6 +683,62 @@ $moduleOptions = [
             showInlineMessage(promptLibraryMsg, text, isError);
         }
 
+        function showHelperMsg(text, isError) {
+            showInlineMessage(helperMsgEl, text, isError);
+        }
+
+        function activePromptContent() {
+            if (briefingPromptView === 'helper' && helperResultEl) {
+                return helperResultEl.value;
+            }
+            return promptTextarea ? promptTextarea.value : '';
+        }
+
+        function syncPromptEditorAfterSave(content) {
+            if (promptTextarea) {
+                promptTextarea.value = content;
+            }
+            var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+            if (def) {
+                def.content = content;
+            }
+        }
+
+        function setBriefingPromptView(view) {
+            briefingPromptView = view === 'helper' ? 'helper' : 'prompt';
+            if (promptPanelEl) {
+                promptPanelEl.hidden = briefingPromptView !== 'prompt';
+            }
+            if (helperPanelEl) {
+                helperPanelEl.hidden = briefingPromptView !== 'helper';
+            }
+            if (viewPromptBtn) {
+                viewPromptBtn.classList.toggle('btn-primary', briefingPromptView === 'prompt');
+                viewPromptBtn.classList.toggle('btn-secondary', briefingPromptView !== 'prompt');
+            }
+            if (viewHelperBtn) {
+                viewHelperBtn.classList.toggle('btn-primary', briefingPromptView === 'helper');
+                viewHelperBtn.classList.toggle('btn-secondary', briefingPromptView !== 'helper');
+            }
+            syncPromptSaveButtons();
+        }
+
+        function initBriefingPromptViewToggle() {
+            if (viewPromptBtn) {
+                viewPromptBtn.addEventListener('click', function() {
+                    setBriefingPromptView('prompt');
+                });
+            }
+            if (viewHelperBtn) {
+                viewHelperBtn.addEventListener('click', function() {
+                    setBriefingPromptView('helper');
+                });
+            }
+            setBriefingPromptView('prompt');
+        }
+
+        initBriefingPromptViewToggle();
+
         function syncLibrarySaveButtonLabel() {
             if (!saveLibraryBtn) return;
             saveLibraryBtn.textContent = activePromptId ? 'Update prompt' : 'Save to library';
@@ -833,7 +930,7 @@ $moduleOptions = [
         syncPromptSaveButtons();
 
         function persistLibraryPrompt(forceCreate) {
-            if (!saveLibraryUrl || !promptTextarea) return;
+            if (!saveLibraryUrl || (!promptTextarea && !helperResultEl)) return;
             var updating = !forceCreate && !!activePromptId;
             var name = '';
             if (!updating) {
@@ -849,7 +946,7 @@ $moduleOptions = [
             } else {
                 fd.set('name', name);
             }
-            fd.set('content', promptTextarea.value);
+            fd.set('content', activePromptContent());
             fd.set('_csrf', getCsrf());
             var triggerBtn = forceCreate ? savePromptBtn : saveLibraryBtn;
             if (triggerBtn) {
@@ -881,9 +978,12 @@ $moduleOptions = [
                 }
                 savedPrompts = data.prompts;
                 renderPromptTabs(data.prompts);
+                var savedContent = activePromptContent();
+                syncPromptEditorAfterSave(savedContent);
                 if (updating) {
                     var row = savedPrompts.find(function(p) { return p.id === activePromptId; });
                     if (row) {
+                        row.content = savedContent;
                         selectLibraryPrompt(row);
                     }
                     showPromptActionMsg('Prompt updated.', false);
@@ -912,9 +1012,66 @@ $moduleOptions = [
             });
         }
 
-        if (saveLibraryBtn && saveLibraryUrl && promptTextarea) {
+        if (saveLibraryBtn && saveLibraryUrl && (promptTextarea || helperResultEl)) {
             saveLibraryBtn.addEventListener('click', function() {
                 persistLibraryPrompt(false);
+            });
+        }
+
+        if (helperGenerateBtn && promptHelperUrl && helperIntentEl && helperResultEl) {
+            helperGenerateBtn.addEventListener('click', function() {
+                showHelperMsg('', false);
+                var intent = helperIntentEl.value.trim();
+                if (intent.length < 10) {
+                    showHelperMsg('Describe what you want in at least 10 characters.', true);
+                    return;
+                }
+                var fd = new FormData();
+                fd.set('intent', intent);
+                fd.set('_csrf', getCsrf());
+                helperGenerateBtn.disabled = true;
+                var prevLabel = helperGenerateBtn.textContent;
+                helperGenerateBtn.textContent = 'Generating…';
+                if (savePromptBtn) savePromptBtn.disabled = true;
+                if (saveLibraryBtn) saveLibraryBtn.disabled = true;
+                fetch(promptHelperUrl, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(function(r) {
+                    return r.text().then(function(t) {
+                        var data;
+                        try {
+                            data = JSON.parse(t);
+                        } catch (e) {
+                            return { ok: false, error: 'Invalid response (HTTP ' + r.status + ').' };
+                        }
+                        if (!data.ok && !data.error) {
+                            data.error = 'Could not generate prompt.';
+                        }
+                        return data;
+                    });
+                })
+                .then(function(data) {
+                    if (!data.ok) {
+                        showHelperMsg(data.error || 'Could not generate prompt.', true);
+                        return;
+                    }
+                    helperResultEl.value = data.prompt || '';
+                    showHelperMsg('Prompt generated. Review, edit, then save if you want.', false);
+                })
+                .catch(function() {
+                    showHelperMsg('Network error — could not reach the server.', true);
+                })
+                .finally(function() {
+                    helperGenerateBtn.disabled = false;
+                    helperGenerateBtn.textContent = prevLabel;
+                    if (savePromptBtn) savePromptBtn.disabled = false;
+                    if (saveLibraryBtn) saveLibraryBtn.disabled = false;
+                    syncPromptSaveButtons();
+                });
             });
         }
 
@@ -924,11 +1081,10 @@ $moduleOptions = [
                     persistLibraryPrompt(true);
                     return;
                 }
-                var promptEl = document.getElementById('briefing_system_prompt');
-                if (!promptEl) return;
+                if (!promptTextarea && !helperResultEl) return;
                 showPromptActionMsg('', false);
                 var fd = new FormData();
-                fd.set('system_prompt', promptEl.value);
+                fd.set('system_prompt', activePromptContent());
                 fd.set('_csrf', getCsrf());
                 savePromptBtn.disabled = true;
                 savePromptBtn.textContent = 'Saving…';
@@ -955,13 +1111,11 @@ $moduleOptions = [
                         showPromptActionMsg(data.error || 'Could not save prompt.', true);
                         return;
                     }
+                    var savedContent = activePromptContent();
+                    syncPromptEditorAfterSave(savedContent);
                     var firstDefaultSave = !defaultPromptStored;
                     defaultPromptStored = true;
                     savePromptBtn.textContent = instanceUpdatePromptLabel;
-                    var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
-                    if (def) {
-                        def.content = promptEl.value;
-                    }
                     syncInstanceSaveButton();
                     showPromptActionMsg(
                         firstDefaultSave
