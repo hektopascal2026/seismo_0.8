@@ -7,10 +7,9 @@
  * title + body text of an entry, it returns a `relevance_score`, predicted
  * label, and an explanation of the top contributing features.
  *
- * Keep the math identical to 0.4 — Magnitu's distiller.py trains against the
- * same feature space, and every divergence ends up as a silent drift between
- * Magnitu and Seismo's deterministic fallback. If the tokenisation or softmax
- * has to change, update both sides at once.
+ * Largely a port of 0.4's `scoreEntryWithRecipe()` (config.php). Magnitu's
+ * distiller should stay aligned on tokenisation and softmax; deliberate PHP-only
+ * divergences (n-gram window, once-per-document keyword hits) are documented below.
  */
 
 declare(strict_types=1);
@@ -52,6 +51,13 @@ final class RecipeScorer
      * subset of the same feature space.
      */
     private const MAX_NGRAM = 3;
+
+    /**
+     * Each recipe keyword (unigram or n-gram token) may contribute at most once per
+     * document. Without this, full-text RSS hydration repeats the same logits on
+     * every occurrence and softmax collapses to ~100% relevance on long articles.
+     */
+    private const MAX_HITS_PER_TOKEN = 1;
 
     /**
      * Score one entry. Returns null when the recipe is missing / empty
@@ -101,13 +107,20 @@ final class RecipeScorer
             }
         }
 
-        $classScores  = array_fill_keys($classes, 0.0);
-        $topFeatures  = [];
+        $classScores   = array_fill_keys($classes, 0.0);
+        $topFeatures   = [];
+        $tokenHitCount = [];
 
         foreach ($tokens as $token) {
             if (!isset($keywords[$token])) {
                 continue;
             }
+            $hits = $tokenHitCount[$token] ?? 0;
+            if ($hits >= self::MAX_HITS_PER_TOKEN) {
+                continue;
+            }
+            $tokenHitCount[$token] = $hits + 1;
+
             foreach ($keywords[$token] as $class => $weight) {
                 if (!isset($classScores[$class])) {
                     continue;
