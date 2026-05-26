@@ -98,19 +98,24 @@ final class MagnituLabelRepository
     }
 
     /**
-     * List every label, newest first. Bounded by {@see self::MAX_LIST_LIMIT}.
+     * List labels, newest first. Each page is capped at {@see self::MAX_LIST_LIMIT}.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listAll(): array
+    public function listAll(int $limit = self::MAX_LIST_LIMIT, int $offset = 0): array
     {
+        $limit  = max(1, min(self::MAX_LIST_LIMIT, $limit));
+        $offset = max(0, $offset);
+
         try {
-            $stmt = $this->pdo->query(
+            $stmt = $this->pdo->prepare(
                 'SELECT entry_type, entry_id, label, reasoning, labeled_at
                    FROM magnitu_labels
                   ORDER BY labeled_at DESC
-                  LIMIT ' . self::MAX_LIST_LIMIT
+                  LIMIT ' . $limit . ' OFFSET ' . $offset
             );
+            $stmt->execute();
+
             return $stmt->fetchAll();
         } catch (PDOException $e) {
             return [];

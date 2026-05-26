@@ -137,10 +137,8 @@ final class EmailIngestRepository
             body_text = VALUES(body_text),
             body_html = VALUES(body_html),
             raw_headers = VALUES(raw_headers),
-            metadata = VALUES(metadata),
-            ' . $this->bodyDuplicateUpdateSql() . '';
-
-        $existingGmail = $this->existingGmailMessageIds($rows);
+            ' . $this->bodyDuplicateUpdateSql() . ',
+            metadata = VALUES(metadata)';
 
         $existingGmail = $this->existingGmailMessageIds($rows);
 
@@ -537,11 +535,10 @@ final class EmailIngestRepository
             $stmt = $this->pdo->prepare(
                 'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
                  FROM ' . $t . '
-                 WHERE LOWER(from_email) = ?
-                    OR LOWER(from_email) LIKE ?
+                 WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . '
                  ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
-            $stmt->execute([$domain, '%@' . $domain]);
+            $stmt->execute([$domain, $domain]);
         } else {
             return [];
         }

@@ -81,7 +81,9 @@ final class RecipeScorer
         /** @var array<int, float> $classWeights */
         $classWeights  = $recipe['class_weights']  ?? self::DEFAULT_CLASS_WEIGHTS;
         /** @var array<string, array<string, float>> $keywords */
-        $keywords      = self::expandRecipeKeywords($recipe['keywords'] ?? []);
+        $keywords      = self::normalizeKeywordKeys(
+            self::expandRecipeKeywords($recipe['keywords'] ?? [])
+        );
         /** @var array<string, array<string, float>> $sourceWeights */
         $sourceWeights = $recipe['source_weights'] ?? [];
 
@@ -218,8 +220,8 @@ final class RecipeScorer
 
         $expanded = $baseKeywords;
         foreach ($baseKeywords as $keyword => $classWeights) {
-            $lookup = mb_strtolower((string)$keyword, 'UTF-8');
-            if (!isset($dict[$lookup])) {
+            $lookup = self::normalizeKeywordKey((string)$keyword);
+            if ($lookup === '' || !isset($dict[$lookup])) {
                 continue;
             }
             foreach ($dict[$lookup] as $translated) {
@@ -239,7 +241,52 @@ final class RecipeScorer
             }
         }
 
-        return $expanded;
+        return self::normalizeKeywordKeys($expanded);
+    }
+
+    /**
+     * Map recipe keys to the same token shape as document n-grams (hyphens → word boundaries).
+     *
+     * @param array<string, array<string, float>> $keywords
+     * @return array<string, array<string, float>>
+     */
+    private static function normalizeKeywordKeys(array $keywords): array
+    {
+        $out = [];
+        foreach ($keywords as $keyword => $classWeights) {
+            $key = self::normalizeKeywordKey((string)$keyword);
+            if ($key === '') {
+                continue;
+            }
+            if (!isset($out[$key])) {
+                $out[$key] = $classWeights;
+                continue;
+            }
+            foreach ($classWeights as $class => $w) {
+                if (!isset($out[$key][$class])) {
+                    $out[$key][$class] = 0.0;
+                }
+                $out[$key][$class] += (float)$w;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Same delimiter rules as {@see score()} tokenisation (preg_split on punctuation/hyphens).
+     */
+    private static function normalizeKeywordKey(string $keyword): string
+    {
+        $lower = mb_strtolower(trim($keyword), 'UTF-8');
+        $parts = preg_split(
+            '/[^a-zA-ZäöüàéèêïôùûçÄÖÜÀÉÈÊÏÔÙÛÇß0-9]+/u',
+            $lower,
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        ) ?: [];
+
+        return implode(' ', $parts);
     }
 
     /**

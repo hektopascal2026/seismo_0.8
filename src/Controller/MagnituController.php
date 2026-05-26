@@ -292,10 +292,15 @@ final class MagnituController
             return;
         }
 
-        $labels = $repo->listAll();
+        $limit  = isset($_GET['limit']) ? (int)$_GET['limit'] : MagnituLabelRepository::MAX_LIST_LIMIT;
+        $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
+        $labels = $repo->listAll($limit, $offset);
         self::respondJson([
             'labels' => $labels,
-            'total'  => count($labels),
+            'total'  => $repo->count(),
+            'limit'  => max(1, min(MagnituLabelRepository::MAX_LIST_LIMIT, $limit)),
+            'offset' => max(0, $offset),
+            'count'  => count($labels),
         ]);
     }
 

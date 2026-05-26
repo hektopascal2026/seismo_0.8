@@ -85,4 +85,18 @@ final class RecipeScorerTest extends TestCase
             (float)$two['relevance_score'],
         );
     }
+
+    public function testHyphenatedKeywordMatchesSplitTokens(): void
+    {
+        $recipe = $this->minimalRecipe();
+        $recipe['keywords'] = [
+            'kmu-förderung' => ['investigation_lead' => 3.0],
+        ];
+
+        $result = RecipeScorer::score($recipe, 'Policy', 'Die KMU-Förderung wird ausgebaut.');
+
+        $this->assertNotNull($result);
+        $this->assertSame('investigation_lead', $result['predicted_label']);
+        $this->assertGreaterThan(0.5, (float)$result['relevance_score']);
+    }
 }

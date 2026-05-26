@@ -35,6 +35,18 @@ final class EmailSubscriptionRepositoryTest extends TestCase
             'domain',
             'example.com'
         ));
+        self::assertTrue(EmailSubscriptionRepository::matchesAddress(
+            'info@newsletter.example.com',
+            'domain',
+            'example.com'
+        ));
+    }
+
+    public function testSqlDomainHostMatchUsesHostPartNotLooseSuffix(): void
+    {
+        $sql = EmailSubscriptionRepository::sqlDomainHostMatch('from_email');
+        self::assertStringContainsString("SUBSTRING_INDEX(from_email, '@', -1)", $sql);
+        self::assertStringNotContainsString("LIKE '%@'", $sql);
     }
 
     public function testDomainDoesNotMatchUnrelatedHostSharingSuffix(): void

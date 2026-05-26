@@ -53,6 +53,18 @@ final class EmailSubscriptionRepository
     }
 
     /**
+     * SQL host match for domain subscriptions — same semantics as {@see matchesAddress()}.
+     * Bind the same domain string twice.
+     */
+    public static function sqlDomainHostMatch(string $fromEmailColumn = 'from_email'): string
+    {
+        $col = preg_replace('/[^a-z_]/', '', strtolower($fromEmailColumn)) ?: 'from_email';
+
+        return '(LOWER(SUBSTRING_INDEX(' . $col . ', \'@\', -1)) = ?'
+            . ' OR LOWER(SUBSTRING_INDEX(' . $col . ', \'@\', -1)) LIKE CONCAT(\'%.\', ?))';
+    }
+
+    /**
      * @param list<array<string, mixed>> $subscriptionRows
      */
     public static function matchesAnyRow(string $fromEmail, array $subscriptionRows): bool
