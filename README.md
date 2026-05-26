@@ -154,7 +154,7 @@ export SEISMO_MYSQL_ADMIN_USER=root
 
 - `https://your-host/<slug>/` — timeline (may be empty until mothership has entries)
 - `https://your-host/<slug>/?action=health` — satellite mode, entries DB `seismo`, scores DB `seismo_<slug>`
-- **Score** on the timeline — runs local recipe rescore only (mothership ingest is via `refresh_cron.php`)
+- **Refresh** on the timeline — triggers mothership ingest (if remote refresh was enabled when adding), then local recipe rescore
 
 **4. Magnitu (per desk)**
 
@@ -180,7 +180,7 @@ sudo systemctl reload php8.5-fpm
 | **Scores** DB schema (`entry_scores`, `magnitu_labels`, desk `system_config`) | N/A on mothership-only desks | `php migrate.php --scores-db=seismo_<slug>` **for each desk** |
 | New desk | Settings → add + `bin/seismo-satellite-provision.sh <slug>` | That desk only |
 | `config.local.php` | Edit **once** | **Nothing** (shared file) |
-| Cron / ingest | `refresh_cron.php` (ingest) + `satellite_rescore_cron.php` (all desks) | Timeline **Score** button; cron needs no extra config when desks are in the registry |
+| Cron / ingest | `refresh_cron.php` (ingest) + `satellite_rescore_cron.php` (all desks) | Timeline **Refresh** (remote ingest + rescore); scoring also runs on cron |
 
 Most migrations are **mothership-only** (feeds, mail, plugins, scrapers). The scores migrator records skipped versions on `seismo_<slug>` without running them. Run `--scores-db` only when a release changes **local** tables (see `docs/db-schema-local.sql` — rare after initial provision).
 
@@ -199,7 +199,8 @@ Migrate seismo_<slug> →  only when scoring/label tables change
 | Provision: “not in registry” | Add the row in Settings → Satellites first |
 | 404 on `/<slug>/` | Run `bin/seismo-satellite-provision.sh <slug>`; check `/<slug>/index.php` exists |
 | Broken CSS | `/<slug>/assets` should symlink to `../assets` |
-| Timeline **Score** errors / no recipe | Ensure `recipe_json` on desk DB; grant `seismo_user` ALL on `seismo_<slug>` |
+| Refresh not configured | Add a desk with **Remote refresh** checked, or enable on the next add |
+| Recipe scores stale on desk | Ensure `recipe_json` on desk DB; `satellite_rescore_cron.php` or click Refresh after ingest |
 | `migrationScope()` error on `--scores-db` | Pull latest code; re-run `php migrate.php --scores-db=seismo_<slug>` |
 | DB permission errors | App user: `SELECT` on `seismo.*`, `ALL` on `seismo_<slug>.*` |
 
