@@ -394,6 +394,12 @@ PROMPT;
                     ? $meta['context_warning'] . ' ' . $fallbackNote
                     : $fallbackNote;
             }
+            if (!empty($meta['citation_gap'])) {
+                $citationNote = 'Briefing text omitted some entry_type:entry_id citations; source cards follow selection order.';
+                $meta['context_warning'] = isset($meta['context_warning'])
+                    ? $meta['context_warning'] . ' ' . $citationNote
+                    : $citationNote;
+            }
 
             $this->echoBriefingJson([
                 'ok'           => true,

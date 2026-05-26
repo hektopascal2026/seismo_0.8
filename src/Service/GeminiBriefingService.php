@@ -1307,6 +1307,8 @@ CONTRACT;
     }
 
     /**
+     * Reject only when prose looks genuinely cut off — not when pass 2 omits entry_type:entry_id tokens.
+     *
      * @throws GeminiBriefingException
      */
     private function assertBriefingNotTruncated(GeminiBriefingResult $result, int $maxItemCount): void
@@ -1317,9 +1319,11 @@ CONTRACT;
         if ($citedKeys > 0 && $keysInMarkdown > 0 && $keysInMarkdown < $citedKeys) {
             error_log(
                 'GeminiBriefingService: briefing_markdown cites ' . $keysInMarkdown
-                . ' entries but used_entry_keys has ' . $citedKeys
+                . ' entries but selection listed ' . $citedKeys
+                . ' (returning briefing; source cards use selection keys)'
             );
-            throw GeminiBriefingException::outputTruncated();
+            $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
+            $this->lastGenerationMeta['citation_gap']             = true;
         }
 
         $itemsToCheck = $citedKeys > 0 ? $citedKeys : ($keysInMarkdown > 0 ? $keysInMarkdown : 0);
@@ -1334,9 +1338,13 @@ CONTRACT;
         if ($citedKeys >= $itemsToCheck && $keysInMarkdown < $itemsToCheck) {
             error_log(
                 'GeminiBriefingService: expected ' . $itemsToCheck
-                . ' cited items in markdown, found ' . $keysInMarkdown
+                . ' entry_type:entry_id tokens in markdown, found ' . $keysInMarkdown
+                . ' (returning briefing anyway)'
             );
-            throw GeminiBriefingException::outputTruncated();
+            $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
+            $this->lastGenerationMeta['citation_gap']             = true;
+
+            return;
         }
 
         $minChars = $itemsToCheck * 220;
