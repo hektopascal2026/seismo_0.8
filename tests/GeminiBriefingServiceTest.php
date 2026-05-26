@@ -19,9 +19,9 @@ final class GeminiBriefingServiceTest extends TestCase
     public function testResolveOutputTokenBudgetClampsToPracticalCap(): void
     {
         self::assertSame(8192, GeminiBriefingService::resolveOutputTokenBudget(15, 8192, 'gemini-3.5-flash'));
-        self::assertSame(17012, GeminiBriefingService::resolveOutputTokenBudget(15, 65536, 'gemini-3.5-flash'));
-        self::assertSame(6012, GeminiBriefingService::resolveOutputTokenBudget(5, 8192, 'gemini-3.5-flash'));
-        self::assertSame(7112, GeminiBriefingService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
+        self::assertSame(24512, GeminiBriefingService::resolveOutputTokenBudget(15, 65536, 'gemini-3.5-flash'));
+        self::assertSame(8192, GeminiBriefingService::resolveOutputTokenBudget(5, 8192, 'gemini-3.5-flash'));
+        self::assertSame(10112, GeminiBriefingService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
     }
 
     public function testResolveSelectionPassTokenBudgetIncludesReasoningHeadroom(): void

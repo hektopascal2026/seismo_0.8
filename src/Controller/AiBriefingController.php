@@ -400,6 +400,14 @@ PROMPT;
                     ? $meta['context_warning'] . ' ' . $citationNote
                     : $citationNote;
             }
+            if (!empty($meta['batched_summary'])) {
+                $batchNote = 'Summary was generated in '
+                    . (int)($meta['summary_batches'] ?? 0)
+                    . ' parts after a single pass hit output limits; review section breaks.';
+                $meta['context_warning'] = isset($meta['context_warning'])
+                    ? $meta['context_warning'] . ' ' . $batchNote
+                    : $batchNote;
+            }
 
             $this->echoBriefingJson([
                 'ok'           => true,

@@ -1117,6 +1117,9 @@ $moduleOptions = [
                         if (payload.meta.batched_selection && payload.meta.selection_batches) {
                             parts.push('batched selection (' + payload.meta.selection_batches + ' batches)');
                         }
+                        if (payload.meta.batched_summary && payload.meta.summary_batches) {
+                            parts.push('batched summary (' + payload.meta.summary_batches + ' parts, ' + payload.meta.summary_batch_size + ' items each)');
+                        }
                         if (payload.meta.context_truncated) {
                             parts.push(payload.meta.context_truncated + ' entries capped (max ' + payload.meta.max_context_entries + ')');
                         }

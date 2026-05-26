@@ -70,7 +70,7 @@ CONTRACT;
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
 
     /** Practical prose cap per briefing (cost/latency), below model hard cap. */
-    public const BRIEFING_SUMMARY_OUTPUT_CAP = 24576;
+    public const BRIEFING_SUMMARY_OUTPUT_CAP = 49152;
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -78,12 +78,17 @@ CONTRACT;
 
     private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 180;
 
-    private const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+    private const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 
     private const OUTPUT_TOKEN_FLOOR = 2048;
 
     /** Visible pass-2 tokens scaled per cited item (structured / legal blocks need more than one paragraph). */
-    private const OUTPUT_TOKENS_PER_ITEM = 1100;
+    private const OUTPUT_TOKENS_PER_ITEM = 1600;
+
+    /** Pass-2 batched retry when a single call hits output limits. */
+    private const SUMMARY_BATCH_SIZE = 2;
+
+    private const SUMMARY_BATCH_MIN_KEYS = 2;
 
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
@@ -457,26 +462,16 @@ CONTRACT;
         $selectedKeys = $this->finalizeSelectedKeys($selectedKeys, $selectionTarget);
 
         $summaryEntries = $this->entriesForKeys($contextEntries, $selectedKeys);
-        if ($summaryEntries === []) {
-            $summaryContext = $this->filterXmlContextByKeys($markdownContext, $selectedKeys);
-        } else {
-            $summaryMeta             = $briefingMeta;
-            $summaryMeta['total']    = count($summaryEntries);
-            $summaryMeta['selected'] = count($selectedKeys);
-            $summaryContext          = $this->buildEntryXmlContext(
-                $summaryEntries,
-                $scoresByKey,
-                $summaryMeta,
-                $markdownContext,
-            );
-        }
 
         $finalCount = count($selectedKeys);
         $this->lastEffectiveCitationCount = max(1, $finalCount);
 
-        return $this->runSummaryPass(
+        return $this->runSummaryPassWithBatchFallback(
             $userSystemPrompt,
-            $summaryContext,
+            $summaryEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $markdownContext,
             $selectedKeys,
             $itemCount,
             $finalCount,
@@ -655,6 +650,157 @@ CONTRACT;
     }
 
     /**
+     * @param list<array<string, mixed>> $summaryEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta
+     * @param list<string> $selectedKeys
+     * @throws GeminiBriefingException
+     */
+    private function runSummaryPassWithBatchFallback(
+        string $userSystemPrompt,
+        array $summaryEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $fallbackXml,
+        array $selectedKeys,
+        int $itemCount,
+        int $effectiveCount,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $summaryContext = $this->buildSummaryContextForKeys(
+            $summaryEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $fallbackXml,
+            $selectedKeys,
+        );
+
+        try {
+            return $this->runSummaryPass(
+                $userSystemPrompt,
+                $summaryContext,
+                $selectedKeys,
+                $itemCount,
+                $effectiveCount,
+                $apiKey,
+                true,
+            );
+        } catch (GeminiBriefingException $e) {
+            if (!$e->isOutputTruncated() || $effectiveCount < self::SUMMARY_BATCH_MIN_KEYS) {
+                throw $e;
+            }
+        }
+
+        error_log(
+            'GeminiBriefingService: pass 2 output truncated for ' . $effectiveCount
+            . ' items; retrying with batched summary (batch size ' . self::SUMMARY_BATCH_SIZE . ')'
+        );
+
+        return $this->runBatchedSummaryPasses(
+            $userSystemPrompt,
+            $summaryEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $fallbackXml,
+            $selectedKeys,
+            $itemCount,
+            $apiKey,
+        );
+    }
+
+    /**
+     * @param list<array<string, mixed>> $summaryEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta
+     * @param list<string> $selectedKeys
+     */
+    private function buildSummaryContextForKeys(
+        array $summaryEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $fallbackXml,
+        array $selectedKeys,
+    ): string {
+        if ($summaryEntries === []) {
+            return $this->filterXmlContextByKeys($fallbackXml, $selectedKeys);
+        }
+
+        $subset = $this->entriesForKeys($summaryEntries, $selectedKeys);
+        if ($subset === []) {
+            return $this->filterXmlContextByKeys($fallbackXml, $selectedKeys);
+        }
+
+        $meta             = $briefingMeta;
+        $meta['total']    = count($subset);
+        $meta['selected'] = count($selectedKeys);
+
+        return $this->buildEntryXmlContext($subset, $scoresByKey, $meta, $fallbackXml);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $summaryEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $briefingMeta
+     * @param list<string> $selectedKeys
+     * @throws GeminiBriefingException
+     */
+    private function runBatchedSummaryPasses(
+        string $userSystemPrompt,
+        array $summaryEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $fallbackXml,
+        array $selectedKeys,
+        int $itemCount,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $batches    = array_chunk($selectedKeys, self::SUMMARY_BATCH_SIZE);
+        $batchCount = count($batches);
+        $parts      = [];
+
+        foreach ($batches as $index => $keyBatch) {
+            if ($index > 0) {
+                sleep($this->batchPauseSeconds());
+            }
+
+            $batchCountKeys = count($keyBatch);
+            $batchContext   = $this->buildSummaryContextForKeys(
+                $summaryEntries,
+                $scoresByKey,
+                $briefingMeta,
+                $fallbackXml,
+                $keyBatch,
+            );
+
+            $part = $this->runSummaryPass(
+                $userSystemPrompt,
+                $batchContext,
+                $keyBatch,
+                $itemCount,
+                $batchCountKeys,
+                $apiKey,
+                $index === 0,
+                $index + 1,
+                $batchCount,
+            );
+            $parts[] = trim($part->markdown);
+        }
+
+        $merged = trim(implode("\n\n", array_filter($parts, static fn(string $p): bool => $p !== '')));
+        if ($merged === '') {
+            throw GeminiBriefingException::emptyResponse('Batched summary passes returned no Markdown.');
+        }
+
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'batched_summary'       => true,
+            'summary_batches'       => $batchCount,
+            'summary_batch_size'    => self::SUMMARY_BATCH_SIZE,
+        ]);
+
+        return new GeminiBriefingResult($merged, $selectedKeys, true);
+    }
+
+    /**
      * @param list<string> $selectedKeys
      * @throws GeminiBriefingException
      */
@@ -665,6 +811,9 @@ CONTRACT;
         int $itemCount,
         int $effectiveCount,
         string $apiKey,
+        bool $includeFullBriefingIntro = true,
+        int $batchIndex = 1,
+        int $batchCount = 1,
     ): GeminiBriefingResult {
         $keysBlock = implode("\n", $selectedKeys);
         $envelope  = $this->expandContract(self::SUMMARY_OUTPUT_CONTRACT, [
@@ -674,9 +823,20 @@ CONTRACT;
         ]);
         $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
 
-        $userText = 'Schreibe das vollständige Executive Briefing als plain Markdown. '
-            . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab. '
-            . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
+        if ($batchCount > 1 && !$includeFullBriefingIntro) {
+            $userText = 'Setze das Executive Briefing fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
+                . 'Wiederhole weder die Hauptüberschrift noch die Executive Summary. '
+                . 'Decke nur diese ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab: '
+                . implode(', ', $selectedKeys) . '. '
+                . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
+        } else {
+            $userText = 'Schreibe das vollständige Executive Briefing als plain Markdown. '
+                . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab. '
+                . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
+            if ($batchCount > 1) {
+                $userText .= ' (Teil ' . $batchIndex . ' von ' . $batchCount . ' — nur die obigen Keys in diesem Aufruf.)';
+            }
+        }
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
@@ -694,7 +854,7 @@ CONTRACT;
             throw $this->exceptionFromFailedResponse($response);
         }
 
-        return $this->parseSummaryResponse($response, $selectedKeys);
+        return $this->parseSummaryResponse($response, $selectedKeys, false);
     }
 
     /**
@@ -748,7 +908,7 @@ CONTRACT;
     private function summaryGenerationConfig(int $itemCount, int $effectiveCount): array
     {
         return $this->applyModelGenerationDefaults([
-            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
+            'maxOutputTokens' => self::resolveOutputTokenBudget($effectiveCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'text/plain',
         ], 'summary', $itemCount);
     }
@@ -899,8 +1059,11 @@ CONTRACT;
      * @param list<string> $selectedKeys
      * @throws GeminiBriefingException
      */
-    private function parseSummaryResponse(Response $response, array $selectedKeys): GeminiBriefingResult
-    {
+    private function parseSummaryResponse(
+        Response $response,
+        array $selectedKeys,
+        bool $enforceLengthHeuristic = true,
+    ): GeminiBriefingResult {
         $raw = $this->extractCandidateText($response);
         if (!str_starts_with(trim($raw), '{')) {
             $markdown = trim($raw);
@@ -908,7 +1071,7 @@ CONTRACT;
                 throw GeminiBriefingException::emptyResponse('Summary pass returned empty Markdown.');
             }
             $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
-            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
@@ -921,7 +1084,7 @@ CONTRACT;
             }
 
             $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
-            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
@@ -931,7 +1094,7 @@ CONTRACT;
         if ($salvaged !== null) {
             error_log('GeminiBriefingService summary pass: recovered markdown from broken JSON.');
             $result = new GeminiBriefingResult($salvaged->markdown, $selectedKeys, false);
-            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
@@ -1308,11 +1471,9 @@ CONTRACT;
     }
 
     /**
-     * Reject only when prose looks genuinely cut off — not when pass 2 omits entry_type:entry_id tokens.
-     *
-     * @throws GeminiBriefingException
+     * Log citation/length hints only — pass 2 truncation is handled via API finish reason or batched retry.
      */
-    private function assertBriefingNotTruncated(GeminiBriefingResult $result, int $maxItemCount): void
+    private function noteBriefingLengthHeuristic(GeminiBriefingResult $result, bool $mayThrowOnShortOutput): void
     {
         $keysInMarkdown = $this->countDistinctEntryKeysInMarkdown($result->markdown);
         $citedKeys      = count($result->usedEntryKeys);
@@ -1325,6 +1486,10 @@ CONTRACT;
             );
             $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
             $this->lastGenerationMeta['citation_gap']             = true;
+        }
+
+        if (!$mayThrowOnShortOutput) {
+            return;
         }
 
         $itemsToCheck = $citedKeys > 0 ? $citedKeys : ($keysInMarkdown > 0 ? $keysInMarkdown : 0);
@@ -1348,11 +1513,11 @@ CONTRACT;
             return;
         }
 
-        $minChars = $itemsToCheck * 400;
-        if (strlen($result->markdown) < $minChars && $keysInMarkdown < (int)ceil($itemsToCheck * 0.5)) {
+        $minChars = $itemsToCheck * 120;
+        if (strlen($result->markdown) < $minChars && $keysInMarkdown === 0) {
             error_log(
-                'GeminiBriefingService: briefing_markdown length ' . strlen($result->markdown)
-                . ' below heuristic for ' . $itemsToCheck . ' items (max requested ' . $maxItemCount . ')'
+                'GeminiBriefingService: briefing_markdown very short (' . strlen($result->markdown)
+                . ' chars) with no entry_type:entry_id tokens'
             );
             throw GeminiBriefingException::outputTruncated();
         }

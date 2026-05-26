@@ -21,6 +21,11 @@ final class GeminiBriefingException extends \RuntimeException
         return $this->httpStatus === 429;
     }
 
+    public function isOutputTruncated(): bool
+    {
+        return str_contains($this->getMessage(), 'ran out of output space');
+    }
+
     public static function missingApiKey(): self
     {
         return new self('Gemini API key is not configured. Add it under Settings → General.');
@@ -38,7 +43,8 @@ final class GeminiBriefingException extends \RuntimeException
     {
         return new self(
             'Gemini ran out of output space for the full briefing (common with multi-section prompts or many items). '
-            . 'Try again, reduce “Number of items”, use a shorter template, or set system_config gemini:max_output_tokens higher.'
+            . 'Generate retries automatically in smaller parts when possible; if this persists, reduce “Number of items”, '
+            . 'use a shorter template, or set system_config gemini:max_output_tokens higher.'
         );
     }
 
