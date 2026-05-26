@@ -432,11 +432,22 @@ final class LexCardPreview
 
     private static function chSummary(string $description, string $excerpt): string
     {
-        if ($description !== '') {
+        $body = self::chBodyFromExcerpt($excerpt);
+
+        if ($description === '') {
+            return self::lead($body, 500);
+        }
+
+        if ($body === '' || mb_strlen($body) < 40) {
             return $description;
         }
 
-        return self::lead(self::chBodyFromExcerpt($excerpt), 500);
+        $descPlain = self::plainExcerpt($description);
+        if ($body === $descPlain || str_starts_with($body, $descPlain)) {
+            return $description;
+        }
+
+        return $description . "\n\n" . self::lead($body, 450);
     }
 
     /**
