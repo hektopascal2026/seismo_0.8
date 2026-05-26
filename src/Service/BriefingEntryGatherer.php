@@ -101,7 +101,7 @@ final class BriefingEntryGatherer
         $scoreRows = $entryRepo->listBriefingScoreCandidates(
             $scoreFilter->alertThreshold,
             $scoreFilter->includeImportantBelowThreshold,
-            MagnituExportRepository::MAX_LIMIT,
+            MagnituExportRepository::BRIEFING_MAX_LIMIT,
         );
 
         $entries = $this->collectShapedEntries($repo, $since, $limit, $selection);
@@ -550,27 +550,30 @@ final class BriefingEntryGatherer
         int $limit,
         BriefingSourceSelection $selection,
     ): array {
-        $entries = [];
+        $limitCap = $selection->isExportMode()
+            ? MagnituExportRepository::MAX_LIMIT
+            : MagnituExportRepository::BRIEFING_MAX_LIMIT;
+        $entries  = [];
 
         if ($selection->isExportMode()) {
             $type = $selection->exportType();
             if ($type === 'all' || $type === 'feed_item') {
-                foreach ($repo->listFeedItemsSince($since, $limit) as $row) {
+                foreach ($repo->listFeedItemsSince($since, $limit, $limitCap) as $row) {
                     $entries[] = MagnituController::shapeFeedItem($row);
                 }
             }
             if ($type === 'all' || $type === 'email') {
-                foreach ($repo->listEmailsSince($since, $limit) as $row) {
+                foreach ($repo->listEmailsSince($since, $limit, $limitCap) as $row) {
                     $entries[] = MagnituController::shapeEmail($row);
                 }
             }
             if ($type === 'all' || $type === 'lex_item') {
-                foreach ($repo->listLexItemsSince($since, $limit) as $row) {
+                foreach ($repo->listLexItemsSince($since, $limit, $limitCap) as $row) {
                     $entries[] = MagnituController::shapeLexItem($row);
                 }
             }
             if ($type === 'all' || $type === 'calendar_event') {
-                foreach ($repo->listCalendarEventsSince($since, $limit) as $row) {
+                foreach ($repo->listCalendarEventsSince($since, $limit, $limitCap) as $row) {
                     $entries[] = MagnituController::shapeCalendarEvent($row);
                 }
             }
@@ -579,32 +582,32 @@ final class BriefingEntryGatherer
         }
 
         if ($selection->moduleFeeds()) {
-            foreach ($repo->listFeedItemsForModule($since, $limit, 'feeds') as $row) {
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'feeds', $limitCap) as $row) {
                 $entries[] = MagnituController::shapeFeedItem($row);
             }
         }
         if ($selection->moduleMedia()) {
-            foreach ($repo->listFeedItemsForModule($since, $limit, 'media') as $row) {
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'media', $limitCap) as $row) {
                 $entries[] = MagnituController::shapeFeedItem($row);
             }
         }
         if ($selection->moduleScraper()) {
-            foreach ($repo->listFeedItemsForModule($since, $limit, 'scraper') as $row) {
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'scraper', $limitCap) as $row) {
                 $entries[] = MagnituController::shapeFeedItem($row);
             }
         }
         if ($selection->moduleEmail()) {
-            foreach ($repo->listEmailsSince($since, $limit) as $row) {
+            foreach ($repo->listEmailsSince($since, $limit, $limitCap) as $row) {
                 $entries[] = MagnituController::shapeEmail($row);
             }
         }
         if ($selection->moduleLex()) {
-            foreach ($repo->listLexItemsSince($since, $limit) as $row) {
+            foreach ($repo->listLexItemsSince($since, $limit, $limitCap) as $row) {
                 $entries[] = MagnituController::shapeLexItem($row);
             }
         }
         if ($selection->moduleLeg()) {
-            foreach ($repo->listCalendarEventsSince($since, $limit) as $row) {
+            foreach ($repo->listCalendarEventsSince($since, $limit, $limitCap) as $row) {
                 $entries[] = MagnituController::shapeCalendarEvent($row);
             }
         }

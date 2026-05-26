@@ -13,7 +13,7 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Deploy scope | **Mothership + path satellites** — routes in `routes_mothership.inc.php` and `routes_satellite.inc.php`; satellites use local `entry_scores` / `system_config` |
 | Source toggles | **Six nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, Lex, Leg |
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
-| Entry cap | **`MagnituExportRepository::MAX_LIMIT` (50)** per enabled feed-family query (same ceiling as export; paginate with `since`) |
+| Entry cap | **`MagnituExportRepository::BRIEFING_MAX_LIMIT` (200)** per enabled module query (export API stays at 50) |
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
 | Gemini context cap | **`briefing:max_context_entries`** (default **100**) — top entries by sort order are sent to Gemini, with a **fair share per enabled source module** when multiple modules are on (so Lex/Leg rows are not dropped because Feeds score higher). UI warns when rows are dropped. **`BriefingModuleGuard`** re-filters and rebuilds XML after the cap; the same guard runs again immediately before every Gemini API call (including rate-limit retry). |
 | Gemini model | **`gemini-3.5-flash` only** — `system_config` **`gemini:model`** must match `gemini-3.5*` or it is coerced to the default. No `temperature` in API payloads. |

@@ -40,6 +40,9 @@ final class MagnituExportRepository
      */
     public const MAX_LIMIT = 50;
 
+    /** Briefing builder “entry limit (per module)” — higher than export API cap. */
+    public const BRIEFING_MAX_LIMIT = 200;
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -50,9 +53,9 @@ final class MagnituExportRepository
      * @param ?string $since ISO-8601 or `Y-m-d H:i:s`; NULL means "no lower bound".
      * @return array<int, array<string, mixed>>
      */
-    public function listFeedItemsSince(?string $since, int $limit): array
+    public function listFeedItemsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
     {
-        return $this->listFeedItemsQuery($since, $limit, null);
+        return $this->listFeedItemsQuery($since, $limit, null, $limitCap);
     }
 
     /**
@@ -63,22 +66,26 @@ final class MagnituExportRepository
      * @param string $module `feeds` | `media` | `scraper`
      * @return array<int, array<string, mixed>>
      */
-    public function listFeedItemsForModule(?string $since, int $limit, string $module): array
-    {
+    public function listFeedItemsForModule(
+        ?string $since,
+        int $limit,
+        string $module,
+        int $limitCap = self::MAX_LIMIT,
+    ): array {
         if (!in_array($module, ['feeds', 'media', 'scraper'], true)) {
             return [];
         }
 
-        return $this->listFeedItemsQuery($since, $limit, $module);
+        return $this->listFeedItemsQuery($since, $limit, $module, $limitCap);
     }
 
     /**
      * @param ?string $moduleScope null = all feed_items; else feeds|media|scraper
      * @return array<int, array<string, mixed>>
      */
-    private function listFeedItemsQuery(?string $since, int $limit, ?string $moduleScope): array
+    private function listFeedItemsQuery(?string $since, int $limit, ?string $moduleScope, int $limitCap = self::MAX_LIMIT): array
     {
-        $limit = $this->clampLimit($limit);
+        $limit = $this->clampLimit($limit, $limitCap);
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
                        fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
@@ -138,9 +145,9 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listEmailsSince(?string $since, int $limit): array
+    public function listEmailsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
     {
-        $limit = $this->clampLimit($limit);
+        $limit = $this->clampLimit($limit, $limitCap);
         $table = entryTable(getEmailTableName());
 
         // Pick the best available date column for ordering. Old installs that
@@ -206,9 +213,9 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listLexItemsSince(?string $since, int $limit): array
+    public function listLexItemsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
     {
-        $limit = $this->clampLimit($limit);
+        $limit = $this->clampLimit($limit, $limitCap);
         $sql = 'SELECT id, celex, title, description, content, document_date, document_type, eurlex_url, source
                   FROM ' . entryTable('lex_items');
         $params = [];
@@ -226,9 +233,9 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listCalendarEventsSince(?string $since, int $limit): array
+    public function listCalendarEventsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
     {
-        $limit = $this->clampLimit($limit);
+        $limit = $this->clampLimit($limit, $limitCap);
         $table = entryTable('calendar_events');
         $sql   = "SELECT id, source, title, description, content, event_date, event_end_date,
                          event_type, status, council, url
@@ -609,12 +616,13 @@ final class MagnituExportRepository
     // Internal helpers
     // ------------------------------------------------------------------
 
-    private function clampLimit(int $limit): int
+    private function clampLimit(int $limit, int $max = self::MAX_LIMIT): int
     {
         if ($limit < 1) {
             return 1;
         }
-        return min($limit, self::MAX_LIMIT);
+
+        return min($limit, max(1, $max));
     }
 
     /**

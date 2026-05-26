@@ -150,7 +150,7 @@ PROMPT;
 
         $defaultLookbackDays = self::DEFAULT_LOOKBACK_DAYS;
         $defaultLimit        = self::DEFAULT_LIMIT;
-        $maxLimit            = MagnituExportRepository::MAX_LIMIT;
+        $maxLimit            = MagnituExportRepository::BRIEFING_MAX_LIMIT;
         $defaultItemCount    = self::DEFAULT_ITEM_COUNT;
         $itemCountOptions    = self::ALLOWED_ITEM_COUNTS;
         $alertThreshold      = 0.60;
@@ -827,7 +827,7 @@ PROMPT;
             $n = self::DEFAULT_LIMIT;
         }
 
-        return min($n, MagnituExportRepository::MAX_LIMIT);
+        return min($n, MagnituExportRepository::BRIEFING_MAX_LIMIT);
     }
 
     private function contextSizeWarning(int $markdownChars): ?string
