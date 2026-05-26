@@ -176,7 +176,7 @@ PROMPT;
      */
     public function prepare(): void
     {
-        set_time_limit(300);
+        $this->beginBriefingJsonAction('prepare');
 
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -201,7 +201,7 @@ PROMPT;
             $pdo     = getDbConnection();
             $filters = $this->parseBriefingFiltersFromPost();
             $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
-            $gathered = $this->gatherBriefingContext($pdo, $filters);
+            $gathered = $this->gatherBriefingContext($pdo, $filters, enrichBodies: false);
             $entryCount = count($gathered['entries']);
             if ($entryCount === 0) {
                 http_response_code(400);
@@ -241,7 +241,7 @@ PROMPT;
 
     public function generate(): void
     {
-        set_time_limit(300);
+        $this->beginBriefingJsonAction('generate');
 
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -395,12 +395,12 @@ PROMPT;
                     : $fallbackNote;
             }
 
-            echo json_encode([
+            $this->echoBriefingJson([
                 'ok'           => true,
                 'text'         => $result->markdown,
                 'meta'         => $meta,
                 'entries_html' => $entriesHtml,
-            ], JSON_UNESCAPED_UNICODE);
+            ]);
         } catch (GeminiBriefingException $e) {
             http_response_code(502);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -886,7 +886,60 @@ PROMPT;
      *     maxContextEntries: int
      * }
      */
-    private function gatherBriefingContext(PDO $pdo, array $filters): array
+    private function beginBriefingJsonAction(string $phase): void
+    {
+        set_time_limit(300);
+        ini_set('memory_limit', '512M');
+
+        register_shutdown_function(static function () use ($phase): void {
+            $err = error_get_last();
+            if ($err === null) {
+                return;
+            }
+            if (!in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+                return;
+            }
+            error_log(
+                'Seismo briefing_builder_' . $phase . ' fatal: '
+                . $err['message'] . ' in ' . $err['file'] . ':' . $err['line']
+            );
+        });
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function echoBriefingJson(array $payload): void
+    {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($json === false) {
+            error_log('Seismo briefing_builder json_encode: ' . json_last_error_msg());
+            http_response_code(500);
+            echo json_encode(
+                [
+                    'ok'    => false,
+                    'error' => 'Briefing response could not be encoded. Reduce max context entries or modules.',
+                ],
+                JSON_UNESCAPED_UNICODE,
+            );
+
+            return;
+        }
+
+        echo $json;
+    }
+
+    /**
+     * @param array{
+     *     since: string,
+     *     limit: int,
+     *     lookbackDays: int,
+     *     scoreFilter: BriefingScoreFilter,
+     *     selection: BriefingSourceSelection
+     * } $filters
+     * @param bool $enrichBodies Load LONGTEXT bodies for the capped pool (skip on prepare to avoid doubling peak memory).
+     */
+    private function gatherBriefingContext(PDO $pdo, array $filters, bool $enrichBodies = true): array
     {
         $gatherer = new BriefingEntryGatherer();
         [$entries, $scoresByKey] = $gatherer->gather(
@@ -911,7 +964,9 @@ PROMPT;
         $contextTruncated = $capped['truncated'];
         $stratifiedCap    = $capped['stratified'];
 
-        $gatherer->enrichEntriesWithFullBodies($pdo, $filters['since'], $entries);
+        if ($enrichBodies) {
+            $gatherer->enrichEntriesWithFullBodies($pdo, $filters['since'], $entries);
+        }
 
         $entryBodyMaxChars = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(count($entries));
         $gatherMeta        = [

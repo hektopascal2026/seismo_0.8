@@ -466,14 +466,19 @@ $moduleOptions = [
                         data = JSON.parse(t);
                     } catch (e) {
                         var invalidMsg = 'Invalid response (HTTP ' + r.status + ').';
-                        if (r.status === 0 || r.status >= 500) {
+                        if (r.status === 502 || r.status === 504) {
+                            invalidMsg = 'Server error (HTTP ' + r.status
+                                + '): PHP may have run out of memory or hit a timeout during entry load or Gemini. '
+                                + 'Try fewer modules, a shorter lookback, or lower max context entries, then retry.';
+                        } else if (r.status === 0 || r.status >= 500) {
                             invalidMsg += ' The server may have timed out during entry load or Gemini generation.';
                         }
-                        return { ok: false, error: invalidMsg };
+                        return { ok: false, error: invalidMsg, httpStatus: r.status };
                     }
                     if (!data.ok) {
                         data.error = data.error || 'Request failed.';
                     }
+                    data.httpStatus = r.status;
                     return data;
                 });
             }).catch(function(err) {
