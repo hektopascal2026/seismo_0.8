@@ -33,7 +33,7 @@ $deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
 
 $defaultPromptStored = $defaultPromptStored ?? false;
 $initialActivePromptTabId = $initialActivePromptTabId ?? null;
-$saveDefaultPromptLabel = $defaultPromptStored ? 'Update prompt' : 'Save prompt';
+$saveDefaultPromptLabel = $defaultPromptStored ? 'Update prompt (default)' : 'Save prompt (default)';
 $saveDefaultPromptTitle = $defaultPromptStored
     ? 'Update the default prompt for this instance'
     : 'Save as the default prompt for this instance';
@@ -285,6 +285,8 @@ $moduleOptions = [
         var activePromptId = null;
         var initialActivePromptTabId = <?= json_encode($initialActivePromptTabId, JSON_UNESCAPED_UNICODE) ?>;
         var defaultPromptStored = <?= $defaultPromptStored ? 'true' : 'false' ?>;
+        var instanceSavePromptLabel = <?= json_encode('Save prompt (default)', JSON_UNESCAPED_UNICODE) ?>;
+        var instanceUpdatePromptLabel = <?= json_encode('Update prompt (default)', JSON_UNESCAPED_UNICODE) ?>;
         var PROMPT_TAB_DEFAULT_NAME = 'Default';
         var copyBtn = document.getElementById('briefing-copy-btn');
         var lastBriefingText = '';
@@ -639,12 +641,19 @@ $moduleOptions = [
         function syncInstanceSaveButton() {
             if (!savePromptBtn) return;
             var editingLibrary = activePromptId !== null;
-            savePromptBtn.disabled = editingLibrary;
-            savePromptBtn.title = editingLibrary
-                ? 'Select the Default tab to update the reload default for this desk'
-                : (defaultPromptStored
-                    ? 'Update the default prompt for this instance'
-                    : 'Save as the default prompt for this instance');
+            if (editingLibrary) {
+                savePromptBtn.disabled = false;
+                savePromptBtn.textContent = 'Save to library';
+                savePromptBtn.title = 'Add the current textarea as a new named prompt in the library';
+                return;
+            }
+            savePromptBtn.disabled = false;
+            savePromptBtn.textContent = defaultPromptStored
+                ? instanceUpdatePromptLabel
+                : instanceSavePromptLabel;
+            savePromptBtn.title = defaultPromptStored
+                ? 'Update the default prompt for this instance'
+                : 'Save as the default prompt for this instance';
         }
 
         function syncPromptSaveButtons() {
@@ -811,91 +820,101 @@ $moduleOptions = [
         }
         syncPromptSaveButtons();
 
+        function persistLibraryPrompt(forceCreate) {
+            if (!saveLibraryUrl || !promptTextarea) return;
+            var updating = !forceCreate && !!activePromptId;
+            var name = '';
+            if (!updating) {
+                name = window.prompt('Prompt name');
+                if (name === null) return;
+                name = name.trim();
+                if (name === '') return;
+            }
+            showPromptLibraryMsg('', false);
+            if (savePromptMsg) {
+                savePromptMsg.hidden = true;
+                savePromptMsg.textContent = '';
+                savePromptMsg.classList.remove('message-error');
+            }
+            var fd = new FormData();
+            if (updating) {
+                fd.set('id', activePromptId);
+            } else {
+                fd.set('name', name);
+            }
+            fd.set('content', promptTextarea.value);
+            fd.set('_csrf', getCsrf());
+            var triggerBtn = forceCreate ? savePromptBtn : saveLibraryBtn;
+            if (triggerBtn) {
+                triggerBtn.disabled = true;
+                triggerBtn.textContent = 'Saving…';
+            }
+            fetch(saveLibraryUrl, {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function(r) {
+                return r.text().then(function(t) {
+                    return { status: r.status, body: t };
+                });
+            })
+            .then(function(res) {
+                var data;
+                try {
+                    data = JSON.parse(res.body);
+                } catch (e) {
+                    showPromptLibraryMsg('Invalid response (HTTP ' + res.status + ').', true);
+                    return;
+                }
+                if (!data.ok || !data.prompts) {
+                    showPromptLibraryMsg(data.error || 'Could not save prompt to library.', true);
+                    return;
+                }
+                savedPrompts = data.prompts;
+                renderPromptTabs(data.prompts);
+                if (updating) {
+                    var row = savedPrompts.find(function(p) { return p.id === activePromptId; });
+                    if (row) {
+                        selectLibraryPrompt(row);
+                    }
+                    showPromptLibraryMsg('Prompt updated.', false);
+                } else {
+                    var newId = null;
+                    if (data.prompts.length) {
+                        newId = data.prompts[data.prompts.length - 1].id;
+                    }
+                    if (newId) {
+                        var created = savedPrompts.find(function(p) { return p.id === newId; });
+                        if (created) {
+                            selectLibraryPrompt(created);
+                        }
+                    }
+                    showPromptLibraryMsg('Prompt saved to library.', false);
+                }
+            })
+            .catch(function() {
+                showPromptLibraryMsg('Network error — could not reach the server.', true);
+            })
+            .finally(function() {
+                if (triggerBtn) {
+                    triggerBtn.disabled = false;
+                }
+                syncPromptSaveButtons();
+            });
+        }
+
         if (saveLibraryBtn && saveLibraryUrl && promptTextarea) {
             saveLibraryBtn.addEventListener('click', function() {
-                var updating = !!activePromptId;
-                var name = '';
-                if (!updating) {
-                    name = window.prompt('Prompt name');
-                    if (name === null) return;
-                    name = name.trim();
-                    if (name === '') return;
-                }
-                showPromptLibraryMsg('', false);
-                var fd = new FormData();
-                if (updating) {
-                    fd.set('id', activePromptId);
-                } else {
-                    fd.set('name', name);
-                }
-                fd.set('content', promptTextarea.value);
-                fd.set('_csrf', getCsrf());
-                saveLibraryBtn.disabled = true;
-                saveLibraryBtn.textContent = 'Saving…';
-                fetch(saveLibraryUrl, {
-                    method: 'POST',
-                    body: fd,
-                    credentials: 'same-origin',
-                    headers: { 'Accept': 'application/json' }
-                })
-                .then(function(r) {
-                    return r.text().then(function(t) {
-                        return { status: r.status, body: t };
-                    });
-                })
-                .then(function(res) {
-                    var data;
-                    try {
-                        data = JSON.parse(res.body);
-                    } catch (e) {
-                        showPromptLibraryMsg('Invalid response (HTTP ' + res.status + ').', true);
-                        return;
-                    }
-                    if (!data.ok || !data.prompts) {
-                        showPromptLibraryMsg(data.error || 'Could not save prompt to library.', true);
-                        return;
-                    }
-                    savedPrompts = data.prompts;
-                    renderPromptTabs(data.prompts);
-                    if (updating) {
-                        var row = savedPrompts.find(function(p) { return p.id === activePromptId; });
-                        if (row) {
-                            selectLibraryPrompt(row);
-                        }
-                        showPromptLibraryMsg('Prompt updated.', false);
-                    } else {
-                        var newId = null;
-                        if (data.prompts.length) {
-                            newId = data.prompts[data.prompts.length - 1].id;
-                        }
-                        if (newId) {
-                            var created = savedPrompts.find(function(p) { return p.id === newId; });
-                            if (created) {
-                                selectLibraryPrompt(created);
-                            }
-                        }
-                        showPromptLibraryMsg('Prompt saved to library.', false);
-                    }
-                })
-                .catch(function() {
-                    showPromptLibraryMsg('Network error — could not reach the server.', true);
-                })
-                .finally(function() {
-                    saveLibraryBtn.disabled = false;
-                    syncPromptSaveButtons();
-                });
+                persistLibraryPrompt(false);
             });
         }
 
         if (savePromptBtn && savePromptUrl) {
             savePromptBtn.addEventListener('click', function() {
                 if (activePromptId !== null) {
-                    if (savePromptMsg) {
-                        savePromptMsg.textContent =
-                            'Select the Default tab to update the reload default (or use Update prompt on the library tab).';
-                        savePromptMsg.classList.add('message-error');
-                        savePromptMsg.hidden = false;
-                    }
+                    persistLibraryPrompt(true);
                     return;
                 }
                 var promptEl = document.getElementById('briefing_system_prompt');
@@ -943,7 +962,7 @@ $moduleOptions = [
                     }
                     var firstDefaultSave = !defaultPromptStored;
                     defaultPromptStored = true;
-                    savePromptBtn.textContent = 'Update prompt';
+                    savePromptBtn.textContent = instanceUpdatePromptLabel;
                     var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
                     if (def) {
                         def.content = promptEl.value;
@@ -965,9 +984,6 @@ $moduleOptions = [
                     }
                 })
                 .finally(function() {
-                    if (savePromptBtn.textContent === 'Saving…') {
-                        savePromptBtn.textContent = defaultPromptStored ? 'Update prompt' : 'Save prompt';
-                    }
                     syncPromptSaveButtons();
                 });
             });
