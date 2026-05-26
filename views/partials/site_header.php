@@ -178,7 +178,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=logbook" class="nav-link<?= $activeNav === 'logbook' ? ' active' : '' ?>">Logbook</a>
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
-            <?php if (!isSatellite() && !hasDbConnection()): ?>
+            <?php if (!isSatellite() && !isConfigured()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=configuration" class="nav-link<?= $activeNav === 'configuration' ? ' active' : '' ?>">Configuration</a>
             <?php endif; ?>
             <?php if (!isSatellite()): ?>

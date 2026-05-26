@@ -7,7 +7,7 @@
  *   2. Define SEISMO_* constants (satellite/brand knobs) with safe defaults.
  *   3. Register a minimal PSR-4 autoloader for Seismo\* classes under src/.
  *   4. Provide a handful of global helpers that every layer depends on:
- *      getDbConnection(), hasDbConnection(), getBasePath(), isSatellite(), entryTable(),
+ *      getDbConnection(), isConfigured(), hasDbConnection(), getBasePath(), isSatellite(), entryTable(),
  *      entryDbSchemaExpr(), seismoBrandBase(), seismoBrandSuffix(),
  *      seismoBrandVersionLabel(), seismoBrandTitle(), seismoBrandAccent(),
  *      seismoSatelliteBrandSplit(), seismoBrandDisplaySplit().
@@ -239,15 +239,25 @@ function seismoPdoForScoresCatalog(string $scoresDbName): PDO
 }
 
 /**
- * True when config.local.php exists, credentials are set, and PDO connects.
- * Used to hide the first-run configuration helper once the app can reach the DB.
+ * True when config.local.php exists and contains database credentials.
+ * Once configured, the setup helper must be completely locked down.
  */
-function hasDbConnection(): bool
+function isConfigured(): bool
 {
     if (!is_file(SEISMO_ROOT . '/config.local.php')) {
         return false;
     }
-    if (!defined('DB_NAME') || DB_NAME === '' || !defined('DB_USER') || DB_USER === '') {
+    return defined('DB_NAME') && DB_NAME !== '' && defined('DB_USER') && DB_USER !== '';
+}
+
+/**
+ * True when config.local.php exists, credentials are set, and PDO connects.
+ * Use {@see isConfigured()} to gate the web installer; this function additionally
+ * requires a live PDO connection.
+ */
+function hasDbConnection(): bool
+{
+    if (!isConfigured()) {
         return false;
     }
     try {

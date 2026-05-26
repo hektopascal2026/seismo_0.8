@@ -24,8 +24,8 @@ namespace Seismo\Http;
  *   - `magnitu_*` (separate Bearer-token auth — Magnitu write key)
  *   - `export_*`  (separate Bearer-token auth — read-only export key)
  *
- * `configuration` (legacy: `setup`) is allowed without a session **only** while
- * the database is not yet reachable (first-run); see {@see AuthGate::check()}.
+ * `configuration` (legacy: `setup`) is allowed without a session **only** for
+ * first-run install ({@see isConfigured()} false); see {@see AuthGate::check()}.
  */
 final class AuthGate
 {
@@ -127,8 +127,8 @@ final class AuthGate
             return;
         }
         if (($action === 'configuration' || $action === 'setup')
-            && function_exists('hasDbConnection')
-            && !hasDbConnection()) {
+            && function_exists('isConfigured')
+            && !isConfigured()) {
             return;
         }
         if (self::isLoggedIn()) {

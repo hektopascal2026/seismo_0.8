@@ -17,6 +17,8 @@ use Seismo\Http\CsrfToken;
  * - If the install directory is not writable (or the write fails), shows a
  *   copy-and-paste block — never chmod 0777, never /tmp.
  * - On successful write, redirects to {@see HealthController} for verification.
+ * - Once {@see isConfigured()} is true (config file + credentials), all setup routes
+ *   are closed — even when the database is temporarily unreachable.
  *
  * Legacy `?action=setup` **303-redirects** here.
  */
@@ -24,9 +26,10 @@ final class SetupController
 {
     public function redirectLegacySetup(): void
     {
-        if (hasDbConnection()) {
-            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
-            exit;
+        if (isConfigured()) {
+            $this->redirectAwayFromSetup();
+
+            return;
         }
         header('Location: ' . getBasePath() . '/index.php?action=configuration', true, 303);
         exit;
@@ -34,9 +37,10 @@ final class SetupController
 
     public function show(): void
     {
-        if (hasDbConnection()) {
-            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
-            exit;
+        if (isConfigured()) {
+            $this->redirectAwayFromSetup();
+
+            return;
         }
 
         $this->renderView([
@@ -51,9 +55,10 @@ final class SetupController
 
     public function handlePost(): void
     {
-        if (hasDbConnection()) {
-            header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
-            exit;
+        if (isConfigured()) {
+            $this->redirectAwayFromSetup();
+
+            return;
         }
 
         if (!CsrfToken::verifyRequest()) {
@@ -94,6 +99,12 @@ final class SetupController
 
         $body = $this->buildConfigBody($old);
         $path = SEISMO_ROOT . '/config.local.php';
+
+        if (is_file($path)) {
+            $_SESSION['error'] = 'config.local.php already exists and cannot be replaced from the web installer.';
+            header('Location: ' . getBasePath() . '/index.php?action=configuration', true, 303);
+            exit;
+        }
 
         $canWrite = (!is_file($path) && is_writable(SEISMO_ROOT))
             || (is_file($path) && is_writable($path));
@@ -249,5 +260,11 @@ final class SetupController
         $lines[] = '// Optional: SEISMO_VIEW_TIMEZONE, satellite knobs, export:api_key via Settings UI after first login.';
 
         return implode("\n", $lines) . "\n";
+    }
+
+    private function redirectAwayFromSetup(): void
+    {
+        header('Location: ' . getBasePath() . '/index.php?action=index', true, 303);
+        exit;
     }
 }
