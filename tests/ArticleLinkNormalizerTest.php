@@ -2,31 +2,31 @@
 
 declare(strict_types=1);
 
-namespace Seismo\Tests;
-
 use PHPUnit\Framework\TestCase;
 use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 
 final class ArticleLinkNormalizerTest extends TestCase
 {
-    public function testStripsFragmentAndTrackingParams(): void
+    public function testStableFeedGuidDiffersWhenUrlsDifferAfterPrefix255(): void
     {
-        $a = 'https://www.watson.ch/schweiz/123?utm_source=rss#section';
-        $b = 'https://watson.ch/schweiz/123';
+        $prefix = 'https://example.com/' . str_repeat('a', 240) . '/';
+        $a      = $prefix . 'article-one';
+        $b      = $prefix . 'article-two';
 
-        self::assertSame(ArticleLinkNormalizer::normalize($b), ArticleLinkNormalizer::normalize($a));
+        self::assertNotSame(
+            ArticleLinkNormalizer::stableFeedGuid($a),
+            ArticleLinkNormalizer::stableFeedGuid($b),
+        );
     }
 
-    public function testTrailingSlashAndWwwAreEquivalent(): void
+    public function testStableFeedGuidMatchesForNormalizedEquivalentUrls(): void
     {
-        $a = 'https://www.example.com/news/story/';
-        $b = 'https://example.com/news/story';
+        $a = 'https://www.example.com/path/?utm_source=x';
+        $b = 'https://example.com/path';
 
-        self::assertSame(ArticleLinkNormalizer::normalize($a), ArticleLinkNormalizer::normalize($b));
-    }
-
-    public function testEmptyUrlReturnsEmpty(): void
-    {
-        self::assertSame('', ArticleLinkNormalizer::normalize(''));
+        self::assertSame(
+            ArticleLinkNormalizer::stableFeedGuid($a),
+            ArticleLinkNormalizer::stableFeedGuid($b),
+        );
     }
 }

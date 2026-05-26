@@ -202,7 +202,7 @@ final class ScraperFetchService
         if ($published === null) {
             $published = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
         }
-        $guid = mb_substr($pageUrl, 0, 500);
+        $guid = ArticleLinkNormalizer::stableFeedGuid($pageUrl);
 
         return [
             'guid'             => $guid,

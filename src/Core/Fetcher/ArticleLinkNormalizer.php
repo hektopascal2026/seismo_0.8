@@ -64,4 +64,19 @@ final class ArticleLinkNormalizer
 
         return $scheme . '://' . $host . $port . $path . $query;
     }
+
+    /**
+     * Stable `feed_items.guid` for URL-backed articles. Avoids MariaDB
+     * `unique_feed_guid (feed_id, guid(255))` prefix collisions on long URLs.
+     */
+    public static function stableFeedGuid(string $link, string $fallbackSeed = ''): string
+    {
+        $norm = self::normalize($link);
+        if ($norm !== '') {
+            return 'url:' . substr(hash('sha256', $norm), 0, 40);
+        }
+        $seed = $fallbackSeed !== '' ? $fallbackSeed : $link;
+
+        return substr(sha1($seed), 0, 32);
+    }
 }

@@ -73,7 +73,9 @@ final class RssFetchService
             }
             $guid = trim((string)$item->get_id());
             if ($guid === '') {
-                $guid = substr(sha1($link . "\0" . $title), 0, 32);
+                $guid = ArticleLinkNormalizer::stableFeedGuid($link, $link . "\0" . $title);
+            } elseif (preg_match('#^https?://#i', $guid) || mb_strlen($guid) > 64) {
+                $guid = ArticleLinkNormalizer::stableFeedGuid($link, $guid);
             }
             $author = '';
             $au = $item->get_author();

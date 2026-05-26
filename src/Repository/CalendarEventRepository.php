@@ -193,7 +193,7 @@ final class CalendarEventRepository
     }
 
     /**
-     * Insert/update parliament events. All-or-nothing transaction.
+     * Insert/update parliament events. Per-row savepoints so one bad row cannot abort the batch.
      *
      * @param array<int, array<string, mixed>> $rows
      */
@@ -228,45 +228,55 @@ final class CalendarEventRepository
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare($sql);
-            foreach ($rows as $row) {
-                $lookupKey = (string)($row['source'] ?? '') . "\0" . (string)($row['external_id'] ?? '');
-                $prior = $existingRows[$lookupKey] ?? null;
-                $isInsert = $prior === null;
-                $priorMeta = is_array($prior) ? ($prior['metadata'] ?? null) : null;
-                $priorContent = is_array($prior) ? (string)($prior['content'] ?? '') : null;
-                $priorCreatedAt = is_array($prior) ? (string)($prior['created_at'] ?? '') : null;
-                if ((string)($row['source'] ?? '') === 'parliament_ch') {
-                    $row = ParlChLegSignal::applyToBusinessRow(
-                        $row,
-                        is_array($priorMeta) ? $priorMeta : null,
-                        $isInsert,
-                        $priorContent,
-                        $priorCreatedAt !== '' ? $priorCreatedAt : null,
-                    );
-                }
+            $n    = 0;
+            foreach ($rows as $i => $row) {
+                $savepoint = 'calendar_event_' . $i;
+                $this->pdo->exec('SAVEPOINT ' . $savepoint);
+                try {
+                    $lookupKey = (string)($row['source'] ?? '') . "\0" . (string)($row['external_id'] ?? '');
+                    $prior = $existingRows[$lookupKey] ?? null;
+                    $isInsert = $prior === null;
+                    $priorMeta = is_array($prior) ? ($prior['metadata'] ?? null) : null;
+                    $priorContent = is_array($prior) ? (string)($prior['content'] ?? '') : null;
+                    $priorCreatedAt = is_array($prior) ? (string)($prior['created_at'] ?? '') : null;
+                    if ((string)($row['source'] ?? '') === 'parliament_ch') {
+                        $row = ParlChLegSignal::applyToBusinessRow(
+                            $row,
+                            is_array($priorMeta) ? $priorMeta : null,
+                            $isInsert,
+                            $priorContent,
+                            $priorCreatedAt !== '' ? $priorCreatedAt : null,
+                        );
+                    }
 
-                $metadata = $row['metadata'] ?? null;
-                if (is_array($metadata)) {
-                    $metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $metadata = $row['metadata'] ?? null;
+                    if (is_array($metadata)) {
+                        $metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                    $stmt->execute([
+                        (string)($row['source'] ?? ''),
+                        (string)($row['external_id'] ?? ''),
+                        (string)($row['title'] ?? ''),
+                        (string)($row['description'] ?? ''),
+                        (string)($row['content'] ?? ''),
+                        $this->normalizeDate($row['event_date'] ?? null),
+                        $this->normalizeDate($row['event_end_date'] ?? null),
+                        $row['event_type'] !== null && $row['event_type'] !== '' ? (string)$row['event_type'] : null,
+                        (string)($row['status'] ?? 'scheduled'),
+                        $row['council'] !== null && $row['council'] !== '' ? (string)$row['council'] : null,
+                        (string)($row['url'] ?? ''),
+                        is_string($metadata) ? $metadata : null,
+                    ]);
+                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    ++$n;
+                } catch (\Throwable $e) {
+                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    error_log('Seismo calendar ingest row skipped: ' . $e->getMessage());
                 }
-                $stmt->execute([
-                    (string)($row['source'] ?? ''),
-                    (string)($row['external_id'] ?? ''),
-                    (string)($row['title'] ?? ''),
-                    (string)($row['description'] ?? ''),
-                    (string)($row['content'] ?? ''),
-                    $this->normalizeDate($row['event_date'] ?? null),
-                    $this->normalizeDate($row['event_end_date'] ?? null),
-                    $row['event_type'] !== null && $row['event_type'] !== '' ? (string)$row['event_type'] : null,
-                    (string)($row['status'] ?? 'scheduled'),
-                    $row['council'] !== null && $row['council'] !== '' ? (string)$row['council'] : null,
-                    (string)($row['url'] ?? ''),
-                    is_string($metadata) ? $metadata : null,
-                ]);
             }
             $this->pdo->commit();
 
-            return count($rows);
+            return $n;
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();

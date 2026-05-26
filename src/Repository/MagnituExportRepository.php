@@ -15,8 +15,8 @@
  *     {@see entryTable()} / {@see entryDbSchemaExpr()}. `entry_scores` is
  *     always local and never wrapped.
  *   - **Bounded.** Every list method takes an explicit `$limit`, hard-capped
- *     at {@see self::MAX_LIMIT} (the Magnitu contract historically allowed
- *     2000; kept for sync.py compatibility).
+ *     at {@see self::MAX_LIMIT} (50 rows per call — full LONGTEXT bodies;
+ *     sync clients paginate with `since`).
  *   - **Leg included.** `calendar_event` rows are exported like other families
  *     (`listCalendarEventsSince`, shared JSON shape via
  *     {@see \Seismo\Controller\MagnituController::shapeCalendarEvent()}).
@@ -34,8 +34,11 @@ use Seismo\Core\Lex\LexCardPreview;
 
 final class MagnituExportRepository
 {
-    /** Hard cap on any single `list*()` call. Matches 0.4's Magnitu limit. */
-    public const MAX_LIMIT = 2000;
+    /**
+     * Hard cap on any single `list*()` call. Keeps worst-case PHP memory bounded
+     * when fetching full email/feed LONGTEXT columns (see ingest MAX_BODY_BYTES).
+     */
+    public const MAX_LIMIT = 50;
 
     public function __construct(private PDO $pdo)
     {

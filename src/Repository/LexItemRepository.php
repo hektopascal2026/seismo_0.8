@@ -284,7 +284,7 @@ final class LexItemRepository
     }
 
     /**
-     * Insert/update Swiss Fedlex rows. All-or-nothing transaction.
+     * Insert/update Swiss Fedlex rows. Per-row savepoints so one bad row cannot abort the batch.
      *
      * @param array<int, array<string, mixed>> $rows
      */
@@ -317,40 +317,50 @@ final class LexItemRepository
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare($sql);
-            foreach ($rows as $row) {
-                $desc = $row['description'] ?? null;
-                if ($desc !== null && $desc !== '') {
-                    $desc = PlainTextNormalizer::forIngest((string)$desc);
-                    if ($desc === '') {
+            $n    = 0;
+            foreach ($rows as $i => $row) {
+                $savepoint = 'lex_item_' . $i;
+                $this->pdo->exec('SAVEPOINT ' . $savepoint);
+                try {
+                    $desc = $row['description'] ?? null;
+                    if ($desc !== null && $desc !== '') {
+                        $desc = PlainTextNormalizer::forIngest((string)$desc);
+                        if ($desc === '') {
+                            $desc = null;
+                        }
+                    } else {
                         $desc = null;
                     }
-                } else {
-                    $desc = null;
-                }
-                $content = $row['content'] ?? null;
-                if ($content !== null && $content !== '') {
-                    $content = PlainTextNormalizer::forIngest((string)$content);
-                    if ($content === '') {
+                    $content = $row['content'] ?? null;
+                    if ($content !== null && $content !== '') {
+                        $content = PlainTextNormalizer::forIngest((string)$content);
+                        if ($content === '') {
+                            $content = null;
+                        }
+                    } else {
                         $content = null;
                     }
-                } else {
-                    $content = null;
+                    $stmt->execute([
+                        (string)$row['celex'],
+                        (string)($row['title'] ?? ''),
+                        $desc,
+                        $content,
+                        $this->normalizeDate($row['document_date'] ?? null),
+                        (string)($row['document_type'] ?? ''),
+                        (string)($row['eurlex_url'] ?? ''),
+                        (string)($row['work_uri'] ?? ''),
+                        (string)($row['source'] ?? 'ch'),
+                    ]);
+                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    ++$n;
+                } catch (\Throwable $e) {
+                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    error_log('Seismo lex ingest row skipped: ' . $e->getMessage());
                 }
-                $stmt->execute([
-                    (string)$row['celex'],
-                    (string)($row['title'] ?? ''),
-                    $desc,
-                    $content,
-                    $this->normalizeDate($row['document_date'] ?? null),
-                    (string)($row['document_type'] ?? ''),
-                    (string)($row['eurlex_url'] ?? ''),
-                    (string)($row['work_uri'] ?? ''),
-                    (string)($row['source'] ?? 'ch'),
-                ]);
             }
             $this->pdo->commit();
 
-            return count($rows);
+            return $n;
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();

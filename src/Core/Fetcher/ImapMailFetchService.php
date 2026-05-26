@@ -382,7 +382,7 @@ final class ImapMailFetchService
             return $s;
         }
 
-        return substr($s, 0, $max);
+        return mb_strcut($s, 0, $max, 'UTF-8');
     }
 
     /**

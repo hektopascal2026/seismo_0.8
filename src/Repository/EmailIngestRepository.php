@@ -26,6 +26,9 @@ final class EmailIngestRepository
     /** Match {@see \Seismo\Core\Fetcher\ImapMailFetchService::MAX_BODY_BYTES}. */
     private const MAX_BODY_BYTES = 2_097_152;
 
+    /** Hosted “view in browser” fetches per {@see executeBatch()} — cron wall-clock guard. */
+    private const MAX_HOSTED_HYDRATE_PER_BATCH = 15;
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -198,7 +201,8 @@ final class EmailIngestRepository
         $subs = (new EmailSubscriptionRepository($this->pdo))
             ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
 
-        $prepared = [];
+        $prepared          = [];
+        $hostedHydratesLeft = self::MAX_HOSTED_HYDRATE_PER_BATCH;
         foreach ($rows as $row) {
             if ($keyFilter($row) === null) {
                 continue;
@@ -210,15 +214,23 @@ final class EmailIngestRepository
                     : trim((string)($row[$ingestKeyField] ?? ''));
                 $hydrateHosted = $key === '' || $key === 0 || !isset($existingIngestKeys[$key]);
             }
-            $prepared[] = $this->prepareRow($row, $subs, $hydrateHosted);
+            $prepared[] = $this->prepareRow($row, $subs, $hydrateHosted, $hostedHydratesLeft);
         }
 
         $this->pdo->beginTransaction();
         try {
             $n = 0;
-            foreach ($prepared as $row) {
-                $stmt->execute($bindRow($row));
-                ++$n;
+            foreach ($prepared as $i => $row) {
+                $savepoint = 'email_ingest_' . $i;
+                $this->pdo->exec('SAVEPOINT ' . $savepoint);
+                try {
+                    $stmt->execute($bindRow($row));
+                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    ++$n;
+                } catch (\Throwable $e) {
+                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    error_log('Seismo email ingest row skipped: ' . $e->getMessage());
+                }
             }
             $this->pdo->commit();
 
@@ -234,8 +246,12 @@ final class EmailIngestRepository
      * @param list<array<string, mixed>> $subs
      * @return array<string, mixed>
      */
-    private function prepareRow(array $row, array $subs, bool $hydrateHostedBody = false): array
-    {
+    private function prepareRow(
+        array $row,
+        array $subs,
+        bool $hydrateHostedBody = false,
+        ?int &$hostedHydratesRemaining = null,
+    ): array {
         $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
@@ -248,7 +264,13 @@ final class EmailIngestRepository
             }
         }
         // Before listing/subscription stripping — those remove “view in browser” lines from plain text.
-        $row = $this->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, $hydrateHostedBody);
+        $row = $this->applyWebViewProcessing(
+            $row,
+            $htmlBeforeNormalize,
+            $plainAfterNormalize,
+            $hydrateHostedBody,
+            $hostedHydratesRemaining,
+        );
         $row = $this->maybeStripListingBoilerplate($row, $subs);
         $row = EmailSubscriptionProcessor::apply($row, $subs);
         $row = $this->syncAndCapBodies($row);
@@ -303,6 +325,7 @@ final class EmailIngestRepository
         string $htmlForExtract = '',
         string $plainForExtract = '',
         bool $hydrateHostedBody = false,
+        ?int &$hostedHydratesRemaining = null,
     ): array {
         $html = trim($htmlForExtract);
         if ($html === '') {
@@ -329,12 +352,16 @@ final class EmailIngestRepository
             && $resolution->url !== null
             && $resolution->localeRank !== null
             && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW
+            && ($hostedHydratesRemaining === null || $hostedHydratesRemaining > 0)
         ) {
             $row = (new EmailWebViewBodyHydrator())->hydrateRow(
                 $row,
                 $resolution->url,
                 $resolution->localeRank
             );
+            if ($hostedHydratesRemaining !== null) {
+                --$hostedHydratesRemaining;
+            }
         }
 
         if ($resolution->localeRank !== null
@@ -463,7 +490,7 @@ final class EmailIngestRepository
             return $s;
         }
 
-        return substr($s, 0, $max);
+        return mb_strcut($s, 0, $max, 'UTF-8');
     }
 
     /**

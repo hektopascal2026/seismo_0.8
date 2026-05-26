@@ -399,7 +399,7 @@ final class FeedItemRepository
                  LIMIT 1'
             );
             $n = 0;
-            foreach ($rows as $row) {
+            foreach ($rows as $i => $row) {
                 $guid = (string)($row['guid'] ?? '');
                 $title = trim((string)($row['title'] ?? ''));
                 if ($title === '') {
@@ -409,60 +409,71 @@ final class FeedItemRepository
                 if ($link === '' || !$this->isNavigableHttpUrl($link)) {
                     continue;
                 }
-                if ($guid === '') {
-                    $guid = substr(sha1($link . "\0" . $title), 0, 32);
-                }
-                $desc = PlainTextNormalizer::forIngest((string)($row['description'] ?? ''));
-                $content = PlainTextNormalizer::forIngest((string)($row['content'] ?? ''));
-                if ($content === '' && $desc !== '') {
-                    $content = $desc;
-                }
-                $pub = $row['published_date'] ?? null;
-                $pubStr = null;
-                if ($pub instanceof DateTimeImmutable) {
-                    $pubStr = $pub->format('Y-m-d H:i:s');
-                } elseif (is_string($pub) && $pub !== '') {
-                    $pubStr = $pub;
-                }
-                $hash = (string)($row['content_hash'] ?? '');
-                if ($hash === '') {
-                    $hash = substr(sha1($link . "\0" . $content), 0, 32);
-                }
-                $linkNorm = mb_substr(ArticleLinkNormalizer::normalize($link), 0, 500);
-                if ($linkNorm !== '') {
-                    $findByLinkStmt->execute([$linkNorm]);
-                    $existing = $findByLinkStmt->fetch(PDO::FETCH_ASSOC);
-                    if (is_array($existing) && (int)($existing['id'] ?? 0) > 0) {
-                        $existingLen = (int)($existing['content_len'] ?? 0);
-                        if (strlen($content) > $existingLen) {
-                            $upgradeStmt->execute([
-                                $feedId,
-                                $title,
-                                $link,
-                                $linkNorm !== '' ? $linkNorm : null,
-                                $desc,
-                                $content,
-                                (string)($row['author'] ?? ''),
-                                $hash,
-                                (int)$existing['id'],
-                            ]);
-                        }
-                        continue;
+
+                $savepoint = 'feed_item_' . $feedId . '_' . $i;
+                $this->pdo->exec('SAVEPOINT ' . $savepoint);
+                try {
+                    if ($guid === '') {
+                        $guid = substr(sha1($link . "\0" . $title), 0, 32);
                     }
+                    $desc = PlainTextNormalizer::forIngest((string)($row['description'] ?? ''));
+                    $content = PlainTextNormalizer::forIngest((string)($row['content'] ?? ''));
+                    if ($content === '' && $desc !== '') {
+                        $content = $desc;
+                    }
+                    $pub = $row['published_date'] ?? null;
+                    $pubStr = null;
+                    if ($pub instanceof DateTimeImmutable) {
+                        $pubStr = $pub->format('Y-m-d H:i:s');
+                    } elseif (is_string($pub) && $pub !== '') {
+                        $pubStr = $pub;
+                    }
+                    $hash = (string)($row['content_hash'] ?? '');
+                    if ($hash === '') {
+                        $hash = substr(sha1($link . "\0" . $content), 0, 32);
+                    }
+                    $linkNorm = mb_substr(ArticleLinkNormalizer::normalize($link), 0, 500);
+                    if ($linkNorm !== '') {
+                        $findByLinkStmt->execute([$linkNorm]);
+                        $existing = $findByLinkStmt->fetch(PDO::FETCH_ASSOC);
+                        if (is_array($existing) && (int)($existing['id'] ?? 0) > 0) {
+                            $existingLen = (int)($existing['content_len'] ?? 0);
+                            if (mb_strlen($content) > $existingLen) {
+                                $upgradeStmt->execute([
+                                    $feedId,
+                                    $title,
+                                    $link,
+                                    $linkNorm !== '' ? $linkNorm : null,
+                                    $desc,
+                                    $content,
+                                    (string)($row['author'] ?? ''),
+                                    $hash,
+                                    (int)$existing['id'],
+                                ]);
+                            }
+                            $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+
+                            continue;
+                        }
+                    }
+                    $stmt->execute([
+                        $feedId,
+                        $guid,
+                        $title,
+                        $link,
+                        $linkNorm !== '' ? $linkNorm : null,
+                        $desc,
+                        $content,
+                        (string)($row['author'] ?? ''),
+                        $pubStr,
+                        $hash,
+                    ]);
+                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    ++$n;
+                } catch (\Throwable $e) {
+                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    error_log('Seismo feed ingest row skipped feed ' . $feedId . ': ' . $e->getMessage());
                 }
-                $stmt->execute([
-                    $feedId,
-                    $guid,
-                    $title,
-                    $link,
-                    $linkNorm !== '' ? $linkNorm : null,
-                    $desc,
-                    $content,
-                    (string)($row['author'] ?? ''),
-                    $pubStr,
-                    $hash,
-                ]);
-                $n++;
             }
             $this->pdo->commit();
 

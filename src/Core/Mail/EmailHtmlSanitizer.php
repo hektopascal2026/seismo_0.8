@@ -15,6 +15,9 @@ use HTMLPurifier_Config;
  */
 final class EmailHtmlSanitizer
 {
+    /** Above this byte size, skip HTMLPurifier (CPU/memory) and use strip_tags. */
+    private const PURIFY_MAX_BYTES = 150_000;
+
     private static ?HTMLPurifier $purifier = null;
 
     public static function sanitize(string $html): string
@@ -22,6 +25,10 @@ final class EmailHtmlSanitizer
         $html = trim($html);
         if ($html === '') {
             return '';
+        }
+
+        if (strlen($html) > self::PURIFY_MAX_BYTES) {
+            return self::normalizeAnchorHrefs(strip_tags($html));
         }
 
         try {

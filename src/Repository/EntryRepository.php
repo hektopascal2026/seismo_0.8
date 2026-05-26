@@ -145,25 +145,16 @@ final class EntryRepository
         $perSource = $this->mergePerSourceFetchCap($limit, $offset);
         $f        = $filter;
 
-        $items = [];
-        foreach ($this->fetchFeedItems($perSource, $f, $excludeMediaCategory) as $row) {
-            $items[] = $this->wrapFeedItem($row);
-        }
-        foreach ($this->fetchEmails($perSource, $f) as $row) {
-            $items[] = $this->wrapEmail($row);
-        }
-        foreach ($this->fetchLexItems($perSource, $f) as $row) {
-            $items[] = $this->wrapLexItem($row);
-        }
-        if ($f === null || !$f->excludeCalendar) {
-            foreach ($this->fetchCalendarEvents($perSource) as $row) {
-                $items[] = $this->wrapCalendarEvent($row);
-            }
-        }
-
+        $items = $this->buildMergedTimelineItems(
+            $perSource,
+            $f,
+            $excludeMediaCategory,
+            $sortByRelevance,
+            null,
+        );
+        $items = $this->deduplicateFeedItemsByLink($items);
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
-        $items = $this->deduplicateFeedItemsByLink($items);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
@@ -196,29 +187,18 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
         $perSource = $this->mergePerSourceFetchCap($limit, $offset);
-        // Escape LIKE wildcards in user input so "%" and "_" are literal (MariaDB default escape \).
-        $term = '%' . $this->escapeLikePattern($q) . '%';
         $f    = $filter;
 
-        $items = [];
-        foreach ($this->fetchFeedItemsSearch($term, $perSource, $f, $excludeMediaCategory) as $row) {
-            $items[] = $this->wrapFeedItem($row);
-        }
-        foreach ($this->searchEmailRows($term, $perSource, $f) as $row) {
-            $items[] = $this->wrapEmail($row);
-        }
-        foreach ($this->fetchLexItemsSearch($term, $perSource, $f) as $row) {
-            $items[] = $this->wrapLexItem($row);
-        }
-        if ($f === null || !$f->excludeCalendar) {
-            foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
-                $items[] = $this->wrapCalendarEvent($row);
-            }
-        }
-
+        $items = $this->buildMergedTimelineItems(
+            $perSource,
+            $f,
+            $excludeMediaCategory,
+            $sortByRelevance,
+            $q,
+        );
+        $items = $this->deduplicateFeedItemsByLink($items);
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
-        $items = $this->deduplicateFeedItemsByLink($items);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
@@ -274,6 +254,7 @@ final class EntryRepository
                 );
                 $stmt->execute([$alertThreshold]);
             } else {
+                $fetchCap = $this->highlightsChronologicalFetchCap($offset, $limit);
                 $stmt = $this->pdo->prepare(
                     'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label, es.explanation, es.score_source
                      FROM entry_scores es
@@ -281,7 +262,7 @@ final class EntryRepository
                        AND es.relevance_score >= ?
                        AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
                      ORDER BY es.id DESC
-                     LIMIT ' . (int)$this->highlightsChronologicalFetchCap()
+                     LIMIT ' . (int)$fetchCap
                 );
                 $stmt->execute([$alertThreshold]);
             }
@@ -365,12 +346,21 @@ final class EntryRepository
         }
     }
 
+    /** Max score rows hydrated before chronological Highlights sort/slice. */
+    private const HIGHLIGHTS_CHRONO_ABSOLUTE_MAX = 5000;
+
     /**
-     * Upper bound on score rows loaded before PHP chronological sort on Highlights.
+     * Score rows to load before PHP chronological sort on Highlights — must cover
+     * `$offset + $limit` (sort is by entry date, not score id).
      */
-    private function highlightsChronologicalFetchCap(): int
+    private function highlightsChronologicalFetchCap(int $offset, int $limit): int
     {
-        return self::MAX_LIMIT * 10;
+        $need = $offset + max(1, $limit);
+
+        return min(
+            self::HIGHLIGHTS_CHRONO_ABSOLUTE_MAX,
+            max(self::MAX_LIMIT * 10, $need),
+        );
     }
 
     /**
@@ -583,6 +573,287 @@ final class EntryRepository
     }
 
     /**
+     * Merge entry families for dashboard newest/search timelines.
+     *
+     * Relevance mode seeds from {@see entry_scores} first so high-scoring older
+     * rows are not dropped by per-family date LIMITs, then backfills by date/search.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildMergedTimelineItems(
+        int $perSource,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+        bool $sortByRelevance,
+        ?string $searchQuery,
+    ): array {
+        /** @var array<string, true> $seen */
+        $seen  = [];
+        $items = [];
+
+        if ($sortByRelevance) {
+            foreach ($this->fetchRelevanceSeededTimelineItems(
+                $perSource,
+                $filter,
+                $excludeMediaCategory,
+                $searchQuery,
+            ) as $item) {
+                $key = $this->timelineItemKey($item);
+                if ($key === '') {
+                    continue;
+                }
+                $seen[$key] = true;
+                $items[]    = $item;
+            }
+        }
+
+        if ($searchQuery !== null && $searchQuery !== '') {
+            $term = '%' . $this->escapeLikePattern($searchQuery) . '%';
+            $this->appendSearchTimelineRows(
+                $items,
+                $seen,
+                $term,
+                $perSource,
+                $filter,
+                $excludeMediaCategory,
+            );
+        } else {
+            $this->appendLatestTimelineRows(
+                $items,
+                $seen,
+                $perSource,
+                $filter,
+                $excludeMediaCategory,
+            );
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchRelevanceSeededTimelineItems(
+        int $perSource,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+        ?string $searchQuery,
+    ): array {
+        $scoreRows = $this->fetchTopScoreRowsForMerge($perSource);
+        $items     = $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
+        $out       = [];
+        foreach ($items as $item) {
+            if (!$this->timelineItemPassesFilters($item, $filter, $excludeMediaCategory, $searchQuery)) {
+                continue;
+            }
+            $out[] = $item;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items
+     * @param array<string, true>             $seen
+     */
+    private function appendLatestTimelineRows(
+        array &$items,
+        array &$seen,
+        int $perSource,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+    ): void {
+        foreach ($this->fetchFeedItems($perSource, $filter, $excludeMediaCategory) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapFeedItem($row), $filter, $excludeMediaCategory, null);
+        }
+        foreach ($this->fetchEmails($perSource, $filter) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapEmail($row), $filter, $excludeMediaCategory, null);
+        }
+        foreach ($this->fetchLexItems($perSource, $filter) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapLexItem($row), $filter, $excludeMediaCategory, null);
+        }
+        if ($filter === null || !$filter->excludeCalendar) {
+            foreach ($this->fetchCalendarEvents($perSource) as $row) {
+                $this->appendTimelineItemIfNew(
+                    $items,
+                    $seen,
+                    $this->wrapCalendarEvent($row),
+                    $filter,
+                    $excludeMediaCategory,
+                    null,
+                );
+            }
+        }
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items
+     * @param array<string, true>             $seen
+     */
+    private function appendSearchTimelineRows(
+        array &$items,
+        array &$seen,
+        string $term,
+        int $perSource,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+    ): void {
+        foreach ($this->fetchFeedItemsSearch($term, $perSource, $filter, $excludeMediaCategory) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapFeedItem($row), $filter, $excludeMediaCategory, null);
+        }
+        foreach ($this->searchEmailRows($term, $perSource, $filter) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapEmail($row), $filter, $excludeMediaCategory, null);
+        }
+        foreach ($this->fetchLexItemsSearch($term, $perSource, $filter) as $row) {
+            $this->appendTimelineItemIfNew($items, $seen, $this->wrapLexItem($row), $filter, $excludeMediaCategory, null);
+        }
+        if ($filter === null || !$filter->excludeCalendar) {
+            foreach ($this->fetchCalendarEventsSearch($term, $perSource) as $row) {
+                $this->appendTimelineItemIfNew(
+                    $items,
+                    $seen,
+                    $this->wrapCalendarEvent($row),
+                    $filter,
+                    $excludeMediaCategory,
+                    null,
+                );
+            }
+        }
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items
+     * @param array<string, true>             $seen
+     */
+    private function appendTimelineItemIfNew(
+        array &$items,
+        array &$seen,
+        array $item,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+        ?string $searchQuery,
+    ): void {
+        if (!$this->timelineItemPassesFilters($item, $filter, $excludeMediaCategory, $searchQuery)) {
+            return;
+        }
+        $key = $this->timelineItemKey($item);
+        if ($key === '' || isset($seen[$key])) {
+            return;
+        }
+        $seen[$key] = true;
+        $items[]    = $item;
+    }
+
+    private function timelineItemKey(array $item): string
+    {
+        $type = (string)($item['entry_type'] ?? '');
+        $id   = (int)($item['entry_id'] ?? 0);
+        if ($type === '' || $id <= 0) {
+            return '';
+        }
+
+        return $type . ':' . $id;
+    }
+
+    private function timelineItemPassesFilters(
+        array $item,
+        ?TimelineFilter $filter,
+        bool $excludeMediaCategory,
+        ?string $searchQuery,
+    ): bool {
+        if ($excludeMediaCategory && !empty($item['timeline_media'])) {
+            return false;
+        }
+        if ($filter !== null && $filter->isActive() && !$this->itemMatchesTimelineFilter($item, $filter)) {
+            return false;
+        }
+        if ($searchQuery !== null && $searchQuery !== ''
+            && !$this->timelineItemMatchesSearchTerm($item, $searchQuery)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchTopScoreRowsForMerge(int $cap): array
+    {
+        $cap = max(1, min($cap, self::MERGE_PER_SOURCE_CAP));
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT es.entry_type, es.entry_id, es.relevance_score, es.predicted_label,
+                        es.explanation, es.score_source
+                 FROM entry_scores es
+                 WHERE es.score_source IN (\'magnitu\', \'recipe\')
+                   AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')
+                 ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
+                 LIMIT ' . (int)$cap
+            );
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+
+            return is_array($rows) ? $rows : [];
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Mirrors SQL LIKE search for relevance-seeded rows hydrated outside search queries.
+     */
+    private function timelineItemMatchesSearchTerm(array $item, string $q): bool
+    {
+        $needle = mb_strtolower(trim($q));
+        if ($needle === '') {
+            return true;
+        }
+
+        $data = $item['data'] ?? [];
+        if (!is_array($data)) {
+            $data = [];
+        }
+
+        $haystacks = [];
+        $et        = (string)($item['entry_type'] ?? '');
+        if ($et === 'feed_item') {
+            $haystacks = [
+                (string)($data['title'] ?? ''),
+                (string)($data['description'] ?? ''),
+                (string)($data['content'] ?? ''),
+            ];
+        } elseif ($et === 'email') {
+            foreach ($this->resolveEmailSearchColumns(getEmailTableName()) as $col) {
+                $haystacks[] = (string)($data[$col] ?? '');
+            }
+        } elseif ($et === 'lex_item') {
+            $haystacks = [
+                (string)($data['title'] ?? ''),
+                (string)($data['description'] ?? ''),
+                (string)($data['content'] ?? ''),
+                (string)($data['content_excerpt'] ?? ''),
+            ];
+        } elseif ($et === 'calendar_event') {
+            $haystacks = [
+                (string)($data['title'] ?? ''),
+                (string)($data['description'] ?? ''),
+            ];
+        }
+
+        foreach ($haystacks as $hay) {
+            if ($hay !== '' && mb_stripos($hay, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * After global merge sort, take the visible window. For the first page we
      * reserve roughly even slots across the four entry families so Lex / mail / Leg
      * are not squeezed off the dashboard when feeds dominate
@@ -680,9 +951,9 @@ final class EntryRepository
      * exceeds that cap, older stars are omitted until we add paging — a
      * deliberate shared-host guard.
      *
-     * `$offset` is wired for API symmetry; {@see DashboardController} clamps
-     * `MAX_OFFSET = 0` until cursor-based paging exists, so deep offsets do
-     * not apply yet.
+     * Loads only enough favourite keys to satisfy `$offset` / `$limit` (with
+     * headroom when filters are active), not the full {@see FAVOURITES_MAX_PAIRS}
+     * table. Stars beyond that cap are still omitted.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -695,12 +966,21 @@ final class EntryRepository
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
+        $pairCap = min(
+            self::FAVOURITES_MAX_PAIRS,
+            max(
+                $offset + $limit,
+                ($filter !== null && $filter->isActive()) ? ($offset + $limit) * 3 : $offset + $limit,
+            ),
+        );
+
         try {
-            $stmt = $this->pdo->query(
+            $stmt = $this->pdo->prepare(
                 'SELECT entry_type, entry_id FROM entry_favourites
                  ORDER BY created_at DESC, id DESC
-                 LIMIT ' . (int)self::FAVOURITES_MAX_PAIRS
+                 LIMIT ' . (int)$pairCap
             );
+            $stmt->execute();
             $pairs = $stmt->fetchAll();
         } catch (PDOException $e) {
             return [];
@@ -2766,7 +3046,13 @@ final class EntryRepository
             $stmt->execute($params);
             $present = $stmt->fetchAll(PDO::FETCH_COLUMN);
         } catch (PDOException $e) {
-            return $this->cachedEmailTimelineSelect = 'e.*';
+            error_log('EntryRepository sqlEmailTimelineSelect: ' . $e->getMessage());
+
+            return $this->cachedEmailTimelineSelect =
+                'e.id, e.subject, e.derived_title, e.from_email, e.from_name, e.from_addr, '
+                . 'e.metadata, e.hidden, e.date_utc, e.date_received, e.date_sent, e.created_at, '
+                . 'SUBSTRING(COALESCE(e.text_body, e.body_text, \'\'), 1, ' . self::TIMELINE_BODY_CHARS . ') AS text_body, '
+                . 'SUBSTRING(COALESCE(e.html_body, e.body_html, \'\'), 1, ' . self::TIMELINE_BODY_CHARS . ') AS html_body';
         }
 
         $presentSet = array_flip(array_map('strval', $present));
@@ -2784,7 +3070,11 @@ final class EntryRepository
         }
 
         if ($parts === []) {
-            return $this->cachedEmailTimelineSelect = 'e.*';
+            error_log('EntryRepository sqlEmailTimelineSelect: no timeline columns resolved');
+
+            return $this->cachedEmailTimelineSelect =
+                'e.id, e.subject, e.hidden, e.date_utc, '
+                . 'SUBSTRING(COALESCE(e.text_body, e.body_text, \'\'), 1, ' . self::TIMELINE_BODY_CHARS . ') AS text_body';
         }
 
         return $this->cachedEmailTimelineSelect = implode(', ', $parts);
