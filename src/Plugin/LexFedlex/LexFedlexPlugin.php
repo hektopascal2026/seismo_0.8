@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Plugin\LexFedlex;
 
-use EasyRdf\Sparql\Client;
+use Seismo\Core\Lex\LexFedlexContentFetcher;
 use Seismo\Service\SourceFetcherInterface;
 use Seismo\Service\Sparql\SparqlEasyRdf;
 
@@ -147,6 +147,8 @@ final class LexFedlexPlugin implements SourceFetcherInterface
           ?act ?title ?pubDate ?typeDoc
           (SAMPLE(?respLabelRaw) AS ?respLabel)
           (GROUP_CONCAT(DISTINCT ?taxLabelRaw; SEPARATOR=" • ") AS ?taxLabel)
+          (SAMPLE(?docDateRaw) AS ?docDate)
+          (SAMPLE(?forceDateRaw) AS ?forceDate)
         WHERE {
             ?act a jolux:Act .
             ?act jolux:publicationDate ?pubDate .
@@ -156,6 +158,8 @@ final class LexFedlexPlugin implements SourceFetcherInterface
             ?expr jolux:language <http://publications.europa.eu/resource/authority/language/' . $lang . '> .
             FILTER(?typeDoc IN (' . $typeFilter . '))
             FILTER(?pubDate >= "' . $sinceDate . '"^^xsd:date && ?pubDate <= "' . $until . '"^^xsd:date)
+            OPTIONAL { ?act jolux:dateDocument ?docDateRaw . }
+            OPTIONAL { ?act jolux:dateEntryInForce ?forceDateRaw . }
             OPTIONAL {
                 ?act jolux:responsibilityOf ?resp .
                 ?resp skos:prefLabel ?respLabelRaw .
@@ -201,7 +205,17 @@ final class LexFedlexPlugin implements SourceFetcherInterface
 
             $respLabel = trim((string)($row->respLabel ?? ''));
             $taxLabel  = trim((string)($row->taxLabel ?? ''));
-            $description = self::composeFedlexDescription($title, $respLabel, $taxLabel);
+            $decisionDate = self::sparqlDateLiteral($row->docDate ?? null);
+            $forceDate    = self::sparqlDateLiteral($row->forceDate ?? null);
+            $description = self::composeFedlexDescription(
+                $title,
+                $respLabel,
+                $taxLabel,
+                $decisionDate,
+                $forceDate,
+                $dateDoc,
+                $langPath,
+            );
 
             $rows[] = [
                 'celex' => $eliId,
@@ -213,6 +227,11 @@ final class LexFedlexPlugin implements SourceFetcherInterface
                 'work_uri' => $actUri,
                 'source' => 'ch',
             ];
+        }
+
+        $contentLimit = max(0, min((int)($config['content_fetch_limit'] ?? 10), 50));
+        if ($contentLimit > 0 && $rows !== []) {
+            $rows = (new LexFedlexContentFetcher())->attachContentToRows($rows, $contentLimit);
         }
 
         return $rows;
@@ -258,8 +277,7 @@ WHERE {
         ?open jolux:eventStartDate ?phaseStart .
         ?open jolux:eventEndDate ?phaseEnd .
       }
-      OPTIONAL { ?cons dcterms:modified ?modRaw . BIND(xsd:date(?modRaw) AS ?phaseMod) . }
-      BIND(COALESCE(?phaseStart, ?phaseMod) AS ?eff)
+      BIND(?phaseStart AS ?eff)
       FILTER(BOUND(?eff) && ?eff >= ?since && ?eff <= ?until)
     }
     ORDER BY DESC(?eff)
@@ -388,35 +406,129 @@ ORDER BY DESC(?eff)
     }
 
     /**
-     * Compose a description from the SPARQL-enriched responsibility +
-     * taxonomy labels (Slice C). Responsibility is the responsible federal
-     * office; taxonomy entry is the parent / classifying act's full title
-     * (with date), which on amendment acts gives the only hint of the
-     * underlying regime. Format: `"<resp> — <tax>"` when both present.
+     * Card synopsis: amendment signal, decision / entry-into-force dates, office + base law.
      *
-     * The taxonomy label is suppressed when it is verbatim-equal to the
-     * fetched act title — for new consolidated acts the two can collide
-     * exactly and the redundancy would just bloat the card. Otherwise
-     * both are surfaced; the dashboard partial truncates at 300 chars.
+     * {@see document_date} on the row stays {@code jolux:publicationDate} (AS/RO day) for timeline sort.
      */
-    public static function composeFedlexDescription(string $title, string $respLabel, string $taxLabel): ?string
-    {
+    public static function composeFedlexDescription(
+        string $title,
+        string $respLabel,
+        string $taxLabel,
+        string $decisionDate = '',
+        string $entryInForceDate = '',
+        string $publicationDate = '',
+        string $langPath = 'de',
+    ): ?string {
         $resp = trim($respLabel);
         $tax  = trim($taxLabel);
+        $titleTrim = trim($title);
 
-        if ($tax !== '' && $tax === trim($title)) {
+        if ($tax !== '' && $tax === $titleTrim) {
             $tax = '';
         }
 
-        if ($resp === '' && $tax === '') {
-            return null;
+        $labels = self::descriptionLabels($langPath);
+        $parts  = [];
+
+        if (self::looksLikeAmendment($titleTrim, $tax, $decisionDate, $publicationDate)) {
+            $parts[] = $labels['amendment'];
+        }
+
+        $meta = [];
+        if ($decisionDate !== '') {
+            $meta[] = $labels['decided'] . self::formatFedlexDisplayDate($decisionDate);
+        }
+        if ($entryInForceDate !== '') {
+            $meta[] = $labels['in_force'] . self::formatFedlexDisplayDate($entryInForceDate);
+        }
+        if ($meta !== []) {
+            $parts[] = implode(' • ', $meta);
         }
 
         if ($resp !== '' && $tax !== '') {
-            return $resp . ' — ' . $tax;
+            $parts[] = $resp . ' — ' . $tax;
+        } elseif ($resp !== '' || $tax !== '') {
+            $parts[] = $resp !== '' ? $resp : $tax;
         }
 
-        return $resp !== '' ? $resp : $tax;
+        if ($parts === []) {
+            return null;
+        }
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * @return array{amendment: string, decided: string, in_force: string}
+     */
+    private static function descriptionLabels(string $langPath): array
+    {
+        return match ($langPath) {
+            'fr' => [
+                'amendment' => 'Modification',
+                'decided'   => 'Adopté le : ',
+                'in_force'  => 'Entrée en vigueur : ',
+            ],
+            'it' => [
+                'amendment' => 'Modifica',
+                'decided'   => 'Deliberato il : ',
+                'in_force'  => 'Entrata in vigore : ',
+            ],
+            'en' => [
+                'amendment' => 'Amendment',
+                'decided'   => 'Adopted on: ',
+                'in_force'  => 'Entry into force: ',
+            ],
+            'rm' => [
+                'amendment' => 'Modificaziun',
+                'decided'   => 'Decidì il : ',
+                'in_force'  => 'Entrada en vigur : ',
+            ],
+            default => [
+                'amendment' => 'Änderung',
+                'decided'   => 'Beschlossen am: ',
+                'in_force'  => 'Inkrafttreten: ',
+            ],
+        };
+    }
+
+    private static function looksLikeAmendment(
+        string $title,
+        string $taxLabel,
+        string $decisionDate,
+        string $publicationDate,
+    ): bool {
+        if ($taxLabel !== '' && $taxLabel !== $title) {
+            return true;
+        }
+        if ($decisionDate !== '' && $publicationDate !== '' && $decisionDate !== $publicationDate) {
+            return true;
+        }
+
+        return (bool) preg_match(
+            '/\b(Änderung|Modification|Modifica|Amendment|Modificaziun)\b/ui',
+            $title,
+        );
+    }
+
+    private static function formatFedlexDisplayDate(string $isoDate): string
+    {
+        $ts = strtotime($isoDate . 'T12:00:00 UTC');
+
+        return $ts !== false ? date('d.m.Y', $ts) : $isoDate;
+    }
+
+    private static function sparqlDateLiteral(mixed $value): string
+    {
+        $raw = trim((string)$value);
+        if ($raw === '') {
+            return '';
+        }
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $raw, $m)) {
+            return $m[1];
+        }
+
+        return '';
     }
 
     /**

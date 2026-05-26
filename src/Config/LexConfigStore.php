@@ -164,6 +164,7 @@ final class LexConfigStore
                 'limit' => 100,
                 // Fedlex consultation procedures (`jolux:Consultation`); persists in Fedlex Settings.
                 'ingest_vernehmlassungen' => true,
+                'content_fetch_limit' => 10,
                 'resource_types' => [
                     ['id' => 21, 'label' => 'Bundesgesetz'],
                     ['id' => 22, 'label' => 'Dringliches Bundesgesetz'],

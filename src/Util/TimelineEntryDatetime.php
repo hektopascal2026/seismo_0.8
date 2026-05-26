@@ -229,7 +229,7 @@ final class TimelineEntryDatetime
     }
 
     /**
-     * Official publication / session date is date-only → timeline uses ingestion.
+     * Official publication / session date is date-only → timeline uses the end of that calendar day.
      *
      * @param array<string, mixed> $row
      */
@@ -251,7 +251,17 @@ final class TimelineEntryDatetime
 
         $created = trim((string)($row['created_at'] ?? ''));
         if ($created !== '') {
-            return self::storedUtcToUnix($created);
+            $createdDt = self::parseStoredUtcDatetime($created);
+            if ($createdDt !== null) {
+                $officialDt = \DateTimeImmutable::createFromFormat('Y-m-d', $official, new \DateTimeZone('UTC'));
+                if ($officialDt !== false) {
+                    $hour = (int)$createdDt->format('H');
+                    $minute = (int)$createdDt->format('i');
+                    $second = (int)$createdDt->format('s');
+
+                    return $officialDt->setTime($hour, $minute, $second)->getTimestamp();
+                }
+            }
         }
 
         return self::unixDateOnlyEndInViewTz($official);

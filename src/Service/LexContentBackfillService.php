@@ -6,6 +6,7 @@ namespace Seismo\Service;
 
 use Seismo\Config\LexConfigStore;
 use Seismo\Core\Lex\LexEurLexContentFetcher;
+use Seismo\Core\Lex\LexFedlexContentFetcher;
 use Seismo\Core\Lex\LexJusDecisionMapper;
 use Seismo\Core\Lex\LexLegifranceApiClient;
 use Seismo\Core\Lex\LexLegifranceContentFetcher;
@@ -26,6 +27,7 @@ final class LexContentBackfillService
         private BaseClient $http = new BaseClient(30),
         private LexEurLexContentFetcher $eurLex = new LexEurLexContentFetcher(),
         private LexRechtBundContentFetcher $rechtBund = new LexRechtBundContentFetcher(),
+        private LexFedlexContentFetcher $fedlex = new LexFedlexContentFetcher(),
     ) {
     }
 
@@ -36,6 +38,7 @@ final class LexContentBackfillService
             new BaseClient(30),
             new LexEurLexContentFetcher(new BaseClient(45)),
             new LexRechtBundContentFetcher(new BaseClient(45)),
+            new LexFedlexContentFetcher(new BaseClient(45)),
         );
     }
 
@@ -126,6 +129,83 @@ final class LexContentBackfillService
         }
 
         return $this->lex->promoteDescriptionToContent('ch', max(1, min($limit, 5000)));
+    }
+
+    /**
+     * Fetch Akoma Ntoso XML corpus for Fedlex OC acts (`eli/oc/…`).
+     *
+     * @return array{updated: int, skipped: int, failed: int}
+     */
+    public function backfillChFromFedlex(int $limit = self::DEFAULT_BATCH, ?array &$reasons = null): array
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Lex content backfill must run on the mothership.');
+        }
+
+        if ($reasons !== null) {
+            $reasons = [];
+        }
+
+        $limit = max(1, min($limit, LexItemRepository::MAX_LIMIT));
+        $rows  = $this->lex->listMissingContentBySources(['ch'], $limit);
+
+        $updated = 0;
+        $skipped = 0;
+        $failed  = 0;
+
+        foreach ($rows as $row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id <= 0) {
+                $skipped++;
+                $this->noteReason($reasons, 'invalid_row');
+                continue;
+            }
+
+            if (!LexFedlexContentFetcher::isOfficialCompilationAct($row)) {
+                $skipped++;
+                $this->noteReason($reasons, 'not_oc_act');
+                continue;
+            }
+
+            $content = $this->fedlex->fetchPlainTextFromRow($row);
+            if ($content === null || $content === '') {
+                $skipped++;
+                $this->abandonContentFetch($id, $reasons, 'empty_corpus');
+                continue;
+            }
+
+            $description = trim((string)($row['description'] ?? ''));
+            if ($description === '') {
+                $description = null;
+            }
+
+            if ($this->lex->updateCorpus($id, $content, $description)) {
+                $updated++;
+            } else {
+                $failed++;
+                $this->noteReason($reasons, 'db_update_failed');
+            }
+        }
+
+        return ['updated' => $updated, 'skipped' => $skipped, 'failed' => $failed];
+    }
+
+    /**
+     * @return array{updated: int, skipped: int, failed: int, reasons: array<string, int>}
+     */
+    public function backfillChDetailed(int $limit = self::DEFAULT_BATCH, bool $verbose = false): array
+    {
+        $reasons = [];
+        $result  = $this->backfillChFromFedlex($limit, $reasons);
+        $result['reasons'] = $reasons;
+
+        if ($verbose && $reasons !== []) {
+            foreach ($reasons as $reason => $count) {
+                fwrite(STDOUT, "  {$reason}: {$count}\n");
+            }
+        }
+
+        return $result;
     }
 
     /**

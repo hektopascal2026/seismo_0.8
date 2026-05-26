@@ -5,7 +5,8 @@
  * Usage:
  *   php bin/lex-backfill-content.php              # Jus HTML corpus (default batch 50)
  *   php bin/lex-backfill-content.php --de         # fetch BGBl PDF corpus (requires pdftotext)
- *   php bin/lex-backfill-content.php --ch         # promote Fedlex CH description → content
+ *   php bin/lex-backfill-content.php --ch         # Fedlex OC acts: Akoma Ntoso XML corpus
+ *   php bin/lex-backfill-content.php --ch-promote # Vernehmlassungen: description → content
  *   php bin/lex-backfill-content.php --eu         # fetch EUR-Lex HTML corpus
  *   php bin/lex-backfill-content.php --fr         # fetch Légifrance JORF corpus via PISTE API
  *   php bin/lex-backfill-content.php --limit=100
@@ -27,6 +28,7 @@ use Seismo\Service\LexContentBackfillService;
 $limit = LexContentBackfillService::DEFAULT_BATCH;
 $deOnly = in_array('--de', $argv, true);
 $chOnly = in_array('--ch', $argv, true);
+$chPromoteOnly = in_array('--ch-promote', $argv, true);
 $euOnly = in_array('--eu', $argv, true);
 $frOnly = in_array('--fr', $argv, true);
 $stats  = in_array('--stats', $argv, true);
@@ -55,17 +57,29 @@ if ($stats) {
             (int)($row['has_description'] ?? 0),
         );
     }
-    if (!$deOnly && !$chOnly && !$euOnly && !$frOnly && !in_array('--stats-only', $argv, true)) {
+    if (!$deOnly && !$chOnly && !$chPromoteOnly && !$euOnly && !$frOnly && !in_array('--stats-only', $argv, true)) {
         echo "\n";
     } else {
         exit(0);
     }
 }
 
-if ($chOnly) {
+if ($chPromoteOnly) {
     $n = $service->backfillChFromDescription($limit);
-    echo "CH description → content: {$n} row(s) updated.\n";
+    echo "CH description → content (consultations): {$n} row(s) updated.\n";
     exit(0);
+}
+
+if ($chOnly) {
+    $result = $service->backfillChDetailed($limit, $verbose);
+    echo sprintf(
+        "CH Fedlex XML corpus backfill: %d updated, %d skipped, %d failed (batch limit %d).\n",
+        $result['updated'],
+        $result['skipped'],
+        $result['failed'],
+        $limit,
+    );
+    exit($result['failed'] > 0 && $result['updated'] === 0 ? 1 : 0);
 }
 
 if ($deOnly) {

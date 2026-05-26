@@ -34,6 +34,7 @@ final class LexCardPreview
             'eu' => self::briefingEuBody($description, $excerpt),
             'fr' => self::briefingFrBody($description, $excerpt),
             'de' => self::briefingDeBody($description, $excerpt),
+            'ch' => self::briefingChBody($description, $excerpt),
             default => $description !== ''
                 ? self::plainExcerpt($description)
                 : self::plainExcerpt($excerpt),
@@ -106,6 +107,7 @@ final class LexCardPreview
             'eu' => self::euPreamble($description, $excerpt),
             'fr' => self::frSummary($description, $excerpt),
             'de' => self::deLead($description, $excerpt),
+            'ch' => self::chSummary($description, $excerpt),
             default => self::defaultPreview($description, $excerpt),
         };
     }
@@ -414,6 +416,56 @@ final class LexCardPreview
         }
 
         return self::lead(self::deBodyFromExcerpt($excerpt), 450);
+    }
+
+    private static function briefingChBody(string $description, string $excerpt): string
+    {
+        if ($excerpt !== '') {
+            $body = self::chBodyFromExcerpt($excerpt);
+            if ($body !== '' && mb_strlen($body) >= 80) {
+                return $body;
+            }
+        }
+
+        return $description !== '' ? self::plainExcerpt($description) : self::plainExcerpt($excerpt);
+    }
+
+    private static function chSummary(string $description, string $excerpt): string
+    {
+        if ($description !== '') {
+            return $description;
+        }
+
+        return self::lead(self::chBodyFromExcerpt($excerpt), 500);
+    }
+
+    /**
+     * Akoma Ntoso AS/RO: preface/preamble plus amendment levels (I., II., …).
+     */
+    private static function chBodyFromExcerpt(string $excerpt): string
+    {
+        $excerpt = self::plainExcerpt($excerpt);
+        if ($excerpt === '') {
+            return '';
+        }
+
+        $chunks = [];
+        if (preg_match('/^(.*?\n\n)(?=I[\n\s]|I\.)/us', $excerpt, $m)) {
+            $head = trim($m[1]);
+            if ($head !== '') {
+                $chunks[] = $head;
+            }
+            $rest = trim(substr($excerpt, strlen($m[0])));
+            if ($rest !== '') {
+                $chunks[] = $rest;
+            }
+        } else {
+            $chunks[] = $excerpt;
+        }
+
+        $plain = trim(implode("\n\n", $chunks));
+
+        return ($plain !== '' && mb_strlen($plain) >= 40) ? $plain : '';
     }
 
     /**
