@@ -9,6 +9,7 @@
  * @var bool $configLocalWritable
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
+ * @var bool $adminBootstrapTokenConfigured
  * @var bool $navLeadingThrottleOn
  * @var bool $legacyRssScraperRefresh
  * @var bool $geminiApiKeyOnFile Gemini key stored in local system_config
@@ -111,9 +112,23 @@ declare(strict_types=1);
                     <span class="settings-bad">config.local.php is not writable by PHP.</span>
                 <?php endif; ?>
             </p>
+            <?php if (!$sessionAuthEnabled && !$adminBootstrapTokenConfigured): ?>
+            <p class="admin-intro message message-info">
+                While auth is dormant, set <code>SEISMO_ADMIN_PASSWORD_HASH</code> in <code>config.local.php</code> manually
+                (run <code>php -r "echo password_hash('your-password', PASSWORD_DEFAULT);"</code>),
+                or define <code>SEISMO_ADMIN_SETUP_TOKEN</code> for a one-time web setup below.
+            </p>
+            <?php endif; ?>
 
             <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_save_admin_password" class="admin-form-card">
                 <?= $csrfField ?>
+                <?php if (!$sessionAuthEnabled && $adminBootstrapTokenConfigured): ?>
+                <div class="admin-form-field">
+                    <label for="admin_setup_token">One-time setup token</label>
+                    <input type="password" id="admin_setup_token" name="admin_setup_token" autocomplete="off" class="search-input" style="width:100%; max-width:28rem;" required>
+                    <p class="meta-text">Must match <code>SEISMO_ADMIN_SETUP_TOKEN</code> in config.local.php.</p>
+                </div>
+                <?php endif; ?>
                 <?php if ($sessionAuthEnabled): ?>
                 <div class="admin-form-field">
                     <label for="current_admin_password">Current password</label>
@@ -129,7 +144,11 @@ declare(strict_types=1);
                     <input type="password" id="new_admin_password_confirm" name="new_admin_password_confirm" autocomplete="new-password" class="search-input" style="width:100%; max-width:28rem;" required minlength="8">
                 </div>
                 <div class="admin-form-actions">
+                    <?php if ($sessionAuthEnabled || $adminBootstrapTokenConfigured): ?>
                     <button type="submit" class="btn btn-success"><?= $sessionAuthEnabled ? 'Change password' : 'Save password (enables auth)' ?></button>
+                    <?php else: ?>
+                    <p class="meta-text">Web password setup is disabled until you add a setup token or hash in config.local.php.</p>
+                    <?php endif; ?>
                 </div>
             </form>
 

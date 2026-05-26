@@ -16,6 +16,9 @@ use Seismo\Core\PlainTextNormalizer;
  */
 final class LexItemRepository
 {
+    /** Backfill tombstone — non-empty so the row leaves the missing-content queue. */
+    public const CONTENT_FETCH_UNAVAILABLE = "\n\n[seismo:content_unavailable]\n\n";
+
     public const MAX_LIMIT = 200;
 
     /** Lex Items view filter pills (EU/CH/DE/FR) — not JUS; Parl MM is a `feed_item`. */
@@ -176,6 +179,37 @@ final class LexItemRepository
         }
     }
 
+    public static function isContentUnavailable(?string $content): bool
+    {
+        return $content !== null && str_contains($content, '[seismo:content_unavailable]');
+    }
+
+    /**
+     * Stop retrying corpus fetch for a row (404, blocked PDF, missing URL, etc.).
+     */
+    public function markContentUnavailable(int $id): bool
+    {
+        if (isSatellite() || $id <= 0) {
+            return false;
+        }
+
+        $table = entryTable('lex_items');
+        try {
+            $stmt = $this->pdo->prepare(
+                'UPDATE ' . $table . ' SET content = ?, fetched_at = CURRENT_TIMESTAMP
+                 WHERE id = ? AND (content IS NULL OR TRIM(content) = \'\')'
+            );
+            $stmt->execute([self::CONTENT_FETCH_UNAVAILABLE, $id]);
+
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return false;
+            }
+            throw $e;
+        }
+    }
+
     /**
      * Write corpus text for one row. Updates `description` only when a synopsis is supplied.
      */
@@ -184,7 +218,7 @@ final class LexItemRepository
         if (isSatellite()) {
             throw new \RuntimeException('LexItemRepository::updateCorpus must not run on a satellite.');
         }
-        if ($id <= 0 || trim($content) === '') {
+        if ($id <= 0 || trim($content) === '' || self::isContentUnavailable($content)) {
             return false;
         }
         $content = PlainTextNormalizer::forIngest($content);
@@ -271,7 +305,7 @@ final class LexItemRepository
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 title = VALUES(title),
-                description = VALUES(description),
+                description = COALESCE(NULLIF(TRIM(VALUES(description)), \'\'), description),
                 content = COALESCE(VALUES(content), content),
                 document_date = VALUES(document_date),
                 document_type = VALUES(document_type),

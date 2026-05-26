@@ -61,10 +61,13 @@ namespace Seismo\Service;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use PDO;
 use Seismo\Repository\CalendarEventRepository;
 use Seismo\Repository\EmailRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\LexItemRepository;
+use Seismo\Repository\PluginRunLogRepository;
+use Seismo\Repository\SourceLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 
 final class RetentionService
@@ -99,7 +102,11 @@ final class RetentionService
         'calendar_events' => ['days' => null, 'keep' => self::DEFAULT_KEEPS],
     ];
 
+    /** Diagnostic tables (`plugin_run_log`, `source_log`) — pruned on every cron retention pass. */
+    public const DIAGNOSTIC_LOG_RETENTION_DAYS = 90;
+
     public function __construct(
+        private PDO $pdo,
         private SystemConfigRepository $config,
         private FeedItemRepository $feeds,
         private EmailRepository $emails,
@@ -114,6 +121,7 @@ final class RetentionService
     public static function boot(\PDO $pdo): self
     {
         return new self(
+            $pdo,
             new SystemConfigRepository($pdo),
             new FeedItemRepository($pdo),
             new EmailRepository($pdo),
@@ -144,6 +152,10 @@ final class RetentionService
             $cutoff = self::cutoff($policy['days']);
             $results[$family] = $this->runPrune($family, $cutoff, $policy['keep']);
         }
+        $logCutoff = self::cutoff(self::DIAGNOSTIC_LOG_RETENTION_DAYS);
+        $results['plugin_run_log'] = (new PluginRunLogRepository($this->pdo))->pruneOlderThan($logCutoff);
+        $results['source_log']     = (new SourceLogRepository($this->pdo))->pruneOlderThan($logCutoff);
+
         return $results;
     }
 

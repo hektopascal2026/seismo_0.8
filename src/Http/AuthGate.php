@@ -53,6 +53,30 @@ final class AuthGate
             && SEISMO_ADMIN_PASSWORD_HASH !== '';
     }
 
+    public static function bootstrapSetupTokenConfigured(): bool
+    {
+        return defined('SEISMO_ADMIN_SETUP_TOKEN')
+            && is_string(SEISMO_ADMIN_SETUP_TOKEN)
+            && SEISMO_ADMIN_SETUP_TOKEN !== '';
+    }
+
+    /**
+     * First password may only be set via the web form when auth is already on, or when
+     * {@see SEISMO_ADMIN_SETUP_TOKEN} is defined and the submitted token matches.
+     */
+    public static function maySetAdminPasswordViaWeb(string $submittedSetupToken): bool
+    {
+        if (self::isEnabled()) {
+            return true;
+        }
+
+        if (!self::bootstrapSetupTokenConfigured() || $submittedSetupToken === '') {
+            return false;
+        }
+
+        return hash_equals((string)SEISMO_ADMIN_SETUP_TOKEN, $submittedSetupToken);
+    }
+
     public static function isLoggedIn(): bool
     {
         if (!self::isEnabled()) {

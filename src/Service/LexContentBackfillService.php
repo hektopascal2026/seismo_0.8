@@ -77,13 +77,13 @@ final class LexContentBackfillService
             );
             if ($corpus === null) {
                 $failed++;
-                $this->noteReason($reasons, 'fetch_failed');
+                $this->abandonContentFetch($id, $reasons, 'fetch_failed');
                 continue;
             }
             $content = trim((string)($corpus['content'] ?? ''));
             if ($content === '') {
                 $skipped++;
-                $this->noteReason($reasons, 'empty_corpus');
+                $this->abandonContentFetch($id, $reasons, 'empty_corpus');
                 continue;
             }
 
@@ -153,14 +153,14 @@ final class LexContentBackfillService
             $url = trim((string)($row['eurlex_url'] ?? ''));
             if ($id <= 0 || $url === '') {
                 $skipped++;
-                $this->noteReason($reasons, 'no_eurlex_url');
+                $this->abandonContentFetch($id, $reasons, 'no_eurlex_url');
                 continue;
             }
 
             $content = $this->eurLex->fetchPlainTextFromRow($row);
             if ($content === null || $content === '') {
                 $skipped++;
-                $this->noteReason($reasons, 'empty_corpus');
+                $this->abandonContentFetch($id, $reasons, 'empty_corpus');
                 continue;
             }
 
@@ -239,7 +239,7 @@ final class LexContentBackfillService
             $consultId = LexLegifranceContentFetcher::consultIdFromRow($row);
             if ($consultId === null) {
                 $skipped++;
-                $this->noteReason($reasons, 'no_jorf_text_cid');
+                $this->abandonContentFetch($id, $reasons, 'no_jorf_text_cid');
                 continue;
             }
 
@@ -252,7 +252,7 @@ final class LexContentBackfillService
             );
             if ($content === null || $content === '') {
                 $skipped++;
-                $this->noteReason($reasons, $reason ?? 'empty_corpus');
+                $this->abandonContentFetch($id, $reasons, $reason ?? 'empty_corpus');
                 continue;
             }
 
@@ -341,19 +341,19 @@ final class LexContentBackfillService
             $url = LexRechtBundContentFetcher::publicationUrlFromRow($row);
             if ($url === null) {
                 $skipped++;
-                $this->noteReason($reasons, 'no_work_uri');
+                $this->abandonContentFetch($id, $reasons, 'no_work_uri');
                 continue;
             }
             if (LexRechtBundContentFetcher::regelungstextPdfUrl($url) === null) {
                 $skipped++;
-                $this->noteReason($reasons, 'no_pdf_url');
+                $this->abandonContentFetch($id, $reasons, 'no_pdf_url');
                 continue;
             }
 
             $content = $this->rechtBund->fetchPlainTextFromPublicationUrl($url);
             if ($content === null || $content === '') {
                 $skipped++;
-                $this->noteReason($reasons, 'empty_corpus');
+                $this->abandonContentFetch($id, $reasons, 'empty_corpus');
                 continue;
             }
 
@@ -413,6 +413,17 @@ final class LexContentBackfillService
         }
 
         return $this->lex->contentBackfillStatsBySource();
+    }
+
+    /**
+     * @param array<string, int>|null $reasons
+     */
+    private function abandonContentFetch(int $id, ?array &$reasons, string $key): void
+    {
+        if ($id > 0) {
+            $this->lex->markContentUnavailable($id);
+        }
+        $this->noteReason($reasons, $key);
     }
 
     /**

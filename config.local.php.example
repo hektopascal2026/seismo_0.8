@@ -62,3 +62,9 @@ define('SEISMO_ENTRIES_DB', 'seismo');
  */
 // define('SEISMO_ADMIN_PASSWORD_HASH', '$2y$12$...');
 
+/**
+ * Optional — one-time token for Settings → General “Save password” while auth is still dormant.
+ * Remove or comment out after the hash is saved. Never commit a real token.
+ */
+// define('SEISMO_ADMIN_SETUP_TOKEN', 'long-random-string-only-on-server');
+

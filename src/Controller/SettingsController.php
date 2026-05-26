@@ -136,7 +136,8 @@ final class SettingsController
 
         $configLocalWritable       = false;
         $adminPasswordPasteBlock   = null;
-        $sessionAuthEnabled        = AuthGate::isEnabled();
+        $sessionAuthEnabled              = AuthGate::isEnabled();
+        $adminBootstrapTokenConfigured   = AuthGate::bootstrapSetupTokenConfigured();
         $geminiApiKeyOnFile        = false;
 
         $diagStatus     = [];
@@ -441,6 +442,21 @@ final class SettingsController
             $this->redirectGeneralTab();
 
             return;
+        }
+
+        if (!AuthGate::isEnabled()) {
+            if (!AuthGate::bootstrapSetupTokenConfigured()) {
+                $_SESSION['error'] = 'Auth is not enabled. Set SEISMO_ADMIN_PASSWORD_HASH in config.local.php manually (web setup is disabled without SEISMO_ADMIN_SETUP_TOKEN).';
+                $this->redirectGeneralTab();
+
+                return;
+            }
+            if (!AuthGate::maySetAdminPasswordViaWeb((string)($_POST['admin_setup_token'] ?? ''))) {
+                $_SESSION['error'] = 'Setup token is incorrect.';
+                $this->redirectGeneralTab();
+
+                return;
+            }
         }
 
         if (AuthGate::isEnabled()) {

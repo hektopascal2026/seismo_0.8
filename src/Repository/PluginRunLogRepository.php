@@ -257,4 +257,24 @@ final class PluginRunLogRepository
 
         return $out;
     }
+
+    /**
+     * Delete diagnostic rows older than $cutoff (UTC). Keeps throttle / diagnostics queries bounded.
+     */
+    public function pruneOlderThan(DateTimeImmutable $cutoff): int
+    {
+        $sql = 'DELETE FROM plugin_run_log WHERE run_at < ?';
+
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$cutoff->format('Y-m-d H:i:s')]);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
+    }
 }

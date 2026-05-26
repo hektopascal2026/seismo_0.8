@@ -7,7 +7,9 @@ declare(strict_types=1);
 
 namespace Seismo\Repository;
 
+use DateTimeImmutable;
 use PDO;
+use PDOException;
 
 final class SourceLogRepository
 {
@@ -105,5 +107,20 @@ final class SourceLogRepository
         );
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function pruneOlderThan(DateTimeImmutable $cutoff): int
+    {
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM source_log WHERE occurred_at < ?');
+            $stmt->execute([$cutoff->format('Y-m-d H:i:s')]);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return 0;
+            }
+            throw $e;
+        }
     }
 }
