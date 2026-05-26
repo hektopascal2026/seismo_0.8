@@ -48,6 +48,14 @@ final class GeminiBriefingException extends \RuntimeException
         );
     }
 
+    public static function outputTruncatedAfterBatching(): self
+    {
+        return new self(
+            'Gemini still ran out of output space after splitting the briefing (one item per request). '
+            . 'Use 3 or fewer items, shorten multi-section blocks in your template, or set system_config gemini:max_output_tokens to 65536.'
+        );
+    }
+
     public static function invalidInput(string $message): self
     {
         return new self($message);
