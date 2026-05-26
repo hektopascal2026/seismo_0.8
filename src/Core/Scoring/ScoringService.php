@@ -7,9 +7,9 @@
  * writes live in the same repository. A single {@see rescoreAll()} call
  * corresponds to what 0.4's `magnituRescore()` did:
  *
- *   1. Ask {@see EntryScoreRepository} for feed_items, lex_items, emails,
- *      calendar_events that do NOT yet carry a `score_source = 'magnitu'`
- *      row (per-family methods, bounded by {@see self::BATCH_LIMIT}).
+ *   1. Ask {@see EntryScoreRepository} for rows missing Magnitu and missing a
+ *      recipe score for the active recipe version (per-family methods, bounded
+ *      by {@see self::BATCH_LIMIT}).
  *   2. Compute the recipe score via {@see RecipeScorer::score()} — a pure
  *      function with no I/O.
  *   3. Upsert via {@see EntryScoreRepository::upsertRecipeScore()} — which
@@ -75,7 +75,7 @@ final class ScoringService
      */
     private function rescoreFeedItems(array $recipe, int $version): int
     {
-        $rows = $this->scores->getUnscoredFeedItems(self::BATCH_LIMIT);
+        $rows = $this->scores->getUnscoredFeedItems(self::BATCH_LIMIT, $version);
         $done = 0;
         foreach ($rows as $row) {
             $st = (string)($row['source_type'] ?? 'rss');
@@ -103,7 +103,7 @@ final class ScoringService
      */
     private function rescoreLexItems(array $recipe, int $version): int
     {
-        $rows = $this->scores->getUnscoredLexItems(self::BATCH_LIMIT);
+        $rows = $this->scores->getUnscoredLexItems(self::BATCH_LIMIT, $version);
         $done = 0;
         foreach ($rows as $row) {
             $sourceType = 'lex_' . (string)($row['source'] ?? 'eu');
@@ -132,7 +132,7 @@ final class ScoringService
      */
     private function rescoreEmails(array $recipe, int $version): int
     {
-        $rows = $this->scores->getUnscoredEmails(self::BATCH_LIMIT);
+        $rows = $this->scores->getUnscoredEmails(self::BATCH_LIMIT, $version);
         $done   = 0;
         $subs   = (new EmailSubscriptionRepository(\getDbConnection()))->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         foreach ($rows as $row) {
@@ -165,7 +165,7 @@ final class ScoringService
      */
     private function rescoreCalendarEvents(array $recipe, int $version): int
     {
-        $rows = $this->scores->getUnscoredCalendarEvents(self::BATCH_LIMIT);
+        $rows = $this->scores->getUnscoredCalendarEvents(self::BATCH_LIMIT, $version);
         $done = 0;
         foreach ($rows as $row) {
             // Recipe scoring uses synopsis only — full `content` is for Magnitu export.

@@ -66,7 +66,7 @@ final class EmailWebViewUrlExtractor
                     continue;
                 }
                 $href = self::normalizeHref($anchor->getAttribute('href'));
-                if ($href === null || EmailTrackingUrl::isTrackingOrAsset($href)) {
+                if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
                     continue;
                 }
                 $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
@@ -113,12 +113,7 @@ final class EmailWebViewUrlExtractor
         $lower = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
 
         foreach (EmailWebViewPhraseLexicon::alternateLocaleEntries() as $entry) {
-            $pos = mb_strpos($lower, $entry['phrase'], 0, 'UTF-8');
-            if ($pos === false) {
-                continue;
-            }
-            $slice = mb_substr($plain, (int)$pos, 2500, 'UTF-8');
-            $url   = self::firstHttpUrl($slice);
+            $url = self::firstHttpUrlAfterNormalizedPhrase($lower, $entry['phrase']);
             if ($url !== null) {
                 self::mergeAlternateCandidate($byUrl, $url, $entry['rank']);
             }
@@ -134,7 +129,7 @@ final class EmailWebViewUrlExtractor
                 $token = (string)($tokenList[$i][0] ?? '');
                 $rank  = $spec['ranks'][$token] ?? EmailWebViewPhraseLexicon::RANK_LOCALE_OTHER;
                 $pos   = (int)($match[1] ?? 0);
-                $slice = mb_substr($plain, $pos, 2500, 'UTF-8');
+                $slice = mb_substr($lower, $pos, 2500, 'UTF-8');
                 $url   = self::firstHttpUrl($slice);
                 if ($url !== null) {
                     self::mergeAlternateCandidate($byUrl, $url, $rank);
@@ -288,7 +283,7 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
-        $slice = mb_substr($text, (int)$bestPos, 2500, 'UTF-8');
+        $slice = mb_substr($lower, (int)$bestPos, 2500, 'UTF-8');
 
         return self::firstHttpUrl($slice);
     }
@@ -322,7 +317,7 @@ final class EmailWebViewUrlExtractor
                 continue;
             }
             $href = self::normalizeHref($anchor->getAttribute('href'));
-            if ($href === null || EmailTrackingUrl::isTrackingOrAsset($href)) {
+            if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
                 continue;
             }
             if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href)) {
@@ -347,7 +342,7 @@ final class EmailWebViewUrlExtractor
         }
         foreach ($matches[0] as $raw) {
             $url = self::normalizeHref((string)$raw);
-            if ($url !== null && !EmailTrackingUrl::isTrackingOrAsset($url)) {
+            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
                 return $url;
             }
         }
@@ -368,7 +363,7 @@ final class EmailWebViewUrlExtractor
             $url = self::normalizeHref((string)$raw);
             if ($url !== null
                 && self::isEuroparlPressRoomUrl($url)
-                && !EmailTrackingUrl::isTrackingOrAsset($url)
+                && !EmailTrackingUrl::isRedirectTrackingUrl($url)
             ) {
                 return $url;
             }
@@ -392,7 +387,7 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
-        $slice = mb_substr($plain, (int)$bestPos, 3000, 'UTF-8');
+        $slice = mb_substr($lower, (int)$bestPos, 3000, 'UTF-8');
 
         return self::firstHttpUrl($slice);
     }
@@ -472,12 +467,24 @@ final class EmailWebViewUrlExtractor
         }
         foreach ($matches[0] as $raw) {
             $url = self::normalizeHref(rtrim((string)$raw, '.,;)]'));
-            if ($url !== null && !EmailTrackingUrl::isTrackingOrAsset($url)) {
+            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
                 return $url;
             }
         }
 
         return null;
+    }
+
+    private static function firstHttpUrlAfterNormalizedPhrase(string $normalizedPlain, string $phrase, int $len = 2500): ?string
+    {
+        $pos = mb_strpos($normalizedPlain, $phrase, 0, 'UTF-8');
+        if ($pos === false) {
+            return null;
+        }
+
+        $slice = mb_substr($normalizedPlain, (int)$pos, $len, 'UTF-8');
+
+        return self::firstHttpUrl($slice);
     }
 
     private static function normalizeHref(string $href): ?string
@@ -496,6 +503,10 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
-        return $href;
+        if (EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+            return null;
+        }
+
+        return EmailTrackingUrl::cleanNewsletterHref($href);
     }
 }

@@ -76,7 +76,9 @@ final class EmailPlainTextExtractor
             if ($inner === '') {
                 return '';
             }
-            if ($href !== '' && !EmailTrackingUrl::isTrackingOrAsset($href)) {
+            if ($href !== '' && !EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                $href = EmailTrackingUrl::cleanNewsletterHref($href);
+
                 return $inner . ' (' . $href . ')';
             }
 

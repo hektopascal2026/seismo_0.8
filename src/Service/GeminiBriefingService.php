@@ -582,9 +582,8 @@ CONTRACT;
             return [];
         }
 
-        $perBatch = max(1, (int)ceil($selectionTarget / $batchCount));
-        $merged   = [];
-        $seen     = [];
+        $merged = [];
+        $seen   = [];
 
         foreach ($batches as $index => $batch) {
             if ($index > 0) {
@@ -592,7 +591,7 @@ CONTRACT;
             }
 
             $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $briefingMeta, $fallbackXml);
-            $batchTarget  = min($perBatch, count($batch), $selectionTarget);
+            $batchTarget  = min($selectionTarget, count($batch));
             $keys         = $this->runSelectionPass(
                 $userSystemPrompt,
                 $batchContext,
@@ -612,13 +611,43 @@ CONTRACT;
         }
 
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'batched_selection'    => true,
-            'selection_batches'    => $batchCount,
-            'selection_batch_size' => $batchSize,
+            'batched_selection'       => true,
+            'selection_batches'       => $batchCount,
+            'selection_batch_size'    => $batchSize,
+            'selection_championship'  => false,
         ]);
 
         if (count($merged) <= $selectionTarget) {
             return $merged;
+        }
+
+        $finalists = $this->entriesForKeys($poolEntries, $merged);
+        if ($finalists === []) {
+            return array_slice($merged, 0, $selectionTarget);
+        }
+
+        sleep($this->batchPauseSeconds());
+        $championContext = $this->buildEntryXmlContext(
+            $finalists,
+            $scoresByKey,
+            $briefingMeta,
+            $fallbackXml,
+        );
+        $championKeys = $this->runSelectionPass(
+            $userSystemPrompt,
+            $championContext,
+            $itemCount,
+            $selectionTarget,
+            $apiKey,
+        );
+
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'selection_championship' => true,
+            'selection_finalists'    => count($finalists),
+        ]);
+
+        if ($championKeys !== []) {
+            return $this->finalizeSelectedKeys($championKeys, $selectionTarget);
         }
 
         return array_slice($merged, 0, $selectionTarget);

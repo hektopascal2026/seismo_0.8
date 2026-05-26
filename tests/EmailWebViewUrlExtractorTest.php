@@ -45,7 +45,7 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         $html = file_get_contents(__DIR__ . '/fixtures/mail/europarl_press_headline_link.html');
         self::assertIsString($html);
 
-        $expected = 'https://www.europarl.europa.eu/news/en/press-room/20260513IPR43308/'
+        $expected = 'https://europarl.europa.eu/news/en/press-room/20260513IPR43308/'
             . 'slovakia-meps-demand-action-to-protect-eu-values-and-the-eu-budget';
         self::assertSame($expected, EmailWebViewUrlExtractor::fromHtml($html));
 
@@ -62,7 +62,7 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         $html = file_get_contents(__DIR__ . '/fixtures/mail/news_service_bund_headline_link.html');
         self::assertIsString($html);
 
-        $expected = 'https://www.admin.ch/de/newnsb/TDa4boIj7yF-wQiV_ccp4';
+        $expected = 'https://admin.ch/de/newnsb/TDa4boIj7yF-wQiV_ccp4';
         self::assertSame($expected, EmailWebViewUrlExtractor::fromHtml($html));
 
         $plain = "News Service Bund www.news.admin.ch\n"
@@ -80,7 +80,7 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         self::assertIsString($html);
 
         self::assertSame(
-            'https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example',
+            'https://baden-wuerttemberg.de/de/newsletter/taeglich/example',
             EmailWebViewUrlExtractor::fromHtml($html)
         );
 
@@ -88,7 +88,7 @@ final class EmailWebViewUrlExtractorTest extends TestCase
             . '[https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example]' . "\n\nNewsletter body.";
 
         self::assertSame(
-            'https://www.baden-wuerttemberg.de/de/newsletter/taeglich/example',
+            'https://baden-wuerttemberg.de/de/newsletter/taeglich/example',
             EmailWebViewUrlExtractor::fromPlainText($plain)
         );
     }
@@ -158,6 +158,16 @@ final class EmailWebViewUrlExtractorTest extends TestCase
             . "Newsletter auf Deutsch ( https://news.example.net/de-edition )";
 
         self::assertSame('https://news.example.net/de-edition', EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
+    public function testPlainAlternateLocaleFindsUrlAfterNormalization(): void
+    {
+        $url = 'https://news.example.net/en-edition';
+        $plain = "Read the English version of our Newsletter here (click)\n"
+            . "  ( {$url} )\n\n"
+            . "Body with extra   spaces and Problème text.";
+
+        self::assertSame($url, EmailWebViewUrlExtractor::fromPlainText($plain));
     }
 
     public function testPlainWebViewLineSurvivesWhenHtmlSnapshotUsedAfterStrip(): void

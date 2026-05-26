@@ -37,7 +37,7 @@ final class EmailHtmlSanitizer
             return '';
         }
 
-        return self::unwrapTrackingLinks($clean);
+        return self::normalizeAnchorHrefs($clean);
     }
 
     private static function purifier(): HTMLPurifier
@@ -66,7 +66,7 @@ final class EmailHtmlSanitizer
         return self::$purifier;
     }
 
-    private static function unwrapTrackingLinks(string $html): string
+    private static function normalizeAnchorHrefs(string $html): string
     {
         $prev = libxml_use_internal_errors(true);
         $dom  = new DOMDocument();
@@ -85,7 +85,7 @@ final class EmailHtmlSanitizer
             return $html;
         }
 
-        self::unwrapTrackingAnchorsInSubtree($dom, $root);
+        self::normalizeAnchorsInSubtree($dom, $root);
 
         $inner = '';
         foreach ($root->childNodes as $child) {
@@ -95,7 +95,7 @@ final class EmailHtmlSanitizer
         return trim($inner);
     }
 
-    private static function unwrapTrackingAnchorsInSubtree(DOMDocument $dom, DOMNode $node): void
+    private static function normalizeAnchorsInSubtree(DOMDocument $dom, DOMNode $node): void
     {
         $children = [];
         foreach ($node->childNodes as $child) {
@@ -105,15 +105,21 @@ final class EmailHtmlSanitizer
         foreach ($children as $child) {
             if ($child instanceof DOMElement && strtolower($child->tagName) === 'a') {
                 $href = trim($child->getAttribute('href'));
-                if ($href !== '' && EmailTrackingUrl::isTrackingOrAsset($href)) {
-                    $label = trim($child->textContent);
-                    $text  = $dom->createTextNode($label);
-                    $child->parentNode?->replaceChild($text, $child);
-                    continue;
+                if ($href !== '') {
+                    if (EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                        $label = trim($child->textContent);
+                        $text  = $dom->createTextNode($label);
+                        $child->parentNode?->replaceChild($text, $child);
+                        continue;
+                    }
+                    $cleaned = EmailTrackingUrl::cleanNewsletterHref($href);
+                    if ($cleaned !== '' && $cleaned !== $href) {
+                        $child->setAttribute('href', $cleaned);
+                    }
                 }
             }
             if ($child instanceof DOMElement) {
-                self::unwrapTrackingAnchorsInSubtree($dom, $child);
+                self::normalizeAnchorsInSubtree($dom, $child);
             }
         }
     }

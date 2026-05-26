@@ -224,13 +224,12 @@ final class EntryScoreRepository
     // -----------------------------------------------------------------
 
     /**
-     * Feed items (RSS / Substack / Scraper) that do not yet carry a
-     * Magnitu-sourced row in `entry_scores`. Joined against `feeds` to pull
-     * `source_type` and to skip disabled feeds in the same pass.
+     * Feed items needing recipe backfill or Magnitu: no Magnitu row, and no recipe
+     * row for {@see $recipeVersion}. Stale recipe versions are rescored on bump.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getUnscoredFeedItems(int $limit): array
+    public function getUnscoredFeedItems(int $limit, int $recipeVersion): array
     {
         $limit = $this->clampLimit($limit);
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, f.source_type
@@ -242,12 +241,12 @@ final class EntryScoreRepository
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = \'feed_item\'
                           AND es.entry_id = fi.id
-                          AND es.score_source = \'magnitu\'
+                          AND ' . self::coveredByMagnituOrCurrentRecipeSql() . '
                    )
                  ORDER BY fi.id DESC
                  LIMIT ' . $limit;
 
-        return $this->runOrEmpty($sql, 'getUnscoredFeedItems');
+        return $this->runOrEmptyWithVersion($sql, $recipeVersion, 'getUnscoredFeedItems');
     }
 
     /**
@@ -261,7 +260,7 @@ final class EntryScoreRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getUnscoredLexItems(int $limit): array
+    public function getUnscoredLexItems(int $limit, int $recipeVersion): array
     {
         $limit = $this->clampLimit($limit);
         $sql = 'SELECT li.id, li.title, li.description, li.document_type, li.source
@@ -270,12 +269,12 @@ final class EntryScoreRepository
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = \'lex_item\'
                           AND es.entry_id = li.id
-                          AND es.score_source = \'magnitu\'
+                          AND ' . self::coveredByMagnituOrCurrentRecipeSql() . '
                    )
                  ORDER BY li.id DESC
                  LIMIT ' . $limit;
 
-        return $this->runOrEmpty($sql, 'getUnscoredLexItems');
+        return $this->runOrEmptyWithVersion($sql, $recipeVersion, 'getUnscoredLexItems');
     }
 
     /**
@@ -287,7 +286,7 @@ final class EntryScoreRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getUnscoredEmails(int $limit): array
+    public function getUnscoredEmails(int $limit, int $recipeVersion): array
     {
         $limit = $this->clampLimit($limit);
         $table = entryTable(getEmailTableName());
@@ -325,12 +324,12 @@ final class EntryScoreRepository
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = 'email'
                           AND es.entry_id  = e.id
-                          AND es.score_source = 'magnitu'
+                          AND " . self::coveredByMagnituOrCurrentRecipeSql() . "
                    )
                  ORDER BY e.id DESC
                  LIMIT {$limit}";
 
-        return $this->runOrEmpty($sql, 'getUnscoredEmails');
+        return $this->runOrEmptyWithVersion($sql, $recipeVersion, 'getUnscoredEmails');
     }
 
     /**
@@ -346,7 +345,7 @@ final class EntryScoreRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getUnscoredCalendarEvents(int $limit): array
+    public function getUnscoredCalendarEvents(int $limit, int $recipeVersion): array
     {
         $limit = $this->clampLimit($limit);
         $sql = 'SELECT ce.id, ce.title, ce.description, ce.source, ce.event_type
@@ -355,12 +354,21 @@ final class EntryScoreRepository
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = \'calendar_event\'
                           AND es.entry_id  = ce.id
-                          AND es.score_source = \'magnitu\'
+                          AND ' . self::coveredByMagnituOrCurrentRecipeSql() . '
                    )
                  ORDER BY ce.id DESC
                  LIMIT ' . $limit;
 
-        return $this->runOrEmpty($sql, 'getUnscoredCalendarEvents');
+        return $this->runOrEmptyWithVersion($sql, $recipeVersion, 'getUnscoredCalendarEvents');
+    }
+
+    /**
+     * Row satisfies "already scored for this recipe run" when Magnitu owns it or
+     * recipe matches the active version passed to the unscored lookup.
+     */
+    private static function coveredByMagnituOrCurrentRecipeSql(): string
+    {
+        return '(es.score_source = \'magnitu\' OR (es.score_source = \'recipe\' AND es.model_version = ?))';
     }
 
     private function clampLimit(int $limit): int
@@ -371,11 +379,12 @@ final class EntryScoreRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function runOrEmpty(string $sql, string $context): array
+    private function runOrEmptyWithVersion(string $sql, int $recipeVersion, string $context): array
     {
         try {
-            $stmt = $this->pdo->query($sql);
-            return $stmt === false ? [] : $stmt->fetchAll();
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$recipeVersion]);
+            return $stmt->fetchAll();
         } catch (PDOException $e) {
             error_log('EntryScoreRepository ' . $context . ' failed: ' . $e->getMessage());
             return [];
