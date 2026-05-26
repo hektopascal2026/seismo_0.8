@@ -37,6 +37,9 @@ final class EntryScoreRepository
      */
     public const MAX_UNSCORED_LIMIT = 500;
 
+    /** Recipe scoring only needs a text prefix; full LONGTEXT bodies OOM at batch size. */
+    private const UNSCORED_EMAIL_BODY_CHARS = 50_000;
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -351,9 +354,10 @@ final class EntryScoreRepository
 
         $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0 AND ' : '';
 
+        $bodyChars = self::UNSCORED_EMAIL_BODY_CHARS;
         $sql = "SELECT e.id, e.subject,
-                       e.`{$textBody}` AS text_body,
-                       e.`{$htmlBody}` AS html_body{$derivedSel}
+                       SUBSTRING(e.`{$textBody}`, 1, {$bodyChars}) AS text_body,
+                       SUBSTRING(e.`{$htmlBody}`, 1, {$bodyChars}) AS html_body{$derivedSel}
                   FROM {$table} e
                  WHERE {$hiddenClause}NOT EXISTS (
                        SELECT 1 FROM entry_scores es

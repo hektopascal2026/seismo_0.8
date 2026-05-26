@@ -29,6 +29,9 @@ final class BaseClient
     /** Total request timeout in seconds. */
     public const DEFAULT_TIMEOUT = 30;
 
+    /** Abort cURL download above this size (matches ingest body ceiling + headroom). */
+    public const MAX_RESPONSE_BYTES = 5_242_880;
+
     /** Milliseconds to wait before retrying a 429/503. */
     private const RETRY_SLEEP_MS = 1000;
 
@@ -197,6 +200,21 @@ final class BaseClient
         if ($share !== null) {
             $opts[CURLOPT_SHARE] = $share;
         }
+        $maxBytes = self::MAX_RESPONSE_BYTES;
+        $opts[CURLOPT_NOPROGRESS]      = false;
+        $opts[CURLOPT_PROGRESSFUNCTION] = static function (
+            $ch,
+            float $downloadSize,
+            float $downloaded,
+            float $uploadSize,
+            float $uploaded,
+        ) use ($maxBytes): int {
+            if ($downloaded > $maxBytes) {
+                return 1;
+            }
+
+            return 0;
+        };
         curl_setopt_array($ch, $opts);
 
         if ($body !== null) {

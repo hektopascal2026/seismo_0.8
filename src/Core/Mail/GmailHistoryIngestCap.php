@@ -67,6 +67,13 @@ final class GmailHistoryIngestCap
                     $ids[] = $mid;
                 }
             }
+            // First history record larger than $max: without a checkpoint the client
+            // keeps startHistoryId unchanged and re-reads the same slice forever.
+            // When earlier records were fully consumed, keep checkpoint on the last
+            // complete record so the next run still sees this record's tail.
+            if ($recordId !== '' && $checkpoint === null) {
+                $checkpoint = $recordId;
+            }
             $truncated = true;
             break;
         }

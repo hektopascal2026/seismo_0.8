@@ -33,6 +33,19 @@ final class GmailHistoryIngestCapTest extends TestCase
         $this->assertTrue($batch['truncated']);
     }
 
+    public function testOversizedFirstHistoryRecordSetsCheckpoint(): void
+    {
+        $batch = GmailHistoryIngestCap::collect(
+            ['h1'],
+            [array_map(static fn (int $n): string => 'm' . $n, range(1, 80))],
+            50,
+        );
+
+        self::assertCount(50, $batch['message_ids']);
+        self::assertSame('h1', $batch['checkpoint_history_id']);
+        self::assertTrue($batch['truncated']);
+    }
+
     public function testFullConsumeNotTruncated(): void
     {
         $batch = GmailHistoryIngestCap::collect(

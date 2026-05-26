@@ -64,9 +64,6 @@ final class GmailApiInboxClient
                 . ' message id(s) remain for a later run (history cursor not advanced past backlog).'
             );
             $messageIds = array_slice($messageIds, 0, $max);
-            if ($storedHistory !== '') {
-                $historyAdvanceId = $storedHistory;
-            }
         }
 
         $rows = [];
