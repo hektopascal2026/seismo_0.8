@@ -124,6 +124,12 @@ $moduleOptions = [
             </div>
         <?php endif; ?>
 
+        <div class="view-toggle view-toggle-bar" id="briefing-prompt-view-toggle">
+            <span class="view-toggle-label">View:</span>
+            <button type="button" class="btn btn-primary" id="briefing-view-prompt" data-view="prompt">Prompt</button>
+            <button type="button" class="btn btn-secondary" id="briefing-view-helper" data-view="helper">Helper</button>
+        </div>
+
         <div class="latest-entries-section">
             <form id="briefing-builder-form" class="admin-form-card">
                 <div class="filter-page-actions" style="margin-bottom:0.75rem;">
@@ -203,14 +209,7 @@ $moduleOptions = [
                     </p>
                 </div>
 
-                <div class="admin-form-field">
-                    <label>Briefing prompt</label>
-                    <div class="view-toggle view-toggle-bar" id="briefing-prompt-view-toggle">
-                        <span class="view-toggle-label">View:</span>
-                        <button type="button" class="btn btn-primary" id="briefing-view-prompt" data-view="prompt">Prompt</button>
-                        <button type="button" class="btn btn-secondary" id="briefing-view-helper" data-view="helper">Helper</button>
-                    </div>
-
+                <div class="admin-form-field" id="briefing-prompt-field">
                     <div id="briefing-prompt-panel">
                         <label for="briefing_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
