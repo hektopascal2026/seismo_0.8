@@ -259,7 +259,9 @@ final class EmailIngestRepository
             $profile    = EmailLocaleGuesser::profileForEmail((string)($row['subject'] ?? ''), $plainAfterNormalize);
             $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
             $resolution = EmailWebViewUrlExtractor::resolve($htmlBeforeNormalize, $plainAfterNormalize, $ranks);
-            if (EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)) {
+            if (EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)
+                || EmailAlternateLocalePolicy::needsTruncatedWebViewHydration($row, $resolution, $plainAfterNormalize)
+            ) {
                 $hydrateHostedBody = true;
             }
         }
@@ -347,17 +349,25 @@ final class EmailIngestRepository
             $row = EmailMetadata::mergeWebViewUrl($row, $resolution->url);
         }
 
-        if ($hydrateHostedBody
-            && $resolution->hydrateBody
+        $canHydrate = $hydrateHostedBody
             && $resolution->url !== null
-            && $resolution->localeRank !== null
             && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW
-            && ($hostedHydratesRemaining === null || $hostedHydratesRemaining > 0)
-        ) {
+            && ($hostedHydratesRemaining === null || $hostedHydratesRemaining > 0);
+
+        $localeRank = $resolution->localeRank;
+        $doHydrate  = $canHydrate && (
+            ($resolution->hydrateBody && $localeRank !== null)
+            || EmailAlternateLocalePolicy::needsTruncatedWebViewHydration($row, $resolution, $plain)
+        );
+
+        if ($doHydrate) {
+            if ($localeRank === null) {
+                $localeRank = EmailAlternateLocalePolicy::preferredHydrationRankForProfile($profile);
+            }
             $row = (new EmailWebViewBodyHydrator())->hydrateRow(
                 $row,
                 $resolution->url,
-                $resolution->localeRank
+                $localeRank
             );
             if ($hostedHydratesRemaining !== null) {
                 --$hostedHydratesRemaining;

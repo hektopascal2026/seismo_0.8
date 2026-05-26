@@ -113,7 +113,7 @@ final class EmailWebViewUrlExtractor
         $lower = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
 
         foreach (EmailWebViewPhraseLexicon::alternateLocaleEntries() as $entry) {
-            $url = self::firstHttpUrlAfterNormalizedPhrase($lower, $entry['phrase']);
+            $url = self::firstHttpUrlAfterNormalizedPhrase($plain, $entry['phrase']);
             if ($url !== null) {
                 self::mergeAlternateCandidate($byUrl, $url, $entry['rank']);
             }
@@ -129,7 +129,7 @@ final class EmailWebViewUrlExtractor
                 $token = (string)($tokenList[$i][0] ?? '');
                 $rank  = $spec['ranks'][$token] ?? EmailWebViewPhraseLexicon::RANK_LOCALE_OTHER;
                 $pos   = (int)($match[1] ?? 0);
-                $slice = mb_substr($lower, $pos, 2500, 'UTF-8');
+                $slice = mb_substr($plain, $pos, 2500, 'UTF-8');
                 $url   = self::firstHttpUrl($slice);
                 if ($url !== null) {
                     self::mergeAlternateCandidate($byUrl, $url, $rank);
@@ -283,7 +283,8 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
-        $slice = mb_substr($lower, (int)$bestPos, 2500, 'UTF-8');
+        // Slice original text so URLs keep their casing (normalizeForMatch lowercases hosts/paths).
+        $slice = mb_substr($text, (int)$bestPos, 2500, 'UTF-8');
 
         return self::firstHttpUrl($slice);
     }
@@ -475,14 +476,15 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function firstHttpUrlAfterNormalizedPhrase(string $normalizedPlain, string $phrase, int $len = 2500): ?string
+    private static function firstHttpUrlAfterNormalizedPhrase(string $plain, string $phrase, int $len = 2500): ?string
     {
-        $pos = mb_strpos($normalizedPlain, $phrase, 0, 'UTF-8');
+        $normalized = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
+        $pos = mb_strpos($normalized, $phrase, 0, 'UTF-8');
         if ($pos === false) {
             return null;
         }
 
-        $slice = mb_substr($normalizedPlain, (int)$pos, $len, 'UTF-8');
+        $slice = mb_substr($plain, (int)$pos, $len, 'UTF-8');
 
         return self::firstHttpUrl($slice);
     }

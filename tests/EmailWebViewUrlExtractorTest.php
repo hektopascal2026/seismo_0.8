@@ -170,6 +170,32 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         self::assertSame($url, EmailWebViewUrlExtractor::fromPlainText($plain));
     }
 
+    public function testBmwkSchlaglichterWebViewFromHtmlFixture(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/mail/bmwk_schlaglichter_webview.html');
+        self::assertIsString($html);
+
+        $expected = 'https://bundeswirtschaftsministerium.de/Redaktion/DE/Publikationen/'
+            . 'Schlaglichter-der-Wirtschaftspolitik/2026/schlaglichter-der-wirtschaftspolitik-2026-06.html'
+            . '?view=renderNewsletterHtml';
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromHtml($html));
+    }
+
+    public function testBmwkSchlaglichterWebViewPhraseAndUrl(): void
+    {
+        $url = 'https://bundeswirtschaftsministerium.de/Redaktion/DE/Publikationen/'
+            . 'Schlaglichter-der-Wirtschaftspolitik/2026/schlaglichter-der-wirtschaftspolitik-2026-06.html'
+            . '?view=renderNewsletterHtml';
+        $plain = 'Sollte der Newsletter nicht korrekt angezeigt werden, klicken Sie bitte hier '
+            . '(' . $url . ")\n\n26.05.2026 PUBLIKATION\n\n"
+            . "Read on web not shown with this email.";
+
+        self::assertTrue(EmailWebViewPhraseLexicon::textLooksLikeWebView(
+            'Sollte der Newsletter nicht korrekt angezeigt werden, klicken Sie bitte hier'
+        ));
+        self::assertSame($url, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
     public function testPlainWebViewLineSurvivesWhenHtmlSnapshotUsedAfterStrip(): void
     {
         $html = '<a href="https://news.example.org/digest/99">View in browser</a>';

@@ -66,8 +66,34 @@ final class EmailAlternateLocalePolicy
     }
 
     /**
-     * Inbox still has default-locale text (e.g. Ukrainian) but a DE/EN hosted edition link exists — fetch once.
+     * Generic “view in browser” link + inbox teaser (e.g. BMWK Schlaglichter) — fetch hosted HTML.
      */
+    public static function needsTruncatedWebViewHydration(
+        array $row,
+        EmailWebViewResolution $resolution,
+        string $plain,
+    ): bool {
+        if ($resolution->url === null || $resolution->hydrateBody) {
+            return false;
+        }
+        if (EmailMetadata::bodySourceFromRow($row) === EmailMetadata::BODY_SOURCE_WEB_VIEW) {
+            return false;
+        }
+
+        return EmailInboxTruncationDetector::looksTruncated($plain);
+    }
+
+    public static function preferredHydrationRankForProfile(string $profile): int
+    {
+        foreach (self::preferredLocaleRanks($profile) as $rank) {
+            if (self::shouldHydrateBodyFromWebView($rank)) {
+                return $rank;
+            }
+        }
+
+        return EmailWebViewPhraseLexicon::RANK_LOCALE_GERMAN;
+    }
+
     public static function needsHostedHydrationRetry(
         array $row,
         EmailWebViewResolution $resolution,

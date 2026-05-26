@@ -6,9 +6,12 @@ namespace Seismo\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Seismo\Core\Mail\EmailAlternateLocalePolicy;
+use Seismo\Core\Mail\EmailInboxTruncationDetector;
 use Seismo\Core\Mail\EmailLocaleGuesser;
+use Seismo\Core\Mail\EmailMetadata;
 use Seismo\Core\Mail\EmailWebViewBodyHydrator;
 use Seismo\Core\Mail\EmailWebViewPhraseLexicon;
+use Seismo\Core\Mail\EmailWebViewResolution;
 use Seismo\Core\Mail\EmailWebViewUrlExtractor;
 
 final class EmailLocalePolicyTest extends TestCase
@@ -89,6 +92,27 @@ final class EmailLocalePolicyTest extends TestCase
 
         self::assertFalse($resolution->hydrateBody);
         self::assertNull($resolution->localeRank);
+    }
+
+    public function testTruncatedInboxRequestsGenericWebViewHydration(): void
+    {
+        $url = 'https://press.example.de/newsletter?view=renderNewsletterHtml';
+        $plain = 'Sollte der Newsletter nicht korrekt angezeigt werden, klicken Sie bitte hier '
+            . '(' . $url . ")\n\nTeaser text.\n\nRead on web not shown with this email.";
+
+        self::assertTrue(EmailInboxTruncationDetector::looksTruncated($plain));
+
+        $resolution = new EmailWebViewResolution($url, null, false);
+        self::assertTrue(
+            EmailAlternateLocalePolicy::needsTruncatedWebViewHydration([], $resolution, $plain)
+        );
+        self::assertFalse(
+            EmailAlternateLocalePolicy::needsTruncatedWebViewHydration(
+                ['metadata' => json_encode([EmailMetadata::KEY_BODY_SOURCE => EmailMetadata::BODY_SOURCE_WEB_VIEW])],
+                $resolution,
+                $plain
+            )
+        );
     }
 
     public function testParsesBrevoStyleRedirectPage(): void
