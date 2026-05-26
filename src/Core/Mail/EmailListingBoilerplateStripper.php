@@ -34,8 +34,12 @@ final class EmailListingBoilerplateStripper
             return $body;
         }
         $sub = trim((string) $subject);
-        if ($sub !== '' && $sub !== '(No subject)' && str_starts_with($body, $sub)) {
-            $body = trim(mb_substr($body, mb_strlen($sub)));
+        if ($sub !== '' && $sub !== '(No subject)') {
+            if (str_starts_with($body, $sub . "\r\n")) {
+                $body = trim(mb_substr($body, mb_strlen($sub) + 2));
+            } elseif (str_starts_with($body, $sub . "\n")) {
+                $body = trim(mb_substr($body, mb_strlen($sub) + 1));
+            }
         }
         if ($body !== '' && str_contains($body, ',')) {
             $body = (string) preg_replace(

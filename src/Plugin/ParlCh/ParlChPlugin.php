@@ -146,16 +146,12 @@ final class ParlChPlugin implements SourceFetcherInterface
             );
             $brResponseText = $this->plainTextFromHtml((string)($item['FederalCouncilResponseText'] ?? ''));
             $hasBrResponse = $brResponseText !== '';
-            if ($hasBrResponse) {
-                $content = $brResponseText;
-            } elseif ($reasonText !== '') {
-                $content = $reasonText;
-            } else {
-                $content = $submittedOrMotion;
-            }
-            if ($content === '') {
-                $content = $description;
-            }
+            $content = self::composeBusinessContent(
+                $brResponseText,
+                $reasonText,
+                $submittedOrMotion,
+                $description,
+            );
 
             // Fetch filters on Modified; timeline/Leg cards must not use SubmissionDate
             // (old dossiers re-enter Curia Vista with ancient filing dates).
@@ -373,5 +369,29 @@ final class ParlChPlugin implements SourceFetcherInterface
             2       => 'SR',
             default => null,
         };
+    }
+
+    /**
+     * Preserve motion context when a Bundesrat response exists (all sections, not only the latest).
+     */
+    public static function composeBusinessContent(
+        string $brResponseText,
+        string $reasonText,
+        string $submittedOrMotion,
+        string $descriptionFallback = '',
+    ): string {
+        $contentParts = [];
+        if ($brResponseText !== '') {
+            $contentParts[] = "Antwort des Bundesrates:\n" . $brResponseText;
+        }
+        if ($reasonText !== '') {
+            $contentParts[] = "Begründung:\n" . $reasonText;
+        }
+        if ($submittedOrMotion !== '') {
+            $contentParts[] = "Eingereichter Text:\n" . $submittedOrMotion;
+        }
+        $content = implode("\n\n---\n\n", $contentParts);
+
+        return $content !== '' ? $content : $descriptionFallback;
     }
 }

@@ -500,7 +500,7 @@ final class EmailIngestRepository
             return $body;
         }
 
-        return substr($body, 0, self::MAX_BODY_BYTES) . "\n\n[truncated]";
+        return \Seismo\Util\Utf8ByteCap::truncate($body, self::MAX_BODY_BYTES, "\n\n[truncated]");
     }
 
     /**

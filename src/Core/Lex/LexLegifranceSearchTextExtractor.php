@@ -151,7 +151,11 @@ final class LexLegifranceSearchTextExtractor
             return null;
         }
         if (strlen($plain) > LexLegifranceContentFetcher::MAX_CONTENT_BYTES) {
-            $plain = substr($plain, 0, LexLegifranceContentFetcher::MAX_CONTENT_BYTES) . "\n\n[truncated]";
+            $plain = \Seismo\Util\Utf8ByteCap::truncate(
+                $plain,
+                LexLegifranceContentFetcher::MAX_CONTENT_BYTES,
+                "\n\n[truncated]",
+            );
         }
 
         return $plain;

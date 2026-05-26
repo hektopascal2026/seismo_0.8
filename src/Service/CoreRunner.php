@@ -240,11 +240,13 @@ final class CoreRunner
             $maxId = $afterId;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
+                if ($id > 0) {
+                    $maxId = max($maxId, $id);
+                }
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
-                $maxId = max($maxId, $id);
                 $attempted++;
                 try {
                     $n = $this->ingestRssFeed($feed);
@@ -532,11 +534,13 @@ final class CoreRunner
             $maxId = $afterId;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
+                if ($id > 0) {
+                    $maxId = max($maxId, $id);
+                }
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
-                $maxId = max($maxId, $id);
                 $attempted++;
                 try {
                     $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));

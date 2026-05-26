@@ -180,7 +180,7 @@ final class LexRechtBundContentFetcher
                 return null;
             }
             if (strlen($plain) > self::MAX_CONTENT_BYTES) {
-                $plain = substr($plain, 0, self::MAX_CONTENT_BYTES) . "\n\n[truncated]";
+                $plain = \Seismo\Util\Utf8ByteCap::truncate($plain, self::MAX_CONTENT_BYTES, "\n\n[truncated]");
             }
 
             return $plain;
