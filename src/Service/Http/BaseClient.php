@@ -215,7 +215,6 @@ final class BaseClient
 
             return new Response($status, (string)$responseBody, $responseHeaders, $finalUrl !== '' ? $finalUrl : $url);
         } finally {
-            curl_close($ch);
             if ($cookieFile !== null && is_file($cookieFile)) {
                 unlink($cookieFile);
             }

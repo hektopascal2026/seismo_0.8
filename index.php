@@ -16,7 +16,8 @@
 
 declare(strict_types=1);
 
-error_reporting(E_ALL);
+// PHP 8.5: EasyRdf/SimplePie deprecations must not flood FastCGI stderr (breaks JSON APIs).
+error_reporting(E_ALL & ~E_DEPRECATED);
 ini_set('log_errors', '1');
 ini_set('display_errors', '0');
 
