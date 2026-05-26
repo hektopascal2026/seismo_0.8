@@ -15,40 +15,11 @@ use Seismo\Service\Http\Response;
 /**
  * Calls Google Gemini `generateContent` for the AI Briefing Builder.
  *
- * Default: skinny two-pass — one global selection call (compact JSON), then plain Markdown
- * prose on selected entries only. Legacy single-pass remains when two-pass is disabled in UI.
+ * Always uses skinny two-pass: one global selection call (compact JSON), then plain Markdown
+ * prose on selected entries only.
  */
 final class GeminiBriefingService
 {
-    private const SINGLE_PASS_OUTPUT_CONTRACT = <<<'CONTRACT'
-SYSTEM DIRECTIVE — STRICT COMPLIANCE REQUIRED:
-You are the backend engine for the Seismo AI Briefing Builder.
-
-1. SEPARATION OF CONCERNS:
-   - The prompt above defines your PERSONA, TONE, and OPTIONAL WRAPPERS (intro, radar, outro, headings). Follow it creatively.
-   - The rules below are absolute platform constraints. They override the creative prompt when they conflict.
-
-2. ENTRIES_DATA SHAPE:
-   - Source rows are XML <entry> blocks. Each has <id>entry_type:entry_id</id> (e.g. feed_item:123).
-   - Only cite IDs that appear in ENTRIES_DATA <id> elements. Never invent IDs.
-
-3. CORE ITEMS:
-   - Extract and detail UP TO {itemCount} separate core developments from ENTRIES_DATA (relevance order).
-   - Include at most {maxCoreItems} core items in briefing_markdown and used_entry_keys.
-   - When the user prompt imposes strict inclusion criteria (e.g. only named companies or spokesperson quotes), return FEWER items rather than padding with loosely related news. Never cite an entry that does not satisfy the user prompt.
-   - If ENTRIES_DATA contains fewer than {maxCoreItems} entries, use only qualifying entries — do not invent rows.
-   - Do not merge multiple distinct qualifying entries into one bullet if that would omit a separate core development you are citing.
-
-4. CITATIONS:
-   - Each core item must map to one <entry> in ENTRIES_DATA.
-   - Populate used_entry_keys with the exact entry_type:entry_id strings from the chosen <id> values, in the same order as the core items in briefing_markdown.
-
-ENTRIES_DATA:
-{markdownContext}
-
-{temporalContext}
-CONTRACT;
-
     private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
 The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
@@ -238,7 +209,6 @@ CONTRACT;
         array $contextEntries = [],
         array $scoresByKey = [],
         array $briefingMeta = [],
-        bool $twoPass = false,
         ?BriefingSourceSelection $moduleSelection = null,
     ): GeminiBriefingResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
@@ -259,7 +229,6 @@ CONTRACT;
                 $scoresByKey,
                 $briefingMeta,
                 $apiKey,
-                $twoPass,
                 $moduleSelection,
             );
         } catch (GeminiBriefingException $e) {
@@ -295,7 +264,6 @@ CONTRACT;
                 $scoresByKey,
                 $briefingMeta,
                 $apiKey,
-                true,
                 $moduleSelection,
             );
         }
@@ -316,7 +284,6 @@ CONTRACT;
         array $scoresByKey,
         array $briefingMeta,
         string $apiKey,
-        bool $twoPass,
         ?BriefingSourceSelection $moduleSelection = null,
     ): GeminiBriefingResult {
         [$contextEntries, $markdownContext, $contextEntryCount] = $this->sealContextForGemini(
@@ -339,34 +306,12 @@ CONTRACT;
         $effectiveCount = $this->effectiveCitationCount($itemCount, $contextEntryCount);
         $this->lastEffectiveCitationCount = $effectiveCount;
 
-        $autoTwoPass = false;
-        if (
-            !$twoPass
-            && $contextEntryCount >= BriefingGeminiContext::AUTO_TWO_PASS_MIN_ENTRIES
-        ) {
-            $twoPass     = true;
-            $autoTwoPass = true;
-        }
-
-        $thinkingItemCount = max(1, $itemCount);
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'two_pass'             => $twoPass,
-            'auto_two_pass'        => $autoTwoPass,
-            'model'                => $this->model,
-            'thinking_selection'   => self::THINKING_LEVEL_SELECTION,
-            'thinking_summary'     => self::THINKING_LEVEL_SUMMARY,
-            'rate_limit_thinking'  => $this->rateLimitFallbackMode,
+            'model'               => $this->model,
+            'thinking_selection'  => self::THINKING_LEVEL_SELECTION,
+            'thinking_summary'    => self::THINKING_LEVEL_SUMMARY,
+            'rate_limit_thinking' => $this->rateLimitFallbackMode,
         ]);
-
-        if (!$twoPass) {
-            return $this->generateSummarySinglePass(
-                $userSystemPrompt,
-                $markdownContext,
-                $itemCount,
-                $effectiveCount,
-                $apiKey,
-            );
-        }
 
         return $this->generateSummaryTwoPass(
             $userSystemPrompt,
@@ -460,37 +405,6 @@ CONTRACT;
     }
 
     /**
-     * @throws GeminiBriefingException
-     */
-    private function generateSummarySinglePass(
-        string $userSystemPrompt,
-        string $markdownContext,
-        int $itemCount,
-        int $effectiveCount,
-        string $apiKey,
-    ): GeminiBriefingResult {
-        $systemText = $this->composeSinglePassSystemInstruction(
-            $userSystemPrompt,
-            trim($markdownContext),
-            $itemCount,
-            $effectiveCount,
-        );
-        $userText = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract. '
-            . 'Liefere briefing_markdown und used_entry_keys (gleiche Reihenfolge). '
-            . 'Bis zu ' . $effectiveCount . ' Kern-Items; nur Einträge die den User-Prompt erfüllen.';
-
-        $payload = [
-            'systemInstruction' => ['parts' => [['text' => $systemText]]],
-            'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
-            'generationConfig'  => $this->singlePassGenerationConfig($itemCount, $effectiveCount, true),
-        ];
-
-        $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'single');
-
-        return $this->parseSinglePassResponse($response);
-    }
-
-    /**
      * @param list<array<string, mixed>> $contextEntries
      * @param array<string, array<string, mixed>> $scoresByKey
      * @param array<string, mixed> $briefingMeta
@@ -569,47 +483,6 @@ CONTRACT;
         );
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function singlePassGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
-    {
-        $config = $this->applyModelGenerationDefaults([
-            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
-            'responseMimeType' => 'application/json',
-        ], 'summary', $itemCount);
-        if ($useStructuredSchema) {
-            $config['responseSchema'] = $this->singlePassResponseSchema($itemCount, $effectiveCount);
-        }
-
-        return $config;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function singlePassResponseSchema(int $itemCount, int $effectiveCount): array
-    {
-        return [
-            'type'       => 'OBJECT',
-            'properties' => [
-                'briefing_markdown' => [
-                    'type'        => 'STRING',
-                    'description' => 'Complete briefing Markdown with up to ' . $effectiveCount
-                        . ' distinct core items (one cited entry each), at most ' . $itemCount . ' requested.',
-                ],
-                'used_entry_keys' => [
-                    'type'        => 'ARRAY',
-                    'description' => 'Exact entry_type:entry_id strings for each core item, same order as briefing_markdown.',
-                    'items'       => ['type' => 'STRING'],
-                    'minItems'    => 0,
-                    'maxItems'    => $effectiveCount,
-                ],
-            ],
-            'required' => ['briefing_markdown', 'used_entry_keys'],
-        ];
-    }
-
     private function composeSelectionSystemInstruction(
         string $userSystemPrompt,
         string $poolContext,
@@ -624,68 +497,6 @@ CONTRACT;
         ]);
 
         return trim($userSystemPrompt) . "\n\n" . $envelope;
-    }
-
-    private function composeSinglePassSystemInstruction(
-        string $userSystemPrompt,
-        string $markdownContext,
-        int $itemCount,
-        int $effectiveItemCount,
-    ): string {
-        $envelope = $this->expandContract(self::SINGLE_PASS_OUTPUT_CONTRACT, [
-            '{itemCount}'       => (string)$itemCount,
-            '{maxCoreItems}'    => (string)$effectiveItemCount,
-            '{markdownContext}' => $markdownContext,
-            '{temporalContext}' => $this->temporalContextBlock(),
-        ]);
-        $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
-
-        if (str_contains($combined, '{markdownContext}')) {
-            return str_replace('{markdownContext}', $markdownContext, $combined);
-        }
-
-        return $combined;
-    }
-
-    /**
-     * @throws GeminiBriefingException
-     */
-    private function parseSinglePassResponse(Response $response): GeminiBriefingResult
-    {
-        $raw     = $this->extractCandidateText($response);
-        $decoded = $this->decodeBriefingJsonObject($raw);
-        if ($decoded !== null) {
-            $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
-            if ($markdown === '') {
-                throw GeminiBriefingException::emptyResponse(
-                    'JSON response is missing a non-empty briefing_markdown field.'
-                );
-            }
-
-            $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);
-            $result = new GeminiBriefingResult($markdown, $keys, true);
-            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
-
-            return $result;
-        }
-
-        $jsonText = LenientJsonParser::extractMarkdownJson($raw);
-        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
-        if ($salvaged !== null) {
-            error_log('GeminiBriefingService single-pass: recovered markdown without valid JSON attribution.');
-            $this->assertBriefingNotTruncated($salvaged, $this->lastEffectiveCitationCount);
-
-            return $salvaged;
-        }
-
-        if (!str_contains($raw, '"briefing_markdown"')) {
-            $fallback = new GeminiBriefingResult(trim($raw), [], false);
-            $this->assertBriefingNotTruncated($fallback, $this->lastEffectiveCitationCount);
-
-            return $fallback;
-        }
-
-        throw GeminiBriefingException::badResponse('Briefing JSON could not be parsed or repaired.');
     }
 
     /**

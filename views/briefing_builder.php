@@ -15,6 +15,10 @@
  * @var int $defaultItemCount
  * @var list<int> $itemCountOptions
  * @var float $alertThreshold Magnitu alert threshold (0–1) for this desk
+ * @var int $maxContextEntries Saved cap for Gemini XML pool
+ * @var int $maxContextDefault Default cap when unset
+ * @var int $maxContextMin Minimum allowed cap
+ * @var int $maxContextMax Maximum allowed cap
  */
 
 declare(strict_types=1);
@@ -186,17 +190,15 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label class="admin-checkbox-label" style="display:flex; align-items:flex-start; gap:0.5rem; cursor:pointer;">
-                        <input type="checkbox" id="briefing_two_pass" name="two_pass" value="1" checked
-                               style="margin-top:0.2rem;">
-                        <span>
-                            <strong>Two-pass generation</strong> (recommended)
-                            <span class="admin-intro" style="display:block; margin:0.25rem 0 0;">
-                                Pass 1 picks entries globally (compact JSON); pass 2 writes plain Markdown from those only.
-                                Uncheck only for legacy single-pass (faster, less reliable on large pools).
-                            </span>
-                        </span>
-                    </label>
+                    <label for="briefing_max_context_entries">Max entries sent to Gemini</label>
+                    <input type="number" id="briefing_max_context_entries" name="max_context_entries"
+                           min="<?= (int)$maxContextMin ?>" max="<?= (int)$maxContextMax ?>"
+                           value="<?= (int)$maxContextEntries ?>"
+                           class="search-input" style="width:7rem;">
+                    <p class="admin-intro" style="margin:0.25rem 0 0;">
+                        Caps how many rows enter the XML pool (<?= (int)$maxContextMin ?>–<?= (int)$maxContextMax ?>, default <?= (int)$maxContextDefault ?>).
+                        Saved when you prepare or generate. Fair share per enabled module when several are on.
+                    </p>
                 </div>
 
                 <div class="admin-form-field">
@@ -217,7 +219,7 @@ $moduleOptions = [
                         </div>
                         <?php endforeach; ?>
                     </div>
-                    <span id="prompt-library-msg" class="admin-intro" style="margin:0.25rem 0 0;" hidden></span>
+                    <span id="prompt-library-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
                     <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
                               style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
                 </div>
@@ -229,7 +231,7 @@ $moduleOptions = [
                             title="<?= e($saveDefaultPromptTitle) ?>"><?= e($saveDefaultPromptLabel) ?></button>
                     <button type="button" class="btn btn-secondary" id="save-prompt-library-btn"
                             title="Add the current textarea as a named prompt in the library">Save to library</button>
-                    <span id="briefing-prompt-save-msg" class="admin-intro" style="margin:0;" hidden></span>
+                    <span id="briefing-prompt-save-msg" class="message" style="margin:0; flex-basis:100%;" hidden role="status" aria-live="polite"></span>
                 </div>
             </form>
         </div>
@@ -370,14 +372,7 @@ $moduleOptions = [
         initDisregardMagnituToggle();
 
         var statusTimerIds = [];
-        var STATUS_STEPS_SINGLE = [
-            { id: 'send', label: 'Sending request to the server' },
-            { id: 'load', label: 'Loading and filtering entries from selected modules' },
-            { id: 'context', label: 'Building markdown source context' },
-            { id: 'gemini', label: 'Generating executive briefing with Gemini (often 20\u201360 seconds)' },
-            { id: 'cards', label: 'Preparing source entry cards for validation' }
-        ];
-        var STATUS_STEPS_TWO_PASS = [
+        var STATUS_STEPS = [
             { id: 'send', label: 'Sending request to the server' },
             { id: 'load', label: 'Loading and filtering entries from selected modules' },
             { id: 'context', label: 'Building markdown source context' },
@@ -386,13 +381,8 @@ $moduleOptions = [
             { id: 'cards', label: 'Preparing source entry cards for validation' }
         ];
 
-        function isTwoPassEnabled() {
-            var cb = document.getElementById('briefing_two_pass');
-            return cb && cb.checked;
-        }
-
         function statusStepsForMode() {
-            return isTwoPassEnabled() ? STATUS_STEPS_TWO_PASS : STATUS_STEPS_SINGLE;
+            return STATUS_STEPS;
         }
 
         function clearStatusTimers() {
@@ -623,11 +613,23 @@ $moduleOptions = [
             copyBtn.addEventListener('click', copyBriefingToClipboard);
         }
 
+        function showInlineMessage(el, text, isError) {
+            if (!el) return;
+            el.textContent = text;
+            el.hidden = text === '';
+            el.classList.remove('message-success', 'message-error');
+            if (text !== '') {
+                el.classList.add(isError ? 'message-error' : 'message-success');
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function showPromptActionMsg(text, isError) {
+            showInlineMessage(savePromptMsg, text, isError);
+        }
+
         function showPromptLibraryMsg(text, isError) {
-            if (!promptLibraryMsg) return;
-            promptLibraryMsg.textContent = text;
-            promptLibraryMsg.classList.toggle('message-error', !!isError);
-            promptLibraryMsg.hidden = text === '';
+            showInlineMessage(promptLibraryMsg, text, isError);
         }
 
         function syncLibrarySaveButtonLabel() {
@@ -830,12 +832,7 @@ $moduleOptions = [
                 name = name.trim();
                 if (name === '') return;
             }
-            showPromptLibraryMsg('', false);
-            if (savePromptMsg) {
-                savePromptMsg.hidden = true;
-                savePromptMsg.textContent = '';
-                savePromptMsg.classList.remove('message-error');
-            }
+            showPromptActionMsg('', false);
             var fd = new FormData();
             if (updating) {
                 fd.set('id', activePromptId);
@@ -865,11 +862,11 @@ $moduleOptions = [
                 try {
                     data = JSON.parse(res.body);
                 } catch (e) {
-                    showPromptLibraryMsg('Invalid response (HTTP ' + res.status + ').', true);
+                    showPromptActionMsg('Invalid response (HTTP ' + res.status + ').', true);
                     return;
                 }
                 if (!data.ok || !data.prompts) {
-                    showPromptLibraryMsg(data.error || 'Could not save prompt to library.', true);
+                    showPromptActionMsg(data.error || 'Could not save prompt to library.', true);
                     return;
                 }
                 savedPrompts = data.prompts;
@@ -879,7 +876,7 @@ $moduleOptions = [
                     if (row) {
                         selectLibraryPrompt(row);
                     }
-                    showPromptLibraryMsg('Prompt updated.', false);
+                    showPromptActionMsg('Prompt updated.', false);
                 } else {
                     var newId = null;
                     if (data.prompts.length) {
@@ -891,11 +888,11 @@ $moduleOptions = [
                             selectLibraryPrompt(created);
                         }
                     }
-                    showPromptLibraryMsg('Prompt saved to library.', false);
+                    showPromptActionMsg('Prompt saved to library.', false);
                 }
             })
             .catch(function() {
-                showPromptLibraryMsg('Network error — could not reach the server.', true);
+                showPromptActionMsg('Network error — could not reach the server.', true);
             })
             .finally(function() {
                 if (triggerBtn) {
@@ -919,11 +916,7 @@ $moduleOptions = [
                 }
                 var promptEl = document.getElementById('briefing_system_prompt');
                 if (!promptEl) return;
-                if (savePromptMsg) {
-                    savePromptMsg.hidden = true;
-                    savePromptMsg.textContent = '';
-                    savePromptMsg.classList.remove('message-error');
-                }
+                showPromptActionMsg('', false);
                 var fd = new FormData();
                 fd.set('system_prompt', promptEl.value);
                 fd.set('_csrf', getCsrf());
@@ -945,19 +938,11 @@ $moduleOptions = [
                     try {
                         data = JSON.parse(res.body);
                     } catch (e) {
-                        if (savePromptMsg) {
-                            savePromptMsg.textContent = 'Invalid response (HTTP ' + res.status + ').';
-                            savePromptMsg.classList.add('message-error');
-                            savePromptMsg.hidden = false;
-                        }
+                        showPromptActionMsg('Invalid response (HTTP ' + res.status + ').', true);
                         return;
                     }
                     if (!data.ok) {
-                        if (savePromptMsg) {
-                            savePromptMsg.textContent = data.error || 'Could not save prompt.';
-                            savePromptMsg.classList.add('message-error');
-                            savePromptMsg.hidden = false;
-                        }
+                        showPromptActionMsg(data.error || 'Could not save prompt.', true);
                         return;
                     }
                     var firstDefaultSave = !defaultPromptStored;
@@ -968,20 +953,15 @@ $moduleOptions = [
                         def.content = promptEl.value;
                     }
                     syncInstanceSaveButton();
-                    if (savePromptMsg) {
-                        savePromptMsg.textContent = firstDefaultSave
+                    showPromptActionMsg(
+                        firstDefaultSave
                             ? 'Prompt saved for this instance.'
-                            : 'Prompt updated for this instance.';
-                        savePromptMsg.classList.remove('message-error');
-                        savePromptMsg.hidden = false;
-                    }
+                            : 'Prompt updated for this instance.',
+                        false
+                    );
                 })
                 .catch(function() {
-                    if (savePromptMsg) {
-                        savePromptMsg.textContent = 'Network error — could not reach the server.';
-                        savePromptMsg.classList.add('message-error');
-                        savePromptMsg.hidden = false;
-                    }
+                    showPromptActionMsg('Network error — could not reach the server.', true);
                 })
                 .finally(function() {
                     syncPromptSaveButtons();
@@ -1099,7 +1079,7 @@ $moduleOptions = [
                     out.style.whiteSpace = 'pre-wrap';
                     var briefingText = (payload.text && String(payload.text).trim()) ? String(payload.text) : '';
                     if (briefingText === '') {
-                        var emptyMsg = 'Gemini returned an empty briefing. Try again, reduce modules or lookback, or enable two-pass.';
+                        var emptyMsg = 'Gemini returned an empty briefing. Try again, reduce modules, lookback, or max context entries.';
                         if (errEl) {
                             errEl.textContent = emptyMsg;
                             errEl.hidden = false;
@@ -1123,9 +1103,6 @@ $moduleOptions = [
                         }
                         if (payload.meta.cited_entry_count !== undefined) {
                             parts.push(String(payload.meta.cited_entry_count) + ' cited');
-                        }
-                        if (payload.meta.two_pass) {
-                            parts.push(payload.meta.auto_two_pass ? 'two-pass (auto)' : 'two-pass');
                         }
                         if (payload.meta.batched_selection && payload.meta.selection_batches) {
                             parts.push('batched selection (' + payload.meta.selection_batches + ' batches)');

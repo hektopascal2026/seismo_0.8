@@ -17,13 +17,14 @@ final class BriefingGeminiContext
 
     public const DEFAULT_MAX_ENTRIES = 100;
 
+    public const MIN_MAX_CONTEXT_ENTRIES = 20;
+
+    public const MAX_MAX_CONTEXT_ENTRIES = 300;
+
     public const DEFAULT_BATCH_SIZE = 35;
 
     /** Pause between batched selection API calls (seconds). */
     public const BATCH_PAUSE_SECONDS = 5;
-
-    /** Briefing Builder always uses skinny two-pass when entry count is at least this. */
-    public const AUTO_TWO_PASS_MIN_ENTRIES = 1;
 
     /**
      * Batched selection disabled for normal runs (global pass-1 sees full capped pool).
@@ -54,8 +55,16 @@ final class BriefingGeminiContext
         return self::clampIntConfig(
             $this->config->get(self::CONFIG_KEY_MAX_ENTRIES),
             self::DEFAULT_MAX_ENTRIES,
-            20,
-            300,
+            self::MIN_MAX_CONTEXT_ENTRIES,
+            self::MAX_MAX_CONTEXT_ENTRIES,
+        );
+    }
+
+    public static function clampMaxContextEntries(int $value): int
+    {
+        return max(
+            self::MIN_MAX_CONTEXT_ENTRIES,
+            min(self::MAX_MAX_CONTEXT_ENTRIES, $value),
         );
     }
 

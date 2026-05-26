@@ -144,9 +144,15 @@ PROMPT;
         $defaultItemCount    = self::DEFAULT_ITEM_COUNT;
         $itemCountOptions    = self::ALLOWED_ITEM_COUNTS;
         $alertThreshold      = 0.60;
+        $maxContextEntries   = BriefingGeminiContext::DEFAULT_MAX_ENTRIES;
+        $maxContextDefault   = BriefingGeminiContext::DEFAULT_MAX_ENTRIES;
+        $maxContextMin       = BriefingGeminiContext::MIN_MAX_CONTEXT_ENTRIES;
+        $maxContextMax       = BriefingGeminiContext::MAX_MAX_CONTEXT_ENTRIES;
 
         try {
-            $alertThreshold = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
+            $configRepo       = new SystemConfigRepository(getDbConnection());
+            $alertThreshold   = $configRepo->getAlertThreshold();
+            $maxContextEntries = (new BriefingGeminiContext($configRepo))->maxContextEntries();
         } catch (\Throwable $e) {
             error_log('Seismo briefing_builder show alert_threshold: ' . $e->getMessage());
         }
@@ -180,8 +186,10 @@ PROMPT;
         }
 
         try {
+            $pdo     = getDbConnection();
             $filters = $this->parseBriefingFiltersFromPost();
-            $gathered = $this->gatherBriefingContext(getDbConnection(), $filters);
+            $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
+            $gathered = $this->gatherBriefingContext($pdo, $filters);
             $entryCount = count($gathered['entries']);
             if ($entryCount === 0) {
                 http_response_code(400);
@@ -261,7 +269,8 @@ PROMPT;
         }
 
         try {
-            $pdo      = getDbConnection();
+            $pdo = getDbConnection();
+            $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
             $gathered = $this->gatherBriefingContext($pdo, $filters);
             $entries      = $gathered['entries'];
             $scoresByKey  = $gathered['scoresByKey'];
@@ -295,8 +304,7 @@ PROMPT;
                 'total'                  => $contextEntryCount,
                 'entry_body_max_chars'   => $gathered['entry_body_max_chars'] ?? MarkdownBriefingFormatter::ENTRY_BODY_DEFAULT_CHARS,
             ];
-            $twoPass = $this->parseTwoPassEnabled($_POST['two_pass'] ?? null);
-            $result  = $gemini->generateSummary(
+            $result = $gemini->generateSummary(
                 $systemPrompt,
                 $markdown,
                 $itemCount,
@@ -304,7 +312,6 @@ PROMPT;
                 $entries,
                 $scoresByKey,
                 $briefingMeta,
-                $twoPass,
                 $selection,
             );
 
@@ -356,8 +363,8 @@ PROMPT;
                 'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
                 'disregard_magnitu' => $scoreFilter->disregardMagnitu,
                 'score_selection'  => MagnituScoreBands::describeBriefingGather($scoreFilter),
-                'citation_slots'   => $citationSlots,
-                'two_pass'         => $twoPass,
+                'citation_slots'      => $citationSlots,
+                'max_context_entries' => $gathered['maxContextEntries'],
             ];
             $meta = array_merge($meta, $attributionMeta, $gemini->lastGenerationMeta());
             if ($contextWarning !== null) {
@@ -770,15 +777,21 @@ PROMPT;
         return in_array($n, self::ALLOWED_ITEM_COUNTS, true) ? $n : self::DEFAULT_ITEM_COUNT;
     }
 
-    private function parseTwoPassEnabled(mixed $raw): bool
+    private function persistMaxContextEntriesFromPost(\PDO $pdo, mixed $raw): void
     {
-        if ($raw === true || $raw === 1) {
-            return true;
+        if ($raw === null) {
+            return;
+        }
+        $s = trim((string)$raw);
+        if ($s === '' || !ctype_digit($s)) {
+            return;
         }
 
-        $s = strtolower(trim((string)$raw));
-
-        return $s === '1' || $s === 'on' || $s === 'true' || $s === 'yes';
+        $clamped = BriefingGeminiContext::clampMaxContextEntries((int)$s);
+        (new SystemConfigRepository($pdo))->set(
+            BriefingGeminiContext::CONFIG_KEY_MAX_ENTRIES,
+            (string)$clamped,
+        );
     }
 
     private function clampLimit(mixed $raw): int
