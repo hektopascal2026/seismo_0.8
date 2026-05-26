@@ -21,4 +21,20 @@ final class GeminiBriefingExceptionTest extends TestCase
 
         self::assertFalse($e->isRateLimitExceeded());
     }
+
+    public function testOutputTruncatedRequestsBatchedRetry(): void
+    {
+        $e = GeminiBriefingException::outputTruncated();
+
+        self::assertTrue($e->shouldRetryWithBatchedSummary());
+        self::assertTrue($e->isOutputTruncated());
+    }
+
+    public function testOutputTruncatedAfterBatchingDoesNotRequestAnotherRetry(): void
+    {
+        $e = GeminiBriefingException::outputTruncatedAfterBatching();
+
+        self::assertFalse($e->shouldRetryWithBatchedSummary());
+        self::assertFalse($e->isOutputTruncated());
+    }
 }

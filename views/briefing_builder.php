@@ -1058,6 +1058,18 @@ $moduleOptions = [
                 if (!data.ok) {
                     hideCopyBtn();
                     var errMsg = data.error || 'Generation failed.';
+                    if (data.meta && data.meta.summary_batch_retry_attempted) {
+                        var batchNote = 'Pass 2 was retried in smaller parts';
+                        if (data.meta.summary_batches) {
+                            batchNote += ' (' + data.meta.summary_batches + ' Gemini calls)';
+                        }
+                        if (data.meta.batched_summary) {
+                            batchNote += ' but output limits were still hit';
+                        } else {
+                            batchNote += ' without completing the briefing';
+                        }
+                        errMsg = errMsg + ' ' + batchNote + '.';
+                    }
                     if (errEl) {
                         errEl.textContent = errMsg;
                         errEl.hidden = false;

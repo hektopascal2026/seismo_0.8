@@ -88,8 +88,6 @@ CONTRACT;
     /** Pass-2 batched retry when a single call hits output limits. */
     private const SUMMARY_BATCH_SIZE = 2;
 
-    private const SUMMARY_BATCH_MIN_KEYS = 2;
-
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
     private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 24;
@@ -689,15 +687,48 @@ CONTRACT;
                 true,
             );
         } catch (GeminiBriefingException $e) {
-            if (!$e->isOutputTruncated() || $effectiveCount < self::SUMMARY_BATCH_MIN_KEYS) {
+            if (!$this->shouldRetrySummaryInBatches($e, $effectiveCount)) {
                 throw $e;
             }
         }
 
+        return $this->retrySummaryInBatches(
+            $userSystemPrompt,
+            $summaryEntries,
+            $scoresByKey,
+            $briefingMeta,
+            $fallbackXml,
+            $selectedKeys,
+            $itemCount,
+            $apiKey,
+        );
+    }
+
+    /**
+     * @param list<string> $selectedKeys
+     * @throws GeminiBriefingException
+     */
+    private function retrySummaryInBatches(
+        string $userSystemPrompt,
+        array $summaryEntries,
+        array $scoresByKey,
+        array $briefingMeta,
+        string $fallbackXml,
+        array $selectedKeys,
+        int $itemCount,
+        int $effectiveCount,
+        string $apiKey,
+    ): GeminiBriefingResult {
+        $batchSize = min(self::SUMMARY_BATCH_SIZE, max(1, $effectiveCount));
         error_log(
             'GeminiBriefingService: pass 2 output truncated for ' . $effectiveCount
-            . ' items; retrying with batched summary (batch size ' . self::SUMMARY_BATCH_SIZE . ')'
+            . ' cited item(s); retrying with batched summary (batch size ' . $batchSize . ')'
         );
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'summary_batch_retry_attempted' => true,
+            'summary_batch_retry_reason'    => 'output_truncated',
+            'summary_batch_retry_size'      => $batchSize,
+        ]);
 
         return $this->runBatchedSummaryPasses(
             $userSystemPrompt,
@@ -708,7 +739,13 @@ CONTRACT;
             $selectedKeys,
             $itemCount,
             $apiKey,
+            $batchSize,
         );
+    }
+
+    private function shouldRetrySummaryInBatches(GeminiBriefingException $e, int $effectiveCount): bool
+    {
+        return $effectiveCount >= 1 && $e->shouldRetryWithBatchedSummary();
     }
 
     /**
@@ -1555,7 +1592,9 @@ CONTRACT;
 
     private function isOutputTruncatedFinishReason(string $finishReason): bool
     {
-        return in_array($finishReason, ['MAX_TOKENS', 'LENGTH'], true);
+        $normalized = strtoupper(trim($finishReason));
+
+        return in_array($normalized, ['MAX_TOKENS', 'LENGTH', 'MAX_OUTPUT_TOKENS', 'OUTPUT_TOKEN_LIMIT'], true);
     }
 
     /**
@@ -1593,10 +1632,14 @@ CONTRACT;
             error_log(
                 'GeminiBriefingService: expected ' . $itemsToCheck
                 . ' entry_type:entry_id tokens in markdown, found ' . $keysInMarkdown
-                . ' (returning briefing anyway)'
+                . ($mayThrowOnShortOutput ? ' (retrying in batched parts)' : ' (returning briefing anyway)')
             );
             $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
             $this->lastGenerationMeta['citation_gap']             = true;
+
+            if ($mayThrowOnShortOutput) {
+                throw GeminiBriefingException::outputTruncated();
+            }
 
             return;
         }

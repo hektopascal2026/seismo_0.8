@@ -417,10 +417,17 @@ PROMPT;
             ]);
         } catch (GeminiBriefingException $e) {
             http_response_code(502);
-            $this->echoBriefingJson([
+            $errorPayload = [
                 'ok'    => false,
                 'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini briefing failed.',
-            ]);
+            ];
+            if (isset($gemini)) {
+                $failureMeta = $gemini->lastGenerationMeta();
+                if ($failureMeta !== []) {
+                    $errorPayload['meta'] = $failureMeta;
+                }
+            }
+            $this->echoBriefingJson($errorPayload);
         } catch (\Throwable $e) {
             error_log('Seismo briefing_builder_generate: ' . $e->getMessage());
             http_response_code(500);

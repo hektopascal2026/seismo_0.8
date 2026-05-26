@@ -12,6 +12,7 @@ final class GeminiBriefingException extends \RuntimeException
     public function __construct(
         string $message,
         public readonly ?int $httpStatus = null,
+        public readonly bool $retryWithBatchedSummary = false,
     ) {
         parent::__construct($message);
     }
@@ -23,7 +24,17 @@ final class GeminiBriefingException extends \RuntimeException
 
     public function isOutputTruncated(): bool
     {
-        return str_contains($this->getMessage(), 'ran out of output space');
+        if ($this->retryWithBatchedSummary) {
+            return true;
+        }
+
+        return str_contains($this->getMessage(), 'ran out of output space')
+            && !str_contains($this->getMessage(), 'after splitting');
+    }
+
+    public function shouldRetryWithBatchedSummary(): bool
+    {
+        return $this->retryWithBatchedSummary;
     }
 
     public static function missingApiKey(): self
@@ -44,7 +55,9 @@ final class GeminiBriefingException extends \RuntimeException
         return new self(
             'Gemini ran out of output space for the full briefing (common with multi-section prompts or many items). '
             . 'Generate retries automatically in smaller parts when possible; if this persists, reduce “Number of items”, '
-            . 'use a shorter template, or set system_config gemini:max_output_tokens higher.'
+            . 'use a shorter template, or set system_config gemini:max_output_tokens higher.',
+            null,
+            true,
         );
     }
 
@@ -52,7 +65,9 @@ final class GeminiBriefingException extends \RuntimeException
     {
         return new self(
             'Gemini still ran out of output space after splitting the briefing (one item per request). '
-            . 'Use 3 or fewer items, shorten multi-section blocks in your template, or set system_config gemini:max_output_tokens to 65536.'
+            . 'Use 3 or fewer items, shorten multi-section blocks in your template, or set system_config gemini:max_output_tokens to 65536.',
+            null,
+            false,
         );
     }
 
