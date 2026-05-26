@@ -446,6 +446,12 @@ final class MagnituController
                 ? (string)$row['description']
                 : (string)($row['title'] ?? '');
         }
+        $storedDocType = (string)($row['document_type'] ?? 'Legislation');
+        $category      = $storedDocType;
+        if ($source === 'ch') {
+            $category = \Seismo\Plugin\LexFedlex\LexFedlexPlugin::documentTypePillLabelFromLexRow($row);
+        }
+
         return [
             'entry_type'      => 'lex_item',
             'entry_id'        => (int)$row['id'],
@@ -456,7 +462,8 @@ final class MagnituController
             'author'          => '',
             'published_date'  => $row['document_date'] ?? null,
             'source_name'     => self::LEX_SOURCE_LABELS[$source] ?? 'EUR-Lex',
-            'source_category' => (string)($row['document_type'] ?? 'Legislation'),
+            'document_type'   => $storedDocType,
+            'source_category' => $category,
             'source_type'     => 'lex_' . $source,
         ];
     }

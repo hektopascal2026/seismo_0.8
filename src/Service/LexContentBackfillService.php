@@ -495,7 +495,8 @@ final class LexContentBackfillService
      *   oc_acts: int,
      *   consultations: int,
      *   oc_empty_content: int,
-     *   oc_synopsis_only: int,
+     *   oc_stale_short: int,
+     *   oc_synopsis_prefix_match: int,
      *   oc_has_corpus: int,
      *   oc_unavailable: int,
      *   oc_needs_backfill: int

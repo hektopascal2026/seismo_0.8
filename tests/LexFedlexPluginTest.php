@@ -23,7 +23,12 @@ final class LexFedlexPluginTest extends TestCase
         );
 
         self::assertNotNull($desc);
-        self::assertStringContainsString('Änderung', $desc);
+        self::assertStringNotContainsString("Änderung\n", $desc);
+        self::assertStringNotContainsString("\nÄnderung", $desc);
+        self::assertSame(
+            'Verordnung / Änderung',
+            LexFedlexPlugin::documentTypePillLabel('Amtsverordnung', true, 'de'),
+        );
         self::assertStringContainsString('Beschlossen am: 06.05.2026', $desc);
         self::assertStringContainsString('Inkrafttreten: 01.07.2026', $desc);
         self::assertStringContainsString('Bundesamt für Kommunikation', $desc);

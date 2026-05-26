@@ -406,7 +406,7 @@ ORDER BY DESC(?eff)
     }
 
     /**
-     * Card synopsis: amendment signal, decision / entry-into-force dates, office + base law.
+     * Card synopsis: decision / entry-into-force dates, office + base law (amendment → grey pill).
      *
      * {@see document_date} on the row stays {@code jolux:publicationDate} (AS/RO day) for timeline sort.
      */
@@ -429,10 +429,6 @@ ORDER BY DESC(?eff)
 
         $labels = self::descriptionLabels($langPath);
         $parts  = [];
-
-        if (self::looksLikeAmendment($titleTrim, $tax, $decisionDate, $publicationDate)) {
-            $parts[] = $labels['amendment'];
-        }
 
         $meta = [];
         if ($decisionDate !== '') {
@@ -490,6 +486,143 @@ ORDER BY DESC(?eff)
                 'in_force'  => 'Inkrafttreten: ',
             ],
         };
+    }
+
+    /**
+     * Grey-pill label for timeline / Lex cards (e.g. {@code Verordnung / Änderung}).
+     */
+    public static function documentTypePillLabelFromLexRow(array $row): string
+    {
+        $stored = trim((string)($row['document_type'] ?? ''));
+        $lang   = self::fedlexLangPathFromEurlexUrl((string)($row['eurlex_url'] ?? ''));
+
+        return self::documentTypePillLabel(
+            $stored !== '' ? $stored : 'Other',
+            self::isFedlexAmendmentFromLexRow($row),
+            $lang,
+        );
+    }
+
+    public static function documentTypePillLabel(
+        string $storedDocumentType,
+        bool $isAmendment,
+        string $langPath = 'de',
+    ): string {
+        $base = self::fedlexTypePillBase($storedDocumentType, $langPath);
+        if (!$isAmendment) {
+            return $base;
+        }
+
+        $labels = self::descriptionLabels($langPath);
+
+        return $base . ' / ' . $labels['amendment'];
+    }
+
+    public static function fedlexLangPathFromEurlexUrl(string $url): string
+    {
+        if (preg_match('#/(de|fr|it|en|rm)(?:/xml)?$#i', $url, $m)) {
+            return strtolower($m[1]);
+        }
+
+        return 'de';
+    }
+
+    public static function fedlexTypePillBase(string $documentType, string $langPath = 'de'): string
+    {
+        $t = trim($documentType);
+        if ($t === '' || strcasecmp($t, 'Other') === 0) {
+            return match ($langPath) {
+                'fr' => 'Ordonnance',
+                'it' => 'Ordinanza',
+                'en' => 'Ordinance',
+                'rm' => 'Ordinanza',
+                default => 'Verordnung',
+            };
+        }
+        if (strcasecmp($t, self::DOCUMENT_TYPE_VERNEHM) === 0) {
+            return $t;
+        }
+        if (preg_match('/verordnung|ordonnance|ordinanza|ordinance/i', $t)) {
+            return match ($langPath) {
+                'fr' => 'Ordonnance',
+                'it' => 'Ordinanza',
+                'en' => 'Ordinance',
+                'rm' => 'Ordinanza',
+                default => 'Verordnung',
+            };
+        }
+        if (preg_match('/gesetz|loi|legge|\bact\b/i', $t)) {
+            return match ($langPath) {
+                'fr' => 'Loi',
+                'it' => 'Legge',
+                'en' => 'Act',
+                'rm' => 'Legislaziun',
+                default => 'Gesetz',
+            };
+        }
+        if (preg_match('/beschluss|décision|decision/i', $t)) {
+            return match ($langPath) {
+                'fr' => 'Arrêté fédéral',
+                'it' => 'Decreto federale',
+                'en' => 'Federal decree',
+                'rm' => 'Decret federal',
+                default => 'Bundesbeschluss',
+            };
+        }
+
+        return $t;
+    }
+
+    public static function isFedlexAmendmentFromLexRow(array $row): bool
+    {
+        $desc = trim((string)($row['description'] ?? ''));
+        if ($desc !== '') {
+            $firstLine = trim(strtok($desc, "\n") ?: '');
+            if (preg_match('/^(Änderung|Modification|Modifica|Amendment|Modificaziun)$/ui', $firstLine)) {
+                return true;
+            }
+        }
+
+        $title = trim((string)($row['title'] ?? ''));
+        $tax   = self::extractTaxLabelFromDescription($desc);
+        $pub   = trim((string)($row['document_date'] ?? ''));
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $pub, $m)) {
+            $pub = $m[1];
+        }
+
+        return self::looksLikeAmendment($title, $tax, self::extractDecisionDateFromDescription($desc), $pub);
+    }
+
+    private static function extractTaxLabelFromDescription(string $description): string
+    {
+        if ($description === '') {
+            return '';
+        }
+        $lines = preg_split("/\r\n|\n|\r/", trim($description)) ?: [];
+        $last  = trim((string)end($lines));
+        if ($last === '' || !str_contains($last, ' — ')) {
+            return '';
+        }
+
+        return trim(substr($last, (int)strrpos($last, ' — ') + 3));
+    }
+
+    private static function extractDecisionDateFromDescription(string $description): string
+    {
+        $patterns = [
+            '/Beschlossen am:\s*(\d{2})\.(\d{2})\.(\d{4})/u',
+            '/Adopté le\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/u',
+            '/Deliberato il\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/u',
+            '/Adopted on:\s*(\d{2})\.(\d{2})\.(\d{4})/u',
+            '/Decidì il\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/u',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $description, $m)) {
+                return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            }
+        }
+
+        return '';
     }
 
     private static function looksLikeAmendment(

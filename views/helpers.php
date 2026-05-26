@@ -307,6 +307,23 @@ if (!function_exists('seismo_lex_card_heading_title')) {
     }
 }
 
+if (!function_exists('seismo_lex_ch_document_type_for_display')) {
+    /**
+     * Grey-pill text for Fedlex (CH) cards, e.g. {@code Verordnung / Änderung}.
+     */
+    function seismo_lex_ch_document_type_for_display(array $lexItem): string
+    {
+        $source = (string)($lexItem['source'] ?? '');
+        if ($source !== 'ch') {
+            $f = trim((string)($lexItem['document_type'] ?? ''));
+
+            return $f !== '' ? $f : 'Legislation';
+        }
+
+        return \Seismo\Plugin\LexFedlex\LexFedlexPlugin::documentTypePillLabelFromLexRow($lexItem);
+    }
+}
+
 if (!function_exists('seismo_lex_eu_document_type_for_display')) {
     /**
      * Grey-pill text for EUR-Lex cards: uses {@see lex_items.document_type}

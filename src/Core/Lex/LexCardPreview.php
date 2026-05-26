@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Seismo\Core\Lex;
 
+use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
+
 /**
  * Dashboard / Lex page card body from synopsis + a lightweight content excerpt.
  *
@@ -34,7 +36,7 @@ final class LexCardPreview
             'eu' => self::briefingEuBody($description, $excerpt),
             'fr' => self::briefingFrBody($description, $excerpt),
             'de' => self::briefingDeBody($description, $excerpt),
-            'ch' => self::briefingChBody($description, $excerpt),
+            'ch' => self::briefingChBody($row, $description, $excerpt),
             default => $description !== ''
                 ? self::plainExcerpt($description)
                 : self::plainExcerpt($excerpt),
@@ -418,21 +420,36 @@ final class LexCardPreview
         return self::lead(self::deBodyFromExcerpt($excerpt), 450);
     }
 
-    private static function briefingChBody(string $description, string $excerpt): string
+    /**
+     * @param array<string, mixed> $row
+     */
+    private static function briefingChBody(array $row, string $description, string $excerpt): string
     {
+        $chunks = [];
+        if (LexFedlexPlugin::isFedlexAmendmentFromLexRow($row)) {
+            $chunks[] = LexFedlexPlugin::documentTypePillLabelFromLexRow($row);
+        }
+        $synopsis = trim($description);
+        if ($synopsis !== '') {
+            $chunks[] = self::plainExcerpt($synopsis);
+        }
         if ($excerpt !== '') {
             $body = self::chBodyFromExcerpt($excerpt);
             if ($body !== '' && mb_strlen($body) >= 80) {
-                return $body;
+                $chunks[] = $body;
             }
         }
+        if ($chunks === []) {
+            return '';
+        }
 
-        return $description !== '' ? self::plainExcerpt($description) : self::plainExcerpt($excerpt);
+        return trim(implode("\n\n", $chunks));
     }
 
     private static function chSummary(string $description, string $excerpt): string
     {
-        $body = self::chBodyFromExcerpt($excerpt);
+        $description = self::stripChAmendmentLeadLine($description);
+        $body        = self::chBodyFromExcerpt($excerpt);
 
         if ($description === '') {
             return self::lead($body, 500);
@@ -448,6 +465,29 @@ final class LexCardPreview
         }
 
         return $description . "\n\n" . self::lead($body, 450);
+    }
+
+    /** Drop legacy synopsis line when amendment is shown in the grey doc-type pill. */
+    private static function stripChAmendmentLeadLine(string $description): string
+    {
+        $description = trim($description);
+        if ($description === '') {
+            return '';
+        }
+
+        $lines = preg_split("/\r\n|\n|\r/", $description);
+        if (!is_array($lines) || $lines === []) {
+            return $description;
+        }
+
+        $first = trim((string)$lines[0]);
+        if (preg_match('/^(Änderung|Modification|Modifica|Amendment|Modificaziun)$/ui', $first)) {
+            array_shift($lines);
+
+            return trim(implode("\n", $lines));
+        }
+
+        return $description;
     }
 
     /**

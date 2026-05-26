@@ -113,6 +113,8 @@ $entryLoopIndex                 = 0;
                                 $lexDocType = function_exists('seismo_lex_eu_document_type_for_display')
                                     ? seismo_lex_eu_document_type_for_display($lexItem)
                                     : ($lexDocType !== '' ? $lexDocType : 'EU legislation');
+                            } elseif ($lexSource === 'ch' && function_exists('seismo_lex_ch_document_type_for_display')) {
+                                $lexDocType = seismo_lex_ch_document_type_for_display($lexItem);
                             }
                             $lexUrl = trim((string)($lexItem['eurlex_url'] ?? ''));
                             if ($lexUrl === '') {

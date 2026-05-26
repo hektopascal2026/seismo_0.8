@@ -145,8 +145,9 @@ final class LexItemRepository
     /**
      * Fedlex official compilation acts (`eli/oc/…`) queued for Akoma XML corpus backfill.
      *
-     * Includes empty `content` and legacy rows where `promoteDescriptionToContent` copied
-     * the card synopsis into `content` (short body, usually a prefix of `description`).
+     * Includes empty `content` and any short body (under {@see FEDLEX_OC_SYNOPSIS_MAX_BYTES} bytes)
+     * that is not a tombstone — including stale promote copies after `description` was
+     * refreshed and no longer prefix-matches `content`.
      *
      * @return list<array<string, mixed>>
      */
@@ -168,11 +169,6 @@ final class LexItemRepository
                            OR (
                                content NOT LIKE '%[seismo:content_unavailable]%'
                                AND CHAR_LENGTH(content) < {$max}
-                               AND (
-                                   description IS NULL OR TRIM(description) = ''
-                                   OR content = description
-                                   OR content LIKE CONCAT(description, '%')
-                               )
                            )
                      )
                    ORDER BY document_date DESC, id DESC
@@ -198,7 +194,8 @@ final class LexItemRepository
      *   oc_acts: int,
      *   consultations: int,
      *   oc_empty_content: int,
-     *   oc_synopsis_only: int,
+     *   oc_stale_short: int,
+     *   oc_synopsis_prefix_match: int,
      *   oc_has_corpus: int,
      *   oc_unavailable: int,
      *   oc_needs_backfill: int
@@ -222,9 +219,15 @@ final class LexItemRepository
                         AND content IS NOT NULL AND TRIM(content) <> ''
                         AND content NOT LIKE '%[seismo:content_unavailable]%'
                         AND CHAR_LENGTH(content) < {$max}
+                    ) AS oc_stale_short,
+                    SUM(
+                        celex LIKE 'eli/oc/%'
+                        AND content IS NOT NULL AND TRIM(content) <> ''
+                        AND content NOT LIKE '%[seismo:content_unavailable]%'
+                        AND CHAR_LENGTH(content) < {$max}
                         AND description IS NOT NULL AND TRIM(description) <> ''
                         AND (content = description OR content LIKE CONCAT(description, '%'))
-                    ) AS oc_synopsis_only,
+                    ) AS oc_synopsis_prefix_match,
                     SUM(
                         celex LIKE 'eli/oc/%'
                         AND content IS NOT NULL
@@ -245,25 +248,26 @@ final class LexItemRepository
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [
                     'total_ch' => 0, 'oc_acts' => 0, 'consultations' => 0,
-                    'oc_empty_content' => 0, 'oc_synopsis_only' => 0, 'oc_has_corpus' => 0,
-                    'oc_unavailable' => 0, 'oc_needs_backfill' => 0,
+                    'oc_empty_content' => 0, 'oc_stale_short' => 0, 'oc_synopsis_prefix_match' => 0,
+                    'oc_has_corpus' => 0, 'oc_unavailable' => 0, 'oc_needs_backfill' => 0,
                 ];
             }
             throw $e;
         }
 
-        $empty   = (int)($row['oc_empty_content'] ?? 0);
-        $synopsis = (int)($row['oc_synopsis_only'] ?? 0);
+        $empty = (int)($row['oc_empty_content'] ?? 0);
+        $stale = (int)($row['oc_stale_short'] ?? 0);
 
         return [
-            'total_ch'          => (int)($row['total_ch'] ?? 0),
-            'oc_acts'           => (int)($row['oc_acts'] ?? 0),
-            'consultations'     => (int)($row['consultations'] ?? 0),
-            'oc_empty_content'  => $empty,
-            'oc_synopsis_only'  => $synopsis,
-            'oc_has_corpus'     => (int)($row['oc_has_corpus'] ?? 0),
-            'oc_unavailable'    => (int)($row['oc_unavailable'] ?? 0),
-            'oc_needs_backfill' => $empty + $synopsis,
+            'total_ch'                  => (int)($row['total_ch'] ?? 0),
+            'oc_acts'                   => (int)($row['oc_acts'] ?? 0),
+            'consultations'             => (int)($row['consultations'] ?? 0),
+            'oc_empty_content'          => $empty,
+            'oc_stale_short'            => $stale,
+            'oc_synopsis_prefix_match'  => (int)($row['oc_synopsis_prefix_match'] ?? 0),
+            'oc_has_corpus'             => (int)($row['oc_has_corpus'] ?? 0),
+            'oc_unavailable'            => (int)($row['oc_unavailable'] ?? 0),
+            'oc_needs_backfill'         => $empty + $stale,
         ];
     }
 

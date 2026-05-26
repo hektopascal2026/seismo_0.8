@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 use Seismo\Core\Lex\LexCardPreview;
+use Seismo\Plugin\LexFedlex\LexFedlexPlugin;
 
 final class LexCardPreviewTest extends TestCase
 {
@@ -18,9 +19,30 @@ final class LexCardPreviewTest extends TestCase
             'content_excerpt' => $corpus,
         ]);
 
-        self::assertStringContainsString('Änderung', $preview);
+        self::assertStringNotContainsString("Änderung\n", $preview);
+        self::assertStringContainsString('Beschlossen am: 06.05.2026', $preview);
         self::assertStringContainsString('Die Bundesversammlung', $preview);
         self::assertStringContainsString('Art. 5 wird geändert', $preview);
+    }
+
+    public function testBriefingTextIncludesAmendmentPillForFedlex(): void
+    {
+        $row = [
+            'source' => 'ch',
+            'title' => 'Verordnung des BAKOM über Fernmeldedienste',
+            'description' => "Beschlossen am: 06.05.2026 • Inkrafttreten: 01.07.2026\nBAKOM — Verordnung vom 1997",
+            'document_type' => 'Amtsverordnung',
+            'document_date' => '2026-05-26',
+            'eurlex_url' => 'https://www.fedlex.admin.ch/eli/oc/2026/244/de',
+            'content' => "Die Bundesversammlung der Schweizerischen Eidgenossenschaft,\n\nbeschliesst:\n\nI\nArt. 5 wird wie folgt geändert.",
+        ];
+
+        $briefing = LexCardPreview::briefingText($row);
+
+        self::assertStringStartsWith('Verordnung / Änderung', $briefing);
+        self::assertStringContainsString('Beschlossen am: 06.05.2026', $briefing);
+        self::assertStringContainsString('Art. 5 wird wie folgt geändert', $briefing);
+        self::assertSame('Verordnung / Änderung', LexFedlexPlugin::documentTypePillLabelFromLexRow($row));
     }
 
     public function testChSummaryDoesNotDuplicatePromotedSynopsis(): void

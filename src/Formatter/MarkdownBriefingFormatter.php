@@ -62,7 +62,7 @@ final class MarkdownBriefingFormatter
     }
 
     /** Lex sources that receive {@see LexCardPreview::briefingText()} in AI briefing context. */
-    private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu'];
+    private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu', 'ch'];
 
     /**
      * @param array<int, array<string, mixed>> $entries Shaped Magnitu-contract rows.
@@ -333,9 +333,13 @@ final class MarkdownBriefingFormatter
     private static function entryAsLexRow(array $entry, string $lexSource): array
     {
         return [
-            'source'      => $lexSource,
-            'description' => (string)($entry['description'] ?? ''),
-            'content'     => (string)($entry['content'] ?? ''),
+            'source'         => $lexSource,
+            'title'          => (string)($entry['title'] ?? ''),
+            'description'    => (string)($entry['description'] ?? ''),
+            'content'        => (string)($entry['content'] ?? ''),
+            'document_type'  => (string)($entry['document_type'] ?? $entry['source_category'] ?? ''),
+            'document_date'  => (string)($entry['published_date'] ?? ''),
+            'eurlex_url'     => (string)($entry['link'] ?? ''),
         ];
     }
 

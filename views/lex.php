@@ -203,6 +203,8 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                         $docType = (string)($item['document_type'] ?? 'Legislation');
                         if ($source === 'eu' && function_exists('seismo_lex_eu_document_type_for_display')) {
                             $docType = seismo_lex_eu_document_type_for_display($item);
+                        } elseif ($source === 'ch' && function_exists('seismo_lex_ch_document_type_for_display')) {
+                            $docType = seismo_lex_ch_document_type_for_display($item);
                         }
                         $itemUrl = trim((string)($item['eurlex_url'] ?? ''));
                         if ($itemUrl === '') {

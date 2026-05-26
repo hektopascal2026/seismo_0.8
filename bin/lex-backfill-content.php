@@ -62,9 +62,10 @@ if ($stats) {
     $fx = $service->fedlexCorpusBreakdown();
     echo sprintf("  total_ch=%d oc_acts=%d consultations=%d\n", $fx['total_ch'], $fx['oc_acts'], $fx['consultations']);
     echo sprintf(
-        "  oc_empty_content=%d oc_synopsis_only=%d oc_has_corpus=%d oc_unavailable=%d\n",
+        "  oc_empty_content=%d oc_stale_short=%d oc_synopsis_prefix_match=%d oc_has_corpus=%d oc_unavailable=%d\n",
         $fx['oc_empty_content'],
-        $fx['oc_synopsis_only'],
+        $fx['oc_stale_short'],
+        $fx['oc_synopsis_prefix_match'],
         $fx['oc_has_corpus'],
         $fx['oc_unavailable'],
     );
