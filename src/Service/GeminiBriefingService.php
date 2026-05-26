@@ -85,9 +85,6 @@ CONTRACT;
     /** Visible pass-2 tokens scaled per cited item (structured / legal blocks need more than one paragraph). */
     private const OUTPUT_TOKENS_PER_ITEM = 4500;
 
-    /** Skip monolithic pass 2 when many items (Legal-style templates routinely exceed one call). */
-    private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 3;
-
     /** Pass-2 batched retry when a single call hits output limits. */
     private const SUMMARY_BATCH_SIZE = 2;
 
@@ -673,24 +670,6 @@ CONTRACT;
         int $effectiveCount,
         string $apiKey,
     ): GeminiBriefingResult {
-        if ($effectiveCount >= self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS) {
-            error_log(
-                'GeminiBriefingService: pass 2 batched upfront for ' . $effectiveCount
-                . ' items (batch size ' . self::SUMMARY_BATCH_SIZE . ')'
-            );
-
-            return $this->runBatchedSummaryPasses(
-                $userSystemPrompt,
-                $summaryEntries,
-                $scoresByKey,
-                $briefingMeta,
-                $fallbackXml,
-                $selectedKeys,
-                $itemCount,
-                $apiKey,
-            );
-        }
-
         $summaryContext = $this->buildSummaryContextForKeys(
             $summaryEntries,
             $scoresByKey,
