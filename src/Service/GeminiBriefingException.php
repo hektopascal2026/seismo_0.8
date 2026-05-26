@@ -75,7 +75,7 @@ final class GeminiBriefingException extends \RuntimeException
         if ($apiMessage !== '') {
             $msg .= ' ' . self::truncateForUi($apiMessage);
         } else {
-            $msg .= ' Try gemini-2.5-flash or set system_config gemini:model.';
+            $msg .= ' Try gemini-3.5-flash or set system_config gemini:model.';
         }
 
         return new self($msg, 404);

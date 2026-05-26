@@ -187,13 +187,13 @@ $moduleOptions = [
 
                 <div class="admin-form-field">
                     <label class="admin-checkbox-label" style="display:flex; align-items:flex-start; gap:0.5rem; cursor:pointer;">
-                        <input type="checkbox" id="briefing_two_pass" name="two_pass" value="1"
+                        <input type="checkbox" id="briefing_two_pass" name="two_pass" value="1" checked
                                style="margin-top:0.2rem;">
                         <span>
-                            <strong>Two-pass generation</strong> (experimental)
+                            <strong>Two-pass generation</strong> (recommended)
                             <span class="admin-intro" style="display:block; margin:0.25rem 0 0;">
-                                Pass 1 selects entries with capped thinking; pass 2 writes the briefing from those only.
-                                Slower (~2× API calls) but can improve story picking on large pools. Off by default.
+                                Pass 1 picks entries globally (compact JSON); pass 2 writes plain Markdown from those only.
+                                Uncheck only for legacy single-pass (faster, less reliable on large pools).
                             </span>
                         </span>
                     </label>

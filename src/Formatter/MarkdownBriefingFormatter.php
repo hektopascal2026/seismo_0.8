@@ -143,9 +143,9 @@ final class MarkdownBriefingFormatter
                     $lines[] = '  - ' . implode(' · ', $bits);
                 }
 
-                $body = self::formatEntryBody($e);
-                if ($body !== '') {
-                    $lines[] = '  - ' . $body;
+            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta));
+            if ($body !== '') {
+                $lines[] = '  - ' . $body;
                 }
                 $lines[] = '';
             }
@@ -235,7 +235,7 @@ final class MarkdownBriefingFormatter
                 }
             }
 
-            $body = self::formatEntryBody($e);
+            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta));
             if ($body !== '') {
                 $xml .= '<content>' . self::escapeXmlText($body) . '</content>';
             }
@@ -257,15 +257,32 @@ final class MarkdownBriefingFormatter
     }
 
     /**
+     * @param array<string, mixed> $meta Briefing gather meta; optional `entry_body_max_chars`.
+     */
+    private static function resolveEntryBodyMaxChars(array $meta): int
+    {
+        $raw = $meta['entry_body_max_chars'] ?? null;
+        if (is_int($raw)) {
+            return max(64, min(self::ENTRY_BODY_MAX_CHARS, $raw));
+        }
+        $s = trim((string)($raw ?? ''));
+        if ($s !== '' && ctype_digit($s)) {
+            return max(64, min(self::ENTRY_BODY_MAX_CHARS, (int)$s));
+        }
+
+        return self::ENTRY_BODY_MAX_CHARS;
+    }
+
+    /**
      * @param array<string, mixed> $entry Shaped Magnitu-contract row.
      */
-    private static function formatEntryBody(array $entry): string
+    private static function formatEntryBody(array $entry, int $maxChars = self::ENTRY_BODY_MAX_CHARS): string
     {
         $lexSource = self::lexSourceFromEntry($entry);
         if ($lexSource !== null && in_array($lexSource, self::LEX_BRIEFING_BODY_SOURCES, true)) {
             $legal = LexCardPreview::briefingText(self::entryAsLexRow($entry, $lexSource));
             if ($legal !== '') {
-                return $legal;
+                return LexPlainText::truncate($legal, $maxChars) ?? '';
             }
         }
 
@@ -279,7 +296,7 @@ final class MarkdownBriefingFormatter
 
         $body = LexPlainText::normalize($body);
 
-        return LexPlainText::truncate($body, self::ENTRY_BODY_MAX_CHARS) ?? '';
+        return LexPlainText::truncate($body, $maxChars) ?? '';
     }
 
     /**

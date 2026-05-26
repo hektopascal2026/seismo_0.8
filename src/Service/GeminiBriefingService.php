@@ -15,8 +15,8 @@ use Seismo\Service\Http\Response;
 /**
  * Calls Google Gemini `generateContent` for the AI Briefing Builder.
  *
- * Default: single-pass (selection + prose in one call, thinking off, scaled output tokens).
- * Optional two-pass: capped thinking for entry selection, then prose on selected entries only.
+ * Default: skinny two-pass — one global selection call (compact JSON), then plain Markdown
+ * prose on selected entries only. Legacy single-pass remains when two-pass is disabled in UI.
  */
 final class GeminiBriefingService
 {
@@ -39,11 +39,7 @@ You are the backend engine for the Seismo AI Briefing Builder.
    - If ENTRIES_DATA contains fewer than {maxCoreItems} entries, use only qualifying entries — do not invent rows.
    - Do not merge multiple distinct qualifying entries into one bullet if that would omit a separate core development you are citing.
 
-4. DRAFTING (JSON field drafting_thoughts — not shown to users):
-   - Before briefing_markdown, list the entry_type:entry_id keys you will cite (one per line, up to {maxCoreItems}), taken only from <id> values in ENTRIES_DATA that satisfy the user prompt.
-   - used_entry_keys must match that list in the same order.
-
-5. CITATIONS:
+4. CITATIONS:
    - Each core item must map to one <entry> in ENTRIES_DATA.
    - Populate used_entry_keys with the exact entry_type:entry_id strings from the chosen <id> values, in the same order as the core items in briefing_markdown.
 
@@ -52,17 +48,15 @@ ENTRIES_DATA:
 CONTRACT;
 
     private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
-SYSTEM DIRECTIVE — ENTRY SELECTION (PASS 1 OF 2):
-You choose which entries merit inclusion in an executive briefing. The user persona and prose style apply in pass 2; here you judge strategic fit only.
+SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
+You see the full ENTRIES_DATA pool at once. Pick the best stories globally. Prose style is pass 2 only.
 
 RULES:
-- ENTRIES_DATA contains XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
-- Select UP TO {maxCoreItems} distinct entries that satisfy the user system prompt (audience, jurisdictions, topics, named entities). Selecting fewer is correct when strict criteria apply — do not pad with high-relevance entries that fail the prompt.
-- When the user prompt restricts jurisdictions or legal corpora (e.g. DE/FR/AT statutes, EU law), EXCLUDE entries whose <jurisdiction> is missing or does not match — even if relevance is high. Prefer lex_item rows over feed_item or calendar_event for legal/regulatory prompts.
-- Prefer entries that are timely, non-redundant, and fit the user system prompt. Use <jurisdiction> and <source_type> when the prompt targets specific countries or legal corpora.
-- used_entry_keys must list the chosen <id> values in briefing order (most important first).
-- selection_notes: one short sentence per chosen entry (why it made the cut). Not shown to end users.
-- Never invent IDs. Only keys from ENTRIES_DATA <id> elements.
+- ENTRIES_DATA: XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
+- Return JSON with used_entry_keys only: up to {maxCoreItems} distinct <id> values, most important first.
+- Selecting fewer is correct when strict criteria apply — never pad with high-relevance rows that fail the user prompt.
+- When the prompt restricts jurisdictions or legal corpora, EXCLUDE non-matching <jurisdiction>. Prefer lex_item for legal/regulatory prompts.
+- Never invent IDs.
 
 ENTRIES_DATA:
 {markdownContext}
@@ -70,13 +64,13 @@ CONTRACT;
 
     private const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
-The entries for this briefing are already chosen. Write the full executive briefing in briefing_markdown only.
+Entries are already chosen. Output plain Markdown only (no JSON wrapper).
 
 RULES:
-- SELECTED_ENTRIES_DATA lists exactly the entries you must cover — one core item per entry, in the same order as SELECTED_ENTRY_KEYS.
-- Each core item must cite its entry_type:entry_id (e.g. in parentheses: feed_item:123) matching SELECTED_ENTRY_KEYS.
-- Do not add entries that are not in SELECTED_ENTRY_KEYS. Do not skip any listed entry.
-- Follow the user persona above for tone, structure, intro/outro, and headings.
+- Cover every SELECTED_ENTRY_KEYS entry once, in that order — one core item per entry.
+- Cite each item with its entry_type:entry_id in parentheses (e.g. feed_item:123).
+- SELECTED_ENTRIES_DATA has full text for those entries only.
+- Follow the user persona for tone, structure, intro/outro, and headings.
 
 SELECTED_ENTRY_KEYS (ordered):
 {selectedEntryKeys}
@@ -91,7 +85,16 @@ CONTRACT;
     /** Optional `system_config` override for {@see DEFAULT_MAX_OUTPUT_TOKENS}. */
     public const CONFIG_KEY_MAX_OUTPUT_TOKENS = 'gemini:max_output_tokens';
 
-    public const DEFAULT_MODEL = 'gemini-2.5-flash';
+    public const DEFAULT_MODEL = 'gemini-3.5-flash';
+
+    /** Hard API output cap for Gemini 2.5 Flash family. */
+    public const MODEL_OUTPUT_CAP_GEMINI_25_FLASH = 8192;
+
+    /** Hard API output cap for Gemini 3.5 Flash (GA). */
+    public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
+
+    /** Practical prose cap per briefing (cost/latency), below model hard cap. */
+    public const BRIEFING_SUMMARY_OUTPUT_CAP = 8192;
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -101,26 +104,15 @@ CONTRACT;
 
     private const DEFAULT_TEMPERATURE = 0.2;
 
-    private const OUTPUT_TOKEN_CAP = 32768;
-
     private const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 
-    private const OUTPUT_TOKEN_FLOOR = 4096;
+    private const OUTPUT_TOKEN_FLOOR = 2048;
 
-    private const OUTPUT_TOKENS_PER_ITEM = 1000;
+    private const OUTPUT_TOKENS_PER_ITEM = 400;
 
-    private const THINKING_BUDGET_BASE = 512;
+    private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
-    private const THINKING_BUDGET_PER_ITEM = 256;
-
-    private const THINKING_BUDGET_CAP = 4096;
-
-    /** Candidate pool size for pass 1 (× requested items). */
-    private const SELECTION_POOL_MULTIPLIER = 3;
-
-    private const SELECTION_VISIBLE_TOKENS_BASE = 768;
-
-    private const SELECTION_VISIBLE_TOKENS_PER_ITEM = 96;
+    private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 24;
 
     private const DEFAULT_MAX_RETRIES = 4;
 
@@ -154,11 +146,29 @@ CONTRACT;
         $this->model  = $configured !== '' ? $configured : self::DEFAULT_MODEL;
 
         $rawTokens = trim((string)($config->get(self::CONFIG_KEY_MAX_OUTPUT_TOKENS) ?? ''));
+        $hardCap   = self::modelHardOutputCapFor($this->model);
         if ($rawTokens !== '' && ctype_digit($rawTokens)) {
-            $this->maxOutputTokens = max(256, min(self::OUTPUT_TOKEN_CAP, (int)$rawTokens));
+            $this->maxOutputTokens = max(256, min($hardCap, (int)$rawTokens));
         } else {
-            $this->maxOutputTokens = self::DEFAULT_MAX_OUTPUT_TOKENS;
+            $this->maxOutputTokens = min(self::DEFAULT_MAX_OUTPUT_TOKENS, $hardCap);
         }
+    }
+
+    public static function usesGemini35Family(string $model): bool
+    {
+        return preg_match('/gemini-3[.-]5/i', $model) === 1;
+    }
+
+    public static function modelHardOutputCapFor(string $model): int
+    {
+        return self::usesGemini35Family($model)
+            ? self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH
+            : self::MODEL_OUTPUT_CAP_GEMINI_25_FLASH;
+    }
+
+    private function modelHardOutputCap(): int
+    {
+        return self::modelHardOutputCapFor($this->model);
     }
 
     /**
@@ -169,30 +179,30 @@ CONTRACT;
         return $this->lastGenerationMeta;
     }
 
-    public static function resolveThinkingBudget(int $itemCount): int
-    {
-        return min(
-            self::THINKING_BUDGET_CAP,
-            self::THINKING_BUDGET_BASE + max(1, $itemCount) * self::THINKING_BUDGET_PER_ITEM,
-        );
+    /** Pass 2 prose output budget (thinking off). */
+    public static function resolveOutputTokenBudget(
+        int $itemCount,
+        int $configuredMax,
+        string $model = self::DEFAULT_MODEL,
+    ): int {
+        $hardCap       = self::modelHardOutputCapFor($model);
+        $practical     = min($hardCap, self::BRIEFING_SUMMARY_OUTPUT_CAP);
+        $configuredMax = max(256, min($hardCap, $configuredMax));
+        $scaled        = 512 + max(1, $itemCount) * self::OUTPUT_TOKENS_PER_ITEM;
+
+        return min($practical, $configuredMax, max(self::OUTPUT_TOKEN_FLOOR, $scaled));
     }
 
-    /** Pass 2 visible output budget (thinking disabled). */
-    public static function resolveOutputTokenBudget(int $itemCount, int $configuredMax): int
-    {
-        $configuredMax = max(256, min(self::OUTPUT_TOKEN_CAP, $configuredMax));
-        $scaled        = 2048 + max(1, $itemCount) * self::OUTPUT_TOKENS_PER_ITEM;
+    /** Pass 1 skinny JSON (IDs only, no thinking). */
+    public static function resolveSelectionPassTokenBudget(
+        int $itemCount,
+        int $configuredMax,
+        string $model = self::DEFAULT_MODEL,
+    ): int {
+        $hardCap = self::modelHardOutputCapFor($model);
+        $visible = self::SELECTION_OUTPUT_TOKENS_BASE + max(1, $itemCount) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM;
 
-        return min(self::OUTPUT_TOKEN_CAP, max($configuredMax, self::OUTPUT_TOKEN_FLOOR, $scaled));
-    }
-
-    /** Pass 1 total maxOutputTokens (thinking + small JSON envelope share one budget on 2.5 Flash). */
-    public static function resolveSelectionPassTokenBudget(int $itemCount, int $configuredMax): int
-    {
-        $thinking = self::resolveThinkingBudget($itemCount);
-        $visible  = self::SELECTION_VISIBLE_TOKENS_BASE + max(1, $itemCount) * self::SELECTION_VISIBLE_TOKENS_PER_ITEM;
-
-        return min(self::OUTPUT_TOKEN_CAP, max($configuredMax, $thinking + $visible));
+        return min($hardCap, max(256, $visible));
     }
 
     /**
@@ -437,10 +447,8 @@ CONTRACT;
             $effectiveCount,
         );
         $userText = 'Erstelle das Briefing gemäss den System Instructions und dem Output Contract. '
-            . 'Fülle zuerst drafting_thoughts mit den entry_type:entry_id-Werten aus ENTRIES_DATA <id>, '
-            . 'dann briefing_markdown, dann used_entry_keys (gleiche Reihenfolge). '
-            . 'Liefere bis zu ' . $effectiveCount . ' Kern-Items mit passenden used_entry_keys, '
-            . 'nur aus Einträgen, die den User-Prompt erfüllen; wenn weniger passen, liefere weniger — kein Auffüllen.';
+            . 'Liefere briefing_markdown und used_entry_keys (gleiche Reihenfolge). '
+            . 'Bis zu ' . $effectiveCount . ' Kern-Items; nur Einträge die den User-Prompt erfüllen.';
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
@@ -469,30 +477,30 @@ CONTRACT;
         array $briefingMeta,
         string $apiKey,
     ): GeminiBriefingResult {
-        if (count($contextEntries) >= $this->batchedSelectionMinEntries()) {
-            $poolEntries = $contextEntries;
-        } else {
-            $poolEntries = $this->selectionPoolEntries($contextEntries, $effectiveCount);
-        }
-
+        $poolEntries     = $contextEntries;
         $poolCount       = count($poolEntries);
         $selectionTarget = min($effectiveCount, max(1, $poolCount));
+
+        $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $briefingMeta, $markdownContext);
 
         if ($poolCount >= $this->batchedSelectionMinEntries()) {
             $selectedKeys = $this->runBatchedSelectionPasses(
                 $poolEntries,
                 $scoresByKey,
-                $briefingMeta,
-                $markdownContext,
+                $selectionMeta,
+                $poolContext,
                 $itemCount,
                 $selectionTarget,
                 $apiKey,
             );
+            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+                'batched_selection' => true,
+            ]);
         } else {
-            $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $briefingMeta, $markdownContext);
-            $poolCount   = $poolEntries !== [] ? count($poolEntries) : $this->countXmlEntries($poolContext);
-            $selectionTarget = min($effectiveCount, max(1, $poolCount));
             $selectedKeys = $this->runSelectionPass($poolContext, $itemCount, $selectionTarget, $apiKey);
+            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+                'skinny_global_selection' => true,
+            ]);
         }
 
         $selectedKeys = $this->finalizeSelectedKeys($selectedKeys, $selectionTarget);
@@ -501,10 +509,10 @@ CONTRACT;
         if ($summaryEntries === []) {
             $summaryContext = $this->filterXmlContextByKeys($markdownContext, $selectedKeys);
         } else {
-            $summaryMeta              = $briefingMeta;
-            $summaryMeta['total']     = count($summaryEntries);
-            $summaryMeta['selected']  = count($selectedKeys);
-            $summaryContext           = $this->buildEntryXmlContext(
+            $summaryMeta             = $briefingMeta;
+            $summaryMeta['total']    = count($summaryEntries);
+            $summaryMeta['selected'] = count($selectedKeys);
+            $summaryContext          = $this->buildEntryXmlContext(
                 $summaryEntries,
                 $scoresByKey,
                 $summaryMeta,
@@ -530,14 +538,10 @@ CONTRACT;
      */
     private function singlePassGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
     {
-        $config = [
-            'temperature'     => self::DEFAULT_TEMPERATURE,
-            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens),
-            'thinkingConfig'  => [
-                'thinkingBudget' => 0,
-            ],
+        $config = $this->applyModelGenerationDefaults([
+            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'application/json',
-        ];
+        ]);
         if ($useStructuredSchema) {
             $config['responseSchema'] = $this->singlePassResponseSchema($itemCount, $effectiveCount);
         }
@@ -553,11 +557,6 @@ CONTRACT;
         return [
             'type'       => 'OBJECT',
             'properties' => [
-                'drafting_thoughts' => [
-                    'type'        => 'STRING',
-                    'description' => 'Before briefing_markdown: list up to ' . $effectiveCount
-                        . ' entry_type:entry_id keys (one per line) copied from ENTRIES_DATA <id> elements that satisfy the user prompt.',
-                ],
                 'briefing_markdown' => [
                     'type'        => 'STRING',
                     'description' => 'Complete briefing Markdown with up to ' . $effectiveCount
@@ -571,7 +570,7 @@ CONTRACT;
                     'maxItems'    => $effectiveCount,
                 ],
             ],
-            'required' => ['drafting_thoughts', 'briefing_markdown', 'used_entry_keys'],
+            'required' => ['briefing_markdown', 'used_entry_keys'],
         ];
     }
 
@@ -638,22 +637,6 @@ CONTRACT;
 
     /**
      * @param list<array<string, mixed>> $entries
-     * @return list<array<string, mixed>>
-     */
-    private function selectionPoolEntries(array $entries, int $effectiveCount): array
-    {
-        if ($entries === []) {
-            return [];
-        }
-
-        $cap = max($effectiveCount + 2, $effectiveCount * self::SELECTION_POOL_MULTIPLIER);
-        $cap = min(count($entries), $cap);
-
-        return array_slice($entries, 0, $cap);
-    }
-
-    /**
-     * @param list<array<string, mixed>> $entries
      * @param array<string, array<string, mixed>> $scoresByKey
      * @param array<string, mixed> $meta
      */
@@ -692,9 +675,9 @@ CONTRACT;
             self::SELECTION_OUTPUT_CONTRACT,
         );
 
-        $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge für das Executive Briefing, '
-            . 'nur wenn sie den User-Prompt erfüllen (weniger ist korrekt). '
-            . 'Fülle selection_notes und used_entry_keys (gleiche Reihenfolge).';
+        $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge global aus ENTRIES_DATA. '
+            . 'Nur wenn sie den User-Prompt erfüllen (weniger ist korrekt). '
+            . 'JSON: used_entry_keys in Briefing-Reihenfolge.';
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
@@ -788,16 +771,25 @@ CONTRACT;
         );
         $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
 
-        $userText = 'Schreibe das vollständige Executive Briefing in briefing_markdown. '
-            . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab.';
+        $userText = 'Schreibe das vollständige Executive Briefing als plain Markdown. '
+            . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab. '
+            . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
-            'generationConfig'  => $this->summaryGenerationConfig($itemCount, $effectiveCount, true),
+            'generationConfig'  => $this->summaryGenerationConfig($itemCount, $effectiveCount),
         ];
 
-        $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'summary');
+        $response = $this->postWithRetries(
+            self::API_BASE . rawurlencode($this->model) . ':generateContent',
+            $payload,
+            $apiKey,
+            true,
+        );
+        if (!$response->isOk()) {
+            throw $this->exceptionFromFailedResponse($response);
+        }
 
         return $this->parseSummaryResponse($response, $selectedKeys);
     }
@@ -836,14 +828,10 @@ CONTRACT;
      */
     private function selectionGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
     {
-        $config = [
-            'temperature'     => self::DEFAULT_TEMPERATURE,
-            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens),
-            'thinkingConfig'  => [
-                'thinkingBudget' => self::resolveThinkingBudget($itemCount),
-            ],
+        $config = $this->applyModelGenerationDefaults([
+            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'application/json',
-        ];
+        ]);
         if ($useStructuredSchema) {
             $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
         }
@@ -854,18 +842,26 @@ CONTRACT;
     /**
      * @return array<string, mixed>
      */
-    private function summaryGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
+    private function summaryGenerationConfig(int $itemCount, int $effectiveCount): array
     {
-        $config = [
-            'temperature'     => self::DEFAULT_TEMPERATURE,
-            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens),
-            'thinkingConfig'  => [
-                'thinkingBudget' => 0,
-            ],
-            'responseMimeType' => 'application/json',
-        ];
-        if ($useStructuredSchema) {
-            $config['responseSchema'] = $this->summaryResponseSchema($effectiveCount);
+        return $this->applyModelGenerationDefaults([
+            'maxOutputTokens' => self::resolveOutputTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
+            'responseMimeType' => 'text/plain',
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function applyModelGenerationDefaults(array $config): array
+    {
+        $config['maxOutputTokens'] = min(
+            (int)($config['maxOutputTokens'] ?? $this->maxOutputTokens),
+            $this->modelHardOutputCap(),
+        );
+        if (!self::usesGemini35Family($this->model)) {
+            $config['temperature'] = self::DEFAULT_TEMPERATURE;
         }
 
         return $config;
@@ -879,19 +875,15 @@ CONTRACT;
         return [
             'type'       => 'OBJECT',
             'properties' => [
-                'selection_notes' => [
-                    'type'        => 'STRING',
-                    'description' => 'Brief rationale: one short line per chosen entry, same order as used_entry_keys.',
-                ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
                     'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, briefing order.',
                     'items'       => ['type' => 'STRING'],
-                    'minItems'    => 1,
+                    'minItems'    => 0,
                     'maxItems'    => $selectionTarget,
                 ],
             ],
-            'required' => ['selection_notes', 'used_entry_keys'],
+            'required' => ['used_entry_keys'],
         ];
     }
 
@@ -950,7 +942,18 @@ CONTRACT;
      */
     private function parseSummaryResponse(Response $response, array $selectedKeys): GeminiBriefingResult
     {
-        $raw     = $this->extractCandidateText($response);
+        $raw = $this->extractCandidateText($response);
+        if (!str_starts_with(trim($raw), '{')) {
+            $markdown = trim($raw);
+            if ($markdown === '') {
+                throw GeminiBriefingException::emptyResponse('Summary pass returned empty Markdown.');
+            }
+            $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
+            $this->assertBriefingNotTruncated($result, $this->lastEffectiveCitationCount);
+
+            return $result;
+        }
+
         $decoded = $this->decodeBriefingJsonObject($raw);
         if ($decoded !== null) {
             $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));

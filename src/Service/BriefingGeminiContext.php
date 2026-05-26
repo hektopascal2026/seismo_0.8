@@ -22,18 +22,21 @@ final class BriefingGeminiContext
     /** Pause between batched selection API calls (seconds). */
     public const BATCH_PAUSE_SECONDS = 5;
 
-    /** Above this entry count, use two-pass + batched selection when needed. */
-    public const AUTO_TWO_PASS_MIN_ENTRIES = 48;
+    /** Briefing Builder always uses skinny two-pass when entry count is at least this. */
+    public const AUTO_TWO_PASS_MIN_ENTRIES = 1;
 
-    /** Run batched selection when the pool exceeds this many entries. */
-    public const BATCHED_SELECTION_MIN_ENTRIES = 40;
+    /**
+     * Batched selection disabled for normal runs (global pass-1 sees full capped pool).
+     * Kept high so only explicit rate-limit fallback paths may batch if lowered in config.
+     */
+    public const BATCHED_SELECTION_MIN_ENTRIES = 10_000;
 
     /** After HTTP 429 — smaller cap and always batched selection. */
     public const RATE_LIMIT_FALLBACK_MAX_ENTRIES = 50;
 
     public const RATE_LIMIT_FALLBACK_BATCH_SIZE = 20;
 
-    public const RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES = 12;
+    public const RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES = 10_000;
 
     /** Wait before automatic retry after rate limit. */
     public const RATE_LIMIT_RETRY_PAUSE_SECONDS = 12;

@@ -7,26 +7,37 @@ use Seismo\Service\GeminiBriefingService;
 
 final class GeminiBriefingServiceTest extends TestCase
 {
-    public function testResolveThinkingBudgetScalesAndCaps(): void
+    public function testModelHardOutputCapForGemini35(): void
     {
-        self::assertSame(768, GeminiBriefingService::resolveThinkingBudget(1));
-        self::assertSame(3072, GeminiBriefingService::resolveThinkingBudget(10));
-        self::assertSame(4096, GeminiBriefingService::resolveThinkingBudget(20));
-    }
-
-    public function testResolveOutputTokenBudgetScalesWithItemCount(): void
-    {
-        self::assertSame(8192, GeminiBriefingService::resolveOutputTokenBudget(1, 8192));
-        self::assertSame(8192, GeminiBriefingService::resolveOutputTokenBudget(5, 8192));
-        self::assertSame(12048, GeminiBriefingService::resolveOutputTokenBudget(10, 8192));
-    }
-
-    public function testResolveSelectionPassTokenBudgetIncludesThinkingHeadroom(): void
-    {
-        self::assertGreaterThan(
-            GeminiBriefingService::resolveThinkingBudget(10),
-            GeminiBriefingService::resolveSelectionPassTokenBudget(10, 8192),
+        self::assertSame(
+            GeminiBriefingService::MODEL_OUTPUT_CAP_GEMINI_35_FLASH,
+            GeminiBriefingService::modelHardOutputCapFor('gemini-3.5-flash'),
         );
-        self::assertSame(4800, GeminiBriefingService::resolveSelectionPassTokenBudget(10, 4096));
+        self::assertTrue(GeminiBriefingService::usesGemini35Family('gemini-3.5-flash'));
+    }
+
+    public function testModelHardOutputCapForGemini25(): void
+    {
+        self::assertSame(
+            GeminiBriefingService::MODEL_OUTPUT_CAP_GEMINI_25_FLASH,
+            GeminiBriefingService::modelHardOutputCapFor('gemini-2.5-flash'),
+        );
+        self::assertFalse(GeminiBriefingService::usesGemini35Family('gemini-2.5-flash'));
+    }
+
+    public function testResolveOutputTokenBudgetClampsToPracticalCap(): void
+    {
+        self::assertSame(6512, GeminiBriefingService::resolveOutputTokenBudget(15, 8192, 'gemini-3.5-flash'));
+        self::assertSame(6512, GeminiBriefingService::resolveOutputTokenBudget(15, 8192, 'gemini-2.5-flash'));
+        self::assertSame(2912, GeminiBriefingService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
+    }
+
+    public function testResolveSelectionPassTokenBudgetIsSmall(): void
+    {
+        self::assertSame(272, GeminiBriefingService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-3.5-flash'));
+        self::assertLessThan(
+            1024,
+            GeminiBriefingService::resolveSelectionPassTokenBudget(10, 8192, 'gemini-2.5-flash'),
+        );
     }
 }
