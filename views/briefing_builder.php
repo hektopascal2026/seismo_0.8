@@ -641,6 +641,30 @@ $moduleOptions = [
             }
         }
 
+        function formatContextCapSummary(meta) {
+            if (!meta || meta.entries_sent_to_gemini === undefined) {
+                return '';
+            }
+            var sent = meta.entries_sent_to_gemini;
+            var parts = [sent + ' sent to Gemini'];
+            if (meta.max_context_entries !== undefined) {
+                parts.push('cap ' + meta.max_context_entries);
+            }
+            if (meta.entries_omitted_by_cap > 0) {
+                parts.push(meta.entries_omitted_by_cap + ' omitted by cap');
+            }
+            if (meta.entries_eligible_before_cap !== undefined) {
+                parts.push(meta.entries_eligible_before_cap + ' eligible before cap');
+            }
+            if (meta.item_count !== undefined) {
+                parts.push(meta.item_count + ' developments requested');
+            }
+            if (meta.cited_entry_count !== undefined) {
+                parts.push(meta.cited_entry_count + ' cited in briefing');
+            }
+            return parts.join(' · ');
+        }
+
         function appendBriefingMetaDebug(container, meta) {
             if (!container || !meta || typeof meta !== 'object') {
                 return;
@@ -654,6 +678,14 @@ $moduleOptions = [
             var title = document.createElement('p');
             title.className = 'briefing-output-meta__title';
             title.textContent = 'Generation meta (debug)';
+            var summary = formatContextCapSummary(meta);
+            if (summary !== '') {
+                var lead = document.createElement('p');
+                lead.className = 'admin-intro';
+                lead.style.margin = '0 0 0.5rem';
+                lead.textContent = summary;
+                wrap.appendChild(lead);
+            }
             var pre = document.createElement('pre');
             pre.className = 'briefing-output-meta__pre';
             try {

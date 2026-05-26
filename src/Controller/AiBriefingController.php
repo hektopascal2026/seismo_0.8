@@ -214,19 +214,15 @@ PROMPT;
                 return;
             }
 
-            $meta = [
-                'entry_count'    => $entryCount,
-                'markdown_chars' => $gathered['markdownChars'],
-            ];
+            $meta = array_merge(
+                $this->contextCapMetaFromGathered($gathered),
+                ['markdown_chars' => $gathered['markdownChars']],
+            );
             if ($gathered['gatherStats'] !== null) {
                 $meta['gather_stats'] = $gathered['gatherStats'];
             }
             if ($gathered['contextWarning'] !== null) {
                 $meta['context_warning'] = $gathered['contextWarning'];
-            }
-            if ($gathered['contextTruncated'] > 0) {
-                $meta['context_truncated'] = $gathered['contextTruncated'];
-                $meta['max_context_entries'] = $gathered['maxContextEntries'];
             }
 
             echo json_encode(['ok' => true, 'meta' => $meta], JSON_UNESCAPED_UNICODE);
@@ -367,27 +363,24 @@ PROMPT;
                     'Attribution JSON could not be parsed; briefing text is shown without source cards.';
             }
 
-            $meta = [
-                'entry_count'      => $contextEntryCount,
-                'markdown_chars'   => $markdownChars,
-                'since'            => $since,
-                'lookback_days'    => $lookbackDays,
-                'limit'            => $limit,
-                'modules'          => $this->enabledModuleNames($selection),
-                'alert_threshold'  => $scoreFilter->alertThreshold,
-                'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
-                'disregard_magnitu' => $scoreFilter->disregardMagnitu,
-                'score_selection'  => MagnituScoreBands::describeBriefingGather($scoreFilter),
-                'citation_slots'      => $citationSlots,
-                'max_context_entries' => $gathered['maxContextEntries'],
-            ];
+            $meta = array_merge(
+                $this->contextCapMetaFromGathered($gathered),
+                [
+                    'markdown_chars'   => $markdownChars,
+                    'since'            => $since,
+                    'lookback_days'    => $lookbackDays,
+                    'limit'            => $limit,
+                    'modules'          => $this->enabledModuleNames($selection),
+                    'alert_threshold'  => $scoreFilter->alertThreshold,
+                    'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
+                    'disregard_magnitu' => $scoreFilter->disregardMagnitu,
+                    'score_selection'  => MagnituScoreBands::describeBriefingGather($scoreFilter),
+                    'citation_slots'      => $citationSlots,
+                ],
+            );
             $meta = array_merge($meta, $attributionMeta, $gemini->lastGenerationMeta());
             if ($contextWarning !== null) {
                 $meta['context_warning'] = $contextWarning;
-            }
-            if (isset($gathered['contextTruncated']) && $gathered['contextTruncated'] > 0) {
-                $meta['context_truncated'] = $gathered['contextTruncated'];
-                $meta['max_context_entries'] = $gathered['maxContextEntries'];
             }
             if (!empty($meta['rate_limit_fallback'])) {
                 $fallbackNote = 'Retried automatically after a Gemini rate limit (smaller batched context).';
@@ -1024,6 +1017,7 @@ PROMPT;
         $entries = $gatherer->filterByModuleSelection($entries, $filters['selection']);
 
         $geminiContext = new BriefingGeminiContext(new SystemConfigRepository($pdo));
+        $entriesEligibleBeforeCap = count($entries);
         $capped        = $geminiContext->capEntriesForModules(
             $entries,
             $scoresByKey,
@@ -1054,10 +1048,13 @@ PROMPT;
 
         $contextWarning = $this->contextSizeWarning($markdownChars);
         if ($contextTruncated > 0) {
-            $capNote = $contextTruncated . ' additional '
+            $capNote = count($entries) . ' sent to Gemini; '
+                . $contextTruncated . ' additional '
                 . ($contextTruncated === 1 ? 'entry was' : 'entries were')
-                . ' omitted from the Gemini context cap (max '
+                . ' omitted (cap '
                 . $geminiContext->maxContextEntries()
+                . ', '
+                . $entriesEligibleBeforeCap . ' eligible before cap'
                 . ($stratifiedCap
                     ? '; fair share per enabled source module, then relevance'
                     : '; highest relevance, then newest')
@@ -1074,10 +1071,44 @@ PROMPT;
             'markdownChars'     => $markdownChars,
             'contextWarning'    => $contextWarning,
             'gatherStats'       => $gatherer->lastGatherStats(),
-            'contextTruncated'  => $contextTruncated,
-            'maxContextEntries'   => $geminiContext->maxContextEntries(),
-            'entry_body_max_chars' => $entryBodyMaxChars,
+            'contextTruncated'         => $contextTruncated,
+            'entriesEligibleBeforeCap' => $entriesEligibleBeforeCap,
+            'maxContextEntries'        => $geminiContext->maxContextEntries(),
+            'entry_body_max_chars'     => $entryBodyMaxChars,
         ];
+    }
+
+    /**
+     * Clear context-cap counts for API meta (prepare + generate).
+     *
+     * @param array{
+     *     entries: list<array<string, mixed>>,
+     *     contextTruncated: int,
+     *     entriesEligibleBeforeCap: int,
+     *     maxContextEntries: int
+     * } $gathered
+     * @return array<string, int>
+     */
+    private function contextCapMetaFromGathered(array $gathered): array
+    {
+        $sent    = count($gathered['entries']);
+        $omitted = (int)($gathered['contextTruncated'] ?? 0);
+        $eligible = (int)($gathered['entriesEligibleBeforeCap'] ?? ($sent + $omitted));
+        $max     = (int)($gathered['maxContextEntries'] ?? 0);
+
+        $meta = [
+            'entries_sent_to_gemini'      => $sent,
+            'entries_omitted_by_cap'      => $omitted,
+            'entries_eligible_before_cap' => $eligible,
+            'max_context_entries'         => $max,
+            // Legacy keys (same semantics as above).
+            'entry_count'                 => $sent,
+        ];
+        if ($omitted > 0) {
+            $meta['context_truncated'] = $omitted;
+        }
+
+        return $meta;
     }
 
     /**
