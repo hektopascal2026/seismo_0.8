@@ -32,8 +32,34 @@ final class MarkdownBriefingFormatter
     /** Tagged entries for AI Briefing Builder — clearer boundaries for extraction. */
     public const FORMAT_XML = 'xml';
 
-    /** Max characters of entry body text included per item (content, else description). */
-    public const ENTRY_BODY_MAX_CHARS = 2000;
+    /** Default characters of entry body text per item when pool size is unknown. */
+    public const ENTRY_BODY_DEFAULT_CHARS = 2000;
+
+    /** Upper bound for dynamic per-entry body budget (see {@see dynamicEntryBodyMaxChars()}). */
+    public const ENTRY_BODY_ABSOLUTE_MAX_CHARS = 12000;
+
+    /**
+     * Shared character budget for all entry bodies in one Gemini XML pool
+     * (excluding prompts, tags, and system instructions).
+     */
+    public const ENTRY_XML_POOL_CHAR_BUDGET = 500_000;
+
+    /** @deprecated Use {@see ENTRY_BODY_DEFAULT_CHARS}. */
+    public const ENTRY_BODY_MAX_CHARS = self::ENTRY_BODY_DEFAULT_CHARS;
+
+    public static function dynamicEntryBodyMaxChars(int $entryCount): int
+    {
+        if ($entryCount < 1) {
+            return self::ENTRY_BODY_DEFAULT_CHARS;
+        }
+
+        $perEntry = (int) floor(self::ENTRY_XML_POOL_CHAR_BUDGET / $entryCount);
+
+        return max(
+            self::ENTRY_BODY_DEFAULT_CHARS,
+            min(self::ENTRY_BODY_ABSOLUTE_MAX_CHARS, $perEntry),
+        );
+    }
 
     /** Lex sources that receive {@see LexCardPreview::briefingText()} in AI briefing context. */
     private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu'];
@@ -261,16 +287,17 @@ final class MarkdownBriefingFormatter
      */
     private static function resolveEntryBodyMaxChars(array $meta): int
     {
-        $raw = $meta['entry_body_max_chars'] ?? null;
+        $ceiling = self::ENTRY_BODY_ABSOLUTE_MAX_CHARS;
+        $raw     = $meta['entry_body_max_chars'] ?? null;
         if (is_int($raw)) {
-            return max(64, min(self::ENTRY_BODY_MAX_CHARS, $raw));
+            return max(64, min($ceiling, $raw));
         }
         $s = trim((string)($raw ?? ''));
         if ($s !== '' && ctype_digit($s)) {
-            return max(64, min(self::ENTRY_BODY_MAX_CHARS, (int)$s));
+            return max(64, min($ceiling, (int)$s));
         }
 
-        return self::ENTRY_BODY_MAX_CHARS;
+        return self::ENTRY_BODY_DEFAULT_CHARS;
     }
 
     /**

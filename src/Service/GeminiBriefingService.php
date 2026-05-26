@@ -45,6 +45,8 @@ You are the backend engine for the Seismo AI Briefing Builder.
 
 ENTRIES_DATA:
 {markdownContext}
+
+{temporalContext}
 CONTRACT;
 
     private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
@@ -52,9 +54,11 @@ SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
 The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
 You see the full ENTRIES_DATA pool at once. Pick the best matching entries globally. Prose style is pass 2 only.
 
+{temporalContext}
+
 RULES:
 - ENTRIES_DATA: XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
-- Return JSON with used_entry_keys only: up to {maxCoreItems} distinct <id> values, most important first.
+- Return JSON with used_entry_keys (required) and selection_reasoning (optional): brief step-by-step rationale, then up to {maxCoreItems} distinct <id> values, most important first.
 - Selecting fewer is correct when strict USER PROMPT criteria apply — never pad with high-relevance rows that fail the USER PROMPT.
 - When the USER PROMPT restricts jurisdictions or legal corpora, EXCLUDE non-matching <jurisdiction>. Prefer lex_item for legal/regulatory USER PROMPTs.
 - Never invent IDs.
@@ -67,11 +71,14 @@ CONTRACT;
 SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
 Entries are already chosen. Output plain Markdown only (no JSON wrapper).
 
+{temporalContext}
+
 RULES:
 - Cover every SELECTED_ENTRY_KEYS entry once, in that order — one core item per entry.
 - Cite each item with its entry_type:entry_id in parentheses (e.g. feed_item:123).
 - SELECTED_ENTRIES_DATA has full text for those entries only.
 - Follow the user persona for tone, structure, intro/outro, and headings.
+- CRITICAL: Output ONLY the requested Markdown. No conversational filler (e.g. "Here is the briefing") and no closing offers (e.g. "Let me know if you need anything else").
 
 SELECTED_ENTRY_KEYS (ordered):
 {selectedEntryKeys}
@@ -88,9 +95,6 @@ CONTRACT;
 
     public const DEFAULT_MODEL = 'gemini-3.5-flash';
 
-    /** Hard API output cap for Gemini 2.5 Flash family. */
-    public const MODEL_OUTPUT_CAP_GEMINI_25_FLASH = 8192;
-
     /** Hard API output cap for Gemini 3.5 Flash (GA). */
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
 
@@ -103,8 +107,6 @@ CONTRACT;
 
     private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 180;
 
-    private const DEFAULT_TEMPERATURE = 0.2;
-
     private const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 
     private const OUTPUT_TOKEN_FLOOR = 2048;
@@ -115,13 +117,9 @@ CONTRACT;
 
     private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 24;
 
-    private const THINKING_BUDGET_BASE = 512;
+    private const SELECTION_REASONING_TOKEN_HEADROOM = 384;
 
-    private const THINKING_BUDGET_PER_ITEM = 256;
-
-    private const THINKING_BUDGET_CAP = 4096;
-
-    /** Gemini 3.x {@see thinkingConfigForPhase()} levels (REST uses uppercase). */
+    /** Gemini 3.5 {@see thinkingConfigForPhase()} levels (REST uses uppercase). */
     private const THINKING_LEVEL_SELECTION = 'LOW';
 
     private const THINKING_LEVEL_SUMMARY = 'LOW';
@@ -155,10 +153,17 @@ CONTRACT;
     ) {
         $this->briefingContext = $briefingContext ?? new BriefingGeminiContext($config);
         $configured = trim((string)($config->get(self::CONFIG_KEY_MODEL) ?? ''));
-        $this->model  = $configured !== '' ? $configured : self::DEFAULT_MODEL;
+        $model      = $configured !== '' ? $configured : self::DEFAULT_MODEL;
+        if (!self::usesGemini35Family($model)) {
+            error_log(
+                'GeminiBriefingService: unsupported gemini:model "' . $model . '"; using ' . self::DEFAULT_MODEL
+            );
+            $model = self::DEFAULT_MODEL;
+        }
+        $this->model = $model;
 
         $rawTokens = trim((string)($config->get(self::CONFIG_KEY_MAX_OUTPUT_TOKENS) ?? ''));
-        $hardCap   = self::modelHardOutputCapFor($this->model);
+        $hardCap   = self::modelHardOutputCap();
         if ($rawTokens !== '' && ctype_digit($rawTokens)) {
             $this->maxOutputTokens = max(256, min($hardCap, (int)$rawTokens));
         } else {
@@ -175,7 +180,7 @@ CONTRACT;
     {
         return self::usesGemini35Family($model)
             ? self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH
-            : self::MODEL_OUTPUT_CAP_GEMINI_25_FLASH;
+            : self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH;
     }
 
     private function modelHardOutputCap(): int
@@ -191,15 +196,7 @@ CONTRACT;
         return $this->lastGenerationMeta;
     }
 
-    public static function resolveThinkingBudget(int $itemCount): int
-    {
-        return min(
-            self::THINKING_BUDGET_CAP,
-            self::THINKING_BUDGET_BASE + max(1, $itemCount) * self::THINKING_BUDGET_PER_ITEM,
-        );
-    }
-
-    /** Pass 2 visible prose budget (thinking is configured separately per model). */
+    /** Pass 2 visible prose budget (thinking is configured separately). */
     public static function resolveOutputTokenBudget(
         int $itemCount,
         int $configuredMax,
@@ -213,20 +210,18 @@ CONTRACT;
         return min($practical, $configuredMax, max(self::OUTPUT_TOKEN_FLOOR, $scaled));
     }
 
-    /** Pass 1 JSON envelope + model thinking headroom (2.5 shares one output budget). */
+    /** Pass 1 JSON envelope (IDs + optional selection_reasoning). */
     public static function resolveSelectionPassTokenBudget(
         int $itemCount,
         int $configuredMax,
         string $model = self::DEFAULT_MODEL,
     ): int {
         $hardCap = self::modelHardOutputCapFor($model);
-        $visible = self::SELECTION_OUTPUT_TOKENS_BASE + max(1, $itemCount) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM;
+        $visible = self::SELECTION_OUTPUT_TOKENS_BASE
+            + max(1, $itemCount) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM
+            + self::SELECTION_REASONING_TOKEN_HEADROOM;
 
-        if (self::usesGemini35Family($model)) {
-            return min($hardCap, max(512, $visible));
-        }
-
-        return min($hardCap, max(256, self::resolveThinkingBudget($itemCount) + $visible));
+        return min($hardCap, max(512, $visible));
     }
 
     /**
@@ -358,12 +353,8 @@ CONTRACT;
             'two_pass'             => $twoPass,
             'auto_two_pass'        => $autoTwoPass,
             'model'                => $this->model,
-            'thinking_selection'   => self::usesGemini35Family($this->model)
-                ? self::THINKING_LEVEL_SELECTION
-                : self::resolveThinkingBudget($thinkingItemCount),
-            'thinking_summary'     => self::usesGemini35Family($this->model)
-                ? self::THINKING_LEVEL_SUMMARY
-                : 0,
+            'thinking_selection'   => self::THINKING_LEVEL_SELECTION,
+            'thinking_summary'     => self::THINKING_LEVEL_SUMMARY,
             'rate_limit_thinking'  => $this->rateLimitFallbackMode,
         ]);
 
@@ -412,7 +403,12 @@ CONTRACT;
             );
             $entries = $capped['entries'];
             $guard   = new BriefingModuleGuard($gatherer);
-            $sealed  = $guard->sealGeminiContext($entries, $scoresByKey, $briefingMeta, $moduleSelection);
+            $sealed  = $guard->sealGeminiContext(
+                $entries,
+                $scoresByKey,
+                $this->metaWithEntryBodyBudget($briefingMeta, count($entries)),
+                $moduleSelection,
+            );
 
             return [$sealed['entries'], $sealed['markdown'], count($sealed['entries'])];
         }
@@ -422,7 +418,7 @@ CONTRACT;
             $this->briefingContext->rateLimitFallbackMaxEntries(),
         );
         $entries = $capped['entries'];
-        $meta    = $briefingMeta;
+        $meta    = $this->metaWithEntryBodyBudget($briefingMeta, count($entries));
         $meta['total'] = count($entries);
         $markdown = MarkdownBriefingFormatter::format(
             $entries,
@@ -456,7 +452,7 @@ CONTRACT;
         $sealed = $guard->sealGeminiContext(
             $contextEntries,
             $scoresByKey,
-            $briefingMeta,
+            $this->metaWithEntryBodyBudget($briefingMeta, count($contextEntries)),
             $moduleSelection,
         );
 
@@ -620,11 +616,12 @@ CONTRACT;
         int $itemCount,
         int $selectionTarget,
     ): string {
-        $envelope = str_replace(
-            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
-            [(string)$itemCount, (string)$selectionTarget, trim($poolContext)],
-            self::SELECTION_OUTPUT_CONTRACT,
-        );
+        $envelope = $this->expandContract(self::SELECTION_OUTPUT_CONTRACT, [
+            '{itemCount}'       => (string)$itemCount,
+            '{maxCoreItems}'    => (string)$selectionTarget,
+            '{markdownContext}' => trim($poolContext),
+            '{temporalContext}' => $this->temporalContextBlock(),
+        ]);
 
         return trim($userSystemPrompt) . "\n\n" . $envelope;
     }
@@ -635,11 +632,12 @@ CONTRACT;
         int $itemCount,
         int $effectiveItemCount,
     ): string {
-        $envelope = str_replace(
-            ['{itemCount}', '{maxCoreItems}', '{markdownContext}'],
-            [(string)$itemCount, (string)$effectiveItemCount, $markdownContext],
-            self::SINGLE_PASS_OUTPUT_CONTRACT,
-        );
+        $envelope = $this->expandContract(self::SINGLE_PASS_OUTPUT_CONTRACT, [
+            '{itemCount}'       => (string)$itemCount,
+            '{maxCoreItems}'    => (string)$effectiveItemCount,
+            '{markdownContext}' => $markdownContext,
+            '{temporalContext}' => $this->temporalContextBlock(),
+        ]);
         $combined = trim($userSystemPrompt) . "\n\n" . $envelope;
 
         if (str_contains($combined, '{markdownContext}')) {
@@ -828,11 +826,11 @@ CONTRACT;
         string $apiKey,
     ): GeminiBriefingResult {
         $keysBlock = implode("\n", $selectedKeys);
-        $envelope  = str_replace(
-            ['{selectedEntryKeys}', '{markdownContext}'],
-            [$keysBlock, trim($summaryContext)],
-            self::SUMMARY_OUTPUT_CONTRACT,
-        );
+        $envelope  = $this->expandContract(self::SUMMARY_OUTPUT_CONTRACT, [
+            '{selectedEntryKeys}' => $keysBlock,
+            '{markdownContext}'   => trim($summaryContext),
+            '{temporalContext}'   => $this->temporalContextBlock(),
+        ]);
         $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
 
         $userText = 'Schreibe das vollständige Executive Briefing als plain Markdown. '
@@ -924,10 +922,6 @@ CONTRACT;
             (int)($config['maxOutputTokens'] ?? $this->maxOutputTokens),
             $this->modelHardOutputCap(),
         );
-        if (!self::usesGemini35Family($this->model)) {
-            $config['temperature'] = self::DEFAULT_TEMPERATURE;
-        }
-
         $thinking = $this->thinkingConfigForPhase($phase, $itemCount);
         if ($thinking !== []) {
             $config['thinkingConfig'] = $thinking;
@@ -942,28 +936,44 @@ CONTRACT;
     private function thinkingConfigForPhase(string $phase, int $itemCount): array
     {
         if ($this->rateLimitFallbackMode) {
-            return self::usesGemini35Family($this->model)
-                ? ['thinkingLevel' => 'MINIMAL']
-                : ['thinkingBudget' => 0];
+            return ['thinkingLevel' => 'MINIMAL'];
         }
 
-        if (self::usesGemini35Family($this->model)) {
-            $level = match ($phase) {
-                'selection' => self::THINKING_LEVEL_SELECTION,
-                'summary'   => self::THINKING_LEVEL_SUMMARY,
-                default     => self::THINKING_LEVEL_SUMMARY,
-            };
-
-            return ['thinkingLevel' => $level];
-        }
-
-        $budget = match ($phase) {
-            'selection' => self::resolveThinkingBudget($itemCount),
-            'summary'   => 0,
-            default     => 0,
+        $level = match ($phase) {
+            'selection' => self::THINKING_LEVEL_SELECTION,
+            'summary'   => self::THINKING_LEVEL_SUMMARY,
+            default     => self::THINKING_LEVEL_SUMMARY,
         };
 
-        return ['thinkingBudget' => $budget];
+        return ['thinkingLevel' => $level];
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     * @return array<string, mixed>
+     */
+    private function metaWithEntryBodyBudget(array $meta, int $entryCount): array
+    {
+        $meta['entry_body_max_chars'] = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars($entryCount);
+
+        return $meta;
+    }
+
+    private function temporalContextBlock(): string
+    {
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Zurich'));
+
+        return 'CURRENT CONTEXT:' . "\n"
+            . 'Today is ' . $now->format('l') . ', ' . $now->format('F j, Y')
+            . ' (Europe/Zurich). Use natural relative dates from each entry <published_date> when writing the briefing.';
+    }
+
+    /**
+     * @param array<string, string> $replacements
+     */
+    private function expandContract(string $contract, array $replacements): string
+    {
+        return str_replace(array_keys($replacements), array_values($replacements), $contract);
     }
 
     /**
@@ -974,6 +984,10 @@ CONTRACT;
         return [
             'type'       => 'OBJECT',
             'properties' => [
+                'selection_reasoning' => [
+                    'type'        => 'STRING',
+                    'description' => 'Brief step-by-step rationale: how USER PROMPT criteria map to chosen ENTRIES_DATA rows.',
+                ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
                     'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, briefing order.',
@@ -1025,6 +1039,11 @@ CONTRACT;
         $decoded = $this->decodeBriefingJsonObject($raw);
         if ($decoded === null) {
             throw GeminiBriefingException::badResponse('Selection pass JSON could not be parsed.');
+        }
+
+        $reasoning = trim((string)($decoded['selection_reasoning'] ?? ''));
+        if ($reasoning !== '') {
+            $this->lastGenerationMeta['selection_reasoning'] = $reasoning;
         }
 
         $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);

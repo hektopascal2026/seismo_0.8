@@ -212,7 +212,17 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.4 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.5 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">AI Briefing: Gemini 3.5 two-pass pipeline</div>
+                        <ul>
+                            <li><strong>Model:</strong> <code>gemini-3.5-flash</code> only; unsupported <code>gemini:model</code> values are coerced to the default.</li>
+                            <li><strong>Two-pass:</strong> pass 1 applies the full USER PROMPT to global JSON selection (<code>used_entry_keys</code>, optional <code>selection_reasoning</code>); pass 2 writes plain Markdown on selected rows only.</li>
+                            <li><strong>Context:</strong> dynamic per-entry body budget (2k&ndash;12k), stratified module cap, <code>BriefingModuleGuard</code>, Europe/Zurich date anchor, 32k system prompt limit.</li>
+                            <li><strong>Reliability:</strong> <code>thinkingLevel</code> LOW; HTTP 429 retry uses batched selection; pass 2 bans conversational filler.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.4</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Mail: locale web views &amp; hosted hydration</div>
                         <ul>
                             <li><strong>Locale loop (all senders):</strong> guesses inbox language; prefers labelled DE/EN/FR edition links over generic &ldquo;cannot read this email&rdquo; webview URLs. German inbox → German edition; non-English → German then English; English → English then German.</li>

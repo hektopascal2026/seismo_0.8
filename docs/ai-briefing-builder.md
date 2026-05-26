@@ -16,10 +16,11 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Entry cap | **`MagnituExportRepository::MAX_LIMIT` (2000)** per enabled feed-family query (same ceiling as export) |
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
 | Gemini context cap | **`briefing:max_context_entries`** (default **100**) — top entries by sort order are sent to Gemini, with a **fair share per enabled source module** when multiple modules are on (so Lex/Leg rows are not dropped because Feeds score higher). UI warns when rows are dropped. **`BriefingModuleGuard`** re-filters and rebuilds XML after the cap; the same guard runs again immediately before every Gemini API call (including rate-limit retry). |
-| Gemini model | Default **`gemini-3.5-flash`** (`system_config` **`gemini:model`**). Gemini 3.5 family omits `temperature` in API payloads. |
-| Gemini two-pass | **Skinny two-pass by default** (UI checkbox on): pass 1 = one **global** selection call (**USER PROMPT** + full entry bodies up to **2000** chars, JSON `used_entry_keys` only); pass 2 = **plain Markdown** on selected rows only (same USER PROMPT). Auto-enabled when pool ≥ **1** entry. Legacy single-pass if two-pass unchecked. |
+| Gemini model | **`gemini-3.5-flash` only** — `system_config` **`gemini:model`** must match `gemini-3.5*` or it is coerced to the default. No `temperature` in API payloads. |
+| Gemini two-pass | **Skinny two-pass by default** (UI checkbox on): pass 1 = **USER PROMPT** + dynamic entry bodies + JSON (`selection_reasoning` optional, `used_entry_keys` required); pass 2 = **plain Markdown** on selected rows. **Europe/Zurich** “today” anchor in contracts. Pass 2 bans conversational filler. Auto-enabled when pool ≥ **1**. |
+| Entry body budget | **Dynamic per pool:** `MarkdownBriefingFormatter::dynamicEntryBodyMaxChars()` — default floor **2000**, ceiling **12000**, pool budget **500k** chars shared across entries (`entry_body_max_chars` in gather meta). |
 | System prompt limit | **32 000** characters (`AiBriefingController::MAX_SYSTEM_PROMPT_LEN`) on generate, save-default, and library save. |
-| Gemini thinking | **Re-enabled per pass:** `gemini-3.5-flash` uses `thinkingLevel` **LOW** for selection and summary; `gemini-2.5-flash` uses scaled `thinkingBudget` on selection only (summary **0** so prose is not truncated). HTTP **429** retry drops to **MINIMAL** / budget **0**. Response parsing skips `thought` parts. Meta: `thinking_selection`, `thinking_summary`. |
+| Gemini thinking | **`thinkingLevel` LOW** (selection + summary); HTTP **429** retry uses **MINIMAL**. Skips `thought` parts in responses. Meta: `thinking_selection`, `thinking_summary`, optional `selection_reasoning`. |
 | Gemini batching | Batched selection **disabled** for normal runs (`BATCHED_SELECTION_MIN_ENTRIES` very high). Rate-limit retry still uses module-aware cap + guard. |
 | Rate-limit fallback | On **HTTP 429**, waits **12s**, caps context to **`rateLimitFallbackMaxEntries()`** (default ≤ **50**), forces **two-pass + batched selection** when pool ≥ **2** (batch **20**, **8s** pause), and retries **once**. UI meta: `rate_limit_fallback`. |
 | Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
@@ -129,9 +130,9 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - Read `gemini:api_key` from `SystemConfigRepository`
 - `BaseClient` with **90–120s** timeout (UI may wait 10–20s+; Nginx allows 300s)
 - `postJson()` → `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key=...`
-- Model: `gemini-2.5-flash` (default; `gemini:model` in `system_config`)
-- Single-pass full markdown to Gemini (no pre-chunk summarization)
-- Retries on 429/5xx and transport errors; `systemInstruction` + `generationConfig` (temp 0.2, max output 8192)
+- Model: `gemini-3.5-flash` (default; `gemini:model` must be 3.5 family)
+- Two-pass: JSON selection then plain Markdown summary (single-pass if UI disables two-pass)
+- Retries on 429/5xx and transport errors; `systemInstruction` + `generationConfig` (`thinkingLevel`, max output tokens)
 - Default entry limit **200** per module (max 2000)
 - Prompt shape: user system prompt + separator + “Seismo briefing (Markdown)” + `MarkdownBriefingFormatter` output
 - Parse `candidates[0].content.parts[0].text`

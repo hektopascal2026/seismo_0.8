@@ -289,10 +289,11 @@ PROMPT;
 
             $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
             $briefingMeta = [
-                'since'           => $since,
-                'limit'           => $limit,
-                'score_selection' => MagnituScoreBands::describeBriefingGather($scoreFilter),
-                'total'           => $contextEntryCount,
+                'since'                => $since,
+                'limit'                => $limit,
+                'score_selection'      => MagnituScoreBands::describeBriefingGather($scoreFilter),
+                'total'                  => $contextEntryCount,
+                'entry_body_max_chars'   => $gathered['entry_body_max_chars'] ?? MarkdownBriefingFormatter::ENTRY_BODY_DEFAULT_CHARS,
             ];
             $twoPass = $this->parseTwoPassEnabled($_POST['two_pass'] ?? null);
             $result  = $gemini->generateSummary(
@@ -883,12 +884,16 @@ PROMPT;
         $contextTruncated = $capped['truncated'];
         $stratifiedCap    = $capped['stratified'];
 
-        $guard = new BriefingModuleGuard($gatherer);
-        $sealed = $guard->sealGeminiContext($entries, $scoresByKey, [
-            'since'           => $filters['since'],
-            'limit'           => $filters['limit'],
-            'score_selection' => MagnituScoreBands::describeBriefingGather($filters['scoreFilter']),
-        ], $filters['selection']);
+        $entryBodyMaxChars = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(count($entries));
+        $gatherMeta        = [
+            'since'                => $filters['since'],
+            'limit'                => $filters['limit'],
+            'score_selection'      => MagnituScoreBands::describeBriefingGather($filters['scoreFilter']),
+            'entry_body_max_chars' => $entryBodyMaxChars,
+        ];
+
+        $guard  = new BriefingModuleGuard($gatherer);
+        $sealed = $guard->sealGeminiContext($entries, $scoresByKey, $gatherMeta, $filters['selection']);
         $entries       = $sealed['entries'];
         $markdown      = $sealed['markdown'];
         $markdownChars = $sealed['markdownChars'];
@@ -916,7 +921,8 @@ PROMPT;
             'contextWarning'    => $contextWarning,
             'gatherStats'       => $gatherer->lastGatherStats(),
             'contextTruncated'  => $contextTruncated,
-            'maxContextEntries' => $geminiContext->maxContextEntries(),
+            'maxContextEntries'   => $geminiContext->maxContextEntries(),
+            'entry_body_max_chars' => $entryBodyMaxChars,
         ];
     }
 
