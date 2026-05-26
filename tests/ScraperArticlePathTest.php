@@ -11,7 +11,6 @@ final class ScraperArticlePathTest extends TestCase
     {
         $svc    = new ScraperFetchService();
         $method = new ReflectionMethod(ScraperFetchService::class, 'hasArticleSlugBeyondListing');
-        $method->setAccessible(true);
 
         self::assertTrue($method->invoke($svc, 'https://example.com/', 'https://example.com/news/story-1'));
         self::assertFalse($method->invoke($svc, 'https://example.com/', 'https://example.com/'));
@@ -21,7 +20,6 @@ final class ScraperArticlePathTest extends TestCase
     {
         $svc    = new ScraperFetchService();
         $method = new ReflectionMethod(ScraperFetchService::class, 'scrapeHostsMatch');
-        $method->setAccessible(true);
 
         self::assertTrue($method->invoke($svc, 'example.com', 'www.example.com'));
         self::assertTrue($method->invoke($svc, 'www.example.com', 'example.com'));

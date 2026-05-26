@@ -272,10 +272,14 @@ final class BaseClient
 
         $status = 0;
         $parsed = [];
-        // PHP sets $http_response_header in the calling scope — captured by reference here.
-        /** @var list<string> $http_response_header */
-        if (isset($http_response_header) && is_array($http_response_header)) {
-            foreach ($http_response_header as $line) {
+        if (function_exists('http_get_last_response_headers')) {
+            $headers = http_get_last_response_headers();
+        } else {
+            $var = 'http_response_header';
+            $headers = $$var ?? null;
+        }
+        if (is_array($headers)) {
+            foreach ($headers as $line) {
                 if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
                     $status = (int)$m[1];
                     continue;

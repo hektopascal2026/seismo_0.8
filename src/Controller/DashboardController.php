@@ -339,7 +339,13 @@ final class DashboardController
 
         $body = @file_get_contents($url, false, $ctx);
         $code = 0;
-        if (!empty($http_response_header[0]) && preg_match('#HTTP/\S+\s+(\d{3})#', $http_response_header[0], $m)) {
+        if (function_exists('http_get_last_response_headers')) {
+            $headers = http_get_last_response_headers();
+        } else {
+            $var = 'http_response_header';
+            $headers = $$var ?? null;
+        }
+        if (is_array($headers) && !empty($headers[0]) && preg_match('#HTTP/\S+\s+(\d{3})#', $headers[0], $m)) {
             $code = (int)$m[1];
         }
 

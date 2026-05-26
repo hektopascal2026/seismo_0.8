@@ -11,7 +11,6 @@ final class EntryRepositoryMergeCapTest extends TestCase
     {
         $repo   = new EntryRepository(new PDO('sqlite::memory:'));
         $method = new ReflectionMethod(EntryRepository::class, 'mergePerSourceFetchCap');
-        $method->setAccessible(true);
 
         self::assertSame(200, $method->invoke($repo, 30, 0));
         self::assertSame(240, $method->invoke($repo, 30, 210));

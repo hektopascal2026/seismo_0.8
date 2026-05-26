@@ -11,7 +11,6 @@ final class EmailIngestTruncateTest extends TestCase
     {
         $repo   = new EmailIngestRepository(new PDO('sqlite::memory:'));
         $method = new ReflectionMethod(EmailIngestRepository::class, 'truncate');
-        $method->setAccessible(true);
 
         $emoji = '🙂';
         $s     = str_repeat('a', 498) . $emoji;
