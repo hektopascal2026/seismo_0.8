@@ -19,7 +19,11 @@ final class BriefingGeminiContext
 
     public const MIN_MAX_CONTEXT_ENTRIES = 20;
 
-    public const MAX_MAX_CONTEXT_ENTRIES = 300;
+    /**
+     * UI / config ceiling for rows in the Gemini XML pool (default stays {@see DEFAULT_MAX_ENTRIES}).
+     * Gemini 3.5 Flash allows ~1M input tokens; entry bodies share {@see MarkdownBriefingFormatter::ENTRY_XML_POOL_CHAR_BUDGET}.
+     */
+    public const MAX_MAX_CONTEXT_ENTRIES = 500;
 
     public const DEFAULT_BATCH_SIZE = 35;
 

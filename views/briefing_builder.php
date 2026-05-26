@@ -197,6 +197,7 @@ $moduleOptions = [
                            class="search-input" style="width:7rem;">
                     <p class="admin-intro" style="margin:0.25rem 0 0;">
                         Caps how many rows enter the XML pool (<?= (int)$maxContextMin ?>–<?= (int)$maxContextMax ?>, default <?= (int)$maxContextDefault ?>).
+                        Gemini 3.5 allows a large input window; higher values add rows but share one body budget (text per entry scales down).
                         Saved when you prepare or generate. Fair share per enabled module when several are on.
                     </p>
                 </div>
