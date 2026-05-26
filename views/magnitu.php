@@ -17,6 +17,7 @@
  * @var bool $showTimelineHighlightsSortToggle
  * @var bool $timelineHighlightsSortHighestOn
  * @var string $timelineHighlightsSortToggleHref
+ * @var bool $timelineMediaOn
  */
 
 declare(strict_types=1);
@@ -29,6 +30,29 @@ $headerSubtitle = 'Scores ≥ ' . round($alertThreshold * 100) . '% (alert thres
 $activeNav      = 'magnitu';
 
 $timelineHighlightsSortHighestOn = !empty($timelineHighlightsSortHighestOn);
+$timelineMediaOn = !empty($timelineMediaOn);
+$mediaToggleParams = ['action' => 'magnitu'];
+if ($timelineHighlightsSortHighestOn) {
+    $mediaToggleParams['sort'] = 'highest';
+}
+foreach (['limit', 'offset'] as $k) {
+    if (!isset($_GET[$k])) {
+        continue;
+    }
+    $v = $_GET[$k];
+    if (is_scalar($v) && $v !== '') {
+        $mediaToggleParams[$k] = $v;
+    }
+}
+if ($timelineMediaOn) {
+    unset($mediaToggleParams['show_media']);
+    $timelineMediaToggleHref = http_build_query($mediaToggleParams);
+} else {
+    $mediaToggleParams['show_media'] = '1';
+    $timelineMediaToggleHref = http_build_query($mediaToggleParams);
+}
+$showTimelineMediaToggle = true;
+$timelineMediaToggleFeature = true;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -86,6 +110,11 @@ $timelineHighlightsSortHighestOn = !empty($timelineHighlightsSortHighestOn);
     <script>
     (function() {
         document.addEventListener('click', function(e) {
+            var mediaBtn = e.target.closest('.timeline-media-toggle-btn');
+            if (mediaBtn && mediaBtn.dataset.href) {
+                window.location.assign(mediaBtn.dataset.href);
+                return;
+            }
             var btn = e.target.closest('.timeline-highlights-sort-toggle-btn');
             if (!btn || !btn.dataset.href) return;
             window.location.assign(btn.dataset.href);

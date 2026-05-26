@@ -35,6 +35,8 @@ final class MagnituHighlightsController
         $pageError        = null;
         $alertThreshold   = 0.60;
         $sortByRelevance  = $this->resolveHighlightsSortByRelevance();
+        $timelineMediaOn  = $this->resolveTimelineMediaOn();
+        $excludeMediaCategory = !$timelineMediaOn;
 
         try {
             $pdo    = getDbConnection();
@@ -44,7 +46,13 @@ final class MagnituHighlightsController
             $repo   = new EntryRepository($pdo);
             $limit  = $this->clampLimit($_GET['limit'] ?? null, $pdo);
             $offset = max(0, (int)($_GET['offset'] ?? 0));
-            $allItems = $repo->getHighlightsTimeline($alertThreshold, $limit, $offset, $sortByRelevance);
+            $allItems = $repo->getHighlightsTimeline(
+                $alertThreshold,
+                $limit,
+                $offset,
+                $sortByRelevance,
+                $excludeMediaCategory,
+            );
         } catch (\Throwable $e) {
             error_log('Seismo magnitu highlights: ' . $e->getMessage());
             $pageError = 'Could not load highlights. Check error_log for details.';
@@ -70,6 +78,12 @@ final class MagnituHighlightsController
         require SEISMO_ROOT . '/views/magnitu.php';
     }
 
+    /** Include `feeds.category = media` rows when `?show_media=1` (same as main index). */
+    private function resolveTimelineMediaOn(): bool
+    {
+        return isset($_GET['show_media']) && (string)$_GET['show_media'] === '1';
+    }
+
     private function resolveHighlightsSortByRelevance(): bool
     {
         return isset($_GET['sort']) && (string)$_GET['sort'] === 'highest';
@@ -84,11 +98,17 @@ final class MagnituHighlightsController
         if ($sortHighest) {
             $params['sort'] = 'highest';
         }
-        foreach (['limit', 'offset'] as $k) {
+        foreach (['limit', 'offset', 'show_media'] as $k) {
             if (!isset($_GET[$k])) {
                 continue;
             }
             $v = $_GET[$k];
+            if ($k === 'show_media') {
+                if ((string)$v === '1') {
+                    $params['show_media'] = '1';
+                }
+                continue;
+            }
             if (is_scalar($v) && $v !== '') {
                 $params[$k] = $v;
             }

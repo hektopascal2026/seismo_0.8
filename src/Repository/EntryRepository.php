@@ -255,7 +255,8 @@ final class EntryRepository
         float $alertThreshold,
         int $limit,
         int $offset = 0,
-        bool $sortByRelevance = false
+        bool $sortByRelevance = false,
+        bool $excludeMediaCategory = false,
     ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
@@ -297,6 +298,12 @@ final class EntryRepository
 
         $items = $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
         $items = $this->deduplicateFeedItemsByLink($items);
+        if ($excludeMediaCategory) {
+            $items = array_values(array_filter(
+                $items,
+                static fn (array $it): bool => empty($it['timeline_media']),
+            ));
+        }
         if (!$sortByRelevance) {
             $this->sortMergedTimeline($items, false);
             $items = array_slice($items, $offset, $limit);
