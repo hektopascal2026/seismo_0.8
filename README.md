@@ -1,4 +1,4 @@
-# Seismo 0.7.6
+# Seismo 0.7.7
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.7.7** | **Swiss Fedlex** — SPARQL decision + entry-into-force dates on cards; Akoma Ntoso XML corpus for OC acts (`LexFedlexContentFetcher`); **`php bin/lex-backfill-content.php --ch`**. Timeline: date-only lex items sort on publication day with ingestion time (no backfill “breaking news”). Consultation ingest no longer uses `dcterms:modified` fallback. |
 | **0.7.6** | **Briefing prompt helper** — **View: Prompt \| Helper** on `?action=briefing_builder`: rough intent → Gemini drafts a full briefing prompt in the style of the desk default (`briefing_prompt_helper`); review, edit, save to library or instance default (syncs the Prompt editor). Generate briefing still uses the Prompt view only. |
 | **0.7.5** | **AI Briefing on Gemini 3.5** — default **`gemini-3.5-flash`** only; skinny **two-pass** pipeline (USER PROMPT in selection + summary, optional `selection_reasoning`, plain Markdown pass 2). **Dynamic entry bodies** (2k–12k chars/pool), **module guard**, 32k system prompts, **thinkingLevel** LOW. HTTP **429** batched retry fixed. Docs: `docs/ai-briefing-builder.md`. |
 | **0.7.4** | **Mail locale web views** — bilingual newsletters: inbox language picks the best labelled edition (German inbox → DE; non-English → DE then EN; English → EN then DE) over generic “view in browser” links. **Hosted DE/EN hydration** at ingest/reprocess: fetches the web edition (Readability + newsletter fallback), replaces `text_body`, metadata `web_view_url`, `web_view_locale`, `body_source`. |

@@ -212,7 +212,17 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </ul>
                     </div>
                     <div class="about-timeline-entry current-version">
-                        <div class="v-header"><strong>v0.7.6 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-header"><strong>v0.7.7 (Current)</strong> <span class="v-date">May 2026</span></div>
+                        <div class="v-title">Swiss Fedlex: richer cards &amp; full text</div>
+                        <ul>
+                            <li><strong>Cards:</strong> Beschlossen / Inkrafttreten dates and <strong>&Auml;nderung</strong> signal from Fedlex SPARQL (<code>dateDocument</code>, <code>dateEntryInForce</code>).</li>
+                            <li><strong>Corpus:</strong> OC acts fetch Akoma Ntoso XML from Fedlex filestore (not portal HTML); briefing and Magnitu use <code>lex_items.content</code>.</li>
+                            <li><strong>Backfill:</strong> <code>php bin/lex-backfill-content.php --ch</code> (consultations: <code>--ch-promote</code>).</li>
+                            <li><strong>Timeline:</strong> date-only lex items sort on publication day with ingestion time.</li>
+                        </ul>
+                    </div>
+                    <div class="about-timeline-entry">
+                        <div class="v-header"><strong>v0.7.6</strong> <span class="v-date">May 2026</span></div>
                         <div class="v-title">Briefing prompt helper</div>
                         <ul>
                             <li><strong>View: Prompt | Helper</strong> on <code>?action=briefing_builder</code> &mdash; rough notes in Helper, <strong>Generate prompt</strong> via <code>briefing_prompt_helper</code> (Gemini, style from desk default).</li>
