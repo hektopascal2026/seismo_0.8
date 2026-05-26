@@ -35,8 +35,8 @@ use Seismo\Repository\PluginRunLogRepository;
  * plugin's {@see SourceFetcherInterface::getMinIntervalSeconds()} and skips
  * plugins whose last successful run (`ok` or `warn`) in `plugin_run_log` is fresher than that.
  *
- * Throttle skips use {@see PluginRunResult::throttleSkipped()} — they are **not**
- * persisted to `plugin_run_log` (cron stdout only). User-initiated refresh paths
+ * Throttle skips use {@see PluginRunResult::throttleSkipped()} and are persisted
+ * to `plugin_run_log` as `skipped` (visible in Diagnostics; not counted as success). User-initiated refresh paths
  * call with `$force = true` to bypass plugin/core throttles except {@see CoreRunner::ID_MAIL}
  * (Gmail API quota — see {@see CoreRunner::runMail()}).
  *
@@ -394,8 +394,10 @@ final class RefreshAllService
 
         if (!$force && $this->isThrottled($plugin)) {
             $msg = 'Throttled — last successful run is fresher than ' . $plugin->getMinIntervalSeconds() . 's.';
+            $result = PluginRunResult::throttleSkipped($msg);
+            $this->record($id, $result, 0);
 
-            return PluginRunResult::throttleSkipped($msg);
+            return $result;
         }
 
         $block = $this->resolveConfigBlock($plugin);

@@ -28,10 +28,7 @@ final class GmailApiInboxClient
     ) {
     }
 
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function fetch(bool $catchUp = false): array
+    public function fetch(bool $catchUp = false): GmailFetchOutcome
     {
         $gmail = $this->oauth->createAuthorizedGmailService();
         $max   = $this->maxMessages();
@@ -40,33 +37,40 @@ final class GmailApiInboxClient
             $this->config->delete(MailConfigKeys::GMAIL_HISTORY_ID);
         }
 
-        $storedHistory = trim((string)($this->config->get(MailConfigKeys::GMAIL_HISTORY_ID) ?? ''));
-        $profile       = $gmail->users->getProfile('me');
+        $storedHistory  = trim((string)($this->config->get(MailConfigKeys::GMAIL_HISTORY_ID) ?? ''));
+        $profile        = $gmail->users->getProfile('me');
         $currentHistory = (string)($profile->getHistoryId() ?? '');
 
-        $messageIds        = [];
-        $historyAdvanceId  = $currentHistory;
+        $messageIds       = [];
+        $historyAdvanceId = '';
+        $historyTruncated = false;
         if ($storedHistory === '') {
             $messageIds = $this->bootstrapMessageIds($gmail, $max);
         } else {
-            $batch        = $this->historyMessageBatch($gmail, $storedHistory, $max);
-            $messageIds   = $batch['message_ids'];
-            if ($batch['truncated']) {
-                $historyAdvanceId = $batch['checkpoint_history_id'] ?? $storedHistory;
+            $batch = $this->historyMessageBatch($gmail, $storedHistory, $max);
+            $messageIds       = $batch['message_ids'];
+            $historyTruncated = $batch['truncated'];
+            if ($historyTruncated) {
+                $historyAdvanceId = (string)($batch['checkpoint_history_id'] ?? $storedHistory);
+            } else {
+                $historyAdvanceId = $currentHistory;
             }
         }
 
         $messageIds = array_values(array_unique(array_filter($messageIds, static fn (string $id) => $id !== '')));
+        $safetyCapTruncated = false;
         if (count($messageIds) > $max) {
             $dropped = count($messageIds) - $max;
             error_log(
                 '[seismo] Gmail fetch: safety cap ' . $max . ' — ' . $dropped
                 . ' message id(s) remain for a later run (history cursor not advanced past backlog).'
             );
-            $messageIds = array_slice($messageIds, 0, $max);
+            $messageIds           = array_slice($messageIds, 0, $max);
+            $safetyCapTruncated   = true;
         }
 
-        $rows = [];
+        $rows          = [];
+        $fetchFailures = 0;
         foreach ($messageIds as $i => $id) {
             if ($i > 0) {
                 usleep(self::MESSAGE_FETCH_DELAY_US);
@@ -78,18 +82,27 @@ final class GmailApiInboxClient
                 if ($this->isRateLimitError($e)) {
                     throw $e;
                 }
+                ++$fetchFailures;
                 error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             } catch (\Throwable $e) {
+                ++$fetchFailures;
                 error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             }
         }
 
-        if ($historyAdvanceId !== '') {
+        $historyAdvanced = false;
+        if ($fetchFailures === 0 && !$safetyCapTruncated && $historyAdvanceId !== '') {
             $this->config->set(MailConfigKeys::GMAIL_HISTORY_ID, $historyAdvanceId);
+            $historyAdvanced = true;
+        } elseif ($fetchFailures > 0) {
+            error_log(
+                '[seismo] Gmail fetch: ' . $fetchFailures . ' message(s) failed — history cursor unchanged (ids will retry).'
+            );
         }
+
         $this->config->set(MailConfigKeys::GMAIL_LAST_SYNC_AT, gmdate('Y-m-d H:i:s'));
 
-        return $rows;
+        return new GmailFetchOutcome($rows, $fetchFailures, $historyAdvanced);
     }
 
     /**

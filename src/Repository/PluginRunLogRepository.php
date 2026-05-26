@@ -15,8 +15,8 @@ use Seismo\Service\PluginRunResult;
  *
  * Rows are written by RefreshAllService after a plugin runs (ok / error) or
  * after the runner explicitly decides to skip for a runtime reason (e.g.
- * satellite mode, plugin disabled in config). **Throttle-skipped runs are
- * deliberately NOT logged** — see docblock on RefreshAllService.
+ * satellite mode, plugin disabled in config, throttle window). Throttle skips
+ * are logged as `skipped` and do not count toward {@see lastSuccessfulRunAt()}.
  */
 final class PluginRunLogRepository
 {
@@ -87,8 +87,8 @@ final class PluginRunLogRepository
     }
 
     /**
-     * Timestamp (UTC) of the most recent run for $pluginId (any status except
-     * throttle skips, which are not logged). Used by {@see \Seismo\Service\CoreRunner}
+     * Timestamp (UTC) of the most recent run for $pluginId (any status).
+     * Used by {@see \Seismo\Service\CoreRunner}
      * mail backoff so Gmail API rate-limit errors are not retried every cron tick.
      */
     public function lastRunAt(string $pluginId): ?DateTimeImmutable

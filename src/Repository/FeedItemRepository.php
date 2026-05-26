@@ -341,13 +341,13 @@ final class FeedItemRepository
      * @param list<array<string, mixed>> $rows Normalised feed item dicts:
      *        guid, title, link, description, content, author, published_date (Y-m-d H:i:s|null)
      */
-    public function upsertFeedItems(int $feedId, array $rows): int
+    public function upsertFeedItems(int $feedId, array $rows): FeedUpsertResult
     {
         if (isSatellite()) {
             throw new \RuntimeException('FeedItemRepository::upsertFeedItems must not run on a satellite.');
         }
         if ($rows === []) {
-            return 0;
+            return new FeedUpsertResult(0, 0);
         }
 
         $table = entryTable('feed_items');
@@ -398,15 +398,18 @@ final class FeedItemRepository
                  WHERE link_normalized = ? AND hidden = 0
                  LIMIT 1'
             );
-            $n = 0;
+            $inserted = 0;
+            $skipped  = 0;
             foreach ($rows as $i => $row) {
                 $guid = (string)($row['guid'] ?? '');
                 $title = trim((string)($row['title'] ?? ''));
                 if ($title === '') {
+                    ++$skipped;
                     continue;
                 }
                 $link = trim((string)($row['link'] ?? ''));
                 if ($link === '' || !$this->isNavigableHttpUrl($link)) {
+                    ++$skipped;
                     continue;
                 }
 
@@ -469,15 +472,16 @@ final class FeedItemRepository
                         $hash,
                     ]);
                     $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
-                    ++$n;
+                    ++$inserted;
                 } catch (\Throwable $e) {
                     $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    ++$skipped;
                     error_log('Seismo feed ingest row skipped feed ' . $feedId . ': ' . $e->getMessage());
                 }
             }
             $this->pdo->commit();
 
-            return $n;
+            return new FeedUpsertResult($inserted, $skipped);
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();

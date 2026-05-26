@@ -102,9 +102,13 @@ final class MailGoogleOAuthController
                 $_SESSION['error'] = 'Connect Gmail first.';
                 $this->redirectMail();
             }
-            $rows = (new GmailApiInboxClient($oauth, $config))->fetch(true);
-            $n    = (new EmailIngestRepository($pdo))->upsertGmailBatch($rows);
-            $_SESSION['success'] = 'Catch up complete — ' . $n . ' message(s) processed.';
+            $outcome = (new GmailApiInboxClient($oauth, $config))->fetch(true);
+            $n       = (new EmailIngestRepository($pdo))->upsertGmailBatch($outcome->rows);
+            $msg     = 'Catch up complete — ' . $n . ' message(s) processed.';
+            if ($outcome->fetchFailures > 0) {
+                $msg .= ' ' . $outcome->fetchFailures . ' message(s) failed to fetch and will retry.';
+            }
+            $_SESSION['success'] = $msg;
         } catch (\Throwable $e) {
             error_log('Seismo mail_gmail_catchup: ' . $e->getMessage());
             $_SESSION['error'] = $e->getMessage();

@@ -7,7 +7,7 @@ namespace Seismo\Service;
 /**
  * Outcome of a single plugin or core fetcher run. Persisted to `plugin_run_log` by
  * RefreshAllService / CoreRunner unless {@see self::$persistToPluginRunLog} is
- * false (throttle skips — stdout / cron mail only).
+ * false (chunked partial batches, IMAP-not-configured skips).
  */
 final class PluginRunResult
 {
@@ -29,29 +29,38 @@ final class PluginRunResult
      * per-feed tries. All failed → {@see error()}; some failed → `warn`; none
      * failed → `ok`. Empty batch (`$sourcesAttempted === 0`) → `ok`.
      */
-    public static function batchFeeds(int $itemCount, int $sourcesAttempted, int $sourcesFailed): self
-    {
-        if ($sourcesAttempted < 0 || $sourcesFailed < 0) {
+    public static function batchFeeds(
+        int $itemCount,
+        int $sourcesAttempted,
+        int $sourcesFailed,
+        int $rowsSkippedAtUpsert = 0,
+    ): self {
+        if ($sourcesAttempted < 0 || $sourcesFailed < 0 || $rowsSkippedAtUpsert < 0) {
             throw new \InvalidArgumentException('batchFeeds: counts must be non-negative.');
         }
         if ($sourcesFailed > $sourcesAttempted) {
             throw new \InvalidArgumentException('batchFeeds: failed cannot exceed attempted.');
         }
+
+        $skipNote = $rowsSkippedAtUpsert > 0
+            ? sprintf(' %d feed row(s) skipped at upsert (empty title/link or SQL error — see error_log).', $rowsSkippedAtUpsert)
+            : '';
+
         if ($sourcesAttempted === 0 || $sourcesFailed === 0) {
-            return new self('ok', $itemCount);
+            return new self('ok', $itemCount, $skipNote !== '' ? trim($skipNote) : null);
         }
         if ($sourcesFailed === $sourcesAttempted) {
             return new self(
                 'error',
                 $itemCount,
-                sprintf('All %d source(s) failed.', $sourcesFailed)
+                sprintf('All %d source(s) failed.', $sourcesFailed) . $skipNote
             );
         }
 
         return new self(
             'warn',
             $itemCount,
-            sprintf('%d of %d sources failed.', $sourcesFailed, $sourcesAttempted)
+            sprintf('%d of %d sources failed.', $sourcesFailed, $sourcesAttempted) . $skipNote
         );
     }
 
@@ -66,12 +75,13 @@ final class PluginRunResult
     }
 
     /**
-     * Skipped because the per-source throttle window has not elapsed. Must not
-     * write a `plugin_run_log` row (avoids cron noise).
+     * Skipped because the per-source throttle window has not elapsed. Logged to
+     * `plugin_run_log` as `skipped` so Diagnostics shows the last throttle (does
+     * not count as a successful run for {@see PluginRunLogRepository::lastSuccessfulRunAt()}).
      */
     public static function throttleSkipped(string $message): self
     {
-        return new self('skipped', 0, $message, false);
+        return new self('skipped', 0, $message, true);
     }
 
     public static function error(string $message): self

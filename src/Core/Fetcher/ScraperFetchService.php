@@ -99,7 +99,12 @@ final class ScraperFetchService
      * Production ingest: up to $maxArticles rows, 1–3 s random delay before each
      * article request after the first (link-following mode only).
      *
-     * @return array{items: list<array<string, mixed>>, warnings: list<string>, fatal_error: ?string}
+     * @return array{
+     *   items: list<array<string, mixed>>,
+     *   warnings: list<string>,
+     *   fatal_error: ?string,
+     *   no_links_matched?: bool
+     * }
      */
     public function fetchScraperFeedItems(
         string $listingUrl,
@@ -149,9 +154,10 @@ final class ScraperFetchService
         }
         if ($candidates === []) {
             return [
-                'items'       => [],
-                'warnings'    => [],
-                'fatal_error' => null,
+                'items'            => [],
+                'warnings'         => [],
+                'fatal_error'      => null,
+                'no_links_matched' => true,
             ];
         }
 

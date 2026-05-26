@@ -17,6 +17,7 @@ use Seismo\Core\Fetcher\ScraperFetchService;
 use Seismo\Feed\FeedModule;
 use Seismo\Repository\EmailIngestRepository;
 use Seismo\Repository\FeedItemRepository;
+use Seismo\Repository\FeedUpsertResult;
 use Seismo\Repository\PluginRunLogRepository;
 use Seismo\Repository\SystemConfigRepository;
 
@@ -86,11 +87,13 @@ final class CoreRunner
     private const K_RSS_ITEMS_ACC    = 'refresh_chunk:rss_items_acc';
     private const K_RSS_ATTEMPTED_ACC = 'refresh_chunk:rss_attempted_acc';
     private const K_RSS_FAILED_ACC   = 'refresh_chunk:rss_failed_acc';
+    private const K_RSS_SKIPPED_ACC  = 'refresh_chunk:rss_skipped_acc';
 
     private const K_SCRAPER_AFTER         = 'refresh_chunk:scraper_after_id';
     private const K_SCRAPER_ITEMS_ACC     = 'refresh_chunk:scraper_items_acc';
     private const K_SCRAPER_ATTEMPTED_ACC  = 'refresh_chunk:scraper_attempted_acc';
     private const K_SCRAPER_FAILED_ACC    = 'refresh_chunk:scraper_failed_acc';
+    private const K_SCRAPER_SKIPPED_ACC   = 'refresh_chunk:scraper_skipped_acc';
 
     public function __construct(
         private FeedItemRepository $feeds,
@@ -153,15 +156,14 @@ final class CoreRunner
     private function runRssLegacy(bool $force): PluginRunResult
     {
         if (!$force && $this->isThrottled(self::ID_RSS, self::THROTTLE_SECONDS[self::ID_RSS])) {
-            return PluginRunResult::throttleSkipped(
-                'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_RSS] . 's.'
-            );
+            return $this->returnCoreThrottled(self::ID_RSS, self::THROTTLE_SECONDS[self::ID_RSS]);
         }
 
         $start = (int)(microtime(true) * 1000);
         $total = 0;
         $attempted = 0;
         $failed = 0;
+        $rowsSkipped = 0;
         try {
             $offset = 0;
             $page   = 200;
@@ -178,8 +180,10 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $n = $this->ingestRssFeed($feed);
-                        $total += $n;
+                        $stats = $this->ingestRssFeed($feed);
+                        $total += $stats->inserted;
+                        $rowsSkipped += $stats->skipped;
+                        $this->logFeedUpsertSkips('core:rss', $id, $stats);
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
                         $failed++;
@@ -192,7 +196,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped);
         } catch (\Throwable $e) {
             error_log('Seismo core:rss: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -214,9 +218,7 @@ final class CoreRunner
         try {
             $afterId = $this->getCursorInt(self::K_RSS_AFTER);
             if ($afterId === 0 && !$force && $this->isThrottled(self::ID_RSS, self::THROTTLE_SECONDS[self::ID_RSS])) {
-                return PluginRunResult::throttleSkipped(
-                    'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_RSS] . 's.'
-                );
+                return $this->returnCoreThrottled(self::ID_RSS, self::THROTTLE_SECONDS[self::ID_RSS]);
             }
             if ($afterId === 0) {
                 $this->zeroRssAccumulators();
@@ -237,35 +239,43 @@ final class CoreRunner
             $total = 0;
             $attempted = 0;
             $failed = 0;
-            $maxId = $afterId;
+            $rowsSkipped = 0;
+            $cursorAfter = $afterId;
+            $lowestFailedInBatch = null;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
-                if ($id > 0) {
-                    $maxId = max($maxId, $id);
-                }
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
                 $attempted++;
                 try {
-                    $n = $this->ingestRssFeed($feed);
-                    $total += $n;
+                    $stats = $this->ingestRssFeed($feed);
+                    $total += $stats->inserted;
+                    $rowsSkipped += $stats->skipped;
+                    $this->logFeedUpsertSkips('core:rss', $id, $stats);
+                    $cursorAfter = max($cursorAfter, $id);
                     $this->feeds->touchFeedSuccess($id);
                 } catch (\Throwable $e) {
                     $failed++;
+                    $lowestFailedInBatch = $lowestFailedInBatch === null
+                        ? $id
+                        : min($lowestFailedInBatch, $id);
                     error_log('Seismo core:rss feed ' . $id . ': ' . $e->getMessage());
                     $this->feeds->touchFeedFailure($id, $e->getMessage());
                 }
             }
+            if ($lowestFailedInBatch !== null) {
+                $cursorAfter = min($cursorAfter, $lowestFailedInBatch - 1);
+            }
 
-            $this->addRssAccumulators($total, $attempted, $failed);
+            $this->addRssAccumulators($total, $attempted, $failed, $rowsSkipped);
             if (count($batch) < self::CHUNK_RSS_FEEDS) {
                 return $this->finalizeRssChunkedCycle($start);
             }
-            $this->magnituConfig->set(self::K_RSS_AFTER, (string)$maxId);
+            $this->magnituConfig->set(self::K_RSS_AFTER, (string)max(0, $cursorAfter));
 
-            return PluginRunResult::batchFeeds($total, $attempted, $failed)->withPersist(false);
+            return PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped)->withPersist(false);
         } catch (\Throwable $e) {
             error_log('Seismo core:rss: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -285,9 +295,7 @@ final class CoreRunner
             return $r;
         }
         if (!$force && $this->isThrottled(self::ID_PARL_PRESS, self::THROTTLE_SECONDS[self::ID_PARL_PRESS])) {
-            return PluginRunResult::throttleSkipped(
-                'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_PARL_PRESS] . 's.'
-            );
+            return $this->returnCoreThrottled(self::ID_PARL_PRESS, self::THROTTLE_SECONDS[self::ID_PARL_PRESS]);
         }
 
         $start = (int)(microtime(true) * 1000);
@@ -319,9 +327,10 @@ final class CoreRunner
                             );
                         }
                         $rows = $this->parlPress->fetchForFeed($feed);
-                        $n = $this->feeds->upsertFeedItems($id, $rows);
-                        $total += $n;
-                        if ($n > 0) {
+                        $stats = $this->feeds->upsertFeedItems($id, $rows);
+                        $total += $stats->inserted;
+                        $this->logFeedUpsertSkips('core:parl_press', $id, $stats);
+                        if ($stats->inserted > 0) {
                             $purged = $this->feeds->deleteAlienParlPressFeedItems($id);
                             if ($purged > 0) {
                                 error_log(
@@ -371,9 +380,7 @@ final class CoreRunner
     private function runScraperLegacy(bool $force): PluginRunResult
     {
         if (!$force && $this->isThrottled(self::ID_SCRAPER, self::THROTTLE_SECONDS[self::ID_SCRAPER])) {
-            return PluginRunResult::throttleSkipped(
-                'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_SCRAPER] . 's.'
-            );
+            return $this->returnCoreThrottled(self::ID_SCRAPER, self::THROTTLE_SECONDS[self::ID_SCRAPER]);
         }
 
         $start = (int)(microtime(true) * 1000);
@@ -381,6 +388,7 @@ final class CoreRunner
         $total = 0;
         $attempted = 0;
         $failed = 0;
+        $rowsSkipped = 0;
         try {
             $offset = 0;
             $page   = 200;
@@ -397,27 +405,10 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
-                        $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
-                        $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                        $maxArticles = ScraperFetchService::PRODUCTION_MAX_ARTICLES;
-                        $out         = $this->scraper->fetchScraperFeedItems(
-                            $url,
-                            $linkPattern,
-                            $dateSel,
-                            $excludeSels,
-                            $maxArticles,
-                            !$force
-                        );
-                        if ($out['fatal_error'] !== null) {
-                            throw new \RuntimeException($out['fatal_error']);
-                        }
-                        foreach ($out['warnings'] as $w) {
-                            error_log('Seismo core:scraper feed ' . $id . ': ' . $w);
-                        }
-                        $items = $out['items'];
-                        $n = $this->feeds->upsertFeedItems($id, $items);
-                        $total += $n;
+                        $stats = $this->ingestScraperFeed($feed, !$force);
+                        $total += $stats->inserted;
+                        $rowsSkipped += $stats->skipped;
+                        $this->logFeedUpsertSkips('core:scraper', $id, $stats);
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
                         $failed++;
@@ -430,7 +421,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped);
         } catch (\Throwable $e) {
             error_log('Seismo core:scraper: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -504,9 +495,7 @@ final class CoreRunner
         try {
             $afterId = $this->getCursorInt(self::K_SCRAPER_AFTER);
             if ($afterId === 0 && !$force && $this->isThrottled(self::ID_SCRAPER, self::THROTTLE_SECONDS[self::ID_SCRAPER])) {
-                return PluginRunResult::throttleSkipped(
-                    'Throttled — last successful run is fresher than ' . self::THROTTLE_SECONDS[self::ID_SCRAPER] . 's.'
-                );
+                return $this->returnCoreThrottled(self::ID_SCRAPER, self::THROTTLE_SECONDS[self::ID_SCRAPER]);
             }
             if ($afterId === 0) {
                 // Self-heal at the start of each chunked cycle so newly-added
@@ -531,54 +520,43 @@ final class CoreRunner
             $total = 0;
             $attempted = 0;
             $failed = 0;
-            $maxId = $afterId;
+            $rowsSkipped = 0;
+            $cursorAfter = $afterId;
+            $lowestFailedInBatch = null;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
-                if ($id > 0) {
-                    $maxId = max($maxId, $id);
-                }
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
                 $attempted++;
                 try {
-                    $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
-                    $dateSel     = trim((string)($feed['scraper_date_selector'] ?? ''));
-                    $excludeSels = trim((string)($feed['scraper_exclude_selectors'] ?? ''));
-                    $maxArticles = ScraperFetchService::PRODUCTION_MAX_ARTICLES;
-                    $out         = $this->scraper->fetchScraperFeedItems(
-                        $url,
-                        $linkPattern,
-                        $dateSel,
-                        $excludeSels,
-                        $maxArticles,
-                        !$force
-                    );
-                    if ($out['fatal_error'] !== null) {
-                        throw new \RuntimeException($out['fatal_error']);
-                    }
-                    foreach ($out['warnings'] as $w) {
-                        error_log('Seismo core:scraper feed ' . $id . ': ' . $w);
-                    }
-                    $items = $out['items'];
-                    $n = $this->feeds->upsertFeedItems($id, $items);
-                    $total += $n;
+                    $stats = $this->ingestScraperFeed($feed, !$force);
+                    $total += $stats->inserted;
+                    $rowsSkipped += $stats->skipped;
+                    $this->logFeedUpsertSkips('core:scraper', $id, $stats);
+                    $cursorAfter = max($cursorAfter, $id);
                     $this->feeds->touchFeedSuccess($id);
                 } catch (\Throwable $e) {
                     $failed++;
+                    $lowestFailedInBatch = $lowestFailedInBatch === null
+                        ? $id
+                        : min($lowestFailedInBatch, $id);
                     error_log('Seismo core:scraper feed ' . $id . ': ' . $e->getMessage());
                     $this->feeds->touchFeedFailure($id, $e->getMessage());
                 }
             }
+            if ($lowestFailedInBatch !== null) {
+                $cursorAfter = min($cursorAfter, $lowestFailedInBatch - 1);
+            }
 
-            $this->addScraperAccumulators($total, $attempted, $failed);
+            $this->addScraperAccumulators($total, $attempted, $failed, $rowsSkipped);
             if (count($batch) < self::CHUNK_SCRAPER_FEEDS) {
                 return $this->finalizeScraperChunkedCycle($start);
             }
-            $this->magnituConfig->set(self::K_SCRAPER_AFTER, (string)$maxId);
+            $this->magnituConfig->set(self::K_SCRAPER_AFTER, (string)max(0, $cursorAfter));
 
-            return PluginRunResult::batchFeeds($total, $attempted, $failed)->withPersist(false);
+            return PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped)->withPersist(false);
         } catch (\Throwable $e) {
             error_log('Seismo core:scraper: ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -600,9 +578,12 @@ final class CoreRunner
         $mailThrottle = self::THROTTLE_SECONDS[self::ID_MAIL];
         // Gmail quota: always respect mail throttle (timeline/diagnostics force=true does not bypass).
         if ($this->isMailThrottled($mailThrottle)) {
-            return PluginRunResult::throttleSkipped(
+            $r = PluginRunResult::throttleSkipped(
                 'Throttled — last mail run is fresher than ' . $mailThrottle . 's.'
             );
+            $this->record(self::ID_MAIL, $r, 0);
+
+            return $r;
         }
 
         $start = (int)(microtime(true) * 1000);
@@ -637,9 +618,17 @@ final class CoreRunner
                 true
             );
         }
-        $client = new GmailApiInboxClient($oauth, $this->magnituConfig);
-        $rows   = $client->fetch(false);
-        $n      = $this->emailIngest->upsertGmailBatch($rows);
+        $client  = new GmailApiInboxClient($oauth, $this->magnituConfig);
+        $outcome = $client->fetch(false);
+        $n       = $this->emailIngest->upsertGmailBatch($outcome->rows);
+
+        if ($outcome->fetchFailures > 0) {
+            return new PluginRunResult(
+                'warn',
+                $n,
+                $outcome->fetchFailures . ' Gmail message(s) failed to fetch; history cursor not advanced — they will retry on the next run.'
+            );
+        }
 
         return PluginRunResult::ok($n);
     }
@@ -754,10 +743,12 @@ final class CoreRunner
             self::K_RSS_ITEMS_ACC,
             self::K_RSS_ATTEMPTED_ACC,
             self::K_RSS_FAILED_ACC,
+            self::K_RSS_SKIPPED_ACC,
             self::K_SCRAPER_AFTER,
             self::K_SCRAPER_ITEMS_ACC,
             self::K_SCRAPER_ATTEMPTED_ACC,
             self::K_SCRAPER_FAILED_ACC,
+            self::K_SCRAPER_SKIPPED_ACC,
         ] as $key) {
             $config->delete($key);
         }
@@ -793,9 +784,10 @@ final class CoreRunner
         $this->magnituConfig->set(self::K_RSS_ITEMS_ACC, '0');
         $this->magnituConfig->set(self::K_RSS_ATTEMPTED_ACC, '0');
         $this->magnituConfig->set(self::K_RSS_FAILED_ACC, '0');
+        $this->magnituConfig->set(self::K_RSS_SKIPPED_ACC, '0');
     }
 
-    private function addRssAccumulators(int $items, int $attempted, int $failed): void
+    private function addRssAccumulators(int $items, int $attempted, int $failed, int $rowsSkipped = 0): void
     {
         $this->magnituConfig->set(
             self::K_RSS_ITEMS_ACC,
@@ -809,6 +801,10 @@ final class CoreRunner
             self::K_RSS_FAILED_ACC,
             (string)($this->getAccInt(self::K_RSS_FAILED_ACC) + $failed)
         );
+        $this->magnituConfig->set(
+            self::K_RSS_SKIPPED_ACC,
+            (string)($this->getAccInt(self::K_RSS_SKIPPED_ACC) + $rowsSkipped)
+        );
     }
 
     private function finalizeRssChunkedCycle(int $startMs): PluginRunResult
@@ -816,9 +812,10 @@ final class CoreRunner
         $items = $this->getAccInt(self::K_RSS_ITEMS_ACC);
         $att = $this->getAccInt(self::K_RSS_ATTEMPTED_ACC);
         $fail = $this->getAccInt(self::K_RSS_FAILED_ACC);
+        $skipped = $this->getAccInt(self::K_RSS_SKIPPED_ACC);
         $this->zeroRssAccumulators();
         $this->magnituConfig->set(self::K_RSS_AFTER, '0');
-        $r = PluginRunResult::batchFeeds($items, $att, $fail);
+        $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_RSS, $r, $duration);
 
@@ -830,9 +827,10 @@ final class CoreRunner
         $this->magnituConfig->set(self::K_SCRAPER_ITEMS_ACC, '0');
         $this->magnituConfig->set(self::K_SCRAPER_ATTEMPTED_ACC, '0');
         $this->magnituConfig->set(self::K_SCRAPER_FAILED_ACC, '0');
+        $this->magnituConfig->set(self::K_SCRAPER_SKIPPED_ACC, '0');
     }
 
-    private function addScraperAccumulators(int $items, int $attempted, int $failed): void
+    private function addScraperAccumulators(int $items, int $attempted, int $failed, int $rowsSkipped = 0): void
     {
         $this->magnituConfig->set(
             self::K_SCRAPER_ITEMS_ACC,
@@ -846,6 +844,10 @@ final class CoreRunner
             self::K_SCRAPER_FAILED_ACC,
             (string)($this->getAccInt(self::K_SCRAPER_FAILED_ACC) + $failed)
         );
+        $this->magnituConfig->set(
+            self::K_SCRAPER_SKIPPED_ACC,
+            (string)($this->getAccInt(self::K_SCRAPER_SKIPPED_ACC) + $rowsSkipped)
+        );
     }
 
     private function finalizeScraperChunkedCycle(int $startMs): PluginRunResult
@@ -853,9 +855,10 @@ final class CoreRunner
         $items = $this->getAccInt(self::K_SCRAPER_ITEMS_ACC);
         $att = $this->getAccInt(self::K_SCRAPER_ATTEMPTED_ACC);
         $fail = $this->getAccInt(self::K_SCRAPER_FAILED_ACC);
+        $skipped = $this->getAccInt(self::K_SCRAPER_SKIPPED_ACC);
         $this->zeroScraperAccumulators();
         $this->magnituConfig->set(self::K_SCRAPER_AFTER, '0');
-        $r = PluginRunResult::batchFeeds($items, $att, $fail);
+        $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_SCRAPER, $r, $duration);
 
@@ -885,6 +888,7 @@ final class CoreRunner
         $total = 0;
         $attempted = 0;
         $failed = 0;
+        $rowsSkipped = 0;
         try {
             $offset = 0;
             $page   = 200;
@@ -900,7 +904,10 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $total += $this->ingestRssFeed($feed);
+                        $stats = $this->ingestRssFeed($feed);
+                        $total += $stats->inserted;
+                        $rowsSkipped += $stats->skipped;
+                        $this->logFeedUpsertSkips('core:rss:' . $category, $id, $stats);
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
                         $failed++;
@@ -913,7 +920,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped);
         } catch (\Throwable $e) {
             error_log('Seismo core:rss:' . $category . ': ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -949,6 +956,7 @@ final class CoreRunner
         $total = 0;
         $attempted = 0;
         $failed = 0;
+        $rowsSkipped = 0;
         try {
             $offset = 0;
             $page   = 50;
@@ -965,21 +973,10 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $out = $this->scraper->fetchScraperFeedItems(
-                            $url,
-                            trim((string)($feed['scraper_link_pattern'] ?? '')),
-                            trim((string)($feed['scraper_date_selector'] ?? '')),
-                            trim((string)($feed['scraper_exclude_selectors'] ?? '')),
-                            ScraperFetchService::PRODUCTION_MAX_ARTICLES,
-                            true
-                        );
-                        if ($out['fatal_error'] !== null) {
-                            throw new \RuntimeException((string)$out['fatal_error']);
-                        }
-                        foreach ($out['warnings'] as $w) {
-                            error_log('Seismo core:scraper:' . $category . ' feed ' . $id . ': ' . $w);
-                        }
-                        $total += $this->feeds->upsertFeedItems($id, $out['items']);
+                        $stats = $this->ingestScraperFeed($feed, false);
+                        $total += $stats->inserted;
+                        $rowsSkipped += $stats->skipped;
+                        $this->logFeedUpsertSkips('core:scraper:' . $category, $id, $stats);
                         $this->feeds->touchFeedSuccess($id);
                     } catch (\Throwable $e) {
                         $failed++;
@@ -992,7 +989,7 @@ final class CoreRunner
                 }
                 $offset += $page;
             }
-            $r = PluginRunResult::batchFeeds($total, $attempted, $failed);
+            $r = PluginRunResult::batchFeeds($total, $attempted, $failed, $rowsSkipped);
         } catch (\Throwable $e) {
             error_log('Seismo core:scraper:' . $category . ': ' . $e->getMessage());
             $r = PluginRunResult::error($e->getMessage());
@@ -1020,12 +1017,12 @@ final class CoreRunner
     /**
      * @param array<string, mixed> $feed Row from {@see FeedItemRepository::listFeedsForRssRefresh()}
      */
-    private function ingestRssFeed(array $feed): int
+    private function ingestRssFeed(array $feed): FeedUpsertResult
     {
         $id  = (int)($feed['id'] ?? 0);
         $url = trim((string)($feed['url'] ?? ''));
         if ($id <= 0 || $url === '') {
-            return 0;
+            return new FeedUpsertResult(0, 0);
         }
 
         $items = $this->rss->fetchFeedItems($url);
@@ -1034,6 +1031,63 @@ final class CoreRunner
         }
 
         return $this->feeds->upsertFeedItems($id, $items);
+    }
+
+    /**
+     * @param array<string, mixed> $feed
+     */
+    private function ingestScraperFeed(array $feed, bool $delayBetweenArticleFetches): FeedUpsertResult
+    {
+        $id  = (int)($feed['id'] ?? 0);
+        $url = trim((string)($feed['url'] ?? ''));
+        if ($id <= 0 || $url === '') {
+            return new FeedUpsertResult(0, 0);
+        }
+
+        $linkPattern = trim((string)($feed['scraper_link_pattern'] ?? ''));
+        $out         = $this->scraper->fetchScraperFeedItems(
+            $url,
+            $linkPattern,
+            trim((string)($feed['scraper_date_selector'] ?? '')),
+            trim((string)($feed['scraper_exclude_selectors'] ?? '')),
+            ScraperFetchService::PRODUCTION_MAX_ARTICLES,
+            $delayBetweenArticleFetches
+        );
+        if ($out['fatal_error'] !== null) {
+            throw new \RuntimeException((string)$out['fatal_error']);
+        }
+        foreach ($out['warnings'] as $w) {
+            error_log('Seismo core:scraper feed ' . $id . ': ' . $w);
+        }
+        if ($linkPattern !== '' && $out['items'] === [] && !empty($out['no_links_matched'])) {
+            throw new \RuntimeException(
+                'No same-host links on the listing page match the link pattern (substring).'
+            );
+        }
+
+        return $this->feeds->upsertFeedItems($id, $out['items']);
+    }
+
+    private function returnCoreThrottled(string $coreId, int $minIntervalSeconds): PluginRunResult
+    {
+        $r = PluginRunResult::throttleSkipped(
+            'Throttled — last successful run is fresher than ' . $minIntervalSeconds . 's.'
+        );
+        $this->record($coreId, $r, 0);
+
+        return $r;
+    }
+
+    private function logFeedUpsertSkips(string $coreLabel, int $feedId, FeedUpsertResult $stats): void
+    {
+        if ($stats->skipped > 0) {
+            error_log(sprintf(
+                'Seismo %s feed %d: %d row(s) skipped at upsert.',
+                $coreLabel,
+                $feedId,
+                $stats->skipped
+            ));
+        }
     }
 
     /**
