@@ -476,7 +476,11 @@ $moduleOptions = [
                         return { ok: false, error: invalidMsg, httpStatus: r.status };
                     }
                     if (!data.ok) {
-                        data.error = data.error || 'Request failed.';
+                        if (!data.error) {
+                            data.error = r.status >= 400
+                                ? 'Request failed (HTTP ' + r.status + ').'
+                                : 'Request failed (no error detail from server).';
+                        }
                     }
                     data.httpStatus = r.status;
                     return data;
@@ -1142,7 +1146,12 @@ $moduleOptions = [
                         }
                     }
                     if (payload.entries_html && sourcesCards) {
-                        sourcesCards.innerHTML = payload.entries_html;
+                        try {
+                            sourcesCards.innerHTML = payload.entries_html;
+                        } catch (htmlErr) {
+                            console.error('Briefing source cards HTML failed:', htmlErr);
+                            sourcesCards.textContent = 'Source cards could not be rendered.';
+                        }
                         if (sourcesIntro && payload.meta) {
                             var introParts = [];
                             if (payload.meta.attribution_filtered && payload.meta.attributed_entry_count !== undefined) {
@@ -1169,15 +1178,47 @@ $moduleOptions = [
                     }
                 }
 
-                if (data.meta && data.meta.entry_count !== undefined) {
-                    applyStatusEntryCount(data.meta.entry_count);
+                try {
+                    if (data.meta && data.meta.entry_count !== undefined) {
+                        applyStatusEntryCount(data.meta.entry_count);
+                    }
+                    setActiveStatusStep('cards');
+                    renderBriefingSuccess(data);
+                } catch (renderErr) {
+                    console.error('Briefing render failed:', renderErr);
+                    hideCopyBtn();
+                    var renderMsg = (data.text && String(data.text).trim())
+                        ? 'Briefing was generated but the page could not display it. See browser console.'
+                        : 'Briefing response could not be displayed.';
+                    if (errEl) {
+                        errEl.textContent = renderMsg;
+                        errEl.hidden = false;
+                    }
+                    hideProcessingStatus();
+                    out.style.whiteSpace = 'pre-wrap';
+                    if (data.text && String(data.text).trim()) {
+                        out.textContent = String(data.text);
+                        showCopyBtn(String(data.text));
+                    } else {
+                        out.innerHTML = '';
+                        var renderInBox = document.createElement('p');
+                        renderInBox.className = 'briefing-output-error-inline';
+                        renderInBox.textContent = renderMsg;
+                        out.appendChild(renderInBox);
+                    }
                 }
-                setActiveStatusStep('cards');
-                renderBriefingSuccess(data);
             })
             .catch(function(err) {
                 hideCopyBtn();
-                var msg = (err && err.error) ? err.error : 'Request failed.';
+                var msg = 'Request failed.';
+                if (err && err.error) {
+                    msg = err.error;
+                } else if (err && err.message) {
+                    msg = err.message;
+                } else if (err && err.httpStatus) {
+                    msg = 'Request failed (HTTP ' + err.httpStatus + ').';
+                }
+                console.error('Briefing request failed:', err);
                 if (errEl) {
                     errEl.textContent = msg;
                     errEl.hidden = false;

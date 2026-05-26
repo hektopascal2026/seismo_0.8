@@ -409,11 +409,17 @@ PROMPT;
             ]);
         } catch (GeminiBriefingException $e) {
             http_response_code(502);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            $this->echoBriefingJson([
+                'ok'    => false,
+                'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini briefing failed.',
+            ]);
         } catch (\Throwable $e) {
             error_log('Seismo briefing_builder_generate: ' . $e->getMessage());
             http_response_code(500);
-            echo json_encode(['ok' => false, 'error' => 'Could not generate briefing.'], JSON_UNESCAPED_UNICODE);
+            $this->echoBriefingJson([
+                'ok'    => false,
+                'error' => 'Could not generate briefing.',
+            ]);
         }
     }
 
