@@ -176,6 +176,8 @@ PROMPT;
      */
     public function prepare(): void
     {
+        set_time_limit(300);
+
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
 
@@ -239,6 +241,8 @@ PROMPT;
 
     public function generate(): void
     {
+        set_time_limit(300);
+
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
 

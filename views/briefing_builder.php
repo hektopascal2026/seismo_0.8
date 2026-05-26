@@ -465,13 +465,25 @@ $moduleOptions = [
                     try {
                         data = JSON.parse(t);
                     } catch (e) {
-                        return { ok: false, error: 'Invalid response (HTTP ' + r.status + ').' };
+                        var invalidMsg = 'Invalid response (HTTP ' + r.status + ').';
+                        if (r.status === 0 || r.status >= 500) {
+                            invalidMsg += ' The server may have timed out during entry load or Gemini generation.';
+                        }
+                        return { ok: false, error: invalidMsg };
                     }
                     if (!data.ok) {
                         data.error = data.error || 'Request failed.';
                     }
                     return data;
                 });
+            }).catch(function(err) {
+                var detail = (err && err.message) ? String(err.message) : '';
+                var msg = 'Network error — could not reach the server.';
+                if (detail !== '') {
+                    msg += ' (' + detail + ')';
+                }
+                msg += ' If this happens after ~30–60s, check PHP max_execution_time and nginx fastcgi_read_timeout (briefing needs up to ~3 minutes).';
+                return { ok: false, error: msg };
             });
         }
 
@@ -1160,7 +1172,7 @@ $moduleOptions = [
             })
             .catch(function(err) {
                 hideCopyBtn();
-                var msg = (err && err.error) ? err.error : 'Network error — could not reach the server.';
+                var msg = (err && err.error) ? err.error : 'Request failed.';
                 if (errEl) {
                     errEl.textContent = msg;
                     errEl.hidden = false;
