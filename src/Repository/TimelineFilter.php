@@ -65,6 +65,7 @@ final class TimelineFilter
         public readonly bool $excludeAllFeedItems = false,
         public readonly bool $excludeAllEmails = false,
         public readonly bool $excludeAllLexItems = false,
+        public readonly bool $filterMem = false,
     ) {
     }
 
@@ -84,7 +85,8 @@ final class TimelineFilter
             || $this->excludeJusLex
             || $this->excludeAllFeedItems
             || $this->excludeAllEmails
-            || $this->excludeAllLexItems;
+            || $this->excludeAllLexItems
+            || $this->filterMem;
     }
 
     /**
@@ -100,6 +102,7 @@ final class TimelineFilter
             && !$this->excludeAllFeedItems
             && !$this->excludeAllEmails
             && !$this->excludeAllLexItems
+            && !$this->filterMem
             && $this->feedCategories === []
             && $this->feedSourceKinds === []
             && $this->lexSources === []
@@ -234,6 +237,7 @@ final class TimelineFilter
             excludeAllFeedItems: true,
             excludeAllEmails: true,
             excludeAllLexItems: true,
+            filterMem: false,
         );
     }
 
@@ -270,6 +274,9 @@ final class TimelineFilter
         $calRaw = $filters['calendar'] ?? null;
         $calOn  = is_scalar($calRaw) && trim((string)$calRaw) === '1';
 
+        $memRaw = $filters['mem'] ?? null;
+        $memOn  = is_scalar($memRaw) && trim((string)$memRaw) === '1';
+
         $excludeAllFeedItems = $feedAll !== [] && $inFeeds === [];
         $excludeAllEmails    = $emAll !== [] && $inEm === [];
         $excludeAllLexItems  = $lexAll !== [] && $inLex === [];
@@ -294,6 +301,7 @@ final class TimelineFilter
             excludeAllFeedItems: $excludeAllFeedItems,
             excludeAllEmails: $excludeAllEmails,
             excludeAllLexItems: $excludeAllLexItems,
+            filterMem: $memOn,
         );
     }
 
@@ -344,6 +352,10 @@ final class TimelineFilter
         $ecalRaw = isset($get['ecal']) ? trim((string)$get['ecal']) : '';
         $ejusRaw = isset($get['ejus']) ? trim((string)$get['ejus']) : '';
 
+        $filters = isset($get['filters']) && is_array($get['filters']) ? $get['filters'] : [];
+        $memRaw = $filters['mem'] ?? null;
+        $memOn  = is_scalar($memRaw) && trim((string)$memRaw) === '1';
+
         return new self(
             feedCategories: $fcList,
             feedSourceKinds: $fkList,
@@ -354,6 +366,7 @@ final class TimelineFilter
             excludedEmailTags: $eetList,
             excludeCalendar: ($ecalRaw === '1' || strtolower($ecalRaw) === 'true'),
             excludeJusLex: ($ejusRaw === '1' || strtolower($ejusRaw) === 'true'),
+            filterMem: $memOn,
         );
     }
 

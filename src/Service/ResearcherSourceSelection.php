@@ -25,6 +25,7 @@ final class ResearcherSourceSelection
         private readonly bool $moduleLex,
         private readonly bool $moduleLeg,
         private readonly bool $moduleLexCh = false,
+        private readonly bool $moduleMem = false,
     ) {
     }
 
@@ -34,7 +35,7 @@ final class ResearcherSourceSelection
             $type = 'all';
         }
 
-        return new self($type, false, false, false, false, false, false, false);
+        return new self($type, false, false, false, false, false, false, false, false);
     }
 
     public static function forModules(
@@ -45,8 +46,9 @@ final class ResearcherSourceSelection
         bool $lex,
         bool $leg,
         bool $lexCh = false,
+        bool $mem = false,
     ): self {
-        return new self(null, $feeds, $media, $scraper, $email, $lex, $leg, $lexCh);
+        return new self(null, $feeds, $media, $scraper, $email, $lex, $leg, $lexCh, $mem);
     }
 
     public function isExportMode(): bool
@@ -94,6 +96,11 @@ final class ResearcherSourceSelection
         return $this->moduleLeg;
     }
 
+    public function moduleMem(): bool
+    {
+        return $this->moduleMem;
+    }
+
     public function hasAnyModule(): bool
     {
         return $this->moduleFeeds
@@ -102,6 +109,7 @@ final class ResearcherSourceSelection
             || $this->moduleEmail
             || $this->moduleLex
             || $this->moduleLeg
-            || $this->moduleLexCh;
+            || $this->moduleLexCh
+            || $this->moduleMem;
     }
 }

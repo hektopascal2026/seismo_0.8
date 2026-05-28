@@ -54,6 +54,9 @@ final class DashboardController
             $repo = new EntryRepository($pdo);
             $pillOpts        = $repo->getFilterPillOptions();
             $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
+            if ($timelineFilter->filterMem) {
+                $excludeMediaCategory = false;
+            }
             if ($currentView === 'favourites') {
                 $allItems = $repo->getFavouritesTimeline($limit, $offset, $timelineFilter, $excludeMediaCategory);
             } elseif ($searchQuery !== '') {
@@ -94,6 +97,8 @@ final class DashboardController
                 $emptyTimelineHint = 'favourites';
             } elseif ($searchQuery !== '') {
                 $emptyTimelineHint = 'search';
+            } elseif ($timelineFilter !== null && $timelineFilter->filterMem) {
+                $emptyTimelineHint = 'swissmem';
             } elseif ($timelineFilter->isActive()) {
                 $emptyTimelineHint = 'filters';
             }
@@ -150,6 +155,8 @@ final class DashboardController
                 $emptyTimelineHint = 'favourites';
             } elseif ($searchQuery !== '') {
                 $emptyTimelineHint = 'search';
+            } elseif ($timelineFilter !== null && $timelineFilter->filterMem) {
+                $emptyTimelineHint = 'swissmem';
             } elseif ($timelineFilter->isActive()) {
                 $emptyTimelineHint = 'filters';
             }

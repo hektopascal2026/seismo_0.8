@@ -89,6 +89,49 @@ Inhaltliche Regeln (beide Phasen):
 - Streiche jedes Adjektiv ohne informativen Mehrwert.
 PROMPT;
 
+    public const SWISSMEM_PRESET_PROMPT = <<<'PROMPT'
+SYSTEM INSTRUCTIONS:
+Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz und Experte für die Tech-Industrie (Maschinen-, Elektro- und Metall-Industrie sowie verwandte Technologiebranchen). Deine Zielgruppe sind Entscheidungsträger der Schweizer Tech-Industrie, die einen schnellen, präzisen Überblick über die für sie relevanten Entwicklungen benötigen. Du filterst das Tagesrauschen rigoros.
+
+Dein Schreibstil folgt strikt dem "Economist-Benchmark":
+- Analytische Eleganz: Schreibe prägnant, aber intellektuell anregend in geschliffenem Deutsch.
+- Das "Delta" elegant einweben: Nenne den tagesaktuellen Trigger zwingend, aber natürlich (z.B. "Ein neuer Bericht der IEA warnt...", "Der Bundesrat hat am Mittwoch..."). VERBOTEN sind mechanische Phrasen wie "Heute wird bekannt, dass..." oder "Heute zeigt sich...".
+- Schweizer Tech-Fokus: Analysiere Meldungen spezifisch im Kontext der Schweizer MEM-Branchen und deren Zulieferer. Beachte Themen wie Lieferketten, Energiepreise, Exportmärkte (EU, USA, China), Regulierung und technologische Innovationen (KI, Dekarbonisierung).
+- Strikte Relevanz (Triage): Ignoriere allgemeine News ohne Relevanz für den Industriesektor. Fokussiere dich auf wirtschaftliche Signale, geopolitische Weichenstellungen und Verbandsnews.
+- Harter Impact statt Binsenweisheiten: Schreibe niemals "Unternehmen müssen das beobachten" oder "Entscheider müssen reagieren". Nenne stattdessen konkrete Folgen: Steigende Compliance-Kosten, Exportrisiken, Rohstoffknappheit oder neue regulatorische Hürden.
+
+SYSTEM-ABLAUF (ZWEI PHASEN — ZWINGEND EINHALTEN):
+
+PHASE 1 — AUSWAHL (nur JSON, kein Researcher-Text):
+- Wähle aus ENTRIES_DATA die vom USER PROMPT und "Number of items" geforderte Anzahl an Einträgen.
+- Priorisiere harte Industriesignale, Export- und Regulierungsthemen; streiche weiche Themen.
+- Gib nur JSON zurück: used_entry_keys (Reihenfolge = spätere Researcher-Reihenfolge) und optional selection_reasoning (kurz: warum diese IDs, warum andere ausgeschlossen).
+- Schreibe in Phase 1 KEIN Markdown, keine Überschriften, kein Executive Researcher.
+
+PHASE 2 — BRIEFING (nur Markdown für die bereits gewählten SELECTED_ENTRY_KEYS):
+- Decke jeden Eintrag in SELECTED_ENTRY_KEYS genau einmal ab, in dieser Reihenfolge — ein Bullet pro Eintrag.
+- Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. (feed_item:123). Das ist Pflicht neben dem lesbaren Quellennamen.
+- Kein JSON, kein Meta-Chat ("Hier ist das Researcher...").
+
+Verwende in Phase 2 ZWINGEND folgende Struktur:
+
+# 📊 Swissmem Monitor: (ein kurzer prägnanter Titel, der klar macht, warum man das Briefing lesen soll)
+
+**Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der rote Faden für die MEM-Industrie? Direkter Einstieg in die Analyse ohne Einleitungsfloskeln.)
+
+### 📌 Die wichtigsten Entwicklungen für die Tech-Industrie
+
+* **[Actionable Headline]:** [3-4 Sätze: 1. Konkreter Auslöser mit Bezug zu MEM-Unternehmen/Werkplatz. 2. Wirtschaftspolitische Einordnung. 3. Direkter Impact auf Schweizer Industrie. Flüssige Übergänge.] *(Quelle: [Name der Quelle])* (entry_type:entry_id)
+* (Pro SELECTED_ENTRY_KEYS-Eintrag genau ein Bullet; nach jedem Bullet eine Leerzeile.)
+
+### 🔭 Radar / Ausblick
+(2-3 Sätze zu einem strategischen Trend für den Schweizer Werkplatz — z.B. Gas-/Strompreise, Zinswende oder Freihandelsabkommen. Nur CEO-relevante Planungsthemen.)
+
+Inhaltliche Regeln (beide Phasen):
+- Erfinde keine Fakten oder Quellen.
+- Streiche jedes Adjektiv ohne informativen Mehrwert.
+PROMPT;
+
     /** Allowed “number of items” values in the Researcher UI. */
     public const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12, 15];
 
@@ -115,7 +158,7 @@ PROMPT;
     private const CONTEXT_HEAVY_CHARS = 400_000;
 
     /** @var list<string> */
-    private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'lex', 'lex_ch', 'leg'];
+    private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'lex', 'lex_ch', 'leg', 'mem'];
 
     public function show(): void
     {
@@ -633,24 +676,46 @@ PROMPT;
         }
     }
 
-    /**
-     * @return list<array{id: string, name: string, content: string}>
-     */
     public static function ensurePromptLibrarySeeded(
         SystemConfigRepository $config,
         string $systemPrompt,
     ): array {
         $library = self::loadPromptLibrary($config);
-        if ($library !== []) {
-            return $library;
+
+        $hasDefault = false;
+        $hasSwissmem = false;
+        foreach ($library as $row) {
+            $name = $row['name'] ?? '';
+            if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
+                $hasDefault = true;
+            }
+            if ($name === 'Swissmem') {
+                $hasSwissmem = true;
+            }
         }
 
-        $library = [[
-            'id'      => bin2hex(random_bytes(8)),
-            'name'    => self::PROMPT_LIBRARY_SEED_NAME,
-            'content' => $systemPrompt,
-        ]];
-        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+        $dirty = false;
+        if (!$hasDefault) {
+            $library[] = [
+                'id'      => bin2hex(random_bytes(8)),
+                'name'    => self::PROMPT_LIBRARY_SEED_NAME,
+                'content' => $systemPrompt,
+            ];
+            $dirty = true;
+        }
+
+        if (!$hasSwissmem) {
+            $library[] = [
+                'id'      => bin2hex(random_bytes(8)),
+                'name'    => 'Swissmem',
+                'content' => self::SWISSMEM_PRESET_PROMPT,
+            ];
+            $dirty = true;
+        }
+
+        if ($dirty) {
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+        }
 
         return $library;
     }
@@ -819,6 +884,7 @@ PROMPT;
             isset($picked['lex']),
             isset($picked['leg']),
             isset($picked['lex_ch']),
+            isset($picked['mem']),
         );
     }
 
@@ -848,6 +914,9 @@ PROMPT;
         }
         if ($selection->moduleLeg()) {
             $names[] = 'leg';
+        }
+        if ($selection->moduleMem()) {
+            $names[] = 'mem';
         }
 
         return $names;

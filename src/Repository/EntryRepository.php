@@ -143,6 +143,9 @@ final class EntryRepository
         // inside a family before the global merge/sort/slice — except where
         // TimelineFilter / hidden rows / Feed disabled excludes them.
         $perSource = $this->mergePerSourceFetchCap($limit, $offset);
+        if ($filter !== null && $filter->filterMem) {
+            $perSource = self::MERGE_PER_SOURCE_CAP;
+        }
         $f        = $filter;
 
         $items = $this->buildMergedTimelineItems(
@@ -1079,7 +1082,7 @@ final class EntryRepository
      */
     private function fetchFeedItems(int $limit, ?TimelineFilter $filter = null, bool $excludeMediaCategory = false): array
     {
-        if ($filter !== null && $filter->excludeAllFeedItems) {
+        if ($filter !== null && $filter->excludeAllFeedItems && !$filter->filterMem) {
             return [];
         }
         $extra = $this->feedSqlFilter($filter);
@@ -1104,7 +1107,7 @@ final class EntryRepository
      */
     private function fetchEmails(int $limit, ?TimelineFilter $filter = null): array
     {
-        if ($filter !== null && $filter->excludeAllEmails) {
+        if ($filter !== null && $filter->excludeAllEmails && !$filter->filterMem) {
             return [];
         }
         $emailTags = $filter !== null && $filter->emailTags !== []
@@ -1189,18 +1192,18 @@ final class EntryRepository
      */
     private function fetchLexItems(int $limit, ?TimelineFilter $filter = null): array
     {
-        if ($filter !== null && $filter->excludeAllLexItems) {
+        if ($filter !== null && $filter->excludeAllLexItems && !$filter->filterMem) {
             return [];
         }
         $clauses = [];
         $params  = [];
-        if ($filter !== null && $filter->lexSources !== []) {
+        if ($filter !== null && $filter->lexSources !== [] && !$filter->filterMem) {
             $ph       = implode(',', array_fill(0, count($filter->lexSources), '?'));
             $clauses[] = 'source IN (' . $ph . ')';
             $params    = array_merge($params, $filter->lexSources);
         }
-        if ($filter === null || $filter->lexSources === []) {
-            $excl = $filter !== null ? $filter->effectiveExcludedLexSources() : [];
+        if ($filter === null || ($filter->lexSources === [] && !$filter->filterMem)) {
+            $excl = ($filter !== null && !$filter->filterMem) ? $filter->effectiveExcludedLexSources() : [];
             if ($excl !== []) {
                 $ph        = implode(',', array_fill(0, count($excl), '?'));
                 $clauses[] = 'source NOT IN (' . $ph . ')';
@@ -2478,6 +2481,14 @@ final class EntryRepository
 
     private function itemMatchesTimelineFilter(array $item, TimelineFilter $filter): bool
     {
+        if ($filter->filterMem) {
+            $sevenDaysAgo = time() - 7 * 86400;
+            if (($item['date'] ?? 0) < $sevenDaysAgo) {
+                return false;
+            }
+            return \Seismo\Util\SwissmemMatcher::matchesTimelineItem($item);
+        }
+
         $et = (string)($item['entry_type'] ?? '');
 
         $data = $item['data'] ?? [];

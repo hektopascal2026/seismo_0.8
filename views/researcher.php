@@ -51,6 +51,7 @@ $moduleOptions = [
     ['key' => 'email', 'label' => 'Mail'],
     ['key' => 'lex', 'label' => 'Lex'],
     ['key' => 'leg', 'label' => 'Leg'],
+    ['key' => 'mem', 'label' => 'Mem'],
 ];
 ?>
 <!DOCTYPE html>
@@ -169,8 +170,13 @@ $moduleOptions = [
                             <span id="lex-label">Lex</span>
                         </label>
                         <?php else: ?>
-                        <label class="tag-filter-pill tag-filter-pill-active">
-                            <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>" checked
+                        <?php
+                            $isMem = $mod['key'] === 'mem';
+                            $pillClass = $isMem ? 'tag-filter-pill' : 'tag-filter-pill tag-filter-pill-active';
+                            $checkedAttr = $isMem ? '' : ' checked';
+                        ?>
+                        <label class="<?= $pillClass ?>">
+                            <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $checkedAttr ?>
                                    class="researcher-module-cb">
                             <span><?= e($mod['label']) ?></span>
                         </label>
@@ -385,7 +391,11 @@ $moduleOptions = [
 
         function setModuleChecked(on) {
             moduleCbs.forEach(function(cb) {
-                cb.checked = on;
+                if (on && cb.value === 'mem') {
+                    cb.checked = false;
+                } else {
+                    cb.checked = on;
+                }
                 syncModulePill(cb);
             });
             if (lexPill && lexInput && lexLabel) {
@@ -998,8 +1008,31 @@ $moduleOptions = [
                     if (!row) return;
                     if (row.name === PROMPT_TAB_DEFAULT_NAME) {
                         selectInstanceDefaultPrompt();
+                        moduleCbs.forEach(function(cb) {
+                            cb.checked = cb.value !== 'mem';
+                            syncModulePill(cb);
+                        });
+                        if (lexPill && lexInput && lexLabel) {
+                            lexState = 1;
+                            lexInput.value = 'lex';
+                            lexInput.disabled = false;
+                            lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                            lexLabel.textContent = 'Lex';
+                        }
                     } else {
                         selectLibraryPrompt(row);
+                        if (row.name === 'Swissmem') {
+                            moduleCbs.forEach(function(cb) {
+                                cb.checked = cb.value === 'mem';
+                                syncModulePill(cb);
+                            });
+                            if (lexPill && lexInput && lexLabel) {
+                                lexState = 0;
+                                lexInput.disabled = true;
+                                lexPill.className = 'tag-filter-pill';
+                                lexLabel.textContent = 'Lex';
+                            }
+                        }
                     }
                     showPromptLibraryMsg('', false);
                 });

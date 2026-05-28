@@ -493,6 +493,10 @@ final class ResearcherEntryGatherer
      */
     public function moduleBucketForEntry(array $entry, ResearcherSourceSelection $selection): ?string
     {
+        if ($selection->moduleMem() && \Seismo\Util\SwissmemMatcher::matchesShapedEntry($entry)) {
+            return 'mem';
+        }
+
         $type = (string)($entry['entry_type'] ?? '');
 
         if ($type === 'feed_item') {
@@ -531,6 +535,10 @@ final class ResearcherEntryGatherer
      */
     private function entryTypeGatherable(string $entryType, ResearcherSourceSelection $selection): bool
     {
+        if ($selection->moduleMem()) {
+            return true;
+        }
+
         return match ($entryType) {
             'email' => $selection->moduleEmail(),
             'lex_item' => $selection->moduleLex() || $selection->moduleLexCh(),
@@ -580,6 +588,27 @@ final class ResearcherEntryGatherer
             }
 
             return $entries;
+        }
+
+        if ($selection->moduleMem()) {
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'feeds', $limitCap) as $row) {
+                $entries[] = MagnituController::shapeFeedItem($row);
+            }
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'media', $limitCap) as $row) {
+                $entries[] = MagnituController::shapeFeedItem($row);
+            }
+            foreach ($repo->listFeedItemsForModule($since, $limit, 'scraper', $limitCap) as $row) {
+                $entries[] = MagnituController::shapeFeedItem($row);
+            }
+            foreach ($repo->listEmailsSince($since, $limit, $limitCap) as $row) {
+                $entries[] = MagnituController::shapeEmail($row);
+            }
+            foreach ($repo->listLexItemsSince($since, $limit, $limitCap) as $row) {
+                $entries[] = MagnituController::shapeLexItem($row);
+            }
+            foreach ($repo->listCalendarEventsSince($since, $limit, $limitCap) as $row) {
+                $entries[] = MagnituController::shapeCalendarEvent($row);
+            }
         }
 
         if ($selection->moduleFeeds()) {

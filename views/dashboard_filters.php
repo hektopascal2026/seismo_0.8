@@ -227,6 +227,12 @@ $formAction = $basePath . '/index.php';
                             <?= $legOn ? ' checked' : '' ?>>
                         <span class="filter-pill-text filter-pill-text--leg" title="Parliamentary calendar (Leg)"><?= e(seismo_leg_filter_pill_label()) ?></span>
                     </label>
+                    <span class="filter-toolbar__sep">|</span>
+                    <label class="filter-pill-label" for="df-mem">
+                        <input type="checkbox" class="filter-pill-input" id="df-mem" name="filters[mem]" value="1"
+                            <?= $timelineFilter->filterMem ? ' checked' : '' ?>>
+                        <span class="filter-pill-text filter-pill-text--leg" title="Swissmem Monitor (Mem)">Mem</span>
+                    </label>
                 </div>
             </form>
         </div>
@@ -250,6 +256,8 @@ $formAction = $basePath . '/index.php';
                         <p>No favourites yet. Star entries on a card, or switch to <a href="?<?= e($filterNewestOnlyQs) ?>">all entries</a> on this page.</p>
                     <?php elseif ($emptyTimelineHint === 'search'): ?>
                         <p>No entries match your search. Try different words or <a href="?<?= e($filterDropSearchQs) ?>">clear the query</a>.</p>
+                    <?php elseif ($emptyTimelineHint === 'swissmem'): ?>
+                        <p>No Swissmem mentions found in the last 7 days. Try updating the timeline or check back later.</p>
                     <?php elseif ($emptyTimelineHint === 'filters'): ?>
                         <p>No entries match the current filters. Use <a href="?<?= e($filterPageAllQs) ?>">All</a> to turn every source on, or adjust the pills above.</p>
                     <?php else: ?>

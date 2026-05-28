@@ -1,0 +1,86 @@
+<?php
+
+declare(strict_types=1);
+
+use PHPUnit\Framework\TestCase;
+use Seismo\Util\SwissmemMatcher;
+
+final class SwissmemMatcherTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Set up the static root constant if not defined in bootstrap
+        if (!defined('SEISMO_ROOT')) {
+            define('SEISMO_ROOT', dirname(__DIR__));
+        }
+    }
+
+    public function testNormalizationCompanySuffixes(): void
+    {
+        $method = new ReflectionMethod(SwissmemMatcher::class, 'normalizeTerm');
+        $method->setAccessible(true);
+
+        self::assertSame('ABB', $method->invoke(null, 'ABB Schweiz AG'));
+        self::assertSame('Bühler', $method->invoke(null, 'Bühler AG'));
+        self::assertSame('Autoneum', $method->invoke(null, 'Autoneum Management AG'));
+        self::assertSame('Schindler', $method->invoke(null, 'Schindler Holding SA'));
+        self::assertSame('Stadler Rail', $method->invoke(null, 'Stadler Rail AG'));
+    }
+
+    public function testNormalizationExecutivePrefixes(): void
+    {
+        $method = new ReflectionMethod(SwissmemMatcher::class, 'normalizeTerm');
+        $method->setAccessible(true);
+
+        self::assertSame('Stefan Brupbacher', $method->invoke(null, 'Dr. Stefan Brupbacher'));
+        self::assertSame('Ulisse Gendotti', $method->invoke(null, 'Dr. sc. techn. Ulisse Gendotti'));
+    }
+
+    public function testPrecisionRegexMatching(): void
+    {
+        // "Swissmem", "ABB", "Stadler Rail" are manually seeded high-profile terms
+        self::assertTrue(SwissmemMatcher::matches('Wir trafen uns bei Swissmem.'));
+        self::assertTrue(SwissmemMatcher::matches('Die ABB plant eine neue Fabrik.'));
+        self::assertTrue(SwissmemMatcher::matches('Stadler Rail gewinnt Ausschreibung.'));
+        self::assertFalse(SwissmemMatcher::matches('Dieses Wort hat nichts mit dem Verband zu tun.'));
+    }
+
+    public function testMatchesTimelineItem(): void
+    {
+        $matchingItem = [
+            'data' => [
+                'title' => 'Grosser Erfolg für ABB Schweiz',
+                'description' => 'Der Technologiekonzern wächst weiter.',
+            ]
+        ];
+
+        $nonMatchingItem = [
+            'data' => [
+                'title' => 'Etwas ganz anderes',
+                'description' => 'Keine Erwähnung hier.',
+            ]
+        ];
+
+        self::assertTrue(SwissmemMatcher::matchesTimelineItem($matchingItem));
+        self::assertFalse(SwissmemMatcher::matchesTimelineItem($nonMatchingItem));
+    }
+
+    public function testMatchesShapedEntry(): void
+    {
+        $matchingEntry = [
+            'title' => 'Interview mit Stefan Brupbacher',
+            'description' => 'Der Verbandsdirektor äussert sich zu den Exporten.',
+            'content' => '',
+        ];
+
+        $nonMatchingEntry = [
+            'title' => 'Wettervorhersage',
+            'description' => 'Sonnig im Tessin.',
+            'content' => '',
+        ];
+
+        self::assertTrue(SwissmemMatcher::matchesShapedEntry($matchingEntry));
+        self::assertFalse(SwissmemMatcher::matchesShapedEntry($nonMatchingEntry));
+    }
+}
