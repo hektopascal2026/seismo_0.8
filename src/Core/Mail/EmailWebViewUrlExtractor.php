@@ -22,7 +22,12 @@ final class EmailWebViewUrlExtractor
 
         $press = self::pressReleaseUrl($html, $plain);
         if ($press !== null) {
-            return new EmailWebViewResolution($press, null, false);
+            $isEuComm = self::isEuCommissionPressCornerUrl($press);
+            return new EmailWebViewResolution(
+                $press,
+                $isEuComm ? EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH : null,
+                $isEuComm
+            );
         }
 
         $picked = self::pickAlternateByRanks(
@@ -181,6 +186,7 @@ final class EmailWebViewUrlExtractor
             [
                 self::firstAdminChNewnsbUrl($plain),
                 self::firstEuroparlPressRoomUrl($plain),
+                self::firstEuCommissionPressCornerUrl($plain),
                 self::firstPressReleaseUrlNearMarker($plain),
             ] as $press
         ) {
@@ -346,6 +352,7 @@ final class EmailWebViewUrlExtractor
             || str_contains($bodyNorm, 'news service bund')
             || str_contains($bodyNorm, 'communique de presse')
             || str_contains($bodyNorm, 'press release')
+            || str_contains($bodyNorm, 'press corner')
             || (str_contains($bodyNorm, 'press service') && str_contains($bodyNorm, 'european parliament'));
 
         $headlineFallback = null;
@@ -357,7 +364,7 @@ final class EmailWebViewUrlExtractor
             if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
                 continue;
             }
-            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href)) {
+            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href) || self::isEuCommissionPressCornerUrl($href)) {
                 return $href;
             }
             if ($isPress && $headlineFallback === null && self::looksLikePressHeadlineAnchor($anchor, $href)) {
@@ -442,6 +449,33 @@ final class EmailWebViewUrlExtractor
         ) === 1;
     }
 
+    private static function isEuCommissionPressCornerUrl(string $url): bool
+    {
+        return preg_match(
+            '#^https?://ec\.europa\.eu/commission/presscorner/detail/[a-z]{2}/[a-z0-9_-]+#i',
+            $url
+        ) === 1;
+    }
+
+    private static function firstEuCommissionPressCornerUrl(string $text): ?string
+    {
+        if (preg_match_all(
+            '#https?://ec\.europa\.eu/commission/presscorner/detail/[a-z]{2}/[a-z0-9_-]+#iu',
+            $text,
+            $matches
+        ) === false) {
+            return null;
+        }
+        foreach ($matches[0] as $raw) {
+            $url = self::normalizeHref((string)$raw);
+            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
     private static function looksLikePressHeadlineAnchor(DOMElement $anchor, string $href): bool
     {
         $label = trim($anchor->textContent ?? '');
@@ -461,6 +495,9 @@ final class EmailWebViewUrlExtractor
         }
         if (str_contains($host, 'europarl.europa.eu')) {
             return self::isEuroparlPressRoomUrl($href);
+        }
+        if (str_contains($host, 'ec.europa.eu')) {
+            return self::isEuCommissionPressCornerUrl($href);
         }
 
         return false;

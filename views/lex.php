@@ -239,10 +239,19 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                         }
                     ?>
                     <div class="entry-card">
-                        <?php if ($source === 'ch'): ?>
+                        <?php
+                            $isEuLexCard = ($source === 'eu' && !$isParlSwissLex);
+                            $isChFedlexCard = ($source === 'ch' && !$isParlSwissLex);
+                            $useLexJurisdictionHeader = $isParlSwissLex || $isEuLexCard || $isChFedlexCard;
+                        ?>
+                        <?php if ($useLexJurisdictionHeader): ?>
                         <div class="entry-header entry-header--lex-eu">
                             <div class="entry-header--lex-eu-left">
-                                <span class="entry-lex-ch-mark" title="Fedlex (Schweiz)"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                                <?php if ($isEuLexCard): ?>
+                                    <span class="entry-lex-eu-mark" title="EUR-Lex (EU)"><span class="entry-lex-eu-mark__flag" aria-hidden="true">🇪🇺</span><span class="entry-lex-eu-mark__text">EU</span></span>
+                                <?php else: ?>
+                                    <span class="entry-lex-ch-mark" title="<?= $isParlSwissLex ? 'Bundeshaus Medien (Schweiz)' : 'Fedlex (Schweiz)' ?>"><span class="entry-lex-ch-mark__flag" aria-hidden="true">🇨🇭</span><span class="entry-lex-ch-mark__text">CH</span></span>
+                                <?php endif; ?>
                                 <span class="entry-lex-eu-doc-type"><?= e($docType) ?></span>
                             </div>
                         </div>

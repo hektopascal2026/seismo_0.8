@@ -141,10 +141,9 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                 <div class="admin-form-field">
                     <input type="hidden" name="extract_full_text" value="0">
                     <?php
-                    $extractDefault = !empty($editRow['extract_full_text'])
-                        || ($feedModule->isMedia() && $editRow === null);
+                    $extractDefault = !empty($editRow['extract_full_text']);
                     ?>
-                    <label><input type="checkbox" name="extract_full_text" value="1" <?= $extractDefault ? 'checked' : '' ?>> Extract full text (thin RSS — e.g. Google News)</label>
+                    <label><input type="checkbox" name="extract_full_text" value="1" <?= $extractDefault ? 'checked' : '' ?>> Hydrate: Use a scraper to fetch full text from the RSS-Link</label>
                 </div>
                 <div class="admin-help" style="margin-top:-0.5rem;margin-bottom:0.75rem;">
                     When enabled, ingest fetches up to 10 publisher pages per refresh for items whose body is shorter than ~400 characters.
@@ -171,14 +170,14 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                 <div id="feed-preview-cards" class="latest-entries-section scraper-preview-cards"></div>
             </div>
             <?php endif; ?>
-
+ 
             <table class="data-table">
                 <thead>
                     <tr>
                         <th>ID</th>
                         <th>Title</th>
                         <th>Type</th>
-                        <?php if ($feedModule->isMedia()): ?><th>Full text</th><?php endif; ?>
+                        <th>Hydrate</th>
                         <th>Active</th>
                         <th>URL</th>
                         <th></th>
@@ -191,9 +190,7 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                         <td><?= (int)$row['id'] ?></td>
                         <td><?= e((string)$row['title']) ?></td>
                         <td><?= e((string)($row['source_type'] ?? '')) ?></td>
-                        <?php if ($feedModule->isMedia()): ?>
                         <td><?= !empty($row['extract_full_text']) ? '<span class="pill pill-on">hydrate</span>' : '<span class="pill pill-off">rss only</span>' ?></td>
-                        <?php endif; ?>
                         <td><?= $feedActive ? '<span class="pill pill-on">yes</span>' : '<span class="pill pill-off">no</span>' ?></td>
                         <td class="data-table-url"><a href="<?= e((string)$row['url']) ?>" target="_blank" rel="noopener"><?= e((string)$row['url']) ?></a></td>
                         <td>
@@ -226,7 +223,7 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($feedsList === []): ?>
-                    <tr class="data-table-empty"><td colspan="<?= $feedModule->isMedia() ? 7 : 6 ?>">No sources defined.</td></tr>
+                    <tr class="data-table-empty"><td colspan="7">No sources defined.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

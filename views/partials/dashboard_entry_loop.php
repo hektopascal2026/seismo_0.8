@@ -256,17 +256,33 @@ $entryLoopIndex                 = 0;
                             $calHasUrl = seismo_is_navigable_url($calUrl);
                             $calDateLabel = (string)($itemWrapper['clock_label'] ?? '');
                             $calDesc = seismo_calendar_event_body_text($calEvent);
-                            $calPreview = mb_substr($calDesc, 0, 200);
-                            if (mb_strlen($calDesc) > 200) {
+                            $calPreview = mb_substr($calDesc, 0, 300);
+                            $calHasMore = mb_strlen($calDesc) > 300;
+                            if ($calHasMore) {
                                 $calPreview .= '...';
                             }
-                            $calHasMore = mb_strlen($calDesc) > 200;
+                            $calSignal = seismo_leg_parl_ch_signal($calEvent);
+                            $calSignalLabel = $calSignal !== null
+                                ? \Seismo\Util\ParlChLegSignal::signalLabel($calSignal)
+                                : '';
+                            $calStatusRaw = (string)($calEvent['status'] ?? 'scheduled');
+                            $calStatusLabel = ucfirst($calStatusRaw);
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
                                 <span class="entry-tag entry-tag--leg-type"><?= htmlspecialchars($calTypeLabel) ?></span>
                                 <?php if ($calCouncil): ?>
                                     <span class="entry-tag entry-tag--leg-council"><?= htmlspecialchars($calCouncil) ?></span>
+                                <?php endif; ?>
+                                <?php if ($calSignalLabel !== ''): ?>
+                                    <span class="entry-tag entry-tag--leg-signal"><?= htmlspecialchars($calSignalLabel) ?></span>
+                                <?php elseif ($calStatusRaw !== 'scheduled'): ?>
+                                    <?php
+                                    $calStatusTagClass = $calStatusRaw === 'completed'
+                                        ? 'entry-tag--status-completed'
+                                        : ($calStatusRaw === 'cancelled' ? 'entry-tag--status-cancelled' : 'entry-tag--status-other');
+                                    ?>
+                                    <span class="entry-tag <?= htmlspecialchars($calStatusTagClass) ?>"><?= htmlspecialchars($calStatusLabel) ?></span>
                                 <?php endif; ?>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
@@ -279,17 +295,19 @@ $entryLoopIndex                 = 0;
                                     <?= htmlspecialchars($calEvent['title']) ?>
                                 <?php endif; ?>
                             </h3>
-                            <?php if ($calDesc !== ''): ?>
+                            <?php if ($calPreview !== ''): ?>
                                 <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($calPreview, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) ?></div>
-                                <div class="entry-full-content"><?= nl2br(htmlspecialchars($calDesc, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) ?></div>
+                                <?php if ($calHasMore): ?>
+                                    <div class="entry-full-content"><?= nl2br(htmlspecialchars($calDesc, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')) ?></div>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
-                                    <?php if ($calHasUrl): ?>
-                                    <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
-                                    <?php endif; ?>
                                     <?php if ($calHasMore): ?>
                                         <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                    <?php endif; ?>
+                                    <?php if ($calHasUrl): ?>
+                                    <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">
