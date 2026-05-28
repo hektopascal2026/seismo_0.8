@@ -56,7 +56,27 @@ final class EmailSubscriptionReprocessService
                 $htmlBeforeNormalize = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
                 $row = EmailIngestNormalizer::normalizeBodies($row);
                 $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
-                $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true);
+
+                $customKeywords = [];
+                $from = trim((string)($row['from_email'] ?? ''));
+                if ($from !== '') {
+                    foreach ($subs as $s) {
+                        if (empty($s['disabled']) && !empty($s['cleanup_config'])) {
+                            $mt = (string)($s['match_type'] ?? '');
+                            $mv = (string)($s['match_value'] ?? '');
+                            if (EmailSubscriptionRepository::matchesAddress($from, $mt, $mv)) {
+                                $cfg = json_decode((string)$s['cleanup_config'], true);
+                                if (is_array($cfg) && !empty($cfg['webview_keywords'])) {
+                                    $customKeywords = (array)$cfg['webview_keywords'];
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                $remaining = null;
+                $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true, $remaining, $customKeywords);
                 $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
                 if (EmailListingBoilerplatePolicy::shouldStrip($ui)) {
                     $subj = trim((string)($row['subject'] ?? ''));
