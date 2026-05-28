@@ -160,9 +160,6 @@ final class LexLegifranceContentFetcher
         return null;
     }
 
-    /**
-     * @param array<string, mixed> $response
-     */
     public function plainTextFromJorfResponse(array $response): ?string
     {
         if (isset($response['text']) && is_array($response['text'])) {
@@ -170,7 +167,7 @@ final class LexLegifranceContentFetcher
         }
 
         $parts = [];
-        foreach (['visa', 'title', 'resume', 'notice', 'exposeMotif', 'prepWork', 'signers'] as $key) {
+        foreach (['visa', 'title', 'resume', 'notice', 'exposeMotif', 'signers'] as $key) {
             $value = trim((string)($response[$key] ?? ''));
             if ($value !== '') {
                 $parts[] = LexPlainText::normalize($value);
@@ -178,6 +175,12 @@ final class LexLegifranceContentFetcher
         }
 
         $parts = array_merge($parts, $this->collectArticleTexts($response));
+
+        $prepWork = trim((string)($response['prepWork'] ?? ''));
+        if ($prepWork !== '') {
+            $parts[] = "\n(1) " . LexPlainText::normalize($prepWork);
+        }
+
         $plain = trim(implode("\n\n", array_filter($parts)));
         if ($plain === '') {
             return null;
@@ -526,5 +529,35 @@ final class LexLegifranceContentFetcher
         }
 
         return implode(' — ', $head) . "\n" . $content;
+    }
+
+    /**
+     * Parse and extract only the essential chamber bill numbers (e.g. Sénat/Assemblée nationale)
+     * from the raw travaux préparatoires text to compose a highly readable, human-friendly metadata brief.
+     */
+    public static function extractDeliberationBrief(string $prepWork): string
+    {
+        $prepWork = trim($prepWork);
+        if ($prepWork === '') {
+            return '';
+        }
+
+        $matches = [];
+        // Match Senate or Assembly Project/Proposition de loi numbers
+        $pattern = '/(Assemblée nationale|Sénat)\s*:\s*(Projet de loi|Proposition de loi)[^;]*?n°\s*(\d+)/ui';
+        if (preg_match_all($pattern, $prepWork, $m, PREG_SET_ORDER)) {
+            $lines = [];
+            foreach ($m as $item) {
+                $chamber = trim($item[1]);
+                $type = trim($item[2]);
+                $num = trim($item[3]);
+                $lines[] = "{$chamber} : {$type} n° {$num}";
+            }
+            if ($lines !== []) {
+                return implode(' • ', array_unique($lines));
+            }
+        }
+
+        return '';
     }
 }

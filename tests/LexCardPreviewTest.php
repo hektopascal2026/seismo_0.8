@@ -101,5 +101,13 @@ final class LexCardPreviewTest extends TestCase
         self::assertStringContainsString('Notice : ce décret a pour objet', $briefing);
         self::assertStringContainsString('Le présent décret entre en vigueur', $briefing);
     }
+
+    public function testExtractDeliberationBrief(): void
+    {
+        $raw = "(1) Loi n° 2026-403.Travaux préparatoires :Sénat :Projet de loi n° 550 (2023-2024) ;Rapport de Mme Catherine Di Folco et M. Yves Bleunven, au nom de la commission spéciale, n° 634 (2023-2024) ;Texte de la commission n° 635 (2023-2024) ;Discussion les 3, 4 et 5 juin et le 22 octobre 2024 et adoption, après engagement de la procédure accélérée, le 22 octobre 2024 (TA n° 8, 2024-2025).Assemblée nationale :Projet de loi, adopté par le Sénat, n° 481 rect. ;Rapport de M. Christophe Naegelen et M. Stéphane Travert, au nom de la commission spéciale, n° 1191 rect. ;Discussion les 9, 10, 11...";
+        $brief = \Seismo\Core\Lex\LexLegifranceContentFetcher::extractDeliberationBrief($raw);
+
+        self::assertSame('Sénat : Projet de loi n° 550 • Assemblée nationale : Projet de loi n° 481', $brief);
+    }
 }
 

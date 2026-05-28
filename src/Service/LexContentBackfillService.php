@@ -340,9 +340,9 @@ final class LexContentBackfillService
             }
 
             if (!empty($data['prepWork'])) {
-                $prepPlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['prepWork']);
-                if ($prepPlain !== '') {
-                    $descriptionParts[] = $prepPlain;
+                $prepBrief = LexLegifranceContentFetcher::extractDeliberationBrief($data['prepWork']);
+                if ($prepBrief !== '') {
+                    $descriptionParts[] = "Délibérations : " . $prepBrief;
                 }
             }
 
