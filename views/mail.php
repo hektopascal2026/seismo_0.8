@@ -258,9 +258,9 @@ $sourcesQs = 'action=mail&view=sources';
                 <div style="background: #fafafa; border: 1px solid #ccc; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.825rem; line-height: 1.45; font-family: sans-serif;">
                     <strong style="display: block; margin-bottom: 0.35rem; color: #000; font-size: 0.85rem;">⚡ Execution Order &amp; Settings:</strong>
                     <ul style="margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.25rem;">
-                        <li><strong>1. AI Cleanup (Rules Below):</strong> Executes <strong>first</strong> during ingestion and reprocessing, applying your custom, sender-specific rules.</li>
-                        <li><strong>2. Body processor (Dropdown Above):</strong> Executes <strong>second</strong>. You can keep this set to <em>(none)</em> unless you specifically want to run an additional PHP-based digest processor.</li>
-                        <li><strong>3. Strip typical boilerplate (Checkbox Above):</strong> Runs Seismo's <em>generic, global heuristics</em>. Since your AI-generated rules are highly tailored to this specific sender, you can leave this unchecked.</li>
+                        <li><strong>1. Local Static Rules (Rules Below):</strong> Executes <strong>first</strong> during ingestion and reprocessing. Your generated rules are applied locally via fast PHP regex engines. <em>Gemini is only used once in this admin panel to generate them—never during ingestion.</em></li>
+                        <li><strong>2. Body processor (Dropdown Above):</strong> Executes <strong>second</strong>. You can leave this set to <em>(none)</em> unless you specifically want to run an additional PHP-based digest processor.</li>
+                        <li><strong>3. Strip typical boilerplate (Checkbox Above):</strong> Runs Seismo's <em>generic, global heuristics</em>. Since your statically saved rules are highly tailored to this specific sender, you can leave this unchecked.</li>
                     </ul>
                 </div>
                 
