@@ -132,7 +132,12 @@ final class BaseClient
         $headers = array_merge(['User-Agent' => $ua], $headers);
 
         if (function_exists('curl_init')) {
-            return $this->executeCurl($method, $url, $headers, $body, $sessionCookies);
+            try {
+                return $this->executeCurl($method, $url, $headers, $body, $sessionCookies);
+            } catch (HttpClientException $e) {
+                // If cURL encounters an SSL/unexpected EOF transport failure, transparently fall back to native PHP streams.
+                return $this->executeStream($method, $url, $headers, $body);
+            }
         }
 
         return $this->executeStream($method, $url, $headers, $body);
