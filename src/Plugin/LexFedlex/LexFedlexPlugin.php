@@ -366,13 +366,7 @@ ORDER BY DESC(?eff)
                 $descrLines[] = 'Vernehmlassung ab ' . date('d.m.Y', strtotime($g['phase_start'] . 'T00:00:00 UTC'));
             }
 
-            $statusLbl = '';
-            if ($g['status_uri'] !== '') {
-                $statusLbl = basename(parse_url($g['status_uri'], PHP_URL_PATH) ?: '');
-            }
-            if ($statusLbl !== '') {
-                $descrLines[] = 'Status-ID: ' . $statusLbl;
-            }
+
 
             if ($body !== '') {
                 $descrLines[] = $body;
