@@ -500,7 +500,8 @@ final class BriefingEntryGatherer
             $category   = strtolower((string)($entry['source_category'] ?? ''));
 
             $isMedia   = $category === 'media';
-            $isScraper = $sourceType === 'scraper' || $category === 'scraper';
+            $isScraper = $sourceType === 'scraper' || $category === 'scraper'
+                || (isset($entry['scraper_config_id']) && (int)$entry['scraper_config_id'] > 0);
             $isFeeds   = !$isMedia && !$isScraper
                 && in_array($sourceType, ['rss', 'substack', 'parl_press'], true);
 

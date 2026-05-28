@@ -374,6 +374,7 @@ final class MagnituController
             'source_name'     => (string)($row['feed_title'] ?? ''),
             'source_category' => (string)($row['feed_category'] ?? ''),
             'source_type'     => (string)($row['source_type'] ?? 'rss'),
+            'scraper_config_id' => isset($row['scraper_config_id']) ? (int)$row['scraper_config_id'] : null,
         ];
     }
 

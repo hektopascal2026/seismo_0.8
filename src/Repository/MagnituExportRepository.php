@@ -38,7 +38,7 @@ final class MagnituExportRepository
      * Hard cap on any single `list*()` call. Keeps worst-case PHP memory bounded
      * when fetching full email/feed LONGTEXT columns (see ingest MAX_BODY_BYTES).
      */
-    public const MAX_LIMIT = 50;
+    public const MAX_LIMIT = 200;
 
     /** Briefing builder “entry limit (per module)” — higher than export API cap. */
     public const BRIEFING_MAX_LIMIT = 200;
@@ -90,7 +90,8 @@ final class MagnituExportRepository
                        fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
-                       f.source_type AS source_type
+                       f.source_type AS source_type,
+                       (SELECT MIN(scx.id) FROM ' . entryTable('scraper_configs') . ' scx WHERE scx.url = f.url AND IFNULL(scx.disabled, 0) = 0) AS scraper_config_id
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0
@@ -272,7 +273,8 @@ final class MagnituExportRepository
                        fi.published_date, fi.cached_at,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
-                       f.source_type AS source_type
+                       f.source_type AS source_type,
+                       (SELECT MIN(scx.id) FROM ' . entryTable('scraper_configs') . ' scx WHERE scx.url = f.url AND IFNULL(scx.disabled, 0) = 0) AS scraper_config_id
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0
@@ -485,7 +487,8 @@ final class MagnituExportRepository
                        fi.published_date,
                        f.title       AS feed_title,
                        f.category    AS feed_category,
-                       f.source_type AS source_type
+                       f.source_type AS source_type,
+                       (SELECT MIN(scx.id) FROM ' . entryTable('scraper_configs') . ' scx WHERE scx.url = f.url AND IFNULL(scx.disabled, 0) = 0) AS scraper_config_id
                   FROM ' . entryTable('feed_items') . ' fi
                   JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
                  WHERE f.disabled = 0

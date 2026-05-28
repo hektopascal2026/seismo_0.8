@@ -1257,7 +1257,7 @@ final class EntryRepository
 
         if ($sourceType === 'substack') {
             $type = 'substack';
-        } elseif ($sourceType === 'scraper' || $category === 'scraper') {
+        } elseif ($sourceType === 'scraper' || $category === 'scraper' || (int)($row['scraper_config_id'] ?? 0) > 0) {
             $type = 'scraper';
         } else {
             $type = 'feed';
