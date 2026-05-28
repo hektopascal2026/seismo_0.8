@@ -245,6 +245,57 @@ $sourcesQs = 'action=mail&view=sources';
                     <?php endif; ?>
                 </div>
             </form>
+
+            <?php if ($editRow && !$satellite): ?>
+            <?php
+            $cleanupConfigRaw = (string)($editRow['cleanup_config'] ?? '');
+            ?>
+            <div class="admin-form-card" style="margin-top: 1.5rem;" id="ai-cleanup-configurator">
+                <h3>AI Cleanup &amp; WebView Configurator</h3>
+                <p class="admin-intro">Select 5 recent emails from this sender to analyze with Gemini and statically generate regular expressions and WebView keywords.</p>
+                
+                <div class="admin-form-field">
+                    <button type="button" id="btn-ai-analyze" class="btn btn-secondary" onclick="runAiAnalysis(<?= (int)$editRow['id'] ?>)">
+                        Analyze sample emails with Gemini
+                    </button>
+                    <span id="ai-analysis-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
+                </div>
+
+                <div id="ai-results-panel" style="display: <?= $cleanupConfigRaw !== '' ? 'block' : 'none' ?>;">
+                    <div class="admin-form-field">
+                        <label>Generated JSON Config:
+                            <textarea id="cleanup_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"strip_regexes": [], "webview_keywords": [], "title_extractor": null}'><?= e($cleanupConfigRaw) ?></textarea>
+                        </label>
+                    </div>
+
+                    <div class="admin-form-field">
+                        <p class="admin-hint">Make adjustments to the JSON above if needed, then save to apply locally.</p>
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save">
+                            <?= $csrfField ?>
+                            <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
+                            <input type="hidden" name="match_type" value="<?= e((string)$editRow['match_type']) ?>">
+                            <input type="hidden" name="match_value" value="<?= e((string)$editRow['match_value']) ?>">
+                            <input type="hidden" name="display_name" value="<?= e((string)$editRow['display_name']) ?>">
+                            <input type="hidden" name="category" value="<?= e((string)$editRow['category']) ?>">
+                            <input type="hidden" name="disabled" value="<?= !empty($editRow['disabled']) ? '1' : '0' ?>">
+                            <input type="hidden" name="show_in_magnitu" value="<?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? '1' : '0' ?>">
+                            <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                            <input type="hidden" name="body_processor" value="<?= e((string)$editRow['body_processor']) ?>">
+                            <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
+                            <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
+                            <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
+                            
+                            <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
+                            
+                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value;">
+                                Save Config &amp; Apply
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <?php if ($editRow): ?>
                 <?php $subscriptionReprocessId = (int)$editRow['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
             <?php endif; ?>
@@ -448,6 +499,47 @@ $sourcesQs = 'action=mail&view=sources';
             btn.textContent = !isExpanded ? 'collapse all \u25B2' : 'expand all \u25BC';
         });
     })();
+
+    function runAiAnalysis(id) {
+        var btn = document.getElementById('btn-ai-analyze');
+        var status = document.getElementById('ai-analysis-status');
+        var resultsPanel = document.getElementById('ai-results-panel');
+        var textarea = document.getElementById('cleanup_config_json');
+
+        btn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Contacting Gemini...';
+
+        var formData = new FormData();
+        formData.append('id', id);
+        formData.append('csrf_token', '<?= CsrfToken::get() ?>');
+
+        fetch('<?= e($basePath) ?>/index.php?action=mail_subscription_analyze', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(res) {
+            return res.json().then(function(data) {
+                if (!res.ok) {
+                    throw new Error(data.error || 'Request failed');
+                }
+                return data;
+            });
+        })
+        .then(function(data) {
+            status.style.color = 'green';
+            status.textContent = 'Analysis complete!';
+            textarea.value = JSON.stringify(data.config, null, 2);
+            resultsPanel.style.display = 'block';
+            btn.disabled = false;
+        })
+        .catch(function(err) {
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+        });
+    }
     </script>
 </body>
 </html>

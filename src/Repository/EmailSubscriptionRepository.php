@@ -334,13 +334,14 @@ final class EmailSubscriptionRepository
         $stripListing = !empty($data['strip_listing_boilerplate']) ? 1 : 0;
         $autoDetected = !empty($data['auto_detected']) ? 1 : 0;
         $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
+        $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
 
         $t   = entryTable('email_subscriptions');
         $sql = "INSERT INTO {$t} (
             match_type, match_value, display_name, category, disabled, show_in_magnitu, strip_listing_boilerplate,
-            body_processor, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
+            body_processor, cleanup_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
@@ -351,6 +352,7 @@ final class EmailSubscriptionRepository
             $showMagnitu,
             $stripListing,
             $bodyProcessor,
+            $cleanupConfig,
             $autoDetected,
             $data['unsubscribe_url'] ?? null,
             $data['unsubscribe_mailto'] ?? null,
@@ -413,6 +415,9 @@ final class EmailSubscriptionRepository
         $bodyProcessor = array_key_exists('body_processor', $data)
             ? self::normalizeBodyProcessor($data['body_processor'])
             : self::normalizeBodyProcessor($existing['body_processor'] ?? null);
+        $cleanupConfig = array_key_exists('cleanup_config', $data)
+            ? (!empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null)
+            : ($existing['cleanup_config'] ?? null);
 
         $t   = entryTable('email_subscriptions');
         $sql = "UPDATE {$t} SET
@@ -424,6 +429,7 @@ final class EmailSubscriptionRepository
             show_in_magnitu = ?,
             strip_listing_boilerplate = ?,
             body_processor = ?,
+            cleanup_config = ?,
             auto_detected = 0,
             unsubscribe_url = ?,
             unsubscribe_mailto = ?,
@@ -439,6 +445,7 @@ final class EmailSubscriptionRepository
             $showMagnitu,
             $stripListing,
             $bodyProcessor,
+            $cleanupConfig,
             $data['unsubscribe_url'] ?? $existing['unsubscribe_url'],
             $data['unsubscribe_mailto'] ?? $existing['unsubscribe_mailto'],
             array_key_exists('unsubscribe_one_click', $data)

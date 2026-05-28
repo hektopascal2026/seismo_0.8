@@ -204,6 +204,7 @@ final class MailController
                 'show_in_magnitu'        => ((string)($_POST['show_in_magnitu'] ?? '0')) === '1',
                 'strip_listing_boilerplate' => ((string)($_POST['strip_listing_boilerplate'] ?? '0')) === '1',
                 'body_processor'         => (string)($_POST['body_processor'] ?? ''),
+                'cleanup_config'         => (string)($_POST['cleanup_config'] ?? ''),
                 'unsubscribe_url'        => (string)($_POST['unsubscribe_url'] ?? ''),
                 'unsubscribe_mailto'     => (string)($_POST['unsubscribe_mailto'] ?? ''),
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',
@@ -228,6 +229,77 @@ final class MailController
         }
 
         $this->redirect(['view' => 'sources']);
+    }
+
+    public function analyzeBoilerplate(): void
+    {
+        header('Content-Type: application/json');
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Session expired — please try again.']);
+            exit;
+        }
+        if (isSatellite()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Satellite mode — AI configuration runs on the mothership only.']);
+            exit;
+        }
+
+        $subscriptionId = (int)($_POST['id'] ?? 0);
+        if ($subscriptionId <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid subscription ID']);
+            exit;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $subRepo = new EmailSubscriptionRepository($pdo);
+            $sub = $subRepo->findById($subscriptionId);
+            if ($sub === null) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Subscription not found']);
+                exit;
+            }
+
+            $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+            $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
+                (string)$sub['match_type'],
+                (string)$sub['match_value'],
+                5
+            );
+
+            if ($emails === []) {
+                http_response_code(400);
+                echo json_encode(['error' => 'No sample emails found in Seismo for this sender to analyze. Please fetch some emails first.']);
+                exit;
+            }
+
+            $samples = [];
+            foreach ($emails as $email) {
+                $samples[] = [
+                    'subject' => (string)($email['subject'] ?? ''),
+                    'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                ];
+            }
+
+            $configRepo = new SystemConfigRepository($pdo);
+            $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
+            $config = $generator->generateConfig($samples);
+
+            echo json_encode(['success' => true, 'config' => $config]);
+            exit;
+        } catch (\Throwable $e) {
+            error_log('Seismo analyzeBoilerplate failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
+        }
     }
 
     public function deleteSubscription(): void

@@ -373,6 +373,11 @@ $router->register(
     false
 );
 $router->register(
+    'mail_subscription_analyze',
+    \Seismo\Controller\MailController::class . '::analyzeBoilerplate',
+    false
+);
+$router->register(
     'mail_subscription_delete',
     \Seismo\Controller\MailController::class . '::deleteSubscription',
     false

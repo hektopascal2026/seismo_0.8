@@ -15,7 +15,7 @@ final class EmailWebViewUrlExtractor
     /**
      * @param list<int> $preferredLocaleRanks {@see EmailAlternateLocalePolicy::preferredLocaleRanks()}
      */
-    public static function resolve(string $html, string $plain, array $preferredLocaleRanks): EmailWebViewResolution
+    public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = []): EmailWebViewResolution
     {
         $html  = trim($html);
         $plain = trim($plain);
@@ -37,7 +37,7 @@ final class EmailWebViewUrlExtractor
             );
         }
 
-        $generic = self::genericWebViewUrl($html, $plain);
+        $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords);
 
         return new EmailWebViewResolution($generic, null, false);
     }
@@ -192,7 +192,7 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function genericWebViewUrl(string $html, string $plain): ?string
+    private static function genericWebViewUrl(string $html, string $plain, array $customKeywords = []): ?string
     {
         $root = self::loadMailRoot($html);
         if ($root instanceof DOMElement) {
@@ -206,7 +206,22 @@ final class EmailWebViewUrlExtractor
                 }
                 $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
                 $context = self::anchorContextText($anchor);
-                if (EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
+
+                $matchedCustom = false;
+                if ($customKeywords !== []) {
+                    $lowerLabel = mb_strtolower($label, 'UTF-8');
+                    $lowerContext = mb_strtolower($context, 'UTF-8');
+                    foreach ($customKeywords as $kw) {
+                        $kwLower = mb_strtolower(trim((string)$kw), 'UTF-8');
+                        if ($kwLower !== '' && (str_contains($lowerLabel, $kwLower) || str_contains($lowerContext, $kwLower))) {
+                            $matchedCustom = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($matchedCustom
+                    || EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
                     || EmailWebViewPhraseLexicon::textLooksLikeWebView($context)
                     || EmailWebViewPhraseLexicon::shortAnchorInWebViewContext($label, $context)
                 ) {
@@ -220,6 +235,13 @@ final class EmailWebViewUrlExtractor
             return null;
         }
 
+        if ($customKeywords !== []) {
+            $nearCustom = self::urlNearPhraseList($plain, $customKeywords);
+            if ($nearCustom !== null) {
+                return $nearCustom;
+            }
+        }
+
         $near = self::urlNearWebViewPhrase($plain);
         if ($near !== null) {
             return $near;
@@ -227,11 +249,25 @@ final class EmailWebViewUrlExtractor
 
         foreach (preg_split("/\r\n|\n|\r/", $plain) ?: [] as $line) {
             $line = trim((string)$line);
-            if ($line === '' || !EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
+            if ($line === '') {
                 continue;
             }
 
-            return self::firstHttpUrl($line);
+            $matchedCustomLine = false;
+            if ($customKeywords !== []) {
+                $lowerLine = mb_strtolower($line, 'UTF-8');
+                foreach ($customKeywords as $kw) {
+                    $kwLower = mb_strtolower(trim((string)$kw), 'UTF-8');
+                    if ($kwLower !== '' && str_contains($lowerLine, $kwLower)) {
+                        $matchedCustomLine = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedCustomLine || EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
+                return self::firstHttpUrl($line);
+            }
         }
 
         return null;
