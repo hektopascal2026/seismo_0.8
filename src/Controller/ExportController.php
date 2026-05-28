@@ -3,11 +3,11 @@
  * Public read-only export endpoints.
  *
  *   GET ?action=export_entries   — JSON dump of entries + scores since cursor.
- *   GET ?action=export_briefing  — Markdown digest of the same window.
+ *   GET ?action=export_researcher  — Markdown digest of the same window.
  *
  * Both routes are authenticated by the `export:api_key` only — the Magnitu
  * write key is rejected here (two-key model, see `BearerAuth`). A compromised
- * briefing key therefore can't corrupt scores or labels.
+ * researcher key therefore can't corrupt scores or labels.
  *
  * Same family reads as {@see \Seismo\Controller\MagnituController} (includes
  * Leg / `calendar_event`).
@@ -18,16 +18,16 @@ declare(strict_types=1);
 namespace Seismo\Controller;
 
 use Seismo\Formatter\JsonExportFormatter;
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Http\BearerAuth;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\SystemConfigRepository;
-use Seismo\Service\BriefingEntryGatherer;
-use Seismo\Service\BriefingSourceSelection;
+use Seismo\Service\ResearcherEntryGatherer;
+use Seismo\Service\ResearcherSourceSelection;
 
 final class ExportController
 {
-    /** Briefings focus on signal — skip `background` / `noise` / unscored by default. */
+    /** Researchers focus on signal — skip `background` / `noise` / unscored by default. */
     private const DEFAULT_BRIEFING_LABELS = ['investigation_lead', 'important'];
 
     public function entries(): void
@@ -42,12 +42,12 @@ final class ExportController
         $limit = self::clampInt($_GET['limit'] ?? 500, 1, MagnituExportRepository::MAX_LIMIT);
         $type  = self::stringParam($_GET['type']  ?? 'all') ?? 'all';
 
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         [$entries, $scoresByKey] = $gatherer->gather(
             $pdo,
             $since,
             $limit,
-            BriefingSourceSelection::forExport($type),
+            ResearcherSourceSelection::forExport($type),
             null,
         );
 
@@ -63,7 +63,7 @@ final class ExportController
         echo $body;
     }
 
-    public function briefing(): void
+    public function researcher(): void
     {
         $pdo    = getDbConnection();
         $config = new SystemConfigRepository($pdo);
@@ -76,23 +76,23 @@ final class ExportController
 
         $labelFilter = self::parseLabelFilter($_GET['labels'] ?? null) ?? self::DEFAULT_BRIEFING_LABELS;
 
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         [$entries, $scoresByKey] = $gatherer->gather(
             $pdo,
             $since,
             $limit,
-            BriefingSourceSelection::forExport('all'),
+            ResearcherSourceSelection::forExport('all'),
             $labelFilter,
         );
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
 
-        $body = MarkdownBriefingFormatter::format($entries, $scoresByKey, [
+        $body = MarkdownResearcherFormatter::format($entries, $scoresByKey, [
             'since'        => $since,
             'limit'        => $limit,
             'label_filter' => $labelFilter,
             'total'        => count($entries),
         ]);
-        header('Content-Type: ' . MarkdownBriefingFormatter::CONTENT_TYPE);
+        header('Content-Type: ' . MarkdownResearcherFormatter::CONTENT_TYPE);
         header('Cache-Control: no-store');
         header('Pragma: no-cache');
         echo $body;

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * Renders dashboard-style entry cards for briefing source validation.
+ * Renders dashboard-style entry cards for researcher source validation.
  */
-final class BriefingEntryCardPresenter
+final class ResearcherEntryCardPresenter
 {
     /**
      * Keep entries whose keys appear in $usedKeys, in model citation order.
@@ -48,7 +48,7 @@ final class BriefingEntryCardPresenter
     }
 
     /**
-     * @param list<array<string, mixed>> $entries Magnitu-shaped rows from {@see BriefingEntryGatherer}
+     * @param list<array<string, mixed>> $entries Magnitu-shaped rows from {@see ResearcherEntryGatherer}
      * @param array<string, array<string, mixed>> $scoresByKey "entry_type:entry_id" → score row
      */
     public function renderHtml(array $entries, array $scoresByKey): string
@@ -69,7 +69,7 @@ final class BriefingEntryCardPresenter
         $showFavourites    = false;
         $showDaySeparators = false;
         $searchQuery       = '';
-        $returnQuery       = 'action=briefing_builder';
+        $returnQuery       = 'action=researcher';
 
         ob_start();
         require SEISMO_ROOT . '/views/partials/dashboard_entry_loop.php';
@@ -91,7 +91,7 @@ final class BriefingEntryCardPresenter
             'email'          => $this->wrapEmailFromShaped($entry, $score),
             'lex_item'       => $this->wrapLexFromShaped($entry, $score),
             'calendar_event' => $this->wrapCalendarFromShaped($entry, $score),
-            default          => throw new \InvalidArgumentException('Unknown briefing entry_type: ' . $entryType),
+            default          => throw new \InvalidArgumentException('Unknown researcher entry_type: ' . $entryType),
         };
     }
 

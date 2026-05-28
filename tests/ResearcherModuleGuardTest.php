@@ -3,20 +3,20 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Formatter\MarkdownBriefingFormatter;
-use Seismo\Service\BriefingModuleGuard;
-use Seismo\Service\BriefingSourceSelection;
+use Seismo\Formatter\MarkdownResearcherFormatter;
+use Seismo\Service\ResearcherModuleGuard;
+use Seismo\Service\ResearcherSourceSelection;
 
-final class BriefingModuleGuardTest extends TestCase
+final class ResearcherModuleGuardTest extends TestCase
 {
     /**
-     * @return list<array{0: BriefingSourceSelection, 1: array<string, mixed>, 2: string}>
+     * @return list<array{0: ResearcherSourceSelection, 1: array<string, mixed>, 2: string}>
      */
     public static function leakFixtures(): array
     {
         return [
             'media off' => [
-                BriefingSourceSelection::forModules(true, false, false, false, false, false),
+                ResearcherSourceSelection::forModules(true, false, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 1,
@@ -26,7 +26,7 @@ final class BriefingModuleGuardTest extends TestCase
                 'media',
             ],
             'feeds off' => [
-                BriefingSourceSelection::forModules(false, true, false, false, false, false),
+                ResearcherSourceSelection::forModules(false, true, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 2,
@@ -36,7 +36,7 @@ final class BriefingModuleGuardTest extends TestCase
                 'feeds',
             ],
             'scraper off' => [
-                BriefingSourceSelection::forModules(true, false, false, false, false, false),
+                ResearcherSourceSelection::forModules(true, false, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 3,
@@ -46,7 +46,7 @@ final class BriefingModuleGuardTest extends TestCase
                 'scraper',
             ],
             'mail off' => [
-                BriefingSourceSelection::forModules(false, false, false, false, true, false),
+                ResearcherSourceSelection::forModules(false, false, false, false, true, false),
                 [
                     'entry_type' => 'email',
                     'entry_id'   => 4,
@@ -55,7 +55,7 @@ final class BriefingModuleGuardTest extends TestCase
                 'email',
             ],
             'lex off' => [
-                BriefingSourceSelection::forModules(false, false, false, false, false, true),
+                ResearcherSourceSelection::forModules(false, false, false, false, false, true),
                 [
                     'entry_type'  => 'lex_item',
                     'entry_id'    => 5,
@@ -64,7 +64,7 @@ final class BriefingModuleGuardTest extends TestCase
                 'lex',
             ],
             'leg off' => [
-                BriefingSourceSelection::forModules(false, false, false, false, true, false),
+                ResearcherSourceSelection::forModules(false, false, false, false, true, false),
                 [
                     'entry_type'  => 'calendar_event',
                     'entry_id'    => 6,
@@ -79,13 +79,13 @@ final class BriefingModuleGuardTest extends TestCase
      * @dataProvider leakFixtures
      */
     public function testSealGeminiContextStripsDeselectedModuleRows(
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
         array $leakRow,
         string $disabledBucket,
     ): void {
         $allowed = $this->allowedRowForSelection($selection);
 
-        $guard = new BriefingModuleGuard();
+        $guard = new ResearcherModuleGuard();
         $sealed = $guard->sealGeminiContext(
             [$allowed, $leakRow],
             [],
@@ -106,7 +106,7 @@ final class BriefingModuleGuardTest extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private function allowedRowForSelection(BriefingSourceSelection $selection): array
+    private function allowedRowForSelection(ResearcherSourceSelection $selection): array
     {
         if ($selection->moduleFeeds()) {
             return [
@@ -162,8 +162,8 @@ final class BriefingModuleGuardTest extends TestCase
 
     public function testAssertNoLeaksThrowsWhenDeselectedRowPresent(): void
     {
-        $selection = BriefingSourceSelection::forModules(true, false, false, false, false, false);
-        $guard     = new BriefingModuleGuard();
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
+        $guard     = new ResearcherModuleGuard();
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Internal module filter leak');
@@ -178,7 +178,7 @@ final class BriefingModuleGuardTest extends TestCase
 
     public function testAssertXmlMatchesEntriesRejectsTamperedMarkdown(): void
     {
-        $selection = BriefingSourceSelection::forModules(true, false, false, false, false, false);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
         $entries   = [[
             'entry_type'      => 'feed_item',
             'entry_id'        => 8,
@@ -186,7 +186,7 @@ final class BriefingModuleGuardTest extends TestCase
             'source_category' => 'news',
             'title'           => 'Allowed',
         ]];
-        $leakedXml = MarkdownBriefingFormatter::format(
+        $leakedXml = MarkdownResearcherFormatter::format(
             array_merge($entries, [[
                 'entry_type'      => 'feed_item',
                 'entry_id'        => 9,
@@ -197,10 +197,10 @@ final class BriefingModuleGuardTest extends TestCase
             [],
             [],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
-        $guard = new BriefingModuleGuard();
+        $guard = new ResearcherModuleGuard();
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Gemini context XML does not match');
@@ -210,13 +210,13 @@ final class BriefingModuleGuardTest extends TestCase
 
     public function testSealGeminiContextXmlIdsMatchFilteredEntriesExactly(): void
     {
-        $selection = BriefingSourceSelection::forModules(false, false, false, false, true, false);
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
         $entries   = [
             ['entry_type' => 'lex_item', 'entry_id' => 10, 'source_type' => 'lex_de', 'title' => 'A'],
             ['entry_type' => 'lex_item', 'entry_id' => 11, 'source_type' => 'lex_fr', 'title' => 'B'],
         ];
 
-        $guard  = new BriefingModuleGuard();
+        $guard  = new ResearcherModuleGuard();
         $sealed = $guard->sealGeminiContext($entries, [], [], $selection);
         $ids    = $guard->extractXmlEntryIds($sealed['markdown']);
 

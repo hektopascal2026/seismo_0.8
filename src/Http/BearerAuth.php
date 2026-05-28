@@ -8,8 +8,8 @@
  *                        `magnitu_*` endpoints (entries pull, scores push,
  *                        recipe GET/POST, labels push, status).
  *   - `export:api_key` — Read-only export key. Authorises only the
- *                        `export_briefing` / `export_entries` endpoints.
- *                        A briefing script with this key CANNOT push scores,
+ *                        `export_researcher` / `export_entries` endpoints.
+ *                        A researcher script with this key CANNOT push scores,
  *                        change the recipe, or otherwise mutate state.
  *
  * Keys are stored in `system_config` (renamed from `magnitu_config` in
@@ -46,7 +46,7 @@ final class BearerAuth
      * Two-key model defence-in-depth: if the presented token matches the
      * Magnitu write key (`api_key`), refuse regardless of the export key's
      * value. This catches an admin who accidentally generated the same secret
-     * for both rows, which would otherwise let a compromised briefing key
+     * for both rows, which would otherwise let a compromised researcher key
      * push scores.
      */
     public static function verifyExportKey(SystemConfigRepository $config): bool

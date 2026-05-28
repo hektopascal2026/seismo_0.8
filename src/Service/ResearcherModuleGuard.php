@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace Seismo\Service;
 
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 
 /**
- * Hard module boundary for AI Briefing Builder → Gemini.
+ * Hard module boundary for AI Researcher → Gemini.
  *
  * Every path that builds ENTRIES_DATA must pass through {@see sealGeminiContext()}.
  */
-final class BriefingModuleGuard
+final class ResearcherModuleGuard
 {
     public function __construct(
-        private readonly BriefingEntryGatherer $gatherer = new BriefingEntryGatherer(),
+        private readonly ResearcherEntryGatherer $gatherer = new ResearcherEntryGatherer(),
     ) {
     }
 
@@ -22,7 +22,7 @@ final class BriefingModuleGuard
      * @param list<array<string, mixed>> $entries
      * @return list<array<string, mixed>>
      */
-    public function filter(array $entries, BriefingSourceSelection $selection): array
+    public function filter(array $entries, ResearcherSourceSelection $selection): array
     {
         return $this->gatherer->filterByModuleSelection($entries, $selection);
     }
@@ -31,7 +31,7 @@ final class BriefingModuleGuard
      * @param list<array<string, mixed>> $entries
      * @return list<array<string, mixed>>
      */
-    public function findLeaks(array $entries, BriefingSourceSelection $selection): array
+    public function findLeaks(array $entries, ResearcherSourceSelection $selection): array
     {
         $leaks = [];
         foreach ($entries as $entry) {
@@ -47,7 +47,7 @@ final class BriefingModuleGuard
      * @param list<array<string, mixed>> $entries
      * @throws \RuntimeException
      */
-    public function assertNoLeaks(array $entries, BriefingSourceSelection $selection): void
+    public function assertNoLeaks(array $entries, ResearcherSourceSelection $selection): void
     {
         $leaks = $this->findLeaks($entries, $selection);
         if ($leaks === []) {
@@ -60,13 +60,13 @@ final class BriefingModuleGuard
             $id   = (string)($row['entry_id'] ?? '?');
             $bucket = $this->gatherer->moduleBucketForEntry(
                 $row,
-                BriefingSourceSelection::forModules(true, true, true, true, true, true),
+                ResearcherSourceSelection::forModules(true, true, true, true, true, true),
             );
             $samples[] = $type . ':' . $id . ' (full bucket=' . ($bucket ?? 'none') . ')';
         }
 
         error_log(
-            'BriefingModuleGuard: blocked ' . count($leaks)
+            'ResearcherModuleGuard: blocked ' . count($leaks)
             . ' deselected-module row(s): ' . implode(', ', $samples)
         );
 
@@ -89,18 +89,18 @@ final class BriefingModuleGuard
         array $entries,
         array $scoresByKey,
         array $meta,
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
     ): array {
         $entries = $this->filter($entries, $selection);
         $this->assertNoLeaks($entries, $selection);
 
         $meta['total'] = count($entries);
-        $markdown = MarkdownBriefingFormatter::format(
+        $markdown = MarkdownResearcherFormatter::format(
             $entries,
             $scoresByKey,
             $meta,
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         $this->assertXmlMatchesEntries($markdown, $entries, $selection);
@@ -119,7 +119,7 @@ final class BriefingModuleGuard
     public function assertXmlMatchesEntries(
         string $xml,
         array $entries,
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
     ): void {
         $this->assertNoLeaks($entries, $selection);
 
@@ -141,10 +141,10 @@ final class BriefingModuleGuard
         }
 
         if ($extra !== []) {
-            error_log('BriefingModuleGuard: XML contains unexpected ids: ' . implode(', ', $extra));
+            error_log('ResearcherModuleGuard: XML contains unexpected ids: ' . implode(', ', $extra));
         }
         if ($missing !== []) {
-            error_log('BriefingModuleGuard: XML missing expected ids: ' . implode(', ', array_slice($missing, 0, 5)));
+            error_log('ResearcherModuleGuard: XML missing expected ids: ' . implode(', ', array_slice($missing, 0, 5)));
         }
 
         throw new \RuntimeException(

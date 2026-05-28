@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * Lookback window for AI Briefing Builder (module + date range).
+ * Lookback window for AI Researcher (module + date range).
  *
  * Feed items use publication date or {@code cached_at} (ingestion), whichever is
  * later in the window — aligned with how operators see fresh items on module timelines.
  */
-final class BriefingLookback
+final class ResearcherLookback
 {
     /**
      * SQL fragment + params for feed_items lookback (append after existing WHERE).
@@ -39,7 +39,7 @@ final class BriefingLookback
     }
 
     /**
-     * Unix timestamp for briefing sort tie-break (newer = larger). Feed/calendar
+     * Unix timestamp for researcher sort tie-break (newer = larger). Feed/calendar
      * use the latest of publication vs ingestion/fetch instants.
      *
      * @param array<string, mixed> $entry Shaped Magnitu row.

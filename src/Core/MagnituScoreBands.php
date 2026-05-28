@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Seismo\Core;
 
-use Seismo\Service\BriefingScoreFilter;
+use Seismo\Service\ResearcherScoreFilter;
 
 /**
- * Magnitu relevance bands — shared by timeline badges and Briefing Builder gather.
+ * Magnitu relevance bands — shared by timeline badges and Researcher gather.
  *
- * Badge colours use fixed score quartiles; Highlights and Briefing use the
+ * Badge colours use fixed score quartiles; Highlights and Researcher use the
  * configurable alert threshold from Settings → Magnitu.
  */
 final class MagnituScoreBands
@@ -35,7 +35,7 @@ final class MagnituScoreBands
         return $score > self::IMPORTANT_MIN_EXCLUSIVE && $score < $t;
     }
 
-    public static function passesBriefingPool(
+    public static function passesResearcherPool(
         float $score,
         float $alertThreshold,
         bool $includeImportantBelowThreshold,
@@ -71,9 +71,9 @@ final class MagnituScoreBands
     }
 
     /**
-     * Human-readable summary for briefing UI / export meta.
+     * Human-readable summary for researcher UI / export meta.
      */
-    public static function describeBriefingPool(float $alertThreshold, bool $includeImportantBelow): string
+    public static function describeResearcherPool(float $alertThreshold, bool $includeImportantBelow): string
     {
         $pct = (int)round(self::clampThreshold($alertThreshold) * 100);
         $base = 'relevance ≥ ' . $pct . '% (Highlights tier, Settings → Magnitu alert threshold)';
@@ -84,13 +84,13 @@ final class MagnituScoreBands
         return $base . '; plus important band below threshold (score &gt; 50% and &lt; ' . $pct . '%)';
     }
 
-    public static function describeBriefingGather(BriefingScoreFilter $filter): string
+    public static function describeResearcherGather(ResearcherScoreFilter $filter): string
     {
         if ($filter->disregardMagnitu) {
             return 'Magnitu relevance filter disabled (experimental); modules and lookback only';
         }
 
-        return self::describeBriefingPool(
+        return self::describeResearcherPool(
             $filter->alertThreshold,
             $filter->includeImportantBelowThreshold,
         );

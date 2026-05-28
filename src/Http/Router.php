@@ -50,7 +50,7 @@ final class Router
         'styleguide' => true,
         'logbook'    => true,
         'magnitu'          => true,
-        'briefing_builder' => true,
+        'researcher' => true,
         'label'            => true,
         'feeds'      => true,
         'scraper'    => true,

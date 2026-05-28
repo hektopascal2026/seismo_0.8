@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 
-final class MarkdownBriefingFormatterTest extends TestCase
+final class MarkdownResearcherFormatterTest extends TestCase
 {
     public function testXmlFormatIncludesIdAndEscapesSpecialCharacters(): void
     {
@@ -21,12 +21,12 @@ final class MarkdownBriefingFormatterTest extends TestCase
             'content'         => 'Body with "quotes" & ampersands.',
         ]];
 
-        $xml = MarkdownBriefingFormatter::format(
+        $xml = MarkdownResearcherFormatter::format(
             $entries,
             [],
             ['since' => '2026-05-01T00:00:00Z'],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         self::assertStringContainsString('<id>feed_item:42</id>', $xml);
@@ -37,7 +37,7 @@ final class MarkdownBriefingFormatterTest extends TestCase
 
     public function testXmlTruncatesFeedBodyAtEntryBodyMaxChars(): void
     {
-        $longBody = str_repeat('x', MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS + 500);
+        $longBody = str_repeat('x', MarkdownResearcherFormatter::ENTRY_BODY_MAX_CHARS + 500);
         $entries  = [[
             'entry_type' => 'feed_item',
             'entry_id'   => 1,
@@ -45,19 +45,19 @@ final class MarkdownBriefingFormatterTest extends TestCase
             'content'    => $longBody,
         ]];
 
-        $xml = MarkdownBriefingFormatter::format(
+        $xml = MarkdownResearcherFormatter::format(
             $entries,
             [],
             [],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
-        self::assertSame(2000, MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS);
+        self::assertSame(2000, MarkdownResearcherFormatter::ENTRY_BODY_MAX_CHARS);
         self::assertStringNotContainsString(str_repeat('x', 2100), $xml);
         if (preg_match('/<content>(.*)<\/content>/s', $xml, $m) === 1) {
             $bodyLen = mb_strlen(html_entity_decode($m[1], ENT_XML1, 'UTF-8'), 'UTF-8');
-            self::assertLessThanOrEqual(MarkdownBriefingFormatter::ENTRY_BODY_MAX_CHARS + 1, $bodyLen);
+            self::assertLessThanOrEqual(MarkdownResearcherFormatter::ENTRY_BODY_MAX_CHARS + 1, $bodyLen);
             self::assertGreaterThan(1900, $bodyLen);
         } else {
             self::fail('Expected <content> in XML output');
@@ -66,7 +66,7 @@ final class MarkdownBriefingFormatterTest extends TestCase
 
     public function testSanitizeLinkUrlEncodesParenthesesForMarkdown(): void
     {
-        $method = new ReflectionMethod(MarkdownBriefingFormatter::class, 'sanitizeLinkUrl');
+        $method = new ReflectionMethod(MarkdownResearcherFormatter::class, 'sanitizeLinkUrl');
 
         $raw = 'https://en.wikipedia.org/wiki/Economy_of_Switzerland_(2020)';
         $out = $method->invoke(null, $raw);
@@ -84,12 +84,12 @@ final class MarkdownBriefingFormatterTest extends TestCase
             'title'      => 'Lex title',
         ]];
 
-        $md = MarkdownBriefingFormatter::format(
+        $md = MarkdownResearcherFormatter::format(
             $entries,
             [],
             [],
             true,
-            MarkdownBriefingFormatter::FORMAT_MARKDOWN,
+            MarkdownResearcherFormatter::FORMAT_MARKDOWN,
         );
 
         self::assertStringContainsString('[ID: lex_item:9]', $md);
@@ -110,12 +110,12 @@ final class MarkdownBriefingFormatterTest extends TestCase
             'description'     => 'Kurzbeschreibung',
         ]];
 
-        $xml = MarkdownBriefingFormatter::format(
+        $xml = MarkdownResearcherFormatter::format(
             $entries,
             [],
             [],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         self::assertStringContainsString('<jurisdiction>DE</jurisdiction>', $xml);
@@ -137,12 +137,12 @@ final class MarkdownBriefingFormatterTest extends TestCase
             'content'     => $content,
         ]];
 
-        $xml = MarkdownBriefingFormatter::format(
+        $xml = MarkdownResearcherFormatter::format(
             $entries,
             [],
             [],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         self::assertStringContainsString('<jurisdiction>FR</jurisdiction>', $xml);

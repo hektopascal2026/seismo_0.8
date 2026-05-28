@@ -3,8 +3,8 @@
  * Migration 004 — reserve `export:api_key` in `magnitu_config` (Slice 5, schema version 20).
  *
  * Slice 5 adds a second Bearer-auth key alongside the existing Magnitu `api_key`.
- * The read-only export endpoints (`?action=export_briefing`, `?action=export_entries`)
- * validate against this row exclusively, so a briefing / automation script can never
+ * The read-only export endpoints (`?action=export_researcher`, `?action=export_entries`)
+ * validate against this row exclusively, so a researcher / automation script can never
  * POST scores or labels — two-key model. The admin UI polish lives in Slice 6.
  *
  * This migration does NOT generate a secret: the row is seeded empty so validators

@@ -1,6 +1,6 @@
 <?php
 /**
- * AI Briefing Builder — filter entries and generate a Gemini summary.
+ * AI Researcher — filter entries and generate a Gemini summary.
  *
  * @var string $csrfField
  * @var string $basePath
@@ -25,16 +25,16 @@ declare(strict_types=1);
 
 $accent = seismoBrandAccent();
 
-$headerTitle    = 'Briefing';
+$headerTitle    = 'Researcher';
 $headerSubtitle = '';
-$activeNav      = 'briefing_builder';
+$activeNav      = 'researcher';
 
-$prepareUrl         = $basePath . '/index.php?action=briefing_builder_prepare';
-$generateUrl        = $basePath . '/index.php?action=briefing_builder_generate';
-$savePromptUrl      = $basePath . '/index.php?action=briefing_builder_save_prompt';
-$promptHelperUrl    = $basePath . '/index.php?action=briefing_prompt_helper';
-$saveLibraryUrl     = $basePath . '/index.php?action=save_briefing_prompt';
-$deleteLibraryUrl   = $basePath . '/index.php?action=delete_briefing_prompt';
+$prepareUrl         = $basePath . '/index.php?action=researcher_prepare';
+$generateUrl        = $basePath . '/index.php?action=researcher_generate';
+$savePromptUrl      = $basePath . '/index.php?action=researcher_save_prompt';
+$promptHelperUrl    = $basePath . '/index.php?action=researcher_prompt_helper';
+$saveLibraryUrl     = $basePath . '/index.php?action=save_researcher_prompt';
+$deleteLibraryUrl   = $basePath . '/index.php?action=delete_researcher_prompt';
 
 $defaultPromptStored = $defaultPromptStored ?? false;
 $initialActivePromptTabId = $initialActivePromptTabId ?? null;
@@ -64,36 +64,36 @@ $moduleOptions = [
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
     <style>
-    .briefing-output-status__lead {
+    .researcher-output-status__lead {
         margin: 0 0 0.5rem;
         font-weight: 600;
     }
-    .briefing-output-status__steps {
+    .researcher-output-status__steps {
         list-style: none;
         margin: 0.5rem 0 0;
         padding: 0;
     }
-    .briefing-output-status__step {
+    .researcher-output-status__step {
         padding: 0.3rem 0;
         color: var(--text-muted, #6b7280);
     }
-    .briefing-output-status__step.is-active {
+    .researcher-output-status__step.is-active {
         color: inherit;
         font-weight: 600;
     }
-    .briefing-output-status__step.is-done::before {
+    .researcher-output-status__step.is-done::before {
         content: '\2713  ';
         color: var(--seismo-accent, #2563eb);
     }
-    .briefing-output-error-inline {
+    .researcher-output-error-inline {
         margin: 0;
         color: #b91c1c;
         font-weight: 600;
     }
-    .briefing-summary-block {
+    .researcher-summary-block {
         max-width: 40rem;
     }
-    .briefing-summary-toolbar {
+    .researcher-summary-toolbar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -101,27 +101,27 @@ $moduleOptions = [
         gap: 0.5rem;
         margin-bottom: 0.75rem;
     }
-    .briefing-summary-toolbar .section-title {
+    .researcher-summary-toolbar .section-title {
         margin: 0;
     }
-    #briefing-copy-btn {
+    #researcher-copy-btn {
         display: none;
     }
-    #briefing-copy-btn.briefing-copy-btn--visible {
+    #researcher-copy-btn.researcher-copy-btn--visible {
         display: inline-block;
     }
-    .briefing-output-meta {
+    .researcher-output-meta {
         margin-top: 1rem;
         padding-top: 0.75rem;
         border-top: 0.0625rem solid #000000;
         max-width: 100%;
     }
-    .briefing-output-meta__title {
+    .researcher-output-meta__title {
         margin: 0 0 0.35rem;
         font-size: 0.8125rem;
         font-weight: 600;
     }
-    .briefing-output-meta__pre {
+    .researcher-output-meta__pre {
         margin: 0;
         padding: 0.5rem 0.65rem;
         font-size: 0.75rem;
@@ -143,56 +143,63 @@ $moduleOptions = [
             <div class="message message-warning">
                 No Gemini API key is configured.
                 <a href="<?= e($basePath) ?>/index.php?action=settings&amp;tab=general">Add one in Settings → General</a>
-                before generating a briefing.
+                before generating a researcher.
             </div>
         <?php endif; ?>
 
-        <div class="view-toggle view-toggle-bar" id="briefing-prompt-view-toggle">
+        <div class="view-toggle view-toggle-bar" id="researcher-prompt-view-toggle">
             <span class="view-toggle-label">View:</span>
-            <button type="button" class="btn btn-primary" id="briefing-view-prompt" data-view="prompt">Prompt</button>
-            <button type="button" class="btn btn-secondary" id="briefing-view-helper" data-view="helper">Helper</button>
+            <button type="button" class="btn btn-primary" id="researcher-view-prompt" data-view="prompt">Prompt</button>
+            <button type="button" class="btn btn-secondary" id="researcher-view-helper" data-view="helper">Helper</button>
         </div>
 
         <div class="latest-entries-section">
-            <form id="briefing-builder-form" class="admin-form-card">
+            <form id="researcher-builder-form" class="admin-form-card">
                 <div class="filter-page-actions" style="margin-bottom:0.75rem;">
-                    <button type="button" class="btn btn-primary" id="briefing-modules-all">All sources</button>
-                    <button type="button" class="btn btn-secondary" id="briefing-modules-none">None</button>
+                    <button type="button" class="btn btn-primary" id="researcher-modules-all">All sources</button>
+                    <button type="button" class="btn btn-secondary" id="researcher-modules-none">None</button>
                 </div>
 
                 <div class="tag-filter-section tag-filter-section--spaced-bottom">
                     <div class="tag-filter-list">
                         <?php foreach ($moduleOptions as $mod): ?>
+                        <?php if ($mod['key'] === 'lex'): ?>
+                        <label class="tag-filter-pill tag-filter-pill-active" id="lex-pill" style="user-select: none;">
+                            <input type="hidden" name="modules[]" value="lex" id="lex-input">
+                            <span id="lex-label">Lex</span>
+                        </label>
+                        <?php else: ?>
                         <label class="tag-filter-pill tag-filter-pill-active">
                             <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>" checked
-                                   class="briefing-module-cb">
+                                   class="researcher-module-cb">
                             <span><?= e($mod['label']) ?></span>
                         </label>
+                        <?php endif; ?>
                         <?php endforeach; ?>
                     </div>
                 </div>
 
                 <div class="admin-form-field">
                     <label>Relevance</label>
-                    <p class="admin-intro" id="briefing-relevance-intro" style="margin:0.25rem 0 0.5rem;">
+                    <p class="admin-intro" id="researcher-relevance-intro" style="margin:0.25rem 0 0.5rem;">
                         Highlights tier (≥ <?= (int)$alertThresholdPct ?>%) is always included.
                     </p>
-                    <label id="briefing-include-important-label">
-                        <input type="checkbox" id="briefing_include_important" name="include_important" value="1">
+                    <label id="researcher-include-important-label">
+                        <input type="checkbox" id="researcher_include_important" name="include_important" value="1">
                         Also include important band below threshold (&gt; 50%, &lt; <?= (int)$alertThresholdPct ?>%)
                     </label>
                     <label style="display:block; margin-top:0.5rem;">
-                        <input type="checkbox" id="briefing_disregard_magnitu" name="disregard_magnitu" value="1">
+                        <input type="checkbox" id="researcher_disregard_magnitu" name="disregard_magnitu" value="1">
                         Disregard Magnitu (experimental)
                     </label>
-                    <p class="admin-intro" id="briefing-disregard-magnitu-hint" style="margin:0.25rem 0 0;" hidden>
+                    <p class="admin-intro" id="researcher-disregard-magnitu-hint" style="margin:0.25rem 0 0;" hidden>
                         All in-window entries from selected modules are eligible; Gemini receives up to the context cap ordered by highest relevance, then newest. Magnitu score thresholds are not applied.
                     </p>
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="briefing_lookback">Lookback window</label>
-                    <select id="briefing_lookback" name="lookback_days" class="search-input" style="width:auto;">
+                    <label for="researcher_lookback">Lookback window</label>
+                    <select id="researcher_lookback" name="lookback_days" class="search-input" style="width:auto;">
                         <?php for ($d = 1; $d <= 7; $d++): ?>
                         <option value="<?= $d ?>"<?= $defaultLookbackDays === $d ? ' selected' : '' ?>>
                             <?= $d === 1 ? '1 day' : $d . ' days' ?>
@@ -202,14 +209,14 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="briefing_limit">Entry limit (per module)</label>
-                    <input type="number" id="briefing_limit" name="limit" class="search-input" style="width:7rem;"
+                    <label for="researcher_limit">Entry limit (per module)</label>
+                    <input type="number" id="researcher_limit" name="limit" class="search-input" style="width:7rem;"
                            min="1" max="<?= (int)$maxLimit ?>" value="<?= (int)$defaultLimit ?>">
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="briefing_item_count">Number of items</label>
-                    <select id="briefing_item_count" name="item_count" class="search-input" style="width:auto;">
+                    <label for="researcher_item_count">Number of items</label>
+                    <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto;">
                         <?php foreach ($itemCountOptions as $n): ?>
                         <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
                             <?= (int)$n ?> items
@@ -220,8 +227,8 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="briefing_max_context_entries">Max entries sent to Gemini</label>
-                    <input type="number" id="briefing_max_context_entries" name="max_context_entries"
+                    <label for="researcher_max_context_entries">Max entries sent to Gemini</label>
+                    <input type="number" id="researcher_max_context_entries" name="max_context_entries"
                            min="<?= (int)$maxContextMin ?>" max="<?= (int)$maxContextMax ?>"
                            value="<?= (int)$maxContextEntries ?>"
                            class="search-input" style="width:7rem;">
@@ -232,9 +239,9 @@ $moduleOptions = [
                     </p>
                 </div>
 
-                <div class="admin-form-field" id="briefing-prompt-field">
-                    <div id="briefing-prompt-panel">
-                        <label for="briefing_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
+                <div class="admin-form-field" id="researcher-prompt-field">
+                    <div id="researcher-prompt-panel">
+                        <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                             <?php foreach ($savedPrompts as $i => $sp): ?>
                             <div class="prompt-tab-wrap">
@@ -252,63 +259,63 @@ $moduleOptions = [
                             <?php endforeach; ?>
                         </div>
                         <span id="prompt-library-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
-                        <textarea id="briefing_system_prompt" name="system_prompt" rows="22" class="search-input"
+                        <textarea id="researcher_system_prompt" name="system_prompt" rows="22" class="search-input"
                                   style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
                     </div>
 
-                    <div id="briefing-helper-panel" hidden>
-                        <label for="briefing_helper_intent">What should this briefing focus on?</label>
+                    <div id="researcher-helper-panel" hidden>
+                        <label for="researcher_helper_intent">What should this researcher focus on?</label>
                         <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
                             Rough notes are enough. Gemini drafts a full prompt in the style of your desk default.
                         </p>
-                        <textarea id="briefing_helper_intent" rows="5" class="search-input"
+                        <textarea id="researcher_helper_intent" rows="5" class="search-input"
                                   style="width:100%; max-width:40rem;"
                                   placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
                         <div style="margin:0.5rem 0;">
-                            <button type="button" class="btn btn-secondary" id="briefing-helper-generate-btn"
+                            <button type="button" class="btn btn-secondary" id="researcher-helper-generate-btn"
                                     <?= $geminiConfigured ? '' : ' disabled' ?>>Generate prompt</button>
                         </div>
-                        <span id="briefing-helper-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
-                        <label for="briefing_helper_result">Generated prompt</label>
+                        <span id="researcher-helper-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
+                        <label for="researcher_helper_result">Generated prompt</label>
                         <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
-                            Review and edit, then save to the library or as the instance default. Generate briefing uses the Prompt view only.
+                            Review and edit, then save to the library or as the instance default. Generate researcher uses the Prompt view only.
                         </p>
-                        <textarea id="briefing_helper_result" rows="22" class="search-input"
+                        <textarea id="researcher_helper_result" rows="22" class="search-input"
                                   style="width:100%; max-width:40rem;"></textarea>
                     </div>
                 </div>
 
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
-                    <button type="submit" class="btn btn-success" id="briefing-generate-btn"
-                            <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
-                    <button type="button" class="btn btn-secondary" id="briefing-save-prompt-btn"
+                    <button type="submit" class="btn btn-success" id="researcher-generate-btn"
+                            <?= $geminiConfigured ? '' : ' disabled' ?>>Generate researcher</button>
+                    <button type="button" class="btn btn-secondary" id="researcher-save-prompt-btn"
                             title="<?= e($saveDefaultPromptTitle) ?>"><?= e($saveDefaultPromptLabel) ?></button>
                     <button type="button" class="btn btn-secondary" id="save-prompt-library-btn"
                             title="Add the current textarea as a named prompt in the library">Save to library</button>
-                    <span id="briefing-prompt-save-msg" class="message" style="margin:0; flex-basis:100%;" hidden role="status" aria-live="polite"></span>
+                    <span id="researcher-prompt-save-msg" class="message" style="margin:0; flex-basis:100%;" hidden role="status" aria-live="polite"></span>
                 </div>
             </form>
         </div>
 
-        <div class="latest-entries-section module-section-spaced briefing-summary-block">
-            <div class="briefing-summary-toolbar">
+        <div class="latest-entries-section module-section-spaced researcher-summary-block">
+            <div class="researcher-summary-toolbar">
                 <h2 class="section-title">Summary</h2>
-                <button type="button" class="btn btn-secondary" id="briefing-copy-btn"
+                <button type="button" class="btn btn-secondary" id="researcher-copy-btn"
                         hidden aria-hidden="true" tabindex="-1">Copy to clipboard</button>
             </div>
-            <div id="briefing-output-error" class="message message-error" hidden></div>
-            <div id="briefing-output-warning" class="message message-warning" hidden></div>
-            <div id="briefing-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
-                <p class="admin-intro" id="briefing-output-placeholder">Generated text will appear here.</p>
+            <div id="researcher-output-error" class="message message-error" hidden></div>
+            <div id="researcher-output-warning" class="message message-warning" hidden></div>
+            <div id="researcher-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
+                <p class="admin-intro" id="researcher-output-placeholder">Generated text will appear here.</p>
             </div>
         </div>
 
-        <div class="latest-entries-section module-section-spaced" id="briefing-sources-section" hidden>
+        <div class="latest-entries-section module-section-spaced" id="researcher-sources-section" hidden>
             <h2 class="section-title">Referenced source entries</h2>
-            <p class="admin-intro" id="briefing-sources-intro">
+            <p class="admin-intro" id="researcher-sources-intro">
                 Entry cards cited for the top developments (attribution).
             </p>
-            <div id="briefing-sources-cards"></div>
+            <div id="researcher-sources-cards"></div>
         </div>
 
         <div class="label-hidden-csrf" aria-hidden="true"><?= $csrfField ?></div>
@@ -316,15 +323,15 @@ $moduleOptions = [
 
     <script>
     (function() {
-        var form = document.getElementById('briefing-builder-form');
-        var btn = document.getElementById('briefing-generate-btn');
-        var out = document.getElementById('briefing-output');
-        var placeholder = document.getElementById('briefing-output-placeholder');
-        var errEl = document.getElementById('briefing-output-error');
-        var warnEl = document.getElementById('briefing-output-warning');
-        var sourcesSection = document.getElementById('briefing-sources-section');
-        var sourcesCards = document.getElementById('briefing-sources-cards');
-        var sourcesIntro = document.getElementById('briefing-sources-intro');
+        var form = document.getElementById('researcher-builder-form');
+        var btn = document.getElementById('researcher-generate-btn');
+        var out = document.getElementById('researcher-output');
+        var placeholder = document.getElementById('researcher-output-placeholder');
+        var errEl = document.getElementById('researcher-output-error');
+        var warnEl = document.getElementById('researcher-output-warning');
+        var sourcesSection = document.getElementById('researcher-sources-section');
+        var sourcesCards = document.getElementById('researcher-sources-cards');
+        var sourcesIntro = document.getElementById('researcher-sources-intro');
         var csrfWrap = document.querySelector('.label-hidden-csrf');
         var prepareUrl = <?= json_encode($prepareUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var generateUrl = <?= json_encode($generateUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
@@ -333,33 +340,37 @@ $moduleOptions = [
         var saveLibraryUrl = <?= json_encode($saveLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var deleteLibraryUrl = <?= json_encode($deleteLibraryUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?>;
         var savedPrompts = <?= json_encode($savedPrompts, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
-        var savePromptBtn = document.getElementById('briefing-save-prompt-btn');
-        var savePromptMsg = document.getElementById('briefing-prompt-save-msg');
+        var savePromptBtn = document.getElementById('researcher-save-prompt-btn');
+        var savePromptMsg = document.getElementById('researcher-prompt-save-msg');
         var saveLibraryBtn = document.getElementById('save-prompt-library-btn');
         var promptTabsEl = document.getElementById('prompt-tabs');
         var promptLibraryMsg = document.getElementById('prompt-library-msg');
-        var promptTextarea = document.getElementById('briefing_system_prompt');
-        var helperIntentEl = document.getElementById('briefing_helper_intent');
-        var helperResultEl = document.getElementById('briefing_helper_result');
-        var helperGenerateBtn = document.getElementById('briefing-helper-generate-btn');
-        var helperMsgEl = document.getElementById('briefing-helper-msg');
-        var promptPanelEl = document.getElementById('briefing-prompt-panel');
-        var helperPanelEl = document.getElementById('briefing-helper-panel');
-        var viewPromptBtn = document.getElementById('briefing-view-prompt');
-        var viewHelperBtn = document.getElementById('briefing-view-helper');
-        var briefingPromptView = 'prompt';
+        var promptTextarea = document.getElementById('researcher_system_prompt');
+        var helperIntentEl = document.getElementById('researcher_helper_intent');
+        var helperResultEl = document.getElementById('researcher_helper_result');
+        var helperGenerateBtn = document.getElementById('researcher-helper-generate-btn');
+        var helperMsgEl = document.getElementById('researcher-helper-msg');
+        var promptPanelEl = document.getElementById('researcher-prompt-panel');
+        var helperPanelEl = document.getElementById('researcher-helper-panel');
+        var viewPromptBtn = document.getElementById('researcher-view-prompt');
+        var viewHelperBtn = document.getElementById('researcher-view-helper');
+        var researcherPromptView = 'prompt';
         var activePromptId = null;
         var initialActivePromptTabId = <?= json_encode($initialActivePromptTabId, JSON_UNESCAPED_UNICODE) ?>;
         var defaultPromptStored = <?= $defaultPromptStored ? 'true' : 'false' ?>;
         var instanceSavePromptLabel = <?= json_encode('Save prompt (default)', JSON_UNESCAPED_UNICODE) ?>;
         var instanceUpdatePromptLabel = <?= json_encode('Update prompt (default)', JSON_UNESCAPED_UNICODE) ?>;
         var PROMPT_TAB_DEFAULT_NAME = 'Default';
-        var copyBtn = document.getElementById('briefing-copy-btn');
-        var lastBriefingText = '';
+        var copyBtn = document.getElementById('researcher-copy-btn');
+        var lastResearcherText = '';
         var COPY_BTN_LABEL = 'Copy to clipboard';
-        var moduleCbs = document.querySelectorAll('.briefing-module-cb');
-        var btnAll = document.getElementById('briefing-modules-all');
-        var btnNone = document.getElementById('briefing-modules-none');
+        var moduleCbs = document.querySelectorAll('.researcher-module-cb');
+        var btnAll = document.getElementById('researcher-modules-all');
+        var btnNone = document.getElementById('researcher-modules-none');
+        var lexPill = document.getElementById('lex-pill');
+        var lexInput = document.getElementById('lex-input');
+        var lexLabel = document.getElementById('lex-label');
+        var lexState = 1; // 0 = Deselected, 1 = Lex (all), 2 = CH Lex (Fedlex only)
 
         function syncModulePill(cb) {
             var pill = cb.closest('.tag-filter-pill');
@@ -373,9 +384,23 @@ $moduleOptions = [
                 cb.checked = on;
                 syncModulePill(cb);
             });
+            if (lexPill && lexInput && lexLabel) {
+                if (on) {
+                    lexState = 1;
+                    lexInput.value = 'lex';
+                    lexInput.disabled = false;
+                    lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                    lexLabel.textContent = 'Lex';
+                } else {
+                    lexState = 0;
+                    lexInput.disabled = true;
+                    lexPill.className = 'tag-filter-pill';
+                    lexLabel.textContent = 'Lex';
+                }
+            }
         }
 
-        function initBriefingModuleToggles() {
+        function initResearcherModuleToggles() {
             if (btnAll) {
                 btnAll.addEventListener('click', function(ev) {
                     ev.preventDefault();
@@ -394,14 +419,41 @@ $moduleOptions = [
                     syncModulePill(cb);
                 });
             });
+
+            if (lexPill && lexInput && lexLabel) {
+                lexPill.addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    if (lexState === 1) {
+                        // All -> CH Lex
+                        lexState = 2;
+                        lexInput.value = 'lex_ch';
+                        lexInput.disabled = false;
+                        lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--ch-lex';
+                        lexLabel.textContent = 'CH Lex';
+                    } else if (lexState === 2) {
+                        // CH Lex -> Off
+                        lexState = 0;
+                        lexInput.disabled = true;
+                        lexPill.className = 'tag-filter-pill';
+                        lexLabel.textContent = 'Lex';
+                    } else {
+                        // Off -> All
+                        lexState = 1;
+                        lexInput.value = 'lex';
+                        lexInput.disabled = false;
+                        lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                        lexLabel.textContent = 'Lex';
+                    }
+                });
+            }
         }
 
         function syncDisregardMagnituUi() {
-            var disregardCb = document.getElementById('briefing_disregard_magnitu');
-            var includeCb = document.getElementById('briefing_include_important');
-            var includeLabel = document.getElementById('briefing-include-important-label');
-            var hint = document.getElementById('briefing-disregard-magnitu-hint');
-            var relevanceIntro = document.getElementById('briefing-relevance-intro');
+            var disregardCb = document.getElementById('researcher_disregard_magnitu');
+            var includeCb = document.getElementById('researcher_include_important');
+            var includeLabel = document.getElementById('researcher-include-important-label');
+            var hint = document.getElementById('researcher-disregard-magnitu-hint');
+            var relevanceIntro = document.getElementById('researcher-relevance-intro');
             if (!disregardCb) {
                 return;
             }
@@ -424,7 +476,7 @@ $moduleOptions = [
         }
 
         function initDisregardMagnituToggle() {
-            var disregardCb = document.getElementById('briefing_disregard_magnitu');
+            var disregardCb = document.getElementById('researcher_disregard_magnitu');
             if (!disregardCb) {
                 return;
             }
@@ -432,7 +484,7 @@ $moduleOptions = [
             syncDisregardMagnituUi();
         }
 
-        initBriefingModuleToggles();
+        initResearcherModuleToggles();
         initDisregardMagnituToggle();
 
         var statusTimerIds = [];
@@ -441,7 +493,7 @@ $moduleOptions = [
             { id: 'load', label: 'Loading and filtering entries from selected modules' },
             { id: 'context', label: 'Building markdown source context' },
             { id: 'select', label: 'Gemini pass 1: selecting top entries (thinking)' },
-            { id: 'write', label: 'Gemini pass 2: writing executive briefing' },
+            { id: 'write', label: 'Gemini pass 2: writing executive researcher' },
             { id: 'cards', label: 'Preparing source entry cards for validation' }
         ];
 
@@ -459,23 +511,23 @@ $moduleOptions = [
         }
 
         function setStatusStepLabel(stepId, label) {
-            var list = document.getElementById('briefing-status-steps');
+            var list = document.getElementById('researcher-status-steps');
             if (!list) return;
-            var li = list.querySelector('.briefing-output-status__step[data-step="' + stepId + '"]');
+            var li = list.querySelector('.researcher-output-status__step[data-step="' + stepId + '"]');
             if (li) li.textContent = label;
         }
 
         function setActiveStatusStep(stepId) {
-            var list = document.getElementById('briefing-status-steps');
+            var list = document.getElementById('researcher-status-steps');
             if (!list) return;
             var found = false;
-            list.querySelectorAll('.briefing-output-status__step').forEach(function(li) {
+            list.querySelectorAll('.researcher-output-status__step').forEach(function(li) {
                 var id = li.getAttribute('data-step');
                 if (id === stepId) {
                     li.classList.add('is-active');
                     li.classList.remove('is-done');
                     found = true;
-                    var leadText = document.getElementById('briefing-status-lead-text');
+                    var leadText = document.getElementById('researcher-status-lead-text');
                     if (leadText) leadText.textContent = li.textContent;
                 } else if (!found) {
                     li.classList.remove('is-active');
@@ -504,12 +556,12 @@ $moduleOptions = [
             );
             setStatusStepLabel(
                 'write',
-                'Gemini pass 2: writing full executive briefing (often 30\u201390 seconds total)'
+                'Gemini pass 2: writing full executive researcher (often 30\u201390 seconds total)'
             );
             setActiveStatusStep('select');
         }
 
-        function postBriefingAction(url, formData) {
+        function postResearcherAction(url, formData) {
             return fetch(url, {
                 method: 'POST',
                 body: formData,
@@ -547,7 +599,7 @@ $moduleOptions = [
                 if (detail !== '') {
                     msg += ' (' + detail + ')';
                 }
-                msg += ' If this happens after ~30–60s, check PHP max_execution_time and nginx fastcgi_read_timeout (briefing needs up to ~3 minutes).';
+                msg += ' If this happens after ~30–60s, check PHP max_execution_time and nginx fastcgi_read_timeout (researcher needs up to ~3 minutes).';
                 return { ok: false, error: msg };
             });
         }
@@ -560,16 +612,16 @@ $moduleOptions = [
             out.setAttribute('aria-busy', 'true');
 
             var wrap = document.createElement('div');
-            wrap.id = 'briefing-output-status';
-            wrap.className = 'briefing-output-status';
+            wrap.id = 'researcher-output-status';
+            wrap.className = 'researcher-output-status';
             wrap.setAttribute('aria-live', 'polite');
 
             var lead = document.createElement('p');
-            lead.id = 'briefing-status-lead';
-            lead.className = 'briefing-output-status__lead';
+            lead.id = 'researcher-status-lead';
+            lead.className = 'researcher-output-status__lead';
 
             var leadText = document.createElement('span');
-            leadText.id = 'briefing-status-lead-text';
+            leadText.id = 'researcher-status-lead-text';
             leadText.textContent = statusStepsForMode()[0].label;
             lead.appendChild(leadText);
 
@@ -583,11 +635,11 @@ $moduleOptions = [
             lead.appendChild(dots);
 
             var list = document.createElement('ol');
-            list.id = 'briefing-status-steps';
-            list.className = 'briefing-output-status__steps';
+            list.id = 'researcher-status-steps';
+            list.className = 'researcher-output-status__steps';
             statusStepsForMode().forEach(function(step, idx) {
                 var li = document.createElement('li');
-                li.className = 'briefing-output-status__step' + (idx === 0 ? ' is-active' : '');
+                li.className = 'researcher-output-status__step' + (idx === 0 ? ' is-active' : '');
                 li.setAttribute('data-step', step.id);
                 li.textContent = step.label;
                 list.appendChild(li);
@@ -607,18 +659,18 @@ $moduleOptions = [
         function hideProcessingStatus() {
             clearStatusTimers();
             out.removeAttribute('aria-busy');
-            var status = document.getElementById('briefing-output-status');
+            var status = document.getElementById('researcher-output-status');
             if (status) status.remove();
         }
 
         function restoreOutputPlaceholder() {
             hideCopyBtn();
             hideProcessingStatus();
-            if (!out.querySelector('#briefing-output-placeholder') && !out.textContent.trim()) {
+            if (!out.querySelector('#researcher-output-placeholder') && !out.textContent.trim()) {
                 out.style.whiteSpace = 'pre-wrap';
                 var p = document.createElement('p');
                 p.className = 'admin-intro';
-                p.id = 'briefing-output-placeholder';
+                p.id = 'researcher-output-placeholder';
                 p.textContent = 'Generated text will appear here.';
                 out.appendChild(p);
                 placeholder = p;
@@ -631,10 +683,10 @@ $moduleOptions = [
         }
 
         function hideCopyBtn() {
-            lastBriefingText = '';
+            lastResearcherText = '';
             if (copyBtn) {
                 copyBtn.hidden = true;
-                copyBtn.classList.remove('briefing-copy-btn--visible');
+                copyBtn.classList.remove('researcher-copy-btn--visible');
                 copyBtn.setAttribute('aria-hidden', 'true');
                 copyBtn.tabIndex = -1;
                 copyBtn.textContent = COPY_BTN_LABEL;
@@ -660,12 +712,12 @@ $moduleOptions = [
                 parts.push(meta.item_count + ' developments requested');
             }
             if (meta.cited_entry_count !== undefined) {
-                parts.push(meta.cited_entry_count + ' cited in briefing');
+                parts.push(meta.cited_entry_count + ' cited in researcher');
             }
             return parts.join(' · ');
         }
 
-        function appendBriefingMetaDebug(container, meta) {
+        function appendResearcherMetaDebug(container, meta) {
             if (!container || !meta || typeof meta !== 'object') {
                 return;
             }
@@ -674,9 +726,9 @@ $moduleOptions = [
                 return;
             }
             var wrap = document.createElement('div');
-            wrap.className = 'briefing-output-meta';
+            wrap.className = 'researcher-output-meta';
             var title = document.createElement('p');
-            title.className = 'briefing-output-meta__title';
+            title.className = 'researcher-output-meta__title';
             title.textContent = 'Generation meta (debug)';
             var summary = formatContextCapSummary(meta);
             if (summary !== '') {
@@ -687,7 +739,7 @@ $moduleOptions = [
                 wrap.appendChild(lead);
             }
             var pre = document.createElement('pre');
-            pre.className = 'briefing-output-meta__pre';
+            pre.className = 'researcher-output-meta__pre';
             try {
                 pre.textContent = JSON.stringify(meta, null, 2);
             } catch (e) {
@@ -699,13 +751,13 @@ $moduleOptions = [
         }
 
         function showCopyBtn(text) {
-            lastBriefingText = text || '';
+            lastResearcherText = text || '';
             if (!copyBtn) return;
-            var ready = lastBriefingText.trim() !== '';
+            var ready = lastResearcherText.trim() !== '';
             copyBtn.textContent = COPY_BTN_LABEL;
             if (ready) {
                 copyBtn.hidden = false;
-                copyBtn.classList.add('briefing-copy-btn--visible');
+                copyBtn.classList.add('researcher-copy-btn--visible');
                 copyBtn.setAttribute('aria-hidden', 'false');
                 copyBtn.tabIndex = 0;
             } else {
@@ -713,20 +765,20 @@ $moduleOptions = [
             }
         }
 
-        function copyBriefingToClipboard() {
-            if (!copyBtn || lastBriefingText.trim() === '') return;
+        function copyResearcherToClipboard() {
+            if (!copyBtn || lastResearcherText.trim() === '') return;
             function copied() {
                 copyBtn.textContent = 'Copied';
                 setTimeout(function() { copyBtn.textContent = COPY_BTN_LABEL; }, 2000);
             }
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(lastBriefingText).then(copied).catch(fallbackCopy);
+                navigator.clipboard.writeText(lastResearcherText).then(copied).catch(fallbackCopy);
                 return;
             }
             fallbackCopy();
             function fallbackCopy() {
                 var ta = document.createElement('textarea');
-                ta.value = lastBriefingText;
+                ta.value = lastResearcherText;
                 ta.setAttribute('readonly', '');
                 ta.style.position = 'fixed';
                 ta.style.left = '-9999px';
@@ -740,7 +792,7 @@ $moduleOptions = [
         }
 
         if (copyBtn) {
-            copyBtn.addEventListener('click', copyBriefingToClipboard);
+            copyBtn.addEventListener('click', copyResearcherToClipboard);
         }
 
         function showInlineMessage(el, text, isError) {
@@ -767,7 +819,7 @@ $moduleOptions = [
         }
 
         function activePromptContent() {
-            if (briefingPromptView === 'helper' && helperResultEl) {
+            if (researcherPromptView === 'helper' && helperResultEl) {
                 return helperResultEl.value;
             }
             return promptTextarea ? promptTextarea.value : '';
@@ -783,40 +835,40 @@ $moduleOptions = [
             }
         }
 
-        function setBriefingPromptView(view) {
-            briefingPromptView = view === 'helper' ? 'helper' : 'prompt';
+        function setResearcherPromptView(view) {
+            researcherPromptView = view === 'helper' ? 'helper' : 'prompt';
             if (promptPanelEl) {
-                promptPanelEl.hidden = briefingPromptView !== 'prompt';
+                promptPanelEl.hidden = researcherPromptView !== 'prompt';
             }
             if (helperPanelEl) {
-                helperPanelEl.hidden = briefingPromptView !== 'helper';
+                helperPanelEl.hidden = researcherPromptView !== 'helper';
             }
             if (viewPromptBtn) {
-                viewPromptBtn.classList.toggle('btn-primary', briefingPromptView === 'prompt');
-                viewPromptBtn.classList.toggle('btn-secondary', briefingPromptView !== 'prompt');
+                viewPromptBtn.classList.toggle('btn-primary', researcherPromptView === 'prompt');
+                viewPromptBtn.classList.toggle('btn-secondary', researcherPromptView !== 'prompt');
             }
             if (viewHelperBtn) {
-                viewHelperBtn.classList.toggle('btn-primary', briefingPromptView === 'helper');
-                viewHelperBtn.classList.toggle('btn-secondary', briefingPromptView !== 'helper');
+                viewHelperBtn.classList.toggle('btn-primary', researcherPromptView === 'helper');
+                viewHelperBtn.classList.toggle('btn-secondary', researcherPromptView !== 'helper');
             }
             syncPromptSaveButtons();
         }
 
-        function initBriefingPromptViewToggle() {
+        function initResearcherPromptViewToggle() {
             if (viewPromptBtn) {
                 viewPromptBtn.addEventListener('click', function() {
-                    setBriefingPromptView('prompt');
+                    setResearcherPromptView('prompt');
                 });
             }
             if (viewHelperBtn) {
                 viewHelperBtn.addEventListener('click', function() {
-                    setBriefingPromptView('helper');
+                    setResearcherPromptView('helper');
                 });
             }
-            setBriefingPromptView('prompt');
+            setResearcherPromptView('prompt');
         }
 
-        initBriefingPromptViewToggle();
+        initResearcherPromptViewToggle();
 
         function syncLibrarySaveButtonLabel() {
             if (!saveLibraryBtn) return;
@@ -1229,6 +1281,7 @@ $moduleOptions = [
             if (sourcesCards) sourcesCards.innerHTML = '';
             var checked = 0;
             moduleCbs.forEach(function(cb) { if (cb.checked) checked++; });
+            if (lexPill && lexState !== 0) checked++;
             if (checked === 0) {
                 if (errEl) {
                     errEl.textContent = 'Select at least one source module.';
@@ -1246,18 +1299,18 @@ $moduleOptions = [
             try {
                 showProcessingStatus();
             } catch (statusErr) {
-                console.error('Briefing status UI failed:', statusErr);
+                console.error('Researcher status UI failed:', statusErr);
                 if (placeholder) placeholder.remove();
                 out.style.whiteSpace = 'pre-wrap';
                 out.innerHTML = '';
                 var fallback = document.createElement('p');
                 fallback.className = 'admin-intro';
-                fallback.textContent = 'Generating briefing…';
+                fallback.textContent = 'Generating researcher…';
                 out.appendChild(fallback);
                 out.setAttribute('aria-busy', 'true');
             }
 
-            postBriefingAction(prepareUrl, fd)
+            postResearcherAction(prepareUrl, fd)
             .then(function(prep) {
                 if (!prep.ok) {
                     throw prep;
@@ -1284,7 +1337,7 @@ $moduleOptions = [
                         warnEl.hidden = false;
                     }
                 }
-                return postBriefingAction(generateUrl, fd);
+                return postResearcherAction(generateUrl, fd);
             })
             .then(function(data) {
                 if (!data) return;
@@ -1299,7 +1352,7 @@ $moduleOptions = [
                         if (data.meta.batched_summary) {
                             batchNote += ' but output limits were still hit';
                         } else {
-                            batchNote += ' without completing the briefing';
+                            batchNote += ' without completing the researcher';
                         }
                         errMsg = errMsg + ' ' + batchNote + '.';
                     }
@@ -1311,13 +1364,13 @@ $moduleOptions = [
                     out.style.whiteSpace = 'pre-wrap';
                     out.innerHTML = '';
                     var errInBox = document.createElement('p');
-                    errInBox.className = 'briefing-output-error-inline';
+                    errInBox.className = 'researcher-output-error-inline';
                     errInBox.textContent = errMsg;
                     out.appendChild(errInBox);
-                    appendBriefingMetaDebug(out, data.meta);
+                    appendResearcherMetaDebug(out, data.meta);
                     return;
                 }
-                function renderBriefingSuccess(payload) {
+                function renderResearcherSuccess(payload) {
                     if (warnEl) {
                         var warnParts = [];
                         if (payload.meta && payload.meta.context_warning) {
@@ -1333,26 +1386,26 @@ $moduleOptions = [
                     }
                     hideProcessingStatus();
                     out.style.whiteSpace = 'pre-wrap';
-                    var briefingText = (payload.text && String(payload.text).trim()) ? String(payload.text) : '';
-                    if (briefingText === '') {
-                        var emptyMsg = 'Gemini returned an empty briefing. Try again, reduce modules, lookback, or max context entries.';
+                    var researcherText = (payload.text && String(payload.text).trim()) ? String(payload.text) : '';
+                    if (researcherText === '') {
+                        var emptyMsg = 'Gemini returned an empty researcher. Try again, reduce modules, lookback, or max context entries.';
                         if (errEl) {
                             errEl.textContent = emptyMsg;
                             errEl.hidden = false;
                         }
                         out.textContent = emptyMsg;
                         hideCopyBtn();
-                        appendBriefingMetaDebug(out, payload.meta);
+                        appendResearcherMetaDebug(out, payload.meta);
                         return;
                     }
-                    out.textContent = briefingText;
-                    showCopyBtn(briefingText);
-                    appendBriefingMetaDebug(out, payload.meta);
+                    out.textContent = researcherText;
+                    showCopyBtn(researcherText);
+                    appendResearcherMetaDebug(out, payload.meta);
                     if (payload.entries_html && sourcesCards) {
                         try {
                             sourcesCards.innerHTML = payload.entries_html;
                         } catch (htmlErr) {
-                            console.error('Briefing source cards HTML failed:', htmlErr);
+                            console.error('Researcher source cards HTML failed:', htmlErr);
                             sourcesCards.textContent = 'Source cards could not be rendered.';
                         }
                         if (sourcesIntro && payload.meta) {
@@ -1360,7 +1413,7 @@ $moduleOptions = [
                             if (payload.meta.attribution_filtered && payload.meta.attributed_entry_count !== undefined) {
                                 introParts.push(
                                     String(payload.meta.attributed_entry_count) +
-                                    ' entries cited in the briefing (attribution order)'
+                                    ' entries cited in the researcher (attribution order)'
                                 );
                                 if (payload.meta.context_entry_count !== undefined) {
                                     introParts.push(
@@ -1386,13 +1439,13 @@ $moduleOptions = [
                         applyStatusEntryCount(data.meta.entry_count);
                     }
                     setActiveStatusStep('cards');
-                    renderBriefingSuccess(data);
+                    renderResearcherSuccess(data);
                 } catch (renderErr) {
-                    console.error('Briefing render failed:', renderErr);
+                    console.error('Researcher render failed:', renderErr);
                     hideCopyBtn();
                     var renderMsg = (data.text && String(data.text).trim())
-                        ? 'Briefing was generated but the page could not display it. See browser console.'
-                        : 'Briefing response could not be displayed.';
+                        ? 'Researcher was generated but the page could not display it. See browser console.'
+                        : 'Researcher response could not be displayed.';
                     if (errEl) {
                         errEl.textContent = renderMsg;
                         errEl.hidden = false;
@@ -1402,14 +1455,14 @@ $moduleOptions = [
                     if (data.text && String(data.text).trim()) {
                         out.textContent = String(data.text);
                         showCopyBtn(String(data.text));
-                        appendBriefingMetaDebug(out, data.meta);
+                        appendResearcherMetaDebug(out, data.meta);
                     } else {
                         out.innerHTML = '';
                         var renderInBox = document.createElement('p');
-                        renderInBox.className = 'briefing-output-error-inline';
+                        renderInBox.className = 'researcher-output-error-inline';
                         renderInBox.textContent = renderMsg;
                         out.appendChild(renderInBox);
-                        appendBriefingMetaDebug(out, data.meta);
+                        appendResearcherMetaDebug(out, data.meta);
                     }
                 }
             })
@@ -1423,7 +1476,7 @@ $moduleOptions = [
                 } else if (err && err.httpStatus) {
                     msg = 'Request failed (HTTP ' + err.httpStatus + ').';
                 }
-                console.error('Briefing request failed:', err);
+                console.error('Researcher request failed:', err);
                 if (errEl) {
                     errEl.textContent = msg;
                     errEl.hidden = false;
@@ -1433,10 +1486,10 @@ $moduleOptions = [
                 out.innerHTML = '';
                 if (msg) {
                     var errInBox = document.createElement('p');
-                    errInBox.className = 'briefing-output-error-inline';
+                    errInBox.className = 'researcher-output-error-inline';
                     errInBox.textContent = msg;
                     out.appendChild(errInBox);
-                    appendBriefingMetaDebug(out, err && err.meta ? err.meta : null);
+                    appendResearcherMetaDebug(out, err && err.meta ? err.meta : null);
                 } else {
                     restoreOutputPlaceholder();
                 }

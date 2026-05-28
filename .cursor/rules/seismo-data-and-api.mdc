@@ -1,0 +1,28 @@
+---
+description: Seismo 0.6 — data layer, list bounds, API contracts, auth
+globs: "{src,views}/**/*"
+alwaysApply: false
+---
+
+# Seismo 0.6 Data & API
+
+## Time
+
+- Store and compute in **UTC** in PHP and the database.
+- Convert to local/display timezone **only** in views or dedicated helpers.
+
+## List queries
+
+- Every list/read that can grow must accept **`limit` + `offset`** (or equivalent paging).
+- Enforce a **hard maximum** `limit` in the repository—never return unbounded rows.
+
+## API contracts (do not break casually)
+
+- Preserve JSON shapes for `magnitu_*` and `export_*` endpoints unless the PR explicitly versions or documents a breaking change.
+- Do not rename or repurpose `entry_type` values without migration + consumer coordination.
+- Satellite instances depend on stable cross-DB reads—flag mothership/satellite impact in the PR.
+
+## Auth
+
+- **Mutating browser POSTs:** require CSRF via `CsrfToken` (`_csrf` field + validation).
+- **Machine APIs (Magnitu/export):** Bearer token only—no session cookies; CSRF does not apply.

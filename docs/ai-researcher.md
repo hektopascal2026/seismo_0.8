@@ -1,4 +1,4 @@
-# AI Briefing Builder — implementation slices
+# AI Researcher — implementation slices
 
 Plan for an in-app page that filters recent Seismo entries and generates a narrative summary via the Gemini API. Vanilla PHP 8.2+, existing MVC/routing — no Laravel/Symfony.
 
@@ -15,23 +15,23 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::BRIEFING_MAX_LIMIT` (200)** per enabled module query (export API stays at 50) |
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
-| Gemini context cap | **`briefing:max_context_entries`** (default **100**) — top entries by sort order are sent to Gemini, with a **fair share per enabled source module** when multiple modules are on (so Lex/Leg rows are not dropped because Feeds score higher). Response meta: **`entries_sent_to_gemini`**, **`entries_omitted_by_cap`**, **`entries_eligible_before_cap`** (legacy **`entry_count`** = sent, **`context_truncated`** = omitted). UI warns when rows are dropped. **`BriefingModuleGuard`** re-filters and rebuilds XML after the cap; the same guard runs again immediately before every Gemini API call (including rate-limit retry). |
+| Gemini context cap | **`researcher:max_context_entries`** (default **100**) — top entries by sort order are sent to Gemini, with a **fair share per enabled source module** when multiple modules are on (so Lex/Leg rows are not dropped because Feeds score higher). Response meta: **`entries_sent_to_gemini`**, **`entries_omitted_by_cap`**, **`entries_eligible_before_cap`** (legacy **`entry_count`** = sent, **`context_truncated`** = omitted). UI warns when rows are dropped. **`ResearcherModuleGuard`** re-filters and rebuilds XML after the cap; the same guard runs again immediately before every Gemini API call (including rate-limit retry). |
 | Gemini model | **`gemini-3.5-flash` only** — `system_config` **`gemini:model`** must match `gemini-3.5*` or it is coerced to the default. No `temperature` in API payloads. |
 | Gemini two-pass | **Always on** (no UI toggle): pass 1 = **USER PROMPT** + dynamic entry bodies + JSON (`selection_reasoning` optional, `used_entry_keys` required); pass 2 = **plain Markdown** on selected rows. **Europe/Zurich** “today” anchor in contracts. Pass 2 bans conversational filler. |
-| Gemini context pool UI | **`max_context_entries`** on Briefing Builder (20–500, default 100); persisted to `briefing:max_context_entries` on prepare/generate. High values thin per-entry bodies via the shared XML char budget. |
-| Entry body budget | **Dynamic per pool:** `MarkdownBriefingFormatter::dynamicEntryBodyMaxChars()` — default floor **2000**, ceiling **12000**, pool budget **500k** chars shared across entries (`entry_body_max_chars` in gather meta). |
-| System prompt limit | **32 000** characters (`AiBriefingController::MAX_SYSTEM_PROMPT_LEN`) on generate, save-default, and library save. |
+| Gemini context pool UI | **`max_context_entries`** on Researcher (20–500, default 100); persisted to `researcher:max_context_entries` on prepare/generate. High values thin per-entry bodies via the shared XML char budget. |
+| Entry body budget | **Dynamic per pool:** `MarkdownResearcherFormatter::dynamicEntryBodyMaxChars()` — default floor **2000**, ceiling **12000**, pool budget **500k** chars shared across entries (`entry_body_max_chars` in gather meta). |
+| System prompt limit | **32 000** characters (`AiResearcherController::MAX_SYSTEM_PROMPT_LEN`) on generate, save-default, and library save. |
 | Gemini pass-2 output | Scales **~4500 visible tokens per cited item** (floor 2048, practical cap **49152**). Override via `gemini:max_output_tokens` in `system_config` (recommend **65536** for heavy Legal templates). **One** pass-2 call by default; automatic batched retry (2 keys/call, then 1/call) when output limits or missing citations are detected (`summary_batch_retry_attempted` in meta). |
 | Gemini thinking | **`thinkingLevel` LOW** (selection), **MINIMAL** (summary); HTTP **429** retry uses **MINIMAL**. Skips `thought` parts in responses. Meta: `thinking_selection`, `thinking_summary`, optional `selection_reasoning`. |
 | Gemini batching | Batched selection **disabled** for normal runs (`BATCHED_SELECTION_MIN_ENTRIES` very high). Rate-limit retry still uses module-aware cap + guard. |
 | Rate-limit fallback | On **HTTP 429**, waits **12s**, caps context to **`rateLimitFallbackMaxEntries()`** (default ≤ **50**), forces **two-pass + batched selection** when pool ≥ **2** (batch **20**, **8s** pause), and retries **once**. UI meta: `rate_limit_fallback`. |
-| Shared pipeline | **Yes** — extract `BriefingEntryGatherer`, refactor `ExportController` to use it |
+| Shared pipeline | **Yes** — extract `ResearcherEntryGatherer`, refactor `ExportController` to use it |
 | API key | `system_config` key **`gemini:api_key`** via Settings → General (per desk on satellites) |
-| Saved prompt (default) | `system_config` key **`briefing:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
-| Prompt library | `system_config` key **`ai_briefing_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_briefing_prompt` and `delete_briefing_prompt` |
-| Prompt helper | **View: Prompt \| Helper** on Briefing Builder — **`briefing_prompt_helper`** reformulates rough intent via Gemini using `resolveStoredSystemPrompt()` as style reference; save default/library from Helper result syncs the Prompt textarea |
-| Briefing item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure; two-pass: selection JSON then Markdown prose with inline `entry_type:entry_id` citations. Context uses XML `<entry>` blocks with `<id>type:id</id>` (`MarkdownBriefingFormatter::FORMAT_XML`). |
-| Prepare step | **`briefing_builder_prepare`** — gather-only POST returns `entry_count` before Gemini (UI status line). |
+| Saved prompt (default) | `system_config` key **`researcher:system_prompt`** via **Save prompt (default)** on the page (per desk on satellites) |
+| Prompt library | `system_config` key **`ai_researcher_prompts`** — JSON list of `{id, name, content}`; seeded with the current default prompt on first visit; **Save to library** / tab delete via `save_researcher_prompt` and `delete_researcher_prompt` |
+| Prompt helper | **View: Prompt \| Helper** on Researcher — **`researcher_prompt_helper`** reformulates rough intent via Gemini using `resolveStoredSystemPrompt()` as style reference; save default/library from Helper result syncs the Prompt textarea |
+| Researcher item count | UI **`item_count`** (allowed: **5, 7, 10, 12, 15**; default **5**). User prompt = free-form structure; two-pass: selection JSON then Markdown prose with inline `entry_type:entry_id` citations. Context uses XML `<entry>` blocks with `<id>type:id</id>` (`MarkdownResearcherFormatter::FORMAT_XML`). |
+| Prepare step | **`researcher_prepare`** — gather-only POST returns `entry_count` before Gemini (UI status line). |
 
 ### Why six toggles (not four `entry_type` values)
 
@@ -50,7 +50,7 @@ Filter-page **per-outlet pills** are out of scope for v1; module-level toggles m
 
 ### Router note
 
-`Router::register($action, $handler, $readOnly)` — third argument is **`readOnly`**, not CSRF. CSRF is enforced in the controller with `CsrfToken::verifyRequest()`. `briefing_builder_generate` must use `readOnly: false`; `briefing_builder` uses `readOnly: true` and must be listed in `Router::READONLY_KEEP_SESSION_FOR_CSRF`.
+`Router::register($action, $handler, $readOnly)` — third argument is **`readOnly`**, not CSRF. CSRF is enforced in the controller with `CsrfToken::verifyRequest()`. `researcher_generate` must use `readOnly: false`; `researcher` uses `readOnly: true` and must be listed in `Router::READONLY_KEEP_SESSION_FOR_CSRF`.
 
 ---
 
@@ -59,13 +59,13 @@ Filter-page **per-outlet pills** are out of scope for v1; module-level toggles m
 | Layer | Responsibility |
 |-------|----------------|
 | `SettingsController` + `settings_general.php` | Persist `gemini:api_key` |
-| `BriefingEntryGatherer` | Fetch + shape entries + scores + label filter (shared with export) |
+| `ResearcherEntryGatherer` | Fetch + shape entries + scores + label filter (shared with export) |
 | `MagnituExportRepository` | SQL only; add scoped `listFeedItemsSince` variants if needed |
-| `MarkdownBriefingFormatter` | Markdown for export; XML (`FORMAT_XML`) for AI builder context |
-| `GeminiBriefingService` | HTTP to Gemini, parse response, safe errors |
-| `BriefingPromptHelperService` | Single Gemini call to draft a briefing prompt from intent + style reference |
-| `AiBriefingController` | Orchestrate `show()` / `generate()` / `promptHelper()` only |
-| `views/briefing_builder.php` | Form + vanilla JS `fetch` |
+| `MarkdownResearcherFormatter` | Markdown for export; XML (`FORMAT_XML`) for AI builder context |
+| `GeminiResearcherService` | HTTP to Gemini, parse response, safe errors |
+| `ResearcherPromptHelperService` | Single Gemini call to draft a researcher prompt from intent + style reference |
+| `AiResearcherController` | Orchestrate `show()` / `generate()` / `promptHelper()` only |
+| `views/researcher.php` | Form + vanilla JS `fetch` |
 
 Do **not** put Gemini HTTP or SQL in the controller.
 
@@ -88,25 +88,25 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 ---
 
-## Slice 2 — `BriefingEntryGatherer` + export refactor ✅
+## Slice 2 — `ResearcherEntryGatherer` + export refactor ✅
 
-**Goal:** Single pipeline for export briefing and AI builder; no duplicated `ExportController::gatherEntriesAndScores()` logic.
+**Goal:** Single pipeline for export researcher and AI builder; no duplicated `ExportController::gatherEntriesAndScores()` logic.
 
-**New:** `src/Service/BriefingEntryGatherer.php`
+**New:** `src/Service/ResearcherEntryGatherer.php`
 
 **Inputs**
 
 - `?string $since` — from lookback days (1–7 → UTC ISO timestamp)
 - `int $limit` — clamp 1 … `MAX_LIMIT`
 - Module flags: `includeFeeds`, `includeMedia`, `includeScraper`, `includeEmail`, `includeLex`, `includeLeg` (at least one must be true)
-- `BriefingScoreFilter` (builder) — Highlights tier + optional important band below threshold; export still uses `array $labelFilter` on labels
+- `ResearcherScoreFilter` (builder) — Highlights tier + optional important band below threshold; export still uses `array $labelFilter` on labels
 
 **Behavior**
 
 - For each enabled module, fetch via `MagnituExportRepository` + `MagnituController::shape*()`
 - Attach scores via `scoresByEntryKey()`
 - Filter by `predicted_label` ∈ label filter
-- Optional shared sort: relevance desc, then `published_date` desc (same as `ExportController::briefing()`)
+- Optional shared sort: relevance desc, then `published_date` desc (same as `ExportController::researcher()`)
 
 **Repository**
 
@@ -114,20 +114,20 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 **Refactor**
 
-- `src/Controller/ExportController.php` — delegate to gatherer; **no change** to export HTTP contracts (`export_briefing` still all `feed_item` families unless we explicitly decide otherwise later)
+- `src/Controller/ExportController.php` — delegate to gatherer; **no change** to export HTTP contracts (`export_researcher` still all `feed_item` families unless we explicitly decide otherwise later)
 
 **Acceptance**
 
-- `export_briefing` output unchanged (smoke or diff one run)
+- `export_researcher` output unchanged (smoke or diff one run)
 - Gatherer with only Media on returns only `category = media` feed items
 
 ---
 
-## Slice 3 — `GeminiBriefingService` ✅
+## Slice 3 — `GeminiResearcherService` ✅
 
 **Goal:** Encapsulate outbound Gemini call.
 
-**New:** `src/Service/GeminiBriefingService.php`
+**New:** `src/Service/GeminiResearcherService.php`
 
 **Details**
 
@@ -138,7 +138,7 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - Two-pass: JSON selection then plain Markdown summary (always)
 - Retries on 429/5xx and transport errors; `systemInstruction` + `generationConfig` (`thinkingLevel`, max output tokens)
 - Default entry limit **200** per module (max 2000)
-- Prompt shape: user system prompt + separator + “Seismo briefing (Markdown)” + `MarkdownBriefingFormatter` output
+- Prompt shape: user system prompt + separator + “Seismo researcher (Markdown)” + `MarkdownResearcherFormatter` output
 - Parse `candidates[0].content.parts[0].text`
 - Errors: generic message to client; log details; **never** return API key or raw upstream body
 
@@ -153,13 +153,13 @@ Do **not** put Gemini HTTP or SQL in the controller.
 
 **Goal:** Page + JSON generate endpoint.
 
-**New:** `src/Controller/AiBriefingController.php`
+**New:** `src/Controller/AiResearcherController.php`
 
 **`show()`**
 
 - `CsrfToken::field()`, `$basePath`, defaults (all six modules on, lookback 7, include-important off, default system prompt, limit 2000)
-- `require` `views/briefing_builder.php`
-- `$activeNav = 'briefing_builder'`
+- `require` `views/researcher.php`
+- `$activeNav = 'researcher'`
 
 **`generate()`** (mirror `MagnituLabelUiController::save`)
 
@@ -168,24 +168,24 @@ Do **not** put Gemini HTTP or SQL in the controller.
 - `CsrfToken::verifyRequest(false)` → 403 (no rotation on long AJAX)
 - `session_write_close()` after CSRF verify
 - Validate POST: module checkboxes, `lookback_days` ∈ {1,…,7} (invalid → 2), `item_count` ∈ {5,7,10,12,15} (invalid → 5), `include_important`, `disregard_magnitu`, `system_prompt` (min 20 / max **32 000** chars), `limit`
-- Pipeline: `gatherBriefingContext()` → `MarkdownBriefingFormatter::format(..., includeEntryIds: true)` → `GeminiBriefingService` (`responseSchema` + envelope; falls back if model rejects schema)
+- Pipeline: `gatherResearcherContext()` → `MarkdownResearcherFormatter::format(..., includeEntryIds: true)` → `GeminiResearcherService` (`responseSchema` + envelope; falls back if model rejects schema)
 - Response: `{ "ok": true, "text": "...", "meta": { "entry_count", "since", "modules", "labels" } }` or `{ "ok": false, "error": "..." }`
 
 **Routes** (`routes_mothership.inc.php` and `routes_satellite.inc.php`)
 
 ```php
-$router->register('briefing_builder', AiBriefingController::class . '::show', true);
-$router->register('briefing_builder_prepare', AiBriefingController::class . '::prepare', false);
-$router->register('briefing_builder_generate', AiBriefingController::class . '::generate', false);
-$router->register('briefing_builder_save_prompt', AiBriefingController::class . '::savePrompt', false);
-$router->register('save_briefing_prompt', AiBriefingController::class . '::savePromptLibrary', false);
-$router->register('delete_briefing_prompt', AiBriefingController::class . '::deletePromptLibrary', false);
-$router->register('briefing_prompt_helper', AiBriefingController::class . '::promptHelper', false);
+$router->register('researcher', AiResearcherController::class . '::show', true);
+$router->register('researcher_prepare', AiResearcherController::class . '::prepare', false);
+$router->register('researcher_generate', AiResearcherController::class . '::generate', false);
+$router->register('researcher_save_prompt', AiResearcherController::class . '::savePrompt', false);
+$router->register('save_researcher_prompt', AiResearcherController::class . '::savePromptLibrary', false);
+$router->register('delete_researcher_prompt', AiResearcherController::class . '::deletePromptLibrary', false);
+$router->register('researcher_prompt_helper', AiResearcherController::class . '::promptHelper', false);
 ```
 
 **`src/Http/Router.php`**
 
-- Add `'briefing_builder'` to `READONLY_KEEP_SESSION_FOR_CSRF`
+- Add `'researcher'` to `READONLY_KEEP_SESSION_FOR_CSRF`
 
 **Auth**
 
@@ -193,7 +193,7 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 
 **Acceptance**
 
-- `?action=briefing_builder` loads when logged in / auth off
+- `?action=researcher` loads when logged in / auth off
 - POST without CSRF → 403 JSON
 
 ---
@@ -202,7 +202,7 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 
 **Goal:** Usable UI.
 
-**New:** `views/briefing_builder.php`
+**New:** `views/researcher.php`
 
 - `partials/site_header.php`
 - Six module checkboxes (Feeds / Media / Scraper / Mail / Lex / Leg), all checked by default; optional All / None shortcuts (Filter-style)
@@ -211,11 +211,11 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 - Limit: number input, max 2000
 - System prompt `<textarea>` (sensible default)
 - Generate button + output `<div>`
-- Hidden CSRF; `fetch` to `briefing_builder_generate` with loading state; render result with `textContent` (not unsanitized `innerHTML`)
+- Hidden CSRF; `fetch` to `researcher_generate` with loading state; render result with `textContent` (not unsanitized `innerHTML`)
 
 **Edit:** `views/partials/site_header.php`
 
-- Nav link after Highlights: `?action=briefing_builder` (mothership and satellites)
+- Nav link after Highlights: `?action=researcher` (mothership and satellites)
 
 **Acceptance**
 
@@ -233,7 +233,7 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 **Manual smoke**
 
 1. Settings → General: save Gemini key; blank submit keeps key
-2. Open Briefing Builder from nav
+2. Open Researcher from nav
 3. Generate with defaults
 4. Toggle off Media only → summary should exclude media-category items
 5. Enable “Also include important” → more entries in markdown context
@@ -254,7 +254,7 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 - Satellite routes + cross-DB behaviour note
 - Filter-level pills (per feed category, lex source, email tag)
 - `gemini:model` in settings
-- Align `export_briefing` with six-module scopes if external consumers need parity
+- Align `export_researcher` with six-module scopes if external consumers need parity
 - Source config export: document whether `gemini:api_key` is included in bundle (sensitive)
 
 ---
@@ -263,8 +263,8 @@ $router->register('briefing_prompt_helper', AiBriefingController::class . '::pro
 
 | Pattern | Location |
 |---------|----------|
-| Export briefing pipeline | `src/Controller/ExportController.php` |
-| Markdown output | `src/Formatter/MarkdownBriefingFormatter.php` |
+| Export researcher pipeline | `src/Controller/ExportController.php` |
+| Markdown output | `src/Formatter/MarkdownResearcherFormatter.php` |
 | AJAX + CSRF JSON | `src/Controller/MagnituLabelUiController.php` |
 | HTTP client | `src/Service/Http/BaseClient.php` |
 | Secret in settings | `views/partials/settings_mail.php` (OAuth secret) |

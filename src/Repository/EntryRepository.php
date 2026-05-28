@@ -294,14 +294,14 @@ final class EntryRepository
     }
 
     /**
-     * Scored rows eligible for AI Briefing Builder (score-first gather).
+     * Scored rows eligible for AI Researcher (score-first gather).
      *
      * Same score sources and entry types as {@see getHighlightsTimeline()}, but can
      * union the Important band below the configured alert threshold.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listBriefingScoreCandidates(
+    public function listResearcherScoreCandidates(
         float $alertThreshold,
         bool $includeImportantBelowThreshold,
         int $limit,
@@ -340,7 +340,7 @@ final class EntryRepository
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
             }
-            error_log('EntryRepository listBriefingScoreCandidates: ' . $e->getMessage());
+            error_log('EntryRepository listResearcherScoreCandidates: ' . $e->getMessage());
 
             return [];
         }

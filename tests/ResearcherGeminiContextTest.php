@@ -3,25 +3,25 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Service\BriefingEntryGatherer;
-use Seismo\Service\BriefingGeminiContext;
-use Seismo\Service\BriefingSourceSelection;
+use Seismo\Service\ResearcherEntryGatherer;
+use Seismo\Service\ResearcherGeminiContext;
+use Seismo\Service\ResearcherSourceSelection;
 
-final class BriefingGeminiContextTest extends TestCase
+final class ResearcherGeminiContextTest extends TestCase
 {
     public function testCapEntryListTruncatesBeyondMax(): void
     {
         $entries = array_fill(0, 120, ['entry_type' => 'feed_item', 'entry_id' => 1]);
-        $capped  = BriefingGeminiContext::capEntryList($entries, BriefingGeminiContext::DEFAULT_MAX_ENTRIES);
+        $capped  = ResearcherGeminiContext::capEntryList($entries, ResearcherGeminiContext::DEFAULT_MAX_ENTRIES);
 
-        self::assertCount(BriefingGeminiContext::DEFAULT_MAX_ENTRIES, $capped['entries']);
+        self::assertCount(ResearcherGeminiContext::DEFAULT_MAX_ENTRIES, $capped['entries']);
         self::assertSame(20, $capped['truncated']);
     }
 
     public function testChunkEntryListSplitsByBatchSize(): void
     {
         $entries = array_fill(0, 25, ['entry_type' => 'feed_item', 'entry_id' => 1]);
-        $chunks  = BriefingGeminiContext::chunkEntryList($entries, 10);
+        $chunks  = ResearcherGeminiContext::chunkEntryList($entries, 10);
 
         self::assertCount(3, $chunks);
         self::assertCount(10, $chunks[0]);
@@ -31,8 +31,8 @@ final class BriefingGeminiContextTest extends TestCase
 
     public function testStratifiedCapReservesLexRowsWhenFeedsDominateRelevance(): void
     {
-        $selection = BriefingSourceSelection::forModules(true, false, false, false, true, true);
-        $gatherer  = new BriefingEntryGatherer();
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, true, true);
+        $gatherer  = new ResearcherEntryGatherer();
 
         $feeds = [];
         for ($i = 1; $i <= 90; $i++) {
@@ -77,7 +77,7 @@ final class BriefingGeminiContextTest extends TestCase
             $scores[$key] = ['relevance_score' => 0.85];
         }
 
-        $capped = BriefingGeminiContext::capEntryListStratified(
+        $capped = ResearcherGeminiContext::capEntryListStratified(
             $entries,
             100,
             $scores,
@@ -100,10 +100,10 @@ final class BriefingGeminiContextTest extends TestCase
 
     public function testRateLimitBatchedSelectionThresholdAllowsFallbackPool(): void
     {
-        self::assertSame(2, BriefingGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES);
+        self::assertSame(2, ResearcherGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES);
         self::assertGreaterThanOrEqual(
-            BriefingGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES,
-            BriefingGeminiContext::RATE_LIMIT_FALLBACK_MAX_ENTRIES,
+            ResearcherGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES,
+            ResearcherGeminiContext::RATE_LIMIT_FALLBACK_MAX_ENTRIES,
         );
     }
 }

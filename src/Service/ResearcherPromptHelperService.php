@@ -11,9 +11,9 @@ use Seismo\Service\Http\HttpClientException;
 use Seismo\Service\Http\Response;
 
 /**
- * Reformulates rough user intent into a Seismo AI Briefing prompt (single Gemini call).
+ * Reformulates rough user intent into a Seismo AI Researcher prompt (single Gemini call).
  */
-final class BriefingPromptHelperService
+final class ResearcherPromptHelperService
 {
     public const MIN_INTENT_LEN = 10;
 
@@ -31,24 +31,24 @@ final class BriefingPromptHelperService
     private const TRANSIENT_HTTP_STATUSES = [500, 502, 503, 504];
 
     private const HELPER_SYSTEM_INSTRUCTION = <<<'PROMPT'
-You are a prompt engineer for Seismo's AI Briefing Builder.
+You are a prompt engineer for Seismo's AI Researcher.
 
 The operator will provide:
-1) BRIEFING_INTENT — rough notes on what the next executive briefing should focus on.
-2) STYLE_REFERENCE — the current default briefing prompt for this desk (tone, structure, two-pass rules).
+1) BRIEFING_INTENT — rough notes on what the next executive researcher should focus on.
+2) STYLE_REFERENCE — the current default researcher prompt for this desk (tone, structure, two-pass rules).
 
-Your task: write ONE complete replacement briefing prompt the operator can paste into Seismo.
+Your task: write ONE complete replacement researcher prompt the operator can paste into Seismo.
 
 Requirements for the output prompt:
 - Match STYLE_REFERENCE in language (usually German), Economist-style executive tone, and overall rigor unless BRIEFING_INTENT explicitly asks for another language.
-- Preserve the two-pass workflow from STYLE_REFERENCE when present: PHASE 1 = JSON only (used_entry_keys, optional selection_reasoning); PHASE 2 = Markdown executive briefing only.
+- Preserve the two-pass workflow from STYLE_REFERENCE when present: PHASE 1 = JSON only (used_entry_keys, optional selection_reasoning); PHASE 2 = Markdown executive researcher only.
 - Keep mandatory citation rules: each core item cites entry_type:entry_id in parentheses, e.g. (feed_item:123).
 - Encode BRIEFING_INTENT as topic focus, jurisdictions, source-type bias (e.g. prefer lex_item), and exclusion rules.
 - Refer to "Number of items" / item count from the UI where STYLE_REFERENCE does — do not hard-code a number unless the intent specifies one.
 - Do NOT include ENTRIES_DATA, {markdownContext}, XML entry blocks, or instructions to paste Seismo rows — the app injects those.
 - Do NOT wrap the answer in markdown code fences or add meta commentary ("Here is your prompt").
 
-Output ONLY the briefing prompt text.
+Output ONLY the researcher prompt text.
 PROMPT;
 
     private readonly string $model;
@@ -57,43 +57,43 @@ PROMPT;
         private readonly SystemConfigRepository $config,
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
     ) {
-        $configured = trim((string)($config->get(GeminiBriefingService::CONFIG_KEY_MODEL) ?? ''));
-        $model      = $configured !== '' ? $configured : GeminiBriefingService::DEFAULT_MODEL;
-        if (!GeminiBriefingService::usesGemini35Family($model)) {
+        $configured = trim((string)($config->get(GeminiResearcherService::CONFIG_KEY_MODEL) ?? ''));
+        $model      = $configured !== '' ? $configured : GeminiResearcherService::DEFAULT_MODEL;
+        if (!GeminiResearcherService::usesGemini35Family($model)) {
             error_log(
-                'BriefingPromptHelperService: unsupported gemini:model "' . $model . '"; using '
-                . GeminiBriefingService::DEFAULT_MODEL
+                'ResearcherPromptHelperService: unsupported gemini:model "' . $model . '"; using '
+                . GeminiResearcherService::DEFAULT_MODEL
             );
-            $model = GeminiBriefingService::DEFAULT_MODEL;
+            $model = GeminiResearcherService::DEFAULT_MODEL;
         }
         $this->model = $model;
     }
 
     /**
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     public function reformulate(string $intent, string $styleReference): string
     {
         $intent = trim($intent);
         if (mb_strlen($intent) < self::MIN_INTENT_LEN) {
-            throw GeminiBriefingException::invalidInput(
+            throw GeminiResearcherException::invalidInput(
                 'Describe what you want in at least ' . self::MIN_INTENT_LEN . ' characters.'
             );
         }
         if (mb_strlen($intent) > self::MAX_INTENT_LEN) {
-            throw GeminiBriefingException::invalidInput(
+            throw GeminiResearcherException::invalidInput(
                 'Intent is too long (maximum ' . self::MAX_INTENT_LEN . ' characters).'
             );
         }
 
         $styleReference = trim($styleReference);
         if ($styleReference === '') {
-            throw GeminiBriefingException::invalidInput('Style reference prompt is empty.');
+            throw GeminiResearcherException::invalidInput('Style reference prompt is empty.');
         }
 
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
-            throw GeminiBriefingException::missingApiKey();
+            throw GeminiResearcherException::missingApiKey();
         }
 
         $userMessage = "BRIEFING_INTENT:\n" . $intent . "\n\nSTYLE_REFERENCE:\n" . $styleReference;
@@ -104,7 +104,7 @@ PROMPT;
             'generationConfig'  => [
                 'maxOutputTokens'  => min(
                     self::MAX_OUTPUT_TOKENS,
-                    GeminiBriefingService::modelHardOutputCapFor($this->model),
+                    GeminiResearcherService::modelHardOutputCapFor($this->model),
                 ),
                 'responseMimeType' => 'text/plain',
                 'thinkingConfig'   => ['thinkingLevel' => 'MINIMAL'],
@@ -120,7 +120,7 @@ PROMPT;
 
         $text = self::stripWrappingFences($this->extractCandidateText($response));
         if ($text === '') {
-            throw GeminiBriefingException::emptyResponse('Gemini returned no prompt text.');
+            throw GeminiResearcherException::emptyResponse('Gemini returned no prompt text.');
         }
 
         return $text;
@@ -138,7 +138,7 @@ PROMPT;
 
     /**
      * @param array<string, mixed> $payload
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function postWithRetries(string $url, array $payload, string $apiKey): Response
     {
@@ -150,15 +150,15 @@ PROMPT;
                 $response = $this->http->postJson($url, $payload, $headers);
             } catch (HttpClientException $e) {
                 if ($attempt >= $attempts - 1) {
-                    error_log('BriefingPromptHelperService transport: ' . $e->getMessage());
-                    throw GeminiBriefingException::transportFailed();
+                    error_log('ResearcherPromptHelperService transport: ' . $e->getMessage());
+                    throw GeminiResearcherException::transportFailed();
                 }
                 usleep((int)(self::RETRY_BACKOFF_SECONDS * ($attempt + 1) * 1_000_000));
 
                 continue;
             } catch (\JsonException $e) {
-                error_log('BriefingPromptHelperService request JSON: ' . $e->getMessage());
-                throw GeminiBriefingException::transportFailed();
+                error_log('ResearcherPromptHelperService request JSON: ' . $e->getMessage());
+                throw GeminiResearcherException::transportFailed();
             }
 
             if ($response->status === 429) {
@@ -174,57 +174,57 @@ PROMPT;
             return $response;
         }
 
-        throw GeminiBriefingException::transportFailed();
+        throw GeminiResearcherException::transportFailed();
     }
 
     /**
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function extractCandidateText(Response $response): string
     {
         try {
             $json = $response->json();
         } catch (\JsonException $e) {
-            throw GeminiBriefingException::badResponse('Could not parse API JSON.');
+            throw GeminiResearcherException::badResponse('Could not parse API JSON.');
         }
 
         if (isset($json['error']) && is_array($json['error'])) {
             $msg = trim((string)($json['error']['message'] ?? ''));
             if ($msg !== '') {
-                throw GeminiBriefingException::fromApiMessage(400, $msg);
+                throw GeminiResearcherException::fromApiMessage(400, $msg);
             }
 
-            throw GeminiBriefingException::badResponse('API returned an error.');
+            throw GeminiResearcherException::badResponse('API returned an error.');
         }
 
         $candidates = $json['candidates'] ?? null;
         if (!is_array($candidates) || $candidates === []) {
             $block = $json['promptFeedback']['blockReason'] ?? null;
             if (is_string($block) && $block !== '') {
-                throw GeminiBriefingException::blocked($block);
+                throw GeminiResearcherException::blocked($block);
             }
 
-            throw GeminiBriefingException::emptyResponse();
+            throw GeminiResearcherException::emptyResponse();
         }
 
         $first = $candidates[0];
         if (!is_array($first)) {
-            throw GeminiBriefingException::badResponse('Invalid candidate.');
+            throw GeminiResearcherException::badResponse('Invalid candidate.');
         }
 
         $finish = (string)($first['finishReason'] ?? '');
         if ($finish === 'SAFETY' || $finish === 'RECITATION') {
-            throw GeminiBriefingException::blocked($finish);
+            throw GeminiResearcherException::blocked($finish);
         }
 
         $content = $first['content'] ?? null;
         if (!is_array($content)) {
-            throw GeminiBriefingException::badResponse('Candidate missing content.');
+            throw GeminiResearcherException::badResponse('Candidate missing content.');
         }
 
         $parts = $content['parts'] ?? null;
         if (!is_array($parts)) {
-            throw GeminiBriefingException::badResponse('Candidate has no text parts.');
+            throw GeminiResearcherException::badResponse('Candidate has no text parts.');
         }
 
         $text = '';
@@ -242,30 +242,30 @@ PROMPT;
     }
 
     /**
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
-    private function exceptionFromFailedResponse(Response $response): GeminiBriefingException
+    private function exceptionFromFailedResponse(Response $response): GeminiResearcherException
     {
         $apiMessage = $this->parseApiErrorMessage($response);
         error_log(
-            'BriefingPromptHelperService HTTP ' . $response->status
+            'ResearcherPromptHelperService HTTP ' . $response->status
             . ' model=' . $this->model
             . ($apiMessage !== '' ? ': ' . $apiMessage : '')
         );
 
         if ($response->status === 400 && $this->isInvalidApiKeyBody($response->body)) {
-            return GeminiBriefingException::invalidApiKey();
+            return GeminiResearcherException::invalidApiKey();
         }
 
         if ($response->status === 404) {
-            return GeminiBriefingException::modelNotFound($this->model, $apiMessage);
+            return GeminiResearcherException::modelNotFound($this->model, $apiMessage);
         }
 
         if ($apiMessage !== '') {
-            return GeminiBriefingException::fromApiMessage($response->status, $apiMessage);
+            return GeminiResearcherException::fromApiMessage($response->status, $apiMessage);
         }
 
-        return GeminiBriefingException::fromHttpStatus($response->status);
+        return GeminiResearcherException::fromHttpStatus($response->status);
     }
 
     private function isInvalidApiKeyBody(string $body): bool

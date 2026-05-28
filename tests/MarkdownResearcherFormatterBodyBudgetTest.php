@@ -3,25 +3,25 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 
-final class MarkdownBriefingFormatterBodyBudgetTest extends TestCase
+final class MarkdownResearcherFormatterBodyBudgetTest extends TestCase
 {
     public function testDynamicEntryBodyMaxCharsScalesDownWithLargePool(): void
     {
-        self::assertSame(5000, MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(100));
+        self::assertSame(5000, MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(100));
     }
 
     public function testDynamicEntryBodyMaxCharsScalesUpWithSmallPool(): void
     {
-        self::assertSame(12000, MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(8));
+        self::assertSame(12000, MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(8));
     }
 
     public function testDynamicEntryBodyMaxCharsUsesDefaultForEmptyPool(): void
     {
         self::assertSame(
-            MarkdownBriefingFormatter::ENTRY_BODY_DEFAULT_CHARS,
-            MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(0),
+            MarkdownResearcherFormatter::ENTRY_BODY_DEFAULT_CHARS,
+            MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(0),
         );
     }
 
@@ -34,12 +34,12 @@ final class MarkdownBriefingFormatterBodyBudgetTest extends TestCase
             'content'    => str_repeat('y', 9000),
         ]];
 
-        $xml = MarkdownBriefingFormatter::format(
+        $xml = MarkdownResearcherFormatter::format(
             $entries,
             [],
             ['entry_body_max_chars' => 8000],
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         self::assertStringNotContainsString(str_repeat('y', 8500), $xml);

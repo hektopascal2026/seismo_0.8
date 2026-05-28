@@ -28,7 +28,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
-use Seismo\Service\BriefingLookback;
+use Seismo\Service\ResearcherLookback;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
 
@@ -40,7 +40,7 @@ final class MagnituExportRepository
      */
     public const MAX_LIMIT = 200;
 
-    /** Briefing builder “entry limit (per module)” — higher than export API cap. */
+    /** Researcher builder “entry limit (per module)” — higher than export API cap. */
     public const BRIEFING_MAX_LIMIT = 200;
 
     public function __construct(private PDO $pdo)
@@ -98,7 +98,7 @@ final class MagnituExportRepository
                    AND fi.hidden = 0'
             . $this->feedModuleSqlExtra($moduleScope);
         $params = [];
-        $lookback = BriefingLookback::feedItemsSinceClause($since);
+        $lookback = ResearcherLookback::feedItemsSinceClause($since);
         $sql .= $lookback['sql'];
         foreach ($lookback['params'] as $p) {
             $params[] = $p;
@@ -281,7 +281,7 @@ final class MagnituExportRepository
                    AND fi.hidden = 0
                    AND fi.id IN (' . $placeholders . ')';
         $params = $ids;
-        $lookback = BriefingLookback::feedItemsSinceClause($since);
+        $lookback = ResearcherLookback::feedItemsSinceClause($since);
         $sql .= $lookback['sql'];
         foreach ($lookback['params'] as $p) {
             $params[] = $p;

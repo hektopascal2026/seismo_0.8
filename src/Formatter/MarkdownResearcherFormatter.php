@@ -1,10 +1,10 @@
 <?php
 /**
- * Markdown briefing formatter.
+ * Markdown researcher formatter.
  *
  * Produces a human / LLM-readable plain-text digest from a list of already-
  * shaped entries. Output is designed to be fed to an LLM (per the
- * "machine-readable briefings" goal in `docs/consolidation-plan.md` Slice 5)
+ * "machine-readable researchers" goal in `docs/consolidation-plan.md` Slice 5)
  * or read directly by a human consuming the automation.
  *
  * No HTML — emphatically. Repositories return raw bytes, views escape for
@@ -22,14 +22,14 @@ use DateTimeZone;
 use Seismo\Core\Lex\LexCardPreview;
 use Seismo\Core\Lex\LexPlainText;
 
-final class MarkdownBriefingFormatter
+final class MarkdownResearcherFormatter
 {
     public const CONTENT_TYPE = 'text/markdown; charset=utf-8';
 
     /** Human/LLM markdown list (export downloads, legacy). */
     public const FORMAT_MARKDOWN = 'markdown';
 
-    /** Tagged entries for AI Briefing Builder — clearer boundaries for extraction. */
+    /** Tagged entries for AI Researcher — clearer boundaries for extraction. */
     public const FORMAT_XML = 'xml';
 
     /** Default characters of entry body text per item when pool size is unknown. */
@@ -61,7 +61,7 @@ final class MarkdownBriefingFormatter
         );
     }
 
-    /** Lex sources that receive {@see LexCardPreview::briefingText()} in AI briefing context. */
+    /** Lex sources that receive {@see LexCardPreview::researcherText()} in AI researcher context. */
     private const LEX_BRIEFING_BODY_SOURCES = ['de', 'fr', 'eu', 'ch'];
 
     /**
@@ -96,7 +96,7 @@ final class MarkdownBriefingFormatter
             ->format('Y-m-d\TH:i:s\Z');
 
         $lines = [];
-        $lines[] = '# Seismo briefing';
+        $lines[] = '# Seismo researcher';
         $lines[] = '';
         $lines[] = '- Generated: ' . $generatedAt;
         if (isset($meta['since']) && $meta['since'] !== null && $meta['since'] !== '') {
@@ -190,7 +190,7 @@ final class MarkdownBriefingFormatter
         $generatedAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
             ->format('Y-m-d\TH:i:s\Z');
 
-        $parts = ['<seismo_briefing'];
+        $parts = ['<seismo_researcher'];
         $parts[] = ' generated="' . self::escapeXmlAttribute($generatedAt) . '"';
         $parts[] = ' total_entries="' . count($entries) . '"';
         if (isset($meta['since']) && $meta['since'] !== null && $meta['since'] !== '') {
@@ -208,7 +208,7 @@ final class MarkdownBriefingFormatter
         $xml = implode('', $parts);
 
         if ($entries === []) {
-            return $xml . '<empty>No entries matched the requested window.</empty></seismo_briefing>';
+            return $xml . '<empty>No entries matched the requested window.</empty></seismo_researcher>';
         }
 
         $xml .= '<entries>';
@@ -269,7 +269,7 @@ final class MarkdownBriefingFormatter
             $xml .= '</entry>';
         }
 
-        return $xml . '</entries></seismo_briefing>';
+        return $xml . '</entries></seismo_researcher>';
     }
 
     private static function escapeXmlAttribute(string $value): string
@@ -283,7 +283,7 @@ final class MarkdownBriefingFormatter
     }
 
     /**
-     * @param array<string, mixed> $meta Briefing gather meta; optional `entry_body_max_chars`.
+     * @param array<string, mixed> $meta Researcher gather meta; optional `entry_body_max_chars`.
      */
     private static function resolveEntryBodyMaxChars(array $meta): int
     {
@@ -307,7 +307,7 @@ final class MarkdownBriefingFormatter
     {
         $lexSource = self::lexSourceFromEntry($entry);
         if ($lexSource !== null && in_array($lexSource, self::LEX_BRIEFING_BODY_SOURCES, true)) {
-            $legal = LexCardPreview::briefingText(self::entryAsLexRow($entry, $lexSource));
+            $legal = LexCardPreview::researcherText(self::entryAsLexRow($entry, $lexSource));
             if ($legal !== '') {
                 return LexPlainText::truncate($legal, $maxChars) ?? '';
             }

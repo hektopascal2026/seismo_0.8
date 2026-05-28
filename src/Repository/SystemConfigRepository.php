@@ -84,6 +84,22 @@ final class SystemConfigRepository
 
         $value = $this->selectOne('system_config', $key);
 
+        if ($value === null) {
+            $fallbackKey = match ($key) {
+                'researcher:system_prompt' => 'researcher:system_prompt',
+                'ai_researcher_prompts' => 'ai_researcher_prompts',
+                'researcher:max_context_entries' => 'researcher:max_context_entries',
+                default => null,
+            };
+            if ($fallbackKey !== null) {
+                $fallbackValue = $this->selectOne('system_config', $fallbackKey);
+                if ($fallbackValue !== null) {
+                    $this->upsertInto('system_config', $key, $fallbackValue);
+                    $value = $fallbackValue;
+                }
+            }
+        }
+
         return $this->cache[$key] = $value;
     }
 

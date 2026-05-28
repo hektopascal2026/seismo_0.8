@@ -2166,6 +2166,10 @@ textarea.search-input.setup-code-preview {
     background-color: #f5f562;
 }
 
+.tag-filter-pill-active.tag-filter-pill--ch-lex {
+    background-color: #ffffb3;
+}
+
 .tag-filter-pill-active.tag-filter-pill--leg-source {
     background-color: #d4edda;
 }
@@ -2890,7 +2894,7 @@ main.about-modern-layout ul:not(.about-history) {
     margin-top: 0.75rem;
 }
 
-/* AI Briefing Builder — prompt library tabs */
+/* AI Researcher — prompt library tabs */
 .prompt-tabs {
     display: flex;
     flex-wrap: nowrap;

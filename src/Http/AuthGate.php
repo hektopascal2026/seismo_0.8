@@ -41,7 +41,7 @@ final class AuthGate
         'magnitu_labels'       => true,
         'magnitu_status'       => true,
         'export_entries'       => true,
-        'export_briefing'      => true,
+        'export_researcher'      => true,
         /** Session-less JSON; gated by {@see seismoRemoteRefreshKey()} (satellite → mothership refresh). */
         'refresh_all_remote'   => true,
     ];

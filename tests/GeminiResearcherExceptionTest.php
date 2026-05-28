@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Service\GeminiBriefingException;
+use Seismo\Service\GeminiResearcherException;
 
-final class GeminiBriefingExceptionTest extends TestCase
+final class GeminiResearcherExceptionTest extends TestCase
 {
     public function testRateLimitExceptionIsDetectable(): void
     {
-        $e = GeminiBriefingException::fromHttpStatus(429);
+        $e = GeminiResearcherException::fromHttpStatus(429);
 
         self::assertTrue($e->isRateLimitExceeded());
         self::assertSame(429, $e->httpStatus);
@@ -17,14 +17,14 @@ final class GeminiBriefingExceptionTest extends TestCase
 
     public function testTransportFailureIsNotRateLimit(): void
     {
-        $e = GeminiBriefingException::transportFailed();
+        $e = GeminiResearcherException::transportFailed();
 
         self::assertFalse($e->isRateLimitExceeded());
     }
 
     public function testOutputTruncatedRequestsBatchedRetry(): void
     {
-        $e = GeminiBriefingException::outputTruncated();
+        $e = GeminiResearcherException::outputTruncated();
 
         self::assertTrue($e->shouldRetryWithBatchedSummary());
         self::assertTrue($e->isOutputTruncated());
@@ -32,7 +32,7 @@ final class GeminiBriefingExceptionTest extends TestCase
 
     public function testOutputTruncatedAfterBatchingDoesNotRequestAnotherRetry(): void
     {
-        $e = GeminiBriefingException::outputTruncatedAfterBatching();
+        $e = GeminiResearcherException::outputTruncatedAfterBatching();
 
         self::assertFalse($e->shouldRetryWithBatchedSummary());
         self::assertFalse($e->isOutputTruncated());

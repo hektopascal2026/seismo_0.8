@@ -1,0 +1,20 @@
+---
+description: Seismo live VPS — stack, deployment paths, and ops conventions
+alwaysApply: true
+---
+
+# Seismo Live Production Environment
+
+## Tech Stack & Environment
+
+- **OS:** Ubuntu 26.04 LTS (Hetzner Cloud VPS)
+- **Language stack:** PHP 8.5 (strict typing, modern OOP)
+- **Web server:** Nginx (`fastcgi_read_timeout` = 300s)
+- **Database:** MariaDB via Unix socket; database name `seismo`
+- **App root:** `/var/www/seismo` (owner `www-data:www-data`)
+
+## Deployment & Ops
+
+- Deploy remotely via Git or SFTP to **116.202.99.217**.
+- Scripts that write logs must use standard locations: project `storage/logs/` or `/var/log/nginx/` so monitoring agents can parse them.
+- When suggesting server commands, paths, or Nginx/PHP-FPM config, assume this VPS layout—not shared webhosting.

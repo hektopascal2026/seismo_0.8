@@ -49,13 +49,13 @@ declare(strict_types=1);
                 </div>
                 <?php endif; ?>
                 <div class="admin-form-field">
-                    <label for="gemini_api_key">Gemini API key (AI Briefing Builder)</label>
+                    <label for="gemini_api_key">Gemini API key (AI Researcher)</label>
                     <input type="password" id="gemini_api_key" name="gemini_api_key" class="search-input" style="width:100%; max-width:28rem;"
                            value="" placeholder="Leave blank to keep current key" autocomplete="off">
                     <?php if (!empty($geminiApiKeyOnFile)): ?>
-                        <div class="magnitu-field-hint">A Gemini API key is already stored. Used server-side only for <code>?action=briefing_builder</code><?= !empty($satellite) ? ' on this desk' : '' ?>.</div>
+                        <div class="magnitu-field-hint">A Gemini API key is already stored. Used server-side only for <code>?action=researcher</code><?= !empty($satellite) ? ' on this desk' : '' ?>.</div>
                     <?php else: ?>
-                        <div class="magnitu-field-hint">Required for the AI Briefing Builder page. Create a key in <a href="https://aistudio.google.com/apikey" rel="noopener noreferrer">Google AI Studio</a>.</div>
+                        <div class="magnitu-field-hint">Required for the AI Researcher page. Create a key in <a href="https://aistudio.google.com/apikey" rel="noopener noreferrer">Google AI Studio</a>.</div>
                     <?php endif; ?>
                 </div>
                 <div class="admin-form-actions">

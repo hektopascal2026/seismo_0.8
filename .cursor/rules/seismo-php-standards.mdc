@@ -1,0 +1,22 @@
+---
+description: PHP 8.5 code quality for Seismo application code
+globs: "{src,views,public}/**/*.php,bootstrap.php"
+alwaysApply: false
+---
+
+# Seismo PHP Standards
+
+## New and edited application PHP
+
+- Start every new PHP file with `declare(strict_types=1);` after the opening `<?php` tag (match existing `src/` files).
+- Prefer PHP 8.5 idioms where they clarify intent: constructor property promotion, attributes, `match`, typed constants.
+- Keep control flow scannable; avoid deep nesting when a small private method or early return is clearer.
+
+## External I/O and database
+
+- Fetching raw external content (HTTP, feeds, scrapers): handle failures explicitly—typed exceptions, clear messages, no silent empty catches.
+- Database access: use prepared statements; handle connection/query errors explicitly; do not swallow exceptions without logging.
+
+## Out of scope
+
+- Do not enforce these rules on `vendor/` or third-party packages.

@@ -7,13 +7,13 @@ namespace Seismo\Service;
 use Seismo\Repository\SystemConfigRepository;
 
 /**
- * Limits and batching for AI Briefing Builder → Gemini (RPM/TPM safety).
+ * Limits and batching for AI Researcher → Gemini (RPM/TPM safety).
  */
-final class BriefingGeminiContext
+final class ResearcherGeminiContext
 {
-    public const CONFIG_KEY_MAX_ENTRIES = 'briefing:max_context_entries';
+    public const CONFIG_KEY_MAX_ENTRIES = 'researcher:max_context_entries';
 
-    public const CONFIG_KEY_BATCH_SIZE = 'briefing:selection_batch_size';
+    public const CONFIG_KEY_BATCH_SIZE = 'researcher:selection_batch_size';
 
     public const DEFAULT_MAX_ENTRIES = 100;
 
@@ -21,7 +21,7 @@ final class BriefingGeminiContext
 
     /**
      * UI / config ceiling for rows in the Gemini XML pool (default stays {@see DEFAULT_MAX_ENTRIES}).
-     * Gemini 3.5 Flash allows ~1M input tokens; entry bodies share {@see MarkdownBriefingFormatter::ENTRY_XML_POOL_CHAR_BUDGET}.
+     * Gemini 3.5 Flash allows ~1M input tokens; entry bodies share {@see MarkdownResearcherFormatter::ENTRY_XML_POOL_CHAR_BUDGET}.
      */
     public const MAX_MAX_CONTEXT_ENTRIES = 500;
 
@@ -107,8 +107,8 @@ final class BriefingGeminiContext
     public function capEntriesForModules(
         array $entries,
         array $scoresByKey,
-        BriefingEntryGatherer $gatherer,
-        BriefingSourceSelection $selection,
+        ResearcherEntryGatherer $gatherer,
+        ResearcherSourceSelection $selection,
     ): array {
         return self::capEntryListStratified(
             $entries,
@@ -156,8 +156,8 @@ final class BriefingGeminiContext
         array $entries,
         int $max,
         array $scoresByKey,
-        BriefingEntryGatherer $gatherer,
-        BriefingSourceSelection $selection,
+        ResearcherEntryGatherer $gatherer,
+        ResearcherSourceSelection $selection,
     ): array {
         $entries = $gatherer->filterByModuleSelection($entries, $selection);
         if ($entries === []) {
@@ -210,7 +210,7 @@ final class BriefingGeminiContext
                     return $sb <=> $sa;
                 }
 
-                return BriefingLookback::entrySortTimestamp($b) <=> BriefingLookback::entrySortTimestamp($a);
+                return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
             });
         }
         unset($bucketEntries);
@@ -251,7 +251,7 @@ final class BriefingGeminiContext
                     return $sb <=> $sa;
                 }
 
-                return BriefingLookback::entrySortTimestamp($b) <=> BriefingLookback::entrySortTimestamp($a);
+                return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
             });
             $need = $max - count($picked);
             if ($need > 0 && $remaining !== []) {
@@ -268,7 +268,7 @@ final class BriefingGeminiContext
                 return $sb <=> $sa;
             }
 
-            return BriefingLookback::entrySortTimestamp($b) <=> BriefingLookback::entrySortTimestamp($a);
+            return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
         });
 
         return [

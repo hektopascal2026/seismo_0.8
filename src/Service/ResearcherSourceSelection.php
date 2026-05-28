@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * Which entry families to include in a briefing gather pass.
+ * Which entry families to include in a researcher gather pass.
  *
  * Two modes:
  *   - **Export** — legacy `type` query param (`all`, `feed_item`, …); `feed_item` uses one
  *     unpartitioned {@see \Seismo\Repository\MagnituExportRepository::listFeedItemsSince()}.
- *   - **Modules** — nav-aligned Feeds / Media / Scraper / Mail / Lex / Leg toggles for AI Briefing Builder.
+ *   - **Modules** — nav-aligned Feeds / Media / Scraper / Mail / Lex / Leg toggles for AI Researcher.
  */
-final class BriefingSourceSelection
+final class ResearcherSourceSelection
 {
     private const EXPORT_TYPES = ['all', 'feed_item', 'email', 'lex_item', 'calendar_event'];
 
@@ -24,6 +24,7 @@ final class BriefingSourceSelection
         private readonly bool $moduleEmail,
         private readonly bool $moduleLex,
         private readonly bool $moduleLeg,
+        private readonly bool $moduleLexCh = false,
     ) {
     }
 
@@ -33,7 +34,7 @@ final class BriefingSourceSelection
             $type = 'all';
         }
 
-        return new self($type, false, false, false, false, false, false);
+        return new self($type, false, false, false, false, false, false, false);
     }
 
     public static function forModules(
@@ -43,8 +44,9 @@ final class BriefingSourceSelection
         bool $email,
         bool $lex,
         bool $leg,
+        bool $lexCh = false,
     ): self {
-        return new self(null, $feeds, $media, $scraper, $email, $lex, $leg);
+        return new self(null, $feeds, $media, $scraper, $email, $lex, $leg, $lexCh);
     }
 
     public function isExportMode(): bool
@@ -82,6 +84,11 @@ final class BriefingSourceSelection
         return $this->moduleLex;
     }
 
+    public function moduleLexCh(): bool
+    {
+        return $this->moduleLexCh;
+    }
+
     public function moduleLeg(): bool
     {
         return $this->moduleLeg;
@@ -94,6 +101,7 @@ final class BriefingSourceSelection
             || $this->moduleScraper
             || $this->moduleEmail
             || $this->moduleLex
-            || $this->moduleLeg;
+            || $this->moduleLeg
+            || $this->moduleLexCh;
     }
 }

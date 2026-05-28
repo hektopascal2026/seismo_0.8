@@ -20,16 +20,16 @@ final class MagnituScoreBandsTest extends TestCase
         $this->assertFalse(MagnituScoreBands::passesImportantBelowThreshold(0.50, 0.60));
     }
 
-    public function testBriefingPoolWithoutExtension(): void
+    public function testResearcherPoolWithoutExtension(): void
     {
-        $this->assertTrue(MagnituScoreBands::passesBriefingPool(0.80, 0.60, false));
-        $this->assertFalse(MagnituScoreBands::passesBriefingPool(0.55, 0.60, false));
+        $this->assertTrue(MagnituScoreBands::passesResearcherPool(0.80, 0.60, false));
+        $this->assertFalse(MagnituScoreBands::passesResearcherPool(0.55, 0.60, false));
     }
 
-    public function testBriefingPoolWithImportantExtension(): void
+    public function testResearcherPoolWithImportantExtension(): void
     {
-        $this->assertTrue(MagnituScoreBands::passesBriefingPool(0.55, 0.60, true));
-        $this->assertFalse(MagnituScoreBands::passesBriefingPool(0.40, 0.60, true));
+        $this->assertTrue(MagnituScoreBands::passesResearcherPool(0.55, 0.60, true));
+        $this->assertFalse(MagnituScoreBands::passesResearcherPool(0.40, 0.60, true));
     }
 
     public function testBadgeCssClassBands(): void

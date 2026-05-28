@@ -7,38 +7,38 @@ namespace Seismo\Controller;
 use PDO;
 use DateTimeImmutable;
 use DateTimeZone;
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Core\MagnituScoreBands;
-use Seismo\Service\BriefingEntryCardPresenter;
-use Seismo\Service\BriefingEntryGatherer;
-use Seismo\Service\BriefingGeminiContext;
-use Seismo\Service\BriefingModuleGuard;
-use Seismo\Service\BriefingScoreFilter;
-use Seismo\Service\BriefingSourceSelection;
-use Seismo\Service\BriefingPromptHelperService;
-use Seismo\Service\GeminiBriefingException;
-use Seismo\Service\GeminiBriefingService;
+use Seismo\Service\ResearcherEntryCardPresenter;
+use Seismo\Service\ResearcherEntryGatherer;
+use Seismo\Service\ResearcherGeminiContext;
+use Seismo\Service\ResearcherModuleGuard;
+use Seismo\Service\ResearcherScoreFilter;
+use Seismo\Service\ResearcherSourceSelection;
+use Seismo\Service\ResearcherPromptHelperService;
+use Seismo\Service\GeminiResearcherException;
+use Seismo\Service\GeminiResearcherService;
 
 /**
- * AI Briefing Builder — session UI + Gemini summary.
+ * AI Researcher — session UI + Gemini summary.
  *
  * On path satellites, {@see getDbConnection()} is the desk catalog (`seismo_<slug>`);
  * entry rows still come from the mothership via {@see entryTable()}, while Magnitu
  * labels and relevance use local `entry_scores`.
  */
-final class AiBriefingController
+final class AiResearcherController
 {
     /** Placeholder substituted with formatted entry markdown before the Gemini call. */
     public const MARKDOWN_CONTEXT_PLACEHOLDER = '{markdownContext}';
 
     /** Saved system prompt in local `system_config` (per mothership or satellite desk). */
-    public const CONFIG_KEY_SYSTEM_PROMPT = 'briefing:system_prompt';
+    public const CONFIG_KEY_SYSTEM_PROMPT = 'researcher:system_prompt';
 
     /** Named prompt library (`system_config` JSON list, per desk). */
-    public const CONFIG_KEY_PROMPT_LIBRARY = 'ai_briefing_prompts';
+    public const CONFIG_KEY_PROMPT_LIBRARY = 'ai_researcher_prompts';
 
     private const PROMPT_LIBRARY_SEED_NAME = 'Default';
 
@@ -59,20 +59,20 @@ Dein Schreibstil folgt strikt dem "Economist-Benchmark":
 
 SYSTEM-ABLAUF (ZWEI PHASEN — ZWINGEND EINHALTEN):
 
-PHASE 1 — AUSWAHL (nur JSON, kein Briefing-Text):
+PHASE 1 — AUSWAHL (nur JSON, kein Researcher-Text):
 - Wähle aus ENTRIES_DATA die vom USER PROMPT und "Number of items" geforderte Anzahl an Einträgen.
 - Priorisiere harte Makro-, Regulierungs- und Geopolitik-Signale; streiche weiche Themen.
-- Gib nur JSON zurück: used_entry_keys (Reihenfolge = spätere Briefing-Reihenfolge) und optional selection_reasoning (kurz: warum diese IDs, warum andere ausgeschlossen).
-- Schreibe in Phase 1 KEIN Markdown, keine Überschriften, kein Executive Briefing.
+- Gib nur JSON zurück: used_entry_keys (Reihenfolge = spätere Researcher-Reihenfolge) und optional selection_reasoning (kurz: warum diese IDs, warum andere ausgeschlossen).
+- Schreibe in Phase 1 KEIN Markdown, keine Überschriften, kein Executive Researcher.
 
 PHASE 2 — BRIEFING (nur Markdown für die bereits gewählten SELECTED_ENTRY_KEYS):
 - Decke jeden Eintrag in SELECTED_ENTRY_KEYS genau einmal ab, in dieser Reihenfolge — ein Bullet pro Eintrag.
 - Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. (feed_item:123). Das ist Pflicht neben dem lesbaren Quellennamen.
-- Kein JSON, kein Meta-Chat ("Hier ist das Briefing...").
+- Kein JSON, kein Meta-Chat ("Hier ist das Researcher...").
 
 Verwende in Phase 2 ZWINGEND folgende Struktur:
 
-# 📊 Executive Briefing: (ein kurzer prägnanter Titel, der klar macht, warum man das Briefing lesen soll)
+# 📊 Executive Researcher: (ein kurzer prägnanter Titel, der klar macht, warum man das Researcher lesen soll)
 
 **Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der makroökonomische oder politische rote Faden? VERBOTEN: Meta-Einleitungen wie "Die heutigen Meldungen zeichnen ein Bild...". Direkter Einstieg in die Analyse.)
 
@@ -89,7 +89,7 @@ Inhaltliche Regeln (beide Phasen):
 - Streiche jedes Adjektiv ohne informativen Mehrwert.
 PROMPT;
 
-    /** Allowed “number of items” values in the Briefing Builder UI. */
+    /** Allowed “number of items” values in the Researcher UI. */
     public const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12, 15];
 
     public const DEFAULT_ITEM_COUNT = 5;
@@ -115,7 +115,7 @@ PROMPT;
     private const CONTEXT_HEAVY_CHARS = 400_000;
 
     /** @var list<string> */
-    private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'lex', 'leg'];
+    private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'lex', 'lex_ch', 'leg'];
 
     public function show(): void
     {
@@ -139,7 +139,7 @@ PROMPT;
             $defaultRow     = self::findPromptLibraryEntryByName($savedPrompts, self::PROMPT_LIBRARY_SEED_NAME);
             $systemPrompt   = $defaultRow !== null ? $defaultRow['content'] : $instancePrompt;
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder show: ' . $e->getMessage());
+            error_log('Seismo researcher show: ' . $e->getMessage());
         }
 
         foreach ($savedPrompts as $row) {
@@ -155,21 +155,21 @@ PROMPT;
         $defaultItemCount    = self::DEFAULT_ITEM_COUNT;
         $itemCountOptions    = self::ALLOWED_ITEM_COUNTS;
         $alertThreshold      = 0.60;
-        $maxContextEntries   = BriefingGeminiContext::DEFAULT_MAX_ENTRIES;
-        $maxContextDefault   = BriefingGeminiContext::DEFAULT_MAX_ENTRIES;
-        $maxContextMin       = BriefingGeminiContext::MIN_MAX_CONTEXT_ENTRIES;
-        $maxContextMax       = BriefingGeminiContext::MAX_MAX_CONTEXT_ENTRIES;
+        $maxContextEntries   = ResearcherGeminiContext::DEFAULT_MAX_ENTRIES;
+        $maxContextDefault   = ResearcherGeminiContext::DEFAULT_MAX_ENTRIES;
+        $maxContextMin       = ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES;
+        $maxContextMax       = ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES;
 
         try {
             $configRepo       = new SystemConfigRepository(getDbConnection());
             $alertThreshold   = $configRepo->getAlertThreshold();
-            $maxContextEntries = (new BriefingGeminiContext($configRepo))->maxContextEntries();
+            $maxContextEntries = (new ResearcherGeminiContext($configRepo))->maxContextEntries();
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder show alert_threshold: ' . $e->getMessage());
+            error_log('Seismo researcher show alert_threshold: ' . $e->getMessage());
         }
 
         require_once SEISMO_ROOT . '/views/helpers.php';
-        require SEISMO_ROOT . '/views/briefing_builder.php';
+        require SEISMO_ROOT . '/views/researcher.php';
     }
 
     /**
@@ -177,7 +177,7 @@ PROMPT;
      */
     public function prepare(): void
     {
-        $this->beginBriefingJsonAction('prepare');
+        $this->beginResearcherJsonAction('prepare');
 
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -200,9 +200,9 @@ PROMPT;
 
         try {
             $pdo     = getDbConnection();
-            $filters = $this->parseBriefingFiltersFromPost();
+            $filters = $this->parseResearcherFiltersFromPost();
             $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
-            $gathered = $this->gatherBriefingContext($pdo, $filters, enrichBodies: false);
+            $gathered = $this->gatherResearcherContext($pdo, $filters, enrichBodies: false);
             $entryCount = count($gathered['entries']);
             if ($entryCount === 0) {
                 http_response_code(400);
@@ -230,7 +230,7 @@ PROMPT;
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder_prepare: ' . $e->getMessage());
+            error_log('Seismo researcher_prepare: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not load entries.'], JSON_UNESCAPED_UNICODE);
         }
@@ -238,7 +238,7 @@ PROMPT;
 
     public function generate(): void
     {
-        $this->beginBriefingJsonAction('generate');
+        $this->beginResearcherJsonAction('generate');
 
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -260,7 +260,7 @@ PROMPT;
         }
 
         try {
-            $filters = $this->parseBriefingFiltersFromPost();
+            $filters = $this->parseResearcherFiltersFromPost();
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -282,7 +282,7 @@ PROMPT;
         try {
             $pdo = getDbConnection();
             $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
-            $gathered = $this->gatherBriefingContext($pdo, $filters);
+            $gathered = $this->gatherResearcherContext($pdo, $filters);
             $entries      = $gathered['entries'];
             $scoresByKey  = $gathered['scoresByKey'];
             $markdown     = $gathered['markdown'];
@@ -307,13 +307,13 @@ PROMPT;
             $contextEntryCount = count($entries);
             $citationSlots     = min($itemCount, $contextEntryCount);
 
-            $gemini = new GeminiBriefingService(new SystemConfigRepository($pdo));
-            $briefingMeta = [
+            $gemini = new GeminiResearcherService(new SystemConfigRepository($pdo));
+            $researcherMeta = [
                 'since'                => $since,
                 'limit'                => $limit,
-                'score_selection'      => MagnituScoreBands::describeBriefingGather($scoreFilter),
+                'score_selection'      => MagnituScoreBands::describeResearcherGather($scoreFilter),
                 'total'                  => $contextEntryCount,
-                'entry_body_max_chars'   => $gathered['entry_body_max_chars'] ?? MarkdownBriefingFormatter::ENTRY_BODY_DEFAULT_CHARS,
+                'entry_body_max_chars'   => $gathered['entry_body_max_chars'] ?? MarkdownResearcherFormatter::ENTRY_BODY_DEFAULT_CHARS,
             ];
             $result = $gemini->generateSummary(
                 $systemPrompt,
@@ -322,7 +322,7 @@ PROMPT;
                 $contextEntryCount,
                 $entries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $selection,
             );
 
@@ -330,7 +330,7 @@ PROMPT;
             $usedEntryKeys   = $result->usedEntryKeys;
             $keysInferred    = false;
             if ($usedEntryKeys === []) {
-                $usedEntryKeys = $this->inferUsedEntryKeysFromBriefing($result->markdown, $entries, $itemCount);
+                $usedEntryKeys = $this->inferUsedEntryKeysFromResearcher($result->markdown, $entries, $itemCount);
                 $keysInferred  = $usedEntryKeys !== [];
             }
 
@@ -350,17 +350,17 @@ PROMPT;
                     $itemCount,
                 );
                 if ($keysInferred) {
-                    $inferredMsg = 'Citations inferred from briefing text (Gemini omitted or invalid used_entry_keys).';
+                    $inferredMsg = 'Citations inferred from researcher text (Gemini omitted or invalid used_entry_keys).';
                     $attributionMeta['attribution_warning'] = isset($attributionMeta['attribution_warning'])
                         ? $attributionMeta['attribution_warning'] . ' ' . $inferredMsg
                         : $inferredMsg;
                 }
                 if ($cardsEntries !== []) {
-                    $entriesHtml = (new BriefingEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
+                    $entriesHtml = (new ResearcherEntryCardPresenter())->renderHtml($cardsEntries, $scoresByKey);
                 }
             } else {
                 $attributionMeta['attribution_warning'] =
-                    'Attribution JSON could not be parsed; briefing text is shown without source cards.';
+                    'Attribution JSON could not be parsed; researcher text is shown without source cards.';
             }
 
             $meta = array_merge(
@@ -374,7 +374,7 @@ PROMPT;
                     'alert_threshold'  => $scoreFilter->alertThreshold,
                     'include_important_below_threshold' => $scoreFilter->includeImportantBelowThreshold,
                     'disregard_magnitu' => $scoreFilter->disregardMagnitu,
-                    'score_selection'  => MagnituScoreBands::describeBriefingGather($scoreFilter),
+                    'score_selection'  => MagnituScoreBands::describeResearcherGather($scoreFilter),
                     'citation_slots'      => $citationSlots,
                 ],
             );
@@ -389,7 +389,7 @@ PROMPT;
                     : $fallbackNote;
             }
             if (!empty($meta['citation_gap'])) {
-                $citationNote = 'Briefing text omitted some entry_type:entry_id citations; source cards follow selection order.';
+                $citationNote = 'Researcher text omitted some entry_type:entry_id citations; source cards follow selection order.';
                 $meta['context_warning'] = isset($meta['context_warning'])
                     ? $meta['context_warning'] . ' ' . $citationNote
                     : $citationNote;
@@ -403,17 +403,17 @@ PROMPT;
                     : $batchNote;
             }
 
-            $this->echoBriefingJson([
+            $this->echoResearcherJson([
                 'ok'           => true,
                 'text'         => $result->markdown,
                 'meta'         => $meta,
                 'entries_html' => $entriesHtml,
             ]);
-        } catch (GeminiBriefingException $e) {
+        } catch (GeminiResearcherException $e) {
             http_response_code(502);
             $errorPayload = [
                 'ok'    => false,
-                'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini briefing failed.',
+                'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini researcher failed.',
             ];
             if (isset($gemini)) {
                 $failureMeta = $gemini->lastGenerationMeta();
@@ -421,13 +421,13 @@ PROMPT;
                     $errorPayload['meta'] = $failureMeta;
                 }
             }
-            $this->echoBriefingJson($errorPayload);
+            $this->echoResearcherJson($errorPayload);
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder_generate: ' . $e->getMessage());
+            error_log('Seismo researcher_generate: ' . $e->getMessage());
             http_response_code(500);
-            $this->echoBriefingJson([
+            $this->echoResearcherJson([
                 'ok'    => false,
-                'error' => 'Could not generate briefing.',
+                'error' => 'Could not generate researcher.',
             ]);
         }
     }
@@ -457,18 +457,18 @@ PROMPT;
             $intent = trim((string)($_POST['intent'] ?? ''));
             $config = new SystemConfigRepository(getDbConnection());
             $style  = self::resolveStoredSystemPrompt($config);
-            $helper = new BriefingPromptHelperService($config);
+            $helper = new ResearcherPromptHelperService($config);
             $prompt = $helper->reformulate($intent, $style);
             $prompt = $this->parseSystemPrompt($prompt);
             echo json_encode(['ok' => true, 'prompt' => $prompt], JSON_UNESCAPED_UNICODE);
-        } catch (GeminiBriefingException $e) {
+        } catch (GeminiResearcherException $e) {
             http_response_code($e->httpStatus ?? 400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_prompt_helper: ' . $e->getMessage());
+            error_log('Seismo researcher_prompt_helper: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not generate prompt.'], JSON_UNESCAPED_UNICODE);
         }
@@ -507,7 +507,7 @@ PROMPT;
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            error_log('Seismo briefing_builder_save_prompt: ' . $e->getMessage());
+            error_log('Seismo researcher_save_prompt: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not save prompt.'], JSON_UNESCAPED_UNICODE);
         }
@@ -564,7 +564,7 @@ PROMPT;
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            error_log('Seismo save_briefing_prompt: ' . $e->getMessage());
+            error_log('Seismo save_researcher_prompt: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not save prompt to library.'], JSON_UNESCAPED_UNICODE);
         }
@@ -615,7 +615,7 @@ PROMPT;
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
-            error_log('Seismo delete_briefing_prompt: ' . $e->getMessage());
+            error_log('Seismo delete_researcher_prompt: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['ok' => false, 'error' => 'Could not delete prompt.'], JSON_UNESCAPED_UNICODE);
         }
@@ -651,7 +651,7 @@ PROMPT;
         $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
         if (!array_is_list($raw)) {
             if ($raw !== []) {
-                error_log('Seismo ai_briefing_prompts: expected JSON array, got object');
+                error_log('Seismo ai_researcher_prompts: expected JSON array, got object');
             }
 
             return [];
@@ -784,7 +784,7 @@ PROMPT;
     /**
      * @throws \InvalidArgumentException
      */
-    private function parseModuleSelection(mixed $raw): BriefingSourceSelection
+    private function parseModuleSelection(mixed $raw): ResearcherSourceSelection
     {
         $picked = [];
         if (is_array($raw)) {
@@ -799,20 +799,21 @@ PROMPT;
             throw new \InvalidArgumentException('Select at least one source module (Feeds, Media, Scraper, Mail, Lex, or Leg).');
         }
 
-        return BriefingSourceSelection::forModules(
+        return ResearcherSourceSelection::forModules(
             isset($picked['feeds']),
             isset($picked['media']),
             isset($picked['scraper']),
             isset($picked['email']),
             isset($picked['lex']),
             isset($picked['leg']),
+            isset($picked['lex_ch']),
         );
     }
 
     /**
      * @return list<string>
      */
-    private function enabledModuleNames(BriefingSourceSelection $selection): array
+    private function enabledModuleNames(ResearcherSourceSelection $selection): array
     {
         $names = [];
         if ($selection->moduleFeeds()) {
@@ -829,6 +830,9 @@ PROMPT;
         }
         if ($selection->moduleLex()) {
             $names[] = 'lex';
+        }
+        if ($selection->moduleLexCh()) {
+            $names[] = 'lex_ch';
         }
         if ($selection->moduleLeg()) {
             $names[] = 'leg';
@@ -864,9 +868,9 @@ PROMPT;
             return;
         }
 
-        $clamped = BriefingGeminiContext::clampMaxContextEntries((int)$s);
+        $clamped = ResearcherGeminiContext::clampMaxContextEntries((int)$s);
         (new SystemConfigRepository($pdo))->set(
-            BriefingGeminiContext::CONFIG_KEY_MAX_ENTRIES,
+            ResearcherGeminiContext::CONFIG_KEY_MAX_ENTRIES,
             (string)$clamped,
         );
     }
@@ -898,12 +902,12 @@ PROMPT;
      *     since: string,
      *     limit: int,
      *     lookbackDays: int,
-     *     scoreFilter: BriefingScoreFilter,
-     *     selection: BriefingSourceSelection
+     *     scoreFilter: ResearcherScoreFilter,
+     *     selection: ResearcherSourceSelection
      * }
      * @throws \InvalidArgumentException
      */
-    private function parseBriefingFiltersFromPost(): array
+    private function parseResearcherFiltersFromPost(): array
     {
         $selection = $this->parseModuleSelection($_POST['modules'] ?? null);
         $lookbackDays = $this->parseLookbackDays($_POST['lookback_days'] ?? null);
@@ -915,7 +919,7 @@ PROMPT;
         $includeImportantBelow = (string)($_POST['include_important'] ?? '0') === '1';
         $disregardMagnitu      = (string)($_POST['disregard_magnitu'] ?? '0') === '1';
         $alertThreshold        = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
-        $scoreFilter           = new BriefingScoreFilter(
+        $scoreFilter           = new ResearcherScoreFilter(
             $alertThreshold,
             $includeImportantBelow,
             $disregardMagnitu,
@@ -935,8 +939,8 @@ PROMPT;
      *     since: string,
      *     limit: int,
      *     lookbackDays: int,
-     *     scoreFilter: BriefingScoreFilter,
-     *     selection: BriefingSourceSelection
+     *     scoreFilter: ResearcherScoreFilter,
+     *     selection: ResearcherSourceSelection
      * } $filters
      * @return array{
      *     entries: list<array<string, mixed>>,
@@ -949,7 +953,7 @@ PROMPT;
      *     maxContextEntries: int
      * }
      */
-    private function beginBriefingJsonAction(string $phase): void
+    private function beginResearcherJsonAction(string $phase): void
     {
         set_time_limit(300);
         ini_set('memory_limit', '512M');
@@ -963,7 +967,7 @@ PROMPT;
                 return;
             }
             error_log(
-                'Seismo briefing_builder_' . $phase . ' fatal: '
+                'Seismo researcher_' . $phase . ' fatal: '
                 . $err['message'] . ' in ' . $err['file'] . ':' . $err['line']
             );
         });
@@ -972,16 +976,16 @@ PROMPT;
     /**
      * @param array<string, mixed> $payload
      */
-    private function echoBriefingJson(array $payload): void
+    private function echoResearcherJson(array $payload): void
     {
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         if ($json === false) {
-            error_log('Seismo briefing_builder json_encode: ' . json_last_error_msg());
+            error_log('Seismo researcher json_encode: ' . json_last_error_msg());
             http_response_code(500);
             echo json_encode(
                 [
                     'ok'    => false,
-                    'error' => 'Briefing response could not be encoded. Reduce max context entries or modules.',
+                    'error' => 'Researcher response could not be encoded. Reduce max context entries or modules.',
                 ],
                 JSON_UNESCAPED_UNICODE,
             );
@@ -997,14 +1001,14 @@ PROMPT;
      *     since: string,
      *     limit: int,
      *     lookbackDays: int,
-     *     scoreFilter: BriefingScoreFilter,
-     *     selection: BriefingSourceSelection
+     *     scoreFilter: ResearcherScoreFilter,
+     *     selection: ResearcherSourceSelection
      * } $filters
      * @param bool $enrichBodies Load LONGTEXT bodies for the capped pool (skip on prepare to avoid doubling peak memory).
      */
-    private function gatherBriefingContext(PDO $pdo, array $filters, bool $enrichBodies = true): array
+    private function gatherResearcherContext(PDO $pdo, array $filters, bool $enrichBodies = true): array
     {
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         [$entries, $scoresByKey] = $gatherer->gather(
             $pdo,
             $filters['since'],
@@ -1016,7 +1020,7 @@ PROMPT;
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
         $entries = $gatherer->filterByModuleSelection($entries, $filters['selection']);
 
-        $geminiContext = new BriefingGeminiContext(new SystemConfigRepository($pdo));
+        $geminiContext = new ResearcherGeminiContext(new SystemConfigRepository($pdo));
         $entriesEligibleBeforeCap = count($entries);
         $capped        = $geminiContext->capEntriesForModules(
             $entries,
@@ -1032,15 +1036,15 @@ PROMPT;
             $gatherer->enrichEntriesWithFullBodies($pdo, $filters['since'], $entries);
         }
 
-        $entryBodyMaxChars = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars(count($entries));
+        $entryBodyMaxChars = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(count($entries));
         $gatherMeta        = [
             'since'                => $filters['since'],
             'limit'                => $filters['limit'],
-            'score_selection'      => MagnituScoreBands::describeBriefingGather($filters['scoreFilter']),
+            'score_selection'      => MagnituScoreBands::describeResearcherGather($filters['scoreFilter']),
             'entry_body_max_chars' => $entryBodyMaxChars,
         ];
 
-        $guard  = new BriefingModuleGuard($gatherer);
+        $guard  = new ResearcherModuleGuard($gatherer);
         $sealed = $guard->sealGeminiContext($entries, $scoresByKey, $gatherMeta, $filters['selection']);
         $entries       = $sealed['entries'];
         $markdown      = $sealed['markdown'];
@@ -1112,13 +1116,13 @@ PROMPT;
     }
 
     /**
-     * When Gemini omits used_entry_keys, match entry_type:entry_id tokens in the briefing
+     * When Gemini omits used_entry_keys, match entry_type:entry_id tokens in the researcher
      * against gathered entries (order of first appearance, capped at $maxKeys).
      *
      * @param list<array<string, mixed>> $entries
      * @return list<string>
      */
-    private function inferUsedEntryKeysFromBriefing(string $markdown, array $entries, int $maxKeys): array
+    private function inferUsedEntryKeysFromResearcher(string $markdown, array $entries, int $maxKeys): array
     {
         if ($markdown === '' || $entries === [] || $maxKeys < 1) {
             return [];
@@ -1183,7 +1187,7 @@ PROMPT;
             $warnings[] = 'Model cited ' . $citedCount . ' of ' . $expectedItemCount . ' requested entries.';
         }
 
-        $attributed = BriefingEntryCardPresenter::filterByUsedKeys($entries, $usedEntryKeys);
+        $attributed = ResearcherEntryCardPresenter::filterByUsedKeys($entries, $usedEntryKeys);
 
         $meta = [
             'context_entry_count'    => $contextCount,

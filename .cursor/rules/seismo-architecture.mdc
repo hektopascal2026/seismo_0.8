@@ -1,0 +1,39 @@
+---
+description: Seismo 0.6 — layers, routing, refresh pipeline, module UI
+alwaysApply: true
+---
+
+# Seismo 0.6 Architecture
+
+## Layer boundaries (keep them hard)
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Controllers** | Orchestrate request/response only |
+| **Services / fetchers** | Business logic, external I/O |
+| **Repositories** | All SQL and persistence |
+| **Views** | Render only — no business logic |
+
+## SQL placement
+
+- **No SQL** outside `src/Repository/`, except numbered migrations in `src/Migration/`.
+- **Schema changes:** add the next numbered migration and update `docs/db-schema.sql` to match.
+
+## URLs and paths
+
+- Never hardcode app URLs or path prefixes for internal links/redirects.
+- Always use `getBasePath()` (see `bootstrap.php`).
+
+## Satellite-aware reads
+
+- Use `entryTable()` **only** for entry-source tables (`feed_items`, `lex_items`, `calendar_events`, `feeds`, `emails`, etc.).
+- Keep local-only tables bare: `entry_scores`, `system_config`, `magnitu_*`, `entry_favourites`, cron mutex state.
+
+## Refresh pipeline
+
+- Cron CLI and web “refresh” actions must call the **same** underlying service implementation—no duplicate ingest logic.
+- Respect `CronMutexRepository` / refresh mutex so overlapping cron and browser refresh cannot corrupt chunked cursors.
+
+## Admin UI ownership
+
+- Feeds, Scraper, and Mail configuration live on **their module pages**—do not add one-off settings elsewhere.

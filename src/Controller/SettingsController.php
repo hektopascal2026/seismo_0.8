@@ -29,7 +29,7 @@ final class SettingsController
      */
     public const KEY_NAV_LEADING_THROTTLE = 'ui:nav_leading_throttle';
 
-    /** Google Gemini API key for Settings → General / AI Briefing Builder (mothership). */
+    /** Google Gemini API key for Settings → General / AI Researcher (mothership). */
     public const KEY_GEMINI_API_KEY = 'gemini:api_key';
 
     /**

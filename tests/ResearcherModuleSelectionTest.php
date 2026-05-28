@@ -3,17 +3,17 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Service\BriefingEntryGatherer;
-use Seismo\Service\BriefingGeminiContext;
-use Seismo\Service\BriefingModuleGuard;
-use Seismo\Service\BriefingSourceSelection;
+use Seismo\Service\ResearcherEntryGatherer;
+use Seismo\Service\ResearcherGeminiContext;
+use Seismo\Service\ResearcherModuleGuard;
+use Seismo\Service\ResearcherSourceSelection;
 
-final class BriefingModuleSelectionTest extends TestCase
+final class ResearcherModuleSelectionTest extends TestCase
 {
     public function testFilterByModuleSelectionExcludesMediaWhenMediaDisabled(): void
     {
-        $selection = BriefingSourceSelection::forModules(true, false, false, false, true, false);
-        $gatherer  = new BriefingEntryGatherer();
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, true, false);
+        $gatherer  = new ResearcherEntryGatherer();
 
         $entries = [
             [
@@ -45,8 +45,8 @@ final class BriefingModuleSelectionTest extends TestCase
 
     public function testStratifiedCapNeverIncludesDeselectedMediaBucket(): void
     {
-        $selection = BriefingSourceSelection::forModules(true, false, false, false, false, false);
-        $gatherer  = new BriefingEntryGatherer();
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
+        $gatherer  = new ResearcherEntryGatherer();
 
         $feeds = [];
         for ($i = 1; $i <= 60; $i++) {
@@ -77,7 +77,7 @@ final class BriefingModuleSelectionTest extends TestCase
             $scores[$key] = ['relevance_score' => 0.9];
         }
 
-        $capped = BriefingGeminiContext::capEntryListStratified(
+        $capped = ResearcherGeminiContext::capEntryListStratified(
             $entries,
             100,
             $scores,
@@ -98,8 +98,8 @@ final class BriefingModuleSelectionTest extends TestCase
 
     public function testStratifiedCapSingleBucketFallbackStillExcludesDeselectedRows(): void
     {
-        $selection = BriefingSourceSelection::forModules(false, false, false, false, true, false);
-        $gatherer  = new BriefingEntryGatherer();
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
+        $gatherer  = new ResearcherEntryGatherer();
 
         $lex = [];
         for ($i = 1; $i <= 80; $i++) {
@@ -126,7 +126,7 @@ final class BriefingModuleSelectionTest extends TestCase
             $scores[$key] = ['relevance_score' => 0.99];
         }
 
-        $capped = BriefingGeminiContext::capEntryListStratified(
+        $capped = ResearcherGeminiContext::capEntryListStratified(
             $entries,
             100,
             $scores,
@@ -139,7 +139,7 @@ final class BriefingModuleSelectionTest extends TestCase
             self::assertSame('lex_item', $row['entry_type']);
         }
 
-        $guard  = new BriefingModuleGuard($gatherer);
+        $guard  = new ResearcherModuleGuard($gatherer);
         $sealed = $guard->sealGeminiContext($capped['entries'], $scores, [], $selection);
         self::assertCount(80, $sealed['entries']);
         self::assertSame(80, count($guard->extractXmlEntryIds($sealed['markdown'])));
@@ -147,9 +147,9 @@ final class BriefingModuleSelectionTest extends TestCase
 
     public function testOnlyLexEnabledExcludesAllNonLexTypes(): void
     {
-        $selection = BriefingSourceSelection::forModules(false, false, false, false, true, false);
-        $gatherer  = new BriefingEntryGatherer();
-        $guard     = new BriefingModuleGuard($gatherer);
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
+        $gatherer  = new ResearcherEntryGatherer();
+        $guard     = new ResearcherModuleGuard($gatherer);
 
         $mixed = [
             ['entry_type' => 'lex_item', 'entry_id' => 1, 'source_type' => 'lex_de', 'title' => 'Law'],

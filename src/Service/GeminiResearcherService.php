@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 use Seismo\Controller\SettingsController;
-use Seismo\Formatter\MarkdownBriefingFormatter;
+use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\Http\BaseClient;
 use Seismo\Util\LenientJsonParser;
@@ -13,12 +13,12 @@ use Seismo\Service\Http\HttpClientException;
 use Seismo\Service\Http\Response;
 
 /**
- * Calls Google Gemini `generateContent` for the AI Briefing Builder.
+ * Calls Google Gemini `generateContent` for the AI Researcher.
  *
  * Always uses skinny two-pass: one global selection call (compact JSON), then plain Markdown
  * prose on selected entries only.
  */
-final class GeminiBriefingService
+final class GeminiResearcherService
 {
     private const SELECTION_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
@@ -49,7 +49,7 @@ RULES:
 - Cite each item with its entry_type:entry_id in parentheses (e.g. feed_item:123).
 - SELECTED_ENTRIES_DATA has full text for those entries only.
 - Follow the user persona for tone, structure, intro/outro, and headings.
-- CRITICAL: Output ONLY the requested Markdown. No conversational filler (e.g. "Here is the briefing") and no closing offers (e.g. "Let me know if you need anything else").
+- CRITICAL: Output ONLY the requested Markdown. No conversational filler (e.g. "Here is the researcher") and no closing offers (e.g. "Let me know if you need anything else").
 
 SELECTED_ENTRY_KEYS (ordered):
 {selectedEntryKeys}
@@ -69,7 +69,7 @@ CONTRACT;
     /** Hard API output cap for Gemini 3.5 Flash (GA). */
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
 
-    /** Practical prose cap per briefing (cost/latency), below model hard cap. */
+    /** Practical prose cap per researcher (cost/latency), below model hard cap. */
     public const BRIEFING_SUMMARY_OUTPUT_CAP = 49152;
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
@@ -111,7 +111,7 @@ CONTRACT;
 
     private readonly int $maxOutputTokens;
 
-    private readonly BriefingGeminiContext $briefingContext;
+    private readonly ResearcherGeminiContext $researcherContext;
 
     private int $lastEffectiveCitationCount = 1;
 
@@ -125,14 +125,14 @@ CONTRACT;
     public function __construct(
         private readonly SystemConfigRepository $config,
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
-        ?BriefingGeminiContext $briefingContext = null,
+        ?ResearcherGeminiContext $researcherContext = null,
     ) {
-        $this->briefingContext = $briefingContext ?? new BriefingGeminiContext($config);
+        $this->researcherContext = $researcherContext ?? new ResearcherGeminiContext($config);
         $configured = trim((string)($config->get(self::CONFIG_KEY_MODEL) ?? ''));
         $model      = $configured !== '' ? $configured : self::DEFAULT_MODEL;
         if (!self::usesGemini35Family($model)) {
             error_log(
-                'GeminiBriefingService: unsupported gemini:model "' . $model . '"; using ' . self::DEFAULT_MODEL
+                'GeminiResearcherService: unsupported gemini:model "' . $model . '"; using ' . self::DEFAULT_MODEL
             );
             $model = self::DEFAULT_MODEL;
         }
@@ -205,8 +205,8 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $contextEntries  Shaped Magnitu rows (relevance-sorted).
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta         Passed to {@see MarkdownBriefingFormatter::format}.
-     * @throws GeminiBriefingException
+     * @param array<string, mixed> $researcherMeta         Passed to {@see MarkdownResearcherFormatter::format}.
+     * @throws GeminiResearcherException
      */
     public function generateSummary(
         string $userSystemPrompt,
@@ -215,12 +215,12 @@ CONTRACT;
         int $contextEntryCount = 0,
         array $contextEntries = [],
         array $scoresByKey = [],
-        array $briefingMeta = [],
-        ?BriefingSourceSelection $moduleSelection = null,
-    ): GeminiBriefingResult {
+        array $researcherMeta = [],
+        ?ResearcherSourceSelection $moduleSelection = null,
+    ): GeminiResearcherResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
-            throw GeminiBriefingException::missingApiKey();
+            throw GeminiResearcherException::missingApiKey();
         }
 
         $this->rateLimitFallbackMode = false;
@@ -234,32 +234,32 @@ CONTRACT;
                 $contextEntryCount,
                 $contextEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $apiKey,
                 $moduleSelection,
             );
-        } catch (GeminiBriefingException $e) {
+        } catch (GeminiResearcherException $e) {
             if (!$e->isRateLimitExceeded() || $this->rateLimitFallbackUsed) {
                 throw $e;
             }
 
             $this->rateLimitFallbackUsed = true;
             $this->rateLimitFallbackMode  = true;
-            error_log('GeminiBriefingService: HTTP 429 — automatic retry with reduced batched context');
+            error_log('GeminiResearcherService: HTTP 429 — automatic retry with reduced batched context');
 
-            sleep(BriefingGeminiContext::RATE_LIMIT_RETRY_PAUSE_SECONDS);
+            sleep(ResearcherGeminiContext::RATE_LIMIT_RETRY_PAUSE_SECONDS);
 
             [$contextEntries, $markdownContext, $contextEntryCount] = $this->shrinkContextForRateLimit(
                 $contextEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $moduleSelection,
             );
 
             $this->lastGenerationMeta = [
                 'rate_limit_fallback'              => true,
-                'rate_limit_fallback_max_entries'  => $this->briefingContext->rateLimitFallbackMaxEntries(),
-                'rate_limit_fallback_batch_size'   => BriefingGeminiContext::RATE_LIMIT_FALLBACK_BATCH_SIZE,
+                'rate_limit_fallback_max_entries'  => $this->researcherContext->rateLimitFallbackMaxEntries(),
+                'rate_limit_fallback_batch_size'   => ResearcherGeminiContext::RATE_LIMIT_FALLBACK_BATCH_SIZE,
             ];
 
             return $this->executeGenerateSummary(
@@ -269,7 +269,7 @@ CONTRACT;
                 $contextEntryCount,
                 $contextEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $apiKey,
                 $moduleSelection,
             );
@@ -279,8 +279,8 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $contextEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
-     * @throws GeminiBriefingException
+     * @param array<string, mixed> $researcherMeta
+     * @throws GeminiResearcherException
      */
     private function executeGenerateSummary(
         string $userSystemPrompt,
@@ -289,21 +289,21 @@ CONTRACT;
         int $contextEntryCount,
         array $contextEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $apiKey,
-        ?BriefingSourceSelection $moduleSelection = null,
-    ): GeminiBriefingResult {
+        ?ResearcherSourceSelection $moduleSelection = null,
+    ): GeminiResearcherResult {
         [$contextEntries, $markdownContext, $contextEntryCount] = $this->sealContextForGemini(
             $contextEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $markdownContext,
             $moduleSelection,
         );
 
         $userSystemPrompt = trim($userSystemPrompt);
         if ($userSystemPrompt === '') {
-            throw GeminiBriefingException::invalidInput('System prompt is required.');
+            throw GeminiResearcherException::invalidInput('System prompt is required.');
         }
 
         if ($itemCount < 1) {
@@ -327,7 +327,7 @@ CONTRACT;
             $effectiveCount,
             $contextEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $apiKey,
         );
     }
@@ -335,49 +335,49 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $contextEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @return array{0: list<array<string, mixed>>, 1: string, 2: int}
      */
     private function shrinkContextForRateLimit(
         array $contextEntries,
         array $scoresByKey,
-        array $briefingMeta,
-        ?BriefingSourceSelection $moduleSelection,
+        array $researcherMeta,
+        ?ResearcherSourceSelection $moduleSelection,
     ): array {
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         if ($moduleSelection !== null) {
-            $capped = BriefingGeminiContext::capEntryListStratified(
+            $capped = ResearcherGeminiContext::capEntryListStratified(
                 $contextEntries,
-                $this->briefingContext->rateLimitFallbackMaxEntries(),
+                $this->researcherContext->rateLimitFallbackMaxEntries(),
                 $scoresByKey,
                 $gatherer,
                 $moduleSelection,
             );
             $entries = $capped['entries'];
-            $guard   = new BriefingModuleGuard($gatherer);
+            $guard   = new ResearcherModuleGuard($gatherer);
             $sealed  = $guard->sealGeminiContext(
                 $entries,
                 $scoresByKey,
-                $this->metaWithEntryBodyBudget($briefingMeta, count($entries)),
+                $this->metaWithEntryBodyBudget($researcherMeta, count($entries)),
                 $moduleSelection,
             );
 
             return [$sealed['entries'], $sealed['markdown'], count($sealed['entries'])];
         }
 
-        $capped  = BriefingGeminiContext::capEntryList(
+        $capped  = ResearcherGeminiContext::capEntryList(
             $contextEntries,
-            $this->briefingContext->rateLimitFallbackMaxEntries(),
+            $this->researcherContext->rateLimitFallbackMaxEntries(),
         );
         $entries = $capped['entries'];
-        $meta    = $this->metaWithEntryBodyBudget($briefingMeta, count($entries));
+        $meta    = $this->metaWithEntryBodyBudget($researcherMeta, count($entries));
         $meta['total'] = count($entries);
-        $markdown = MarkdownBriefingFormatter::format(
+        $markdown = MarkdownResearcherFormatter::format(
             $entries,
             $scoresByKey,
             $meta,
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
 
         return [$entries, $markdown, count($entries)];
@@ -386,25 +386,25 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $contextEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @return array{0: list<array<string, mixed>>, 1: string, 2: int}
      */
     private function sealContextForGemini(
         array $contextEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $markdownContext,
-        ?BriefingSourceSelection $moduleSelection,
+        ?ResearcherSourceSelection $moduleSelection,
     ): array {
         if ($moduleSelection === null) {
             return [$contextEntries, $markdownContext, count($contextEntries)];
         }
 
-        $guard  = new BriefingModuleGuard(new BriefingEntryGatherer());
+        $guard  = new ResearcherModuleGuard(new ResearcherEntryGatherer());
         $sealed = $guard->sealGeminiContext(
             $contextEntries,
             $scoresByKey,
-            $this->metaWithEntryBodyBudget($briefingMeta, count($contextEntries)),
+            $this->metaWithEntryBodyBudget($researcherMeta, count($contextEntries)),
             $moduleSelection,
         );
 
@@ -414,8 +414,8 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $contextEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
-     * @throws GeminiBriefingException
+     * @param array<string, mixed> $researcherMeta
+     * @throws GeminiResearcherException
      */
     private function generateSummaryTwoPass(
         string $userSystemPrompt,
@@ -424,21 +424,21 @@ CONTRACT;
         int $effectiveCount,
         array $contextEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $apiKey,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $poolEntries     = $contextEntries;
         $poolCount       = count($poolEntries);
         $selectionTarget = min($effectiveCount, max(1, $poolCount));
 
-        $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $briefingMeta, $markdownContext);
+        $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $researcherMeta, $markdownContext);
 
         if ($poolCount >= $this->batchedSelectionMinEntries()) {
             $selectedKeys = $this->runBatchedSelectionPasses(
                 $userSystemPrompt,
                 $poolEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $poolContext,
                 $itemCount,
                 $selectionTarget,
@@ -471,7 +471,7 @@ CONTRACT;
             $userSystemPrompt,
             $summaryEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $markdownContext,
             $selectedKeys,
             $itemCount,
@@ -511,18 +511,18 @@ CONTRACT;
             return trim($fallbackXml);
         }
 
-        return MarkdownBriefingFormatter::format(
+        return MarkdownResearcherFormatter::format(
             $entries,
             $scoresByKey,
             $meta,
             true,
-            MarkdownBriefingFormatter::FORMAT_XML,
+            MarkdownResearcherFormatter::FORMAT_XML,
         );
     }
 
     /**
      * @return list<string>
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runSelectionPass(
         string $userSystemPrompt,
@@ -540,7 +540,7 @@ CONTRACT;
 
         $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge global aus ENTRIES_DATA. '
             . 'Strikte Einhaltung des USER PROMPT (weniger ist korrekt). '
-            . 'JSON: used_entry_keys in Briefing-Reihenfolge.';
+            . 'JSON: used_entry_keys in Researcher-Reihenfolge.';
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
@@ -558,22 +558,22 @@ CONTRACT;
      *
      * @param list<array<string, mixed>> $poolEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @return list<string>
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runBatchedSelectionPasses(
         string $userSystemPrompt,
         array $poolEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         int $itemCount,
         int $selectionTarget,
         string $apiKey,
     ): array {
         $batchSize  = $this->effectiveSelectionBatchSize();
-        $batches    = BriefingGeminiContext::chunkEntryList($poolEntries, $batchSize);
+        $batches    = ResearcherGeminiContext::chunkEntryList($poolEntries, $batchSize);
         $batchCount = count($batches);
         if ($batchCount === 0) {
             return [];
@@ -587,7 +587,7 @@ CONTRACT;
                 sleep($this->batchPauseSeconds());
             }
 
-            $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $briefingMeta, $fallbackXml);
+            $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $researcherMeta, $fallbackXml);
             $batchTarget  = min($selectionTarget, count($batch));
             $keys         = $this->runSelectionPass(
                 $userSystemPrompt,
@@ -627,7 +627,7 @@ CONTRACT;
         $championContext = $this->buildEntryXmlContext(
             $finalists,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $fallbackXml,
         );
         $championKeys = $this->runSelectionPass(
@@ -653,25 +653,25 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $summaryEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runSummaryPassWithBatchFallback(
         string $userSystemPrompt,
         array $summaryEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         array $selectedKeys,
         int $itemCount,
         int $effectiveCount,
         string $apiKey,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $summaryContext = $this->buildSummaryContextForKeys(
             $summaryEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $fallbackXml,
             $selectedKeys,
         );
@@ -686,7 +686,7 @@ CONTRACT;
                 $apiKey,
                 true,
             );
-        } catch (GeminiBriefingException $e) {
+        } catch (GeminiResearcherException $e) {
             if (!$this->shouldRetrySummaryInBatches($e, $effectiveCount)) {
                 throw $e;
             }
@@ -696,7 +696,7 @@ CONTRACT;
             $userSystemPrompt,
             $summaryEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $fallbackXml,
             $selectedKeys,
             $itemCount,
@@ -706,22 +706,22 @@ CONTRACT;
 
     /**
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function retrySummaryInBatches(
         string $userSystemPrompt,
         array $summaryEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         array $selectedKeys,
         int $itemCount,
         int $effectiveCount,
         string $apiKey,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $batchSize = min(self::SUMMARY_BATCH_SIZE, max(1, $effectiveCount));
         error_log(
-            'GeminiBriefingService: pass 2 output truncated for ' . $effectiveCount
+            'GeminiResearcherService: pass 2 output truncated for ' . $effectiveCount
             . ' cited item(s); retrying with batched summary (batch size ' . $batchSize . ')'
         );
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
@@ -734,7 +734,7 @@ CONTRACT;
             $userSystemPrompt,
             $summaryEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $fallbackXml,
             $selectedKeys,
             $itemCount,
@@ -743,7 +743,7 @@ CONTRACT;
         );
     }
 
-    private function shouldRetrySummaryInBatches(GeminiBriefingException $e, int $effectiveCount): bool
+    private function shouldRetrySummaryInBatches(GeminiResearcherException $e, int $effectiveCount): bool
     {
         if ($effectiveCount < 1) {
             return false;
@@ -776,13 +776,13 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $summaryEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @param list<string> $selectedKeys
      */
     private function buildSummaryContextForKeys(
         array $summaryEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         array $selectedKeys,
     ): string {
@@ -795,7 +795,7 @@ CONTRACT;
             return $this->filterXmlContextByKeys($fallbackXml, $selectedKeys);
         }
 
-        $meta             = $briefingMeta;
+        $meta             = $researcherMeta;
         $meta['total']    = count($subset);
         $meta['selected'] = count($selectedKeys);
 
@@ -805,43 +805,43 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $summaryEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runBatchedSummaryPasses(
         string $userSystemPrompt,
         array $summaryEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         array $selectedKeys,
         int $itemCount,
         string $apiKey,
         int $batchSize = self::SUMMARY_BATCH_SIZE,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         try {
             return $this->runBatchedSummaryPassesCore(
                 $userSystemPrompt,
                 $summaryEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $fallbackXml,
                 $selectedKeys,
                 $itemCount,
                 $apiKey,
                 $batchSize,
             );
-        } catch (GeminiBriefingException $e) {
+        } catch (GeminiResearcherException $e) {
             if (!$e->isOutputTruncated() || $batchSize <= 1) {
                 throw $batchSize <= 1 && $e->isOutputTruncated()
-                    ? GeminiBriefingException::outputTruncatedAfterBatching()
+                    ? GeminiResearcherException::outputTruncatedAfterBatching()
                     : $e;
             }
         }
 
         error_log(
-            'GeminiBriefingService: batched summary still truncated at batch size ' . $batchSize
+            'GeminiResearcherService: batched summary still truncated at batch size ' . $batchSize
             . '; retrying one item per request'
         );
 
@@ -849,7 +849,7 @@ CONTRACT;
             $userSystemPrompt,
             $summaryEntries,
             $scoresByKey,
-            $briefingMeta,
+            $researcherMeta,
             $fallbackXml,
             $selectedKeys,
             $itemCount,
@@ -861,21 +861,21 @@ CONTRACT;
     /**
      * @param list<array<string, mixed>> $summaryEntries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $briefingMeta
+     * @param array<string, mixed> $researcherMeta
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runBatchedSummaryPassesCore(
         string $userSystemPrompt,
         array $summaryEntries,
         array $scoresByKey,
-        array $briefingMeta,
+        array $researcherMeta,
         string $fallbackXml,
         array $selectedKeys,
         int $itemCount,
         string $apiKey,
         int $batchSize,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $batchSize  = max(1, $batchSize);
         $batches    = array_chunk($selectedKeys, $batchSize);
         $batchCount = count($batches);
@@ -890,7 +890,7 @@ CONTRACT;
             $batchContext   = $this->buildSummaryContextForKeys(
                 $summaryEntries,
                 $scoresByKey,
-                $briefingMeta,
+                $researcherMeta,
                 $fallbackXml,
                 $keyBatch,
             );
@@ -912,7 +912,7 @@ CONTRACT;
 
         $merged = trim(implode("\n\n", array_filter($parts, static fn(string $p): bool => $p !== '')));
         if ($merged === '') {
-            throw GeminiBriefingException::emptyResponse('Batched summary passes returned no Markdown.');
+            throw GeminiResearcherException::emptyResponse('Batched summary passes returned no Markdown.');
         }
 
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
@@ -922,12 +922,12 @@ CONTRACT;
             'summary_output_tokens' => self::resolveOutputTokenBudget(1, $this->maxOutputTokens, $this->model),
         ]);
 
-        return new GeminiBriefingResult($merged, $selectedKeys, true);
+        return new GeminiResearcherResult($merged, $selectedKeys, true);
     }
 
     /**
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function runSummaryPass(
         string $userSystemPrompt,
@@ -936,11 +936,11 @@ CONTRACT;
         int $itemCount,
         int $effectiveCount,
         string $apiKey,
-        bool $includeFullBriefingIntro = true,
+        bool $includeFullResearcherIntro = true,
         int $batchIndex = 1,
         int $batchCount = 1,
         bool $allowTruncatedPartial = false,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $keysBlock = implode("\n", $selectedKeys);
         $envelope  = $this->expandContract(self::SUMMARY_OUTPUT_CONTRACT, [
             '{selectedEntryKeys}' => $keysBlock,
@@ -949,14 +949,14 @@ CONTRACT;
         ]);
         $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
 
-        if ($batchCount > 1 && !$includeFullBriefingIntro) {
-            $userText = 'Setze das Executive Briefing fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
+        if ($batchCount > 1 && !$includeFullResearcherIntro) {
+            $userText = 'Setze das Executive Researcher fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
                 . 'Wiederhole weder die Hauptüberschrift noch die Executive Summary. '
                 . 'Decke nur diese ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab: '
                 . implode(', ', $selectedKeys) . '. '
                 . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
         } else {
-            $userText = 'Schreibe das vollständige Executive Briefing als plain Markdown. '
+            $userText = 'Schreibe das vollständige Executive Researcher als plain Markdown. '
                 . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab. '
                 . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
             if ($batchCount > 1) {
@@ -993,7 +993,7 @@ CONTRACT;
 
     /**
      * @param array<string, mixed> $payload
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function postPayloadWithSchemaFallback(array $payload, string $apiKey, string $phase): Response
     {
@@ -1002,7 +1002,7 @@ CONTRACT;
 
         if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
             error_log(
-                'GeminiBriefingService: responseSchema rejected for ' . $phase
+                'GeminiResearcherService: responseSchema rejected for ' . $phase
                 . ' on model ' . $this->model . '; retrying without schema'
             );
             $config = $payload['generationConfig'] ?? [];
@@ -1089,7 +1089,7 @@ CONTRACT;
      */
     private function metaWithEntryBodyBudget(array $meta, int $entryCount): array
     {
-        $meta['entry_body_max_chars'] = MarkdownBriefingFormatter::dynamicEntryBodyMaxChars($entryCount);
+        $meta['entry_body_max_chars'] = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars($entryCount);
 
         return $meta;
     }
@@ -1100,7 +1100,7 @@ CONTRACT;
 
         return 'CURRENT CONTEXT:' . "\n"
             . 'Today is ' . $now->format('l') . ', ' . $now->format('F j, Y')
-            . ' (Europe/Zurich). Use natural relative dates from each entry <published_date> when writing the briefing.';
+            . ' (Europe/Zurich). Use natural relative dates from each entry <published_date> when writing the researcher.';
     }
 
     /**
@@ -1125,7 +1125,7 @@ CONTRACT;
                 ],
                 'used_entry_keys' => [
                     'type'        => 'ARRAY',
-                    'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, briefing order.',
+                    'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, researcher order.',
                     'items'       => ['type' => 'STRING'],
                     'minItems'    => 0,
                     'maxItems'    => $selectionTarget,
@@ -1154,26 +1154,26 @@ CONTRACT;
         return [
             'type'       => 'OBJECT',
             'properties' => [
-                'briefing_markdown' => [
+                'researcher_markdown' => [
                     'type'        => 'STRING',
-                    'description' => 'Complete executive briefing Markdown covering all ' . $effectiveCount
+                    'description' => 'Complete executive researcher Markdown covering all ' . $effectiveCount
                         . ' selected entries in SELECTED_ENTRY_KEYS order.',
                 ],
             ],
-            'required' => ['briefing_markdown'],
+            'required' => ['researcher_markdown'],
         ];
     }
 
     /**
      * @return list<string>
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function parseSelectionResponse(Response $response): array
     {
         $raw     = $this->extractCandidateText($response);
-        $decoded = $this->decodeBriefingJsonObject($raw);
+        $decoded = $this->decodeResearcherJsonObject($raw);
         if ($decoded === null) {
-            throw GeminiBriefingException::badResponse('Selection pass JSON could not be parsed.');
+            throw GeminiResearcherException::badResponse('Selection pass JSON could not be parsed.');
         }
 
         $reasoning = trim((string)($decoded['selection_reasoning'] ?? ''));
@@ -1183,7 +1183,7 @@ CONTRACT;
 
         $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);
         if ($keys === []) {
-            throw GeminiBriefingException::emptyResponse('Selection pass returned no used_entry_keys.');
+            throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
         }
 
         return $keys;
@@ -1191,50 +1191,50 @@ CONTRACT;
 
     /**
      * @param list<string> $selectedKeys
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function parseSummaryResponse(
         Response $response,
         array $selectedKeys,
         bool $enforceLengthHeuristic = true,
         bool $allowTruncatedPartial = false,
-    ): GeminiBriefingResult {
+    ): GeminiResearcherResult {
         $raw = $this->extractCandidateText($response, $allowTruncatedPartial);
         if (!str_starts_with(trim($raw), '{')) {
             $markdown = trim($raw);
             if ($markdown === '') {
-                throw GeminiBriefingException::emptyResponse('Summary pass returned empty Markdown.');
+                throw GeminiResearcherException::emptyResponse('Summary pass returned empty Markdown.');
             }
-            $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
-            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
+            $result = new GeminiResearcherResult($markdown, $selectedKeys, true);
+            $this->noteResearcherLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
 
-        $decoded = $this->decodeBriefingJsonObject($raw);
+        $decoded = $this->decodeResearcherJsonObject($raw);
         if ($decoded !== null) {
-            $markdown = trim((string)($decoded['briefing_markdown'] ?? ''));
+            $markdown = trim((string)($decoded['researcher_markdown'] ?? ''));
             if ($markdown === '') {
-                throw GeminiBriefingException::emptyResponse('Summary pass missing briefing_markdown.');
+                throw GeminiResearcherException::emptyResponse('Summary pass missing researcher_markdown.');
             }
 
-            $result = new GeminiBriefingResult($markdown, $selectedKeys, true);
-            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
+            $result = new GeminiResearcherResult($markdown, $selectedKeys, true);
+            $this->noteResearcherLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
 
         $jsonText = LenientJsonParser::extractMarkdownJson($raw);
-        $salvaged = $this->salvageBriefingFromBrokenJson($jsonText);
+        $salvaged = $this->salvageResearcherFromBrokenJson($jsonText);
         if ($salvaged !== null) {
-            error_log('GeminiBriefingService summary pass: recovered markdown from broken JSON.');
-            $result = new GeminiBriefingResult($salvaged->markdown, $selectedKeys, false);
-            $this->noteBriefingLengthHeuristic($result, $enforceLengthHeuristic);
+            error_log('GeminiResearcherService summary pass: recovered markdown from broken JSON.');
+            $result = new GeminiResearcherResult($salvaged->markdown, $selectedKeys, false);
+            $this->noteResearcherLengthHeuristic($result, $enforceLengthHeuristic);
 
             return $result;
         }
 
-        throw GeminiBriefingException::badResponse('Summary pass JSON could not be parsed.');
+        throw GeminiResearcherException::badResponse('Summary pass JSON could not be parsed.');
     }
 
     /**
@@ -1250,7 +1250,7 @@ CONTRACT;
 
         if ($selectedKeys !== [] && count($selectedKeys) < $effectiveCount) {
             error_log(
-                'GeminiBriefingService: selection returned ' . count($selectedKeys)
+                'GeminiResearcherService: selection returned ' . count($selectedKeys)
                 . ' of up to ' . $effectiveCount . ' requested keys (no relevance padding)'
             );
         }
@@ -1334,7 +1334,7 @@ CONTRACT;
             return trim($xml);
         }
 
-        return '<seismo_briefing selected_only="true"><entries>' . implode('', $blocks) . '</entries></seismo_briefing>';
+        return '<seismo_researcher selected_only="true"><entries>' . implode('', $blocks) . '</entries></seismo_researcher>';
     }
 
     private function effectiveCitationCount(int $itemCount, int $contextEntryCount): int
@@ -1349,33 +1349,33 @@ CONTRACT;
     private function batchedSelectionMinEntries(): int
     {
         if ($this->rateLimitFallbackMode) {
-            return BriefingGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES;
+            return ResearcherGeminiContext::RATE_LIMIT_BATCHED_SELECTION_MIN_ENTRIES;
         }
 
-        return BriefingGeminiContext::BATCHED_SELECTION_MIN_ENTRIES;
+        return ResearcherGeminiContext::BATCHED_SELECTION_MIN_ENTRIES;
     }
 
     private function effectiveSelectionBatchSize(): int
     {
         if ($this->rateLimitFallbackMode) {
-            return BriefingGeminiContext::RATE_LIMIT_FALLBACK_BATCH_SIZE;
+            return ResearcherGeminiContext::RATE_LIMIT_FALLBACK_BATCH_SIZE;
         }
 
-        return $this->briefingContext->selectionBatchSize();
+        return $this->researcherContext->selectionBatchSize();
     }
 
     private function batchPauseSeconds(): int
     {
         if ($this->rateLimitFallbackMode) {
-            return BriefingGeminiContext::RATE_LIMIT_BATCH_PAUSE_SECONDS;
+            return ResearcherGeminiContext::RATE_LIMIT_BATCH_PAUSE_SECONDS;
         }
 
-        return BriefingGeminiContext::BATCH_PAUSE_SECONDS;
+        return ResearcherGeminiContext::BATCH_PAUSE_SECONDS;
     }
 
     /**
      * @param array<string, mixed> $payload
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function postWithRetries(string $url, array $payload, string $apiKey, bool $extendedTimeout = false): Response
     {
@@ -1392,15 +1392,15 @@ CONTRACT;
             } catch (HttpClientException $e) {
                 $lastTransport = $e;
                 if ($attempt >= $attempts - 1) {
-                    error_log('GeminiBriefingService transport: ' . $e->getMessage());
-                    throw GeminiBriefingException::transportFailed();
+                    error_log('GeminiResearcherService transport: ' . $e->getMessage());
+                    throw GeminiResearcherException::transportFailed();
                 }
                 $this->sleepBeforeRetry($attempt);
 
                 continue;
             } catch (\JsonException $e) {
-                error_log('GeminiBriefingService request JSON: ' . $e->getMessage());
-                throw GeminiBriefingException::transportFailed();
+                error_log('GeminiResearcherService request JSON: ' . $e->getMessage());
+                throw GeminiResearcherException::transportFailed();
             }
 
             if ($response->status === 429) {
@@ -1409,7 +1409,7 @@ CONTRACT;
 
             if ($this->isTransientHttp($response->status) && $attempt < $attempts - 1) {
                 error_log(
-                    'GeminiBriefingService transient HTTP ' . $response->status
+                    'GeminiResearcherService transient HTTP ' . $response->status
                     . '; retry ' . ($attempt + 1) . '/' . ($attempts - 1)
                 );
                 $this->sleepBeforeRetry($attempt);
@@ -1421,10 +1421,10 @@ CONTRACT;
         }
 
         if ($lastTransport !== null) {
-            error_log('GeminiBriefingService transport: ' . $lastTransport->getMessage());
+            error_log('GeminiResearcherService transport: ' . $lastTransport->getMessage());
         }
 
-        throw GeminiBriefingException::transportFailed();
+        throw GeminiResearcherException::transportFailed();
     }
 
     private function shouldRetryWithoutResponseSchema(Response $response): bool
@@ -1452,31 +1452,31 @@ CONTRACT;
     }
 
     /**
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
-    private function exceptionFromFailedResponse(Response $response): GeminiBriefingException
+    private function exceptionFromFailedResponse(Response $response): GeminiResearcherException
     {
         $apiMessage = $this->parseApiErrorMessage($response);
         $bodySample = substr($response->body, 0, 500);
         error_log(
-            'GeminiBriefingService HTTP ' . $response->status
+            'GeminiResearcherService HTTP ' . $response->status
             . ' model=' . $this->model
             . ($apiMessage !== '' ? ': ' . $apiMessage : ': ' . $bodySample)
         );
 
         if ($response->status === 400 && $this->isInvalidApiKeyBody($response->body)) {
-            return GeminiBriefingException::invalidApiKey();
+            return GeminiResearcherException::invalidApiKey();
         }
 
         if ($response->status === 404) {
-            return GeminiBriefingException::modelNotFound($this->model, $apiMessage);
+            return GeminiResearcherException::modelNotFound($this->model, $apiMessage);
         }
 
         if ($apiMessage !== '') {
-            return GeminiBriefingException::fromApiMessage($response->status, $apiMessage);
+            return GeminiResearcherException::fromApiMessage($response->status, $apiMessage);
         }
 
-        return GeminiBriefingException::fromHttpStatus($response->status);
+        return GeminiResearcherException::fromHttpStatus($response->status);
     }
 
     private function isInvalidApiKeyBody(string $body): bool
@@ -1501,54 +1501,54 @@ CONTRACT;
     }
 
     /**
-     * @throws GeminiBriefingException
+     * @throws GeminiResearcherException
      */
     private function extractCandidateText(Response $response, bool $allowTruncatedPartial = false): string
     {
         try {
             $json = $response->json();
         } catch (\JsonException $e) {
-            error_log('GeminiBriefingService response JSON: ' . $e->getMessage());
-            throw GeminiBriefingException::badResponse('Could not parse API JSON: ' . $e->getMessage());
+            error_log('GeminiResearcherService response JSON: ' . $e->getMessage());
+            throw GeminiResearcherException::badResponse('Could not parse API JSON: ' . $e->getMessage());
         }
 
         if (isset($json['error']) && is_array($json['error'])) {
             $msg = trim((string)($json['error']['message'] ?? ''));
-            error_log('GeminiBriefingService API error: ' . ($msg !== '' ? $msg : 'unknown'));
+            error_log('GeminiResearcherService API error: ' . ($msg !== '' ? $msg : 'unknown'));
             if ($msg !== '') {
-                throw GeminiBriefingException::fromApiMessage(400, $msg);
+                throw GeminiResearcherException::fromApiMessage(400, $msg);
             }
 
-            throw GeminiBriefingException::badResponse('API returned an error object without a message.');
+            throw GeminiResearcherException::badResponse('API returned an error object without a message.');
         }
 
         $candidates = $json['candidates'] ?? null;
         if (!is_array($candidates) || $candidates === []) {
             $block = $json['promptFeedback']['blockReason'] ?? null;
             if (is_string($block) && $block !== '') {
-                throw GeminiBriefingException::blocked($block);
+                throw GeminiResearcherException::blocked($block);
             }
 
-            throw GeminiBriefingException::emptyResponse('API response had no candidates.');
+            throw GeminiResearcherException::emptyResponse('API response had no candidates.');
         }
 
         $first = $candidates[0];
         if (!is_array($first)) {
-            throw GeminiBriefingException::badResponse('First candidate is not a valid object.');
+            throw GeminiResearcherException::badResponse('First candidate is not a valid object.');
         }
 
         $finish = (string)($first['finishReason'] ?? '');
         if ($finish === 'SAFETY' || $finish === 'RECITATION') {
-            throw GeminiBriefingException::blocked($finish);
+            throw GeminiResearcherException::blocked($finish);
         }
         $truncated = $this->isOutputTruncatedFinishReason($finish);
 
         $content = $first['content'] ?? null;
         if (!is_array($content)) {
             if ($truncated && $allowTruncatedPartial) {
-                throw GeminiBriefingException::outputTruncated();
+                throw GeminiResearcherException::outputTruncated();
             }
-            throw GeminiBriefingException::badResponse(
+            throw GeminiResearcherException::badResponse(
                 'Candidate missing content'
                 . ($finish !== '' ? ' (finish: ' . $finish . ').' : '.')
             );
@@ -1556,7 +1556,7 @@ CONTRACT;
 
         $parts = $content['parts'] ?? null;
         if (!is_array($parts)) {
-            throw GeminiBriefingException::badResponse('Candidate content has no text parts.');
+            throw GeminiResearcherException::badResponse('Candidate content has no text parts.');
         }
 
         $text = '';
@@ -1573,17 +1573,17 @@ CONTRACT;
         $text = trim($text);
         if ($text === '') {
             throw $truncated
-                ? GeminiBriefingException::outputTruncated()
-                : GeminiBriefingException::emptyResponse();
+                ? GeminiResearcherException::outputTruncated()
+                : GeminiResearcherException::emptyResponse();
         }
 
         if ($truncated && !$allowTruncatedPartial) {
-            throw GeminiBriefingException::outputTruncated();
+            throw GeminiResearcherException::outputTruncated();
         }
 
         if ($truncated && $allowTruncatedPartial) {
             error_log(
-                'GeminiBriefingService: pass 2 MAX_TOKENS with ' . strlen($text)
+                'GeminiResearcherService: pass 2 MAX_TOKENS with ' . strlen($text)
                 . ' chars of partial Markdown (batched pass kept)'
             );
             $this->lastGenerationMeta['summary_partial_truncation'] = true;
@@ -1595,7 +1595,7 @@ CONTRACT;
     /**
      * @return array<string, mixed>|null
      */
-    private function decodeBriefingJsonObject(string $raw): ?array
+    private function decodeResearcherJsonObject(string $raw): ?array
     {
         $jsonText = LenientJsonParser::extractMarkdownJson($raw);
 
@@ -1604,12 +1604,12 @@ CONTRACT;
 
             return is_array($decoded) ? $decoded : null;
         } catch (\JsonException $e) {
-            error_log('GeminiBriefingService JSON strict parse: ' . $e->getMessage());
+            error_log('GeminiResearcherService JSON strict parse: ' . $e->getMessage());
         }
 
         $repaired = LenientJsonParser::parseObject($raw);
         if ($repaired !== null) {
-            error_log('GeminiBriefingService JSON repaired via lenient parser.');
+            error_log('GeminiResearcherService JSON repaired via lenient parser.');
         }
 
         return $repaired;
@@ -1625,16 +1625,16 @@ CONTRACT;
     /**
      * Log citation/length hints only — pass 2 truncation is handled via API finish reason or batched retry.
      */
-    private function noteBriefingLengthHeuristic(GeminiBriefingResult $result, bool $mayThrowOnShortOutput): void
+    private function noteResearcherLengthHeuristic(GeminiResearcherResult $result, bool $mayThrowOnShortOutput): void
     {
         $keysInMarkdown = $this->countDistinctEntryKeysInMarkdown($result->markdown);
         $citedKeys      = count($result->usedEntryKeys);
 
         if ($citedKeys > 0 && $keysInMarkdown > 0 && $keysInMarkdown < $citedKeys) {
             error_log(
-                'GeminiBriefingService: briefing_markdown cites ' . $keysInMarkdown
+                'GeminiResearcherService: researcher_markdown cites ' . $keysInMarkdown
                 . ' entries but selection listed ' . $citedKeys
-                . ' (returning briefing; source cards use selection keys)'
+                . ' (returning researcher; source cards use selection keys)'
             );
             $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
             $this->lastGenerationMeta['citation_gap']             = true;
@@ -1655,15 +1655,15 @@ CONTRACT;
 
         if ($citedKeys >= $itemsToCheck && $keysInMarkdown < $itemsToCheck) {
             error_log(
-                'GeminiBriefingService: expected ' . $itemsToCheck
+                'GeminiResearcherService: expected ' . $itemsToCheck
                 . ' entry_type:entry_id tokens in markdown, found ' . $keysInMarkdown
-                . ($mayThrowOnShortOutput ? ' (retrying in batched parts)' : ' (returning briefing anyway)')
+                . ($mayThrowOnShortOutput ? ' (retrying in batched parts)' : ' (returning researcher anyway)')
             );
             $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
             $this->lastGenerationMeta['citation_gap']             = true;
 
             if ($mayThrowOnShortOutput) {
-                throw GeminiBriefingException::outputTruncated();
+                throw GeminiResearcherException::outputTruncated();
             }
 
             return;
@@ -1672,10 +1672,10 @@ CONTRACT;
         $minChars = $itemsToCheck * 120;
         if (strlen($result->markdown) < $minChars && $keysInMarkdown === 0) {
             error_log(
-                'GeminiBriefingService: briefing_markdown very short (' . strlen($result->markdown)
+                'GeminiResearcherService: researcher_markdown very short (' . strlen($result->markdown)
                 . ' chars) with no entry_type:entry_id tokens'
             );
-            throw GeminiBriefingException::outputTruncated();
+            throw GeminiResearcherException::outputTruncated();
         }
     }
 
@@ -1692,9 +1692,9 @@ CONTRACT;
         return count(array_unique($matches[1]));
     }
 
-    private function salvageBriefingFromBrokenJson(string $jsonText): ?GeminiBriefingResult
+    private function salvageResearcherFromBrokenJson(string $jsonText): ?GeminiResearcherResult
     {
-        $needle = '"briefing_markdown"';
+        $needle = '"researcher_markdown"';
         $pos    = strpos($jsonText, $needle);
         if ($pos === false) {
             return null;
@@ -1711,7 +1711,7 @@ CONTRACT;
             return null;
         }
 
-        return new GeminiBriefingResult($markdown, [], false);
+        return new GeminiResearcherResult($markdown, [], false);
     }
 
     private function readJsonStringLiteral(string $input): ?string

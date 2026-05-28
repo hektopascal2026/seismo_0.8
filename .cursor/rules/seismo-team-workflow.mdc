@@ -1,0 +1,28 @@
+---
+description: Seismo 0.6 — PRs, commits, merge checklist, README
+alwaysApply: true
+---
+
+# Seismo 0.6 Team Workflow
+
+## Pull requests
+
+- **Small PRs:** one concern each (feature, migration, refactor, or bugfix).
+- **No mixed commits:** never bundle schema changes + unrelated UI + drive-by cleanup in one commit/PR.
+
+## Before merge
+
+- Run PHP lint on touched files.
+- Run targeted tests for the changed area.
+- One manual smoke path: health check, index, and the affected module page.
+
+## PR description must include
+
+- **Risk:** what can break (DB, cron, Magnitu/export consumers, satellites).
+- **Rollback:** how to revert safely (migration down? config flag? redeploy previous tag?).
+- **Satellite impact:** yes/no and what behavior changes on lightweight instances.
+
+## Documentation
+
+- Keep `README.md` current for how to run locally and where major code lives.
+- Avoid historical clutter in docs—short, actionable notes only.

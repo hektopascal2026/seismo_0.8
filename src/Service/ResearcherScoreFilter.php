@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * Score-based inclusion for AI Briefing Builder (aligned with Highlights + badge bands).
+ * Score-based inclusion for AI Researcher (aligned with Highlights + badge bands).
  */
-final class BriefingScoreFilter
+final class ResearcherScoreFilter
 {
     public function __construct(
         public readonly float $alertThreshold,

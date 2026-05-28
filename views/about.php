@@ -204,10 +204,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
-                    <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for briefings, n8n, Raycast, or custom scripts:</p>
+                    <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=briefing_builder</code> &mdash; in-app Gemini executive briefing with filters, per-desk prompt library, and source-card attribution (mothership and path satellites).</li>
-                        <li><code>?action=export_briefing</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
+                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, and source-card attribution (mothership and path satellites).</li>
+                        <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
                     <p class="meta-text"><strong>Security:</strong> the <code>export:api_key</code> in Settings is <strong>read-only</strong> for these actions. It must not reuse the Magnitu write <code>api_key</code>; the server rejects the write key on export routes by design.</p>
@@ -420,7 +420,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>Architectural Refactoring:</strong> Replaced procedural controllers with class-based routing, repository patterns to isolate raw SQL statements, and secure bearer export endpoints (`export_briefing`, `export_entries`).</li>
+                                <li><strong>Architectural Refactoring:</strong> Replaced procedural controllers with class-based routing, repository patterns to isolate raw SQL statements, and secure bearer export endpoints (`export_researcher`, `export_entries`).</li>
                                 <li><strong>Advisory Cron Lock:</strong> Leveraged MySQL/MariaDB advisory locks (<code>GET_LOCK</code> / <code>RELEASE_LOCK</code> via <code>CronMutexRepository</code>) to prevent overlapping cron jobs from executing in parallel.</li>
                                 <li><strong>Chunked Cursors (v0.5.3):</strong> Chunked RSS and Scraper refreshes. A single tick fetches a subset of feeds, storing progress keys (<code>refresh_chunk:*</code>) in <code>system_config</code>, while a completed rotation triggers the module’s throttle window.</li>
                                 <li><strong>Recipe Attractor Calibration:</strong> Mitigated a severe "48–52 uniform softmax attractor" in `RecipeScorer` where conflicting n-gram signals flattened scores:
@@ -474,19 +474,19 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era VI: Cognitive AI</span>
                             <span class="era-date">May 2026 (Current)</span>
                         </div>
-                        <h3>v0.7.0 – v0.7.7 &mdash; The AI Briefing Builder</h3>
+                        <h3>v0.7.0 – v0.7.7 &mdash; The AI Researcher</h3>
                         
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> With thousands of ingested items, manual summary was exhausting. The team designed the **AI Briefing Builder**, bringing LLM capabilities directly into the dashboard. We built a highly reliable, two-pass Gemini pipeline that selects critical items first, and drafts a beautifully organized executive summary complete with dashboard-card attribution lists.</p>
+                            <p><strong>Rationale:</strong> With thousands of ingested items, manual summary was exhausting. The team designed the **AI Researcher**, bringing LLM capabilities directly into the dashboard. We built a highly reliable, two-pass Gemini pipeline that selects critical items first, and drafts a beautifully organized executive summary complete with dashboard-card attribution lists.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>AI Briefing Builder:</strong> Interactive Gemini pipeline (`?action=briefing_builder`) with custom prompt libraries, lookback filters, and category toggles.</li>
-                                <li><strong>Skinny Two-Pass Pipeline:</strong> Standardized on `gemini-3.5-flash` with a two-step prompt. Pass 1 handles logical entry selection (returning a JSON array of used keys). Pass 2 generates a clean, structured Markdown briefing on those items only.</li>
+                                <li><strong>AI Researcher:</strong> Interactive Gemini pipeline (`?action=researcher`) with custom prompt libraries, lookback filters, and category toggles.</li>
+                                <li><strong>Skinny Two-Pass Pipeline:</strong> Standardized on `gemini-3.5-flash` with a two-step prompt. Pass 1 handles logical entry selection (returning a JSON array of used keys). Pass 2 generates a clean, structured Markdown researcher on those items only.</li>
                                 <li><strong>Lenient JSON Repair:</strong> Ported the robust `LenientJsonParser` to recover malformed Gemini JSON (broken markdown fences, missing brackets), preventing interface crashes.</li>
-                                <li><strong>Attribution Grounding:</strong> The briefing output dynamically renders actual timeline cards for cited entries, allowing users to fact-check LLM summaries.</li>
+                                <li><strong>Attribution Grounding:</strong> The researcher output dynamically renders actual timeline cards for cited entries, allowing users to fact-check LLM summaries.</li>
                                 <li><strong>Bilingual Mail Hydration:</strong> Added locale-aware webview processing that automatically fetches cleaner German or English editions of newsletter emails.</li>
                                 <li><strong>Rich Swiss Fedlex Cards:</strong> Leveraged SPARQL queries to extract actual publication and entry-into-force dates, bypassing the default backfill limitations.</li>
                             </ul>
@@ -494,7 +494,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Sending large legal texts to Gemini can easily exceed rate and context limits. We introduced a dynamic token budget controller (`BriefingModuleGuard`) that scales item bodies between 2k and 12k characters based on the overall context size, keeping cost and latency optimal.</p>
+                            <p>Sending large legal texts to Gemini can easily exceed rate and context limits. We introduced a dynamic token budget controller (`ResearcherModuleGuard`) that scales item bodies between 2k and 12k characters based on the overall context size, keeping cost and latency optimal.</p>
                         </div>
                     </div>
                 </div>
@@ -573,14 +573,14 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                 <li><strong>v0.6.0 (VPS Baseline):</strong> This should have been a **MAJOR** bump because it replaced split IMAP/Gmail storage with a unified `emails` database schema, requiring immediate schema migrations.</li>
                                 <li><strong>v0.6.2 (Satellites):</strong> A **MAJOR** bump due to the introduction of local database configurations and cross-DB SQL grants.</li>
                                 <li><strong>v0.6.4 (Full-Text Storage):</strong> A **MINOR** bump as the LONGTEXT `lex_items.content` was additive and backward-compatible.</li>
-                                <li><strong>v0.7.0 (Briefing Builder):</strong> A **MINOR** feature release. However, the subsequent JSON repair and retry fixes (`v0.7.2`, `v0.7.3`) would be correct **PATCH** increments under SemVer.</li>
+                                <li><strong>v0.7.0 (Researcher):</strong> A **MINOR** feature release. However, the subsequent JSON repair and retry fixes (`v0.7.2`, `v0.7.3`) would be correct **PATCH** increments under SemVer.</li>
                             </ul>
                         </div>
 
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.7.7</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini briefing builder and path satellite systems undergo an additional 30-day stability trial.
+                                Currently, Seismo is on version <strong>0.7.7</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

@@ -24,7 +24,7 @@ final class LexCardPreviewTest extends TestCase
         self::assertStringContainsString('Art. 5 wird geändert', $preview);
     }
 
-    public function testBriefingTextIncludesAmendmentPillForFedlex(): void
+    public function testResearcherTextIncludesAmendmentPillForFedlex(): void
     {
         $row = [
             'source' => 'ch',
@@ -36,11 +36,11 @@ final class LexCardPreviewTest extends TestCase
             'content' => "Die Bundesversammlung der Schweizerischen Eidgenossenschaft,\n\nbeschliesst:\n\nI\nArt. 5 wird wie folgt geändert.",
         ];
 
-        $briefing = LexCardPreview::briefingText($row);
+        $researcher = LexCardPreview::researcherText($row);
 
-        self::assertStringStartsWith('Verordnung / Änderung', $briefing);
-        self::assertStringContainsString('Beschlossen am: 06.05.2026', $briefing);
-        self::assertStringContainsString('Art. 5 wird wie folgt geändert', $briefing);
+        self::assertStringStartsWith('Verordnung / Änderung', $researcher);
+        self::assertStringContainsString('Beschlossen am: 06.05.2026', $researcher);
+        self::assertStringContainsString('Art. 5 wird wie folgt geändert', $researcher);
         self::assertSame('Verordnung / Änderung', LexFedlexPlugin::documentTypePillLabelFromLexRow($row));
     }
 
@@ -87,7 +87,7 @@ final class LexCardPreviewTest extends TestCase
         self::assertStringNotContainsString('LOI n° 2026-404 du 26 mai 2026', $preview);
     }
 
-    public function testFrBriefingTextCombinesDescriptionAndExcerpt(): void
+    public function testFrResearcherTextCombinesDescriptionAndExcerpt(): void
     {
         $row = [
             'source' => 'fr',
@@ -95,11 +95,11 @@ final class LexCardPreviewTest extends TestCase
             'content' => "DÉCRET n° 2026-500\n\nArticle 1er\nLe présent décret entre en vigueur le lendemain...",
         ];
 
-        $briefing = LexCardPreview::briefingText($row);
+        $researcher = LexCardPreview::researcherText($row);
 
-        self::assertStringContainsString('Publié le : 27.05.2026', $briefing);
-        self::assertStringContainsString('Notice : ce décret a pour objet', $briefing);
-        self::assertStringContainsString('Le présent décret entre en vigueur', $briefing);
+        self::assertStringContainsString('Publié le : 27.05.2026', $researcher);
+        self::assertStringContainsString('Notice : ce décret a pour objet', $researcher);
+        self::assertStringContainsString('Le présent décret entre en vigueur', $researcher);
     }
 
     public function testExtractDeliberationBrief(): void

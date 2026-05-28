@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Service\BriefingLookback;
+use Seismo\Service\ResearcherLookback;
 
-final class BriefingLookbackTest extends TestCase
+final class ResearcherLookbackTest extends TestCase
 {
     public function testFeedItemInWindowViaCachedAtWhenPublishedIsOlder(): void
     {
@@ -16,7 +16,7 @@ final class BriefingLookbackTest extends TestCase
             'cached_at'       => '2026-05-20T12:00:00',
         ];
 
-        self::assertTrue(BriefingLookback::entryInWindow($entry, $since));
+        self::assertTrue(ResearcherLookback::entryInWindow($entry, $since));
     }
 
     public function testFeedItemOutOfWindowWhenBothDatesAreOlder(): void
@@ -28,12 +28,12 @@ final class BriefingLookbackTest extends TestCase
             'cached_at'      => '2026-05-10T12:00:00',
         ];
 
-        self::assertFalse(BriefingLookback::entryInWindow($entry, $since));
+        self::assertFalse(ResearcherLookback::entryInWindow($entry, $since));
     }
 
     public function testFeedItemsSinceClauseDoublesSinceParam(): void
     {
-        $clause = BriefingLookback::feedItemsSinceClause('2026-05-18T00:00:00Z');
+        $clause = ResearcherLookback::feedItemsSinceClause('2026-05-18T00:00:00Z');
 
         self::assertStringContainsString('published_date', $clause['sql']);
         self::assertStringContainsString('cached_at', $clause['sql']);
@@ -49,8 +49,8 @@ final class BriefingLookbackTest extends TestCase
         ];
 
         self::assertSame(
-            BriefingLookback::instantUnix('2026-05-22T08:00:00Z'),
-            BriefingLookback::entrySortTimestamp($entry),
+            ResearcherLookback::instantUnix('2026-05-22T08:00:00Z'),
+            ResearcherLookback::entrySortTimestamp($entry),
         );
     }
 }

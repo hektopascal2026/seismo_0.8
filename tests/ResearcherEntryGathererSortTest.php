@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
-use Seismo\Service\BriefingEntryGatherer;
+use Seismo\Service\ResearcherEntryGatherer;
 
-final class BriefingEntryGathererSortTest extends TestCase
+final class ResearcherEntryGathererSortTest extends TestCase
 {
     public function testSortByRelevanceDescThenNewest(): void
     {
@@ -20,7 +20,7 @@ final class BriefingEntryGathererSortTest extends TestCase
             'feed_item:3' => ['relevance_score' => 0.7],
         ];
 
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
 
         self::assertSame(1, $entries[0]['entry_id']);
@@ -53,7 +53,7 @@ final class BriefingEntryGathererSortTest extends TestCase
             'email:9'     => ['relevance_score' => 0.5],
         ];
 
-        $gatherer = new BriefingEntryGatherer();
+        $gatherer = new ResearcherEntryGatherer();
         $deduped  = $gatherer->deduplicateFeedItemsByLink($entries, $scoresByKey);
 
         self::assertCount(2, $deduped);

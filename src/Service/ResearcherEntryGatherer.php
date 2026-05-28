@@ -12,19 +12,19 @@ use Seismo\Repository\EntryRepository;
 use Seismo\Repository\MagnituExportRepository;
 
 /**
- * Shared pipeline for export briefing and AI Briefing Builder.
+ * Shared pipeline for export researcher and AI Researcher.
  *
  * Pulls per-family rows, shapes them to the Magnitu contract, attaches local
- * scores. Export uses optional {@see $labelFilter}; the Briefing Builder uses
- * {@see BriefingScoreFilter} (Highlights tier + optional Important band).
+ * scores. Export uses optional {@see $labelFilter}; the Researcher uses
+ * {@see ResearcherScoreFilter} (Highlights tier + optional Important band).
  */
-final class BriefingEntryGatherer
+final class ResearcherEntryGatherer
 {
     /** @var array{entries_before_score_filter: int, entries_after_score_filter: int}|null */
     private ?array $lastGatherStats = null;
 
     /**
-     * Stats from the latest {@see gatherForBriefingBuilder()} run (builder mode only).
+     * Stats from the latest {@see gatherForResearcherBuilder()} run (builder mode only).
      *
      * @return array{entries_before_score_filter: int, entries_after_score_filter: int}|null
      */
@@ -41,16 +41,16 @@ final class BriefingEntryGatherer
         PDO $pdo,
         ?string $since,
         int $limit,
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
         ?array $labelFilter,
-        ?BriefingScoreFilter $scoreFilter = null,
+        ?ResearcherScoreFilter $scoreFilter = null,
     ): array {
         if (!$selection->isExportMode() && !$selection->hasAnyModule()) {
             return [[], []];
         }
 
         if ($scoreFilter !== null && !$selection->isExportMode()) {
-            return $this->gatherForBriefingBuilder($pdo, $since, $limit, $selection, $scoreFilter);
+            return $this->gatherForResearcherBuilder($pdo, $since, $limit, $selection, $scoreFilter);
         }
 
         $repo    = new MagnituExportRepository($pdo);
@@ -82,23 +82,23 @@ final class BriefingEntryGatherer
      *
      * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
      */
-    private function gatherForBriefingBuilder(
+    private function gatherForResearcherBuilder(
         PDO $pdo,
         ?string $since,
         int $limit,
-        BriefingSourceSelection $selection,
-        BriefingScoreFilter $scoreFilter,
+        ResearcherSourceSelection $selection,
+        ResearcherScoreFilter $scoreFilter,
     ): array {
         $this->lastGatherStats = null;
 
         if ($scoreFilter->disregardMagnitu) {
-            return $this->gatherForBriefingBuilderWithoutMagnitu($pdo, $since, $limit, $selection);
+            return $this->gatherForResearcherBuilderWithoutMagnitu($pdo, $since, $limit, $selection);
         }
 
         $repo      = new MagnituExportRepository($pdo);
         $entryRepo = new EntryRepository($pdo);
 
-        $scoreRows = $entryRepo->listBriefingScoreCandidates(
+        $scoreRows = $entryRepo->listResearcherScoreCandidates(
             $scoreFilter->alertThreshold,
             $scoreFilter->includeImportantBelowThreshold,
             MagnituExportRepository::BRIEFING_MAX_LIMIT,
@@ -142,7 +142,7 @@ final class BriefingEntryGatherer
         }
 
         foreach ($this->hydrateMissingEntries($repo, $since, $missingIdsByType, false) as $e) {
-            if (!BriefingLookback::entryInWindow($e, $since)) {
+            if (!ResearcherLookback::entryInWindow($e, $since)) {
                 continue;
             }
             if (!$this->entryMatchesModuleSelection($e, $selection)) {
@@ -169,13 +169,13 @@ final class BriefingEntryGatherer
                 if (!$this->entryMatchesModuleSelection($e, $selection)) {
                     return false;
                 }
-                if (!BriefingLookback::entryInWindow($e, $since)) {
+                if (!ResearcherLookback::entryInWindow($e, $since)) {
                     return false;
                 }
                 $key = ($e['entry_type'] ?? '') . ':' . ($e['entry_id'] ?? '');
                 $rel = (float)($scoresByKey[$key]['relevance_score'] ?? 0);
 
-                return MagnituScoreBands::passesBriefingPool(
+                return MagnituScoreBands::passesResearcherPool(
                     $rel,
                     $scoreFilter->alertThreshold,
                     $scoreFilter->includeImportantBelowThreshold,
@@ -200,11 +200,11 @@ final class BriefingEntryGatherer
      *
      * @return array{0: array<int, array<string, mixed>>, 1: array<string, array<string, mixed>>}
      */
-    private function gatherForBriefingBuilderWithoutMagnitu(
+    private function gatherForResearcherBuilderWithoutMagnitu(
         PDO $pdo,
         ?string $since,
         int $limit,
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
     ): array {
         $repo    = new MagnituExportRepository($pdo);
         $entries = array_values(array_filter(
@@ -214,7 +214,7 @@ final class BriefingEntryGatherer
                     return false;
                 }
 
-                return BriefingLookback::entryInWindow($e, $since);
+                return ResearcherLookback::entryInWindow($e, $since);
             },
         ));
 
@@ -295,7 +295,7 @@ final class BriefingEntryGatherer
     }
 
     /**
-     * Briefing priority: highest relevance_score, then newest entry time,
+     * Researcher priority: highest relevance_score, then newest entry time,
      * then (entry_type, entry_id) for determinism. Used for Gemini context cap.
      *
      * @param array<int, array<string, mixed>> $entries
@@ -311,8 +311,8 @@ final class BriefingEntryGatherer
             if ($sa !== $sb) {
                 return $sb <=> $sa;
             }
-            $ta = BriefingLookback::entrySortTimestamp($a);
-            $tb = BriefingLookback::entrySortTimestamp($b);
+            $ta = ResearcherLookback::entrySortTimestamp($a);
+            $tb = ResearcherLookback::entrySortTimestamp($b);
             if ($ta !== $tb) {
                 return $tb <=> $ta;
             }
@@ -391,7 +391,7 @@ final class BriefingEntryGatherer
     }
 
     /**
-     * Load LONGTEXT bodies for the final capped briefing pool only (avoids OOM during score hydration).
+     * Load LONGTEXT bodies for the final capped researcher pool only (avoids OOM during score hydration).
      *
      * @param list<array<string, mixed>> $entries Shaped Magnitu rows (mutated in place).
      */
@@ -470,7 +470,7 @@ final class BriefingEntryGatherer
      * @param list<array<string, mixed>> $entries
      * @return list<array<string, mixed>>
      */
-    public function filterByModuleSelection(array $entries, BriefingSourceSelection $selection): array
+    public function filterByModuleSelection(array $entries, ResearcherSourceSelection $selection): array
     {
         return array_values(array_filter(
             $entries,
@@ -481,7 +481,7 @@ final class BriefingEntryGatherer
     /**
      * @param array<string, mixed> $entry Shaped Magnitu export row.
      */
-    public function entryMatchesModuleSelection(array $entry, BriefingSourceSelection $selection): bool
+    public function entryMatchesModuleSelection(array $entry, ResearcherSourceSelection $selection): bool
     {
         return $this->moduleBucketForEntry($entry, $selection) !== null;
     }
@@ -491,7 +491,7 @@ final class BriefingEntryGatherer
      *
      * @param array<string, mixed> $entry Shaped Magnitu export row.
      */
-    public function moduleBucketForEntry(array $entry, BriefingSourceSelection $selection): ?string
+    public function moduleBucketForEntry(array $entry, ResearcherSourceSelection $selection): ?string
     {
         $type = (string)($entry['entry_type'] ?? '');
 
@@ -520,7 +520,7 @@ final class BriefingEntryGatherer
 
         return match ($type) {
             'email' => $selection->moduleEmail() ? 'email' : null,
-            'lex_item' => $selection->moduleLex() ? 'lex' : null,
+            'lex_item' => (($selection->moduleLex() || $selection->moduleLexCh()) && (!$selection->moduleLexCh() || ($entry['source_type'] ?? '') === 'lex_ch')) ? 'lex' : null,
             'calendar_event' => $selection->moduleLeg() ? 'leg' : null,
             default => null,
         };
@@ -529,11 +529,11 @@ final class BriefingEntryGatherer
     /**
      * Whether Magnitu score hydration may fetch this entry_type at all.
      */
-    private function entryTypeGatherable(string $entryType, BriefingSourceSelection $selection): bool
+    private function entryTypeGatherable(string $entryType, ResearcherSourceSelection $selection): bool
     {
         return match ($entryType) {
             'email' => $selection->moduleEmail(),
-            'lex_item' => $selection->moduleLex(),
+            'lex_item' => $selection->moduleLex() || $selection->moduleLexCh(),
             'calendar_event' => $selection->moduleLeg(),
             'feed_item' => $selection->moduleFeeds()
                 || $selection->moduleMedia()
@@ -549,7 +549,7 @@ final class BriefingEntryGatherer
         MagnituExportRepository $repo,
         ?string $since,
         int $limit,
-        BriefingSourceSelection $selection,
+        ResearcherSourceSelection $selection,
     ): array {
         $limitCap = $selection->isExportMode()
             ? MagnituExportRepository::MAX_LIMIT
@@ -602,8 +602,11 @@ final class BriefingEntryGatherer
                 $entries[] = MagnituController::shapeEmail($row);
             }
         }
-        if ($selection->moduleLex()) {
+        if ($selection->moduleLex() || $selection->moduleLexCh()) {
             foreach ($repo->listLexItemsSince($since, $limit, $limitCap) as $row) {
+                if ($selection->moduleLexCh() && ($row['source'] ?? '') !== 'ch') {
+                    continue;
+                }
                 $entries[] = MagnituController::shapeLexItem($row);
             }
         }

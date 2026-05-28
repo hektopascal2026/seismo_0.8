@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 /**
- * User-safe failures from {@see GeminiBriefingService}. Message may be shown in the UI.
+ * User-safe failures from {@see GeminiResearcherService}. Message may be shown in the UI.
  */
-final class GeminiBriefingException extends \RuntimeException
+final class GeminiResearcherException extends \RuntimeException
 {
     public function __construct(
         string $message,
@@ -53,7 +53,7 @@ final class GeminiBriefingException extends \RuntimeException
     public static function outputTruncated(): self
     {
         return new self(
-            'Gemini ran out of output space for the full briefing (common with multi-section prompts or many items). '
+            'Gemini ran out of output space for the full researcher (common with multi-section prompts or many items). '
             . 'Generate retries automatically in smaller parts when possible; if this persists, reduce “Number of items”, '
             . 'use a shorter template, or set system_config gemini:max_output_tokens higher.',
             null,
@@ -64,7 +64,7 @@ final class GeminiBriefingException extends \RuntimeException
     public static function outputTruncatedAfterBatching(): self
     {
         return new self(
-            'Gemini still ran out of output space after splitting the briefing (one item per request). '
+            'Gemini still ran out of output space after splitting the researcher (one item per request). '
             . 'Use 3 or fewer items, shorten multi-section blocks in your template, or set system_config gemini:max_output_tokens to 65536.',
             null,
             false,

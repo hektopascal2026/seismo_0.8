@@ -180,6 +180,7 @@ $entryLoopIndex                 = 0;
                             $lexFooterMonoHide = ($lexSource === 'eu' && !$isParlSwissLex)
                                 || ($lexSource === 'de' && str_starts_with($lexCelexRaw, 'de_rss_'))
                                 || ($lexSource === 'fr' && preg_match('/^JORFTEXT[0-9]+/i', $lexCelexRaw))
+                                || ($lexSource === 'ch' && !$isParlSwissLex)
                                 || seismo_lex_bge_footer_mono_hide($lexSource, $lexCelexRaw, $lexHeadingTitle);
                         ?>
                         <div class="entry-card">
