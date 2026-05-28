@@ -241,6 +241,10 @@ $moduleOptions = [
 
                 <div class="admin-form-field" id="researcher-prompt-field">
                     <div id="researcher-prompt-panel">
+                        <label style="display:block; margin-bottom:0.75rem; user-select:none; font-weight:600;">
+                            <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
+                            Use recipe-driven dynamic snippets (extract 200 words around matching scoring keywords)
+                        </label>
                         <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                             <?php foreach ($savedPrompts as $i => $sp): ?>

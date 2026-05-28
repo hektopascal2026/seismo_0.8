@@ -149,4 +149,29 @@ final class MarkdownResearcherFormatterTest extends TestCase
         self::assertStringContainsString('Article 1er', $xml);
         self::assertStringNotContainsString('promulgue la loi dont la teneur suit', $xml);
     }
+
+    public function testExtractRecipeSnippets(): void
+    {
+        $content = "The Federal Council discussed a new carbon tax on Wednesday. "
+            . "This measure is intended to incentivize renewable energy sources. "
+            . "Several Swissmem member companies, including ABB and Bystronic, "
+            . "welcomed the decision but called for transitional subsidies. "
+            . "Meanwhile, the general public remains split on the policy's long-term effects.";
+
+        // Match case-insensitive unigrams and n-grams
+        $keywords = ['carbon tax', 'ABB', 'subsidies', 'nonexistent'];
+
+        $snippet = MarkdownResearcherFormatter::extractRecipeSnippets($content, $keywords, 250);
+
+        // Verify that matching keyword snippets are extracted and merged/separated
+        self::assertStringContainsString('carbon tax', $snippet);
+        self::assertStringContainsString('ABB', $snippet);
+        self::assertStringContainsString('subsidies', $snippet);
+        self::assertStringNotContainsString("policy's long-term effects", $snippet);
+
+        // Verify fallback when no keywords match
+        $fallback = MarkdownResearcherFormatter::extractRecipeSnippets($content, ['unmatched_keyword'], 50);
+        self::assertSame(50, strlen($fallback));
+        self::assertStringStartsWith("The Federal Council discussed a new carbon tax on ", $fallback);
+    }
 }

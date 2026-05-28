@@ -798,6 +798,7 @@ CONTRACT;
         $meta             = $researcherMeta;
         $meta['total']    = count($subset);
         $meta['selected'] = count($selectedKeys);
+        unset($meta['use_recipe_snippets']); // Pass 2 summary pass always uses full text bodies
 
         return $this->buildEntryXmlContext($subset, $scoresByKey, $meta, $fallbackXml);
     }

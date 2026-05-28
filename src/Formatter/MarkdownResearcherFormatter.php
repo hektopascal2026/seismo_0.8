@@ -169,7 +169,7 @@ final class MarkdownResearcherFormatter
                     $lines[] = '  - ' . implode(' · ', $bits);
                 }
 
-            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta));
+            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta), $meta);
             if ($body !== '') {
                 $lines[] = '  - ' . $body;
                 }
@@ -261,7 +261,7 @@ final class MarkdownResearcherFormatter
                 }
             }
 
-            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta));
+            $body = self::formatEntryBody($e, self::resolveEntryBodyMaxChars($meta), $meta);
             if ($body !== '') {
                 $xml .= '<content>' . self::escapeXmlText($body) . '</content>';
             }
@@ -303,17 +303,17 @@ final class MarkdownResearcherFormatter
     /**
      * @param array<string, mixed> $entry Shaped Magnitu-contract row.
      */
-    private static function formatEntryBody(array $entry, int $maxChars = self::ENTRY_BODY_MAX_CHARS): string
+    private static function formatEntryBody(array $entry, int $maxChars, array $meta = []): string
     {
         $lexSource = self::lexSourceFromEntry($entry);
+        $body = '';
         if ($lexSource !== null && in_array($lexSource, self::LEX_BRIEFING_BODY_SOURCES, true)) {
-            $legal = LexCardPreview::researcherText(self::entryAsLexRow($entry, $lexSource));
-            if ($legal !== '') {
-                return LexPlainText::truncate($legal, $maxChars) ?? '';
-            }
+            $body = LexCardPreview::researcherText(self::entryAsLexRow($entry, $lexSource));
         }
 
-        $body = trim((string)($entry['content'] ?? ''));
+        if ($body === '') {
+            $body = trim((string)($entry['content'] ?? ''));
+        }
         if ($body === '') {
             $body = trim((string)($entry['description'] ?? ''));
         }
@@ -323,7 +323,75 @@ final class MarkdownResearcherFormatter
 
         $body = LexPlainText::normalize($body);
 
+        $useSnippets = (bool)($meta['use_recipe_snippets'] ?? false);
+        $keywords = (array)($meta['recipe_keywords'] ?? []);
+        if ($useSnippets && $keywords !== []) {
+            $body = self::extractRecipeSnippets($body, $keywords, $maxChars);
+        }
+
         return LexPlainText::truncate($body, $maxChars) ?? '';
+    }
+
+    /**
+     * Extracts dynamic snippets around matched recipe keywords (max 1000 characters).
+     */
+    public static function extractRecipeSnippets(string $content, array $keywords, int $maxChars = 1000): string
+    {
+        $content = trim($content);
+        if ($content === '' || $keywords === []) {
+            return mb_substr($content, 0, $maxChars);
+        }
+
+        $hits = [];
+        foreach ($keywords as $keyword) {
+            $keyword = trim((string)$keyword);
+            if ($keyword === '') {
+                continue;
+            }
+            $pattern = '/\b' . preg_quote($keyword, '/') . '\b/iu';
+            if (preg_match_all($pattern, $content, $matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($matches[0] as $match) {
+                    $hits[] = (int)$match[1];
+                }
+            }
+        }
+
+        if ($hits === []) {
+            return mb_substr($content, 0, $maxChars);
+        }
+
+        sort($hits);
+
+        $windows = [];
+        foreach ($hits as $offset) {
+            $start = max(0, $offset - 120);
+            $end = min(strlen($content), $offset + 130);
+            
+            if ($windows !== [] && $start <= end($windows)['end']) {
+                $lastIdx = count($windows) - 1;
+                $windows[$lastIdx]['end'] = max($windows[$lastIdx]['end'], $end);
+            } else {
+                $windows[] = ['start' => $start, 'end' => $end];
+            }
+        }
+
+        $snippets = [];
+        $totalLen = 0;
+        foreach ($windows as $w) {
+            $len = $w['end'] - $w['start'];
+            $snippet = trim(substr($content, $w['start'], $len));
+            if ($snippet === '') {
+                continue;
+            }
+            $snippets[] = $snippet;
+            $totalLen += strlen($snippet);
+            if ($totalLen >= $maxChars) {
+                break;
+            }
+        }
+
+        $result = implode(' ... ', $snippets);
+        return mb_substr($result, 0, $maxChars);
     }
 
     /**

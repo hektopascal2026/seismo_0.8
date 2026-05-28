@@ -308,12 +308,24 @@ PROMPT;
             $citationSlots     = min($itemCount, $contextEntryCount);
 
             $gemini = new GeminiResearcherService(new SystemConfigRepository($pdo));
+            $recipeKeywords = [];
+            if ($filters['useRecipeSnippets'] ?? false) {
+                $configRepo = new SystemConfigRepository($pdo);
+                $recipeJson = $configRepo->get('recipe_json');
+                if ($recipeJson !== null && $recipeJson !== '') {
+                    $recipe = json_decode($recipeJson, true) ?: [];
+                    $recipeKeywords = array_keys($recipe['keywords'] ?? []);
+                }
+            }
+
             $researcherMeta = [
                 'since'                => $since,
                 'limit'                => $limit,
                 'score_selection'      => MagnituScoreBands::describeResearcherGather($scoreFilter),
                 'total'                  => $contextEntryCount,
                 'entry_body_max_chars'   => $gathered['entry_body_max_chars'] ?? MarkdownResearcherFormatter::ENTRY_BODY_DEFAULT_CHARS,
+                'use_recipe_snippets'  => $filters['useRecipeSnippets'] ?? false,
+                'recipe_keywords'      => $recipeKeywords,
             ];
             $result = $gemini->generateSummary(
                 $systemPrompt,
@@ -918,6 +930,7 @@ PROMPT;
 
         $includeImportantBelow = (string)($_POST['include_important'] ?? '0') === '1';
         $disregardMagnitu      = (string)($_POST['disregard_magnitu'] ?? '0') === '1';
+        $useRecipeSnippets     = (string)($_POST['use_recipe_snippets'] ?? '0') === '1';
         $alertThreshold        = (new SystemConfigRepository(getDbConnection()))->getAlertThreshold();
         $scoreFilter           = new ResearcherScoreFilter(
             $alertThreshold,
@@ -926,11 +939,12 @@ PROMPT;
         );
 
         return [
-            'since'        => $since,
-            'limit'        => $limit,
-            'lookbackDays' => $lookbackDays,
-            'scoreFilter'  => $scoreFilter,
-            'selection'    => $selection,
+            'since'             => $since,
+            'limit'             => $limit,
+            'lookbackDays'      => $lookbackDays,
+            'scoreFilter'       => $scoreFilter,
+            'selection'         => $selection,
+            'useRecipeSnippets' => $useRecipeSnippets,
         ];
     }
 
@@ -1037,11 +1051,23 @@ PROMPT;
         }
 
         $entryBodyMaxChars = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(count($entries));
+        $recipeKeywords = [];
+        if ($filters['useRecipeSnippets'] ?? false) {
+            $configRepo = new SystemConfigRepository($pdo);
+            $recipeJson = $configRepo->get('recipe_json');
+            if ($recipeJson !== null && $recipeJson !== '') {
+                $recipe = json_decode($recipeJson, true) ?: [];
+                $recipeKeywords = array_keys($recipe['keywords'] ?? []);
+            }
+        }
+
         $gatherMeta        = [
             'since'                => $filters['since'],
             'limit'                => $filters['limit'],
             'score_selection'      => MagnituScoreBands::describeResearcherGather($filters['scoreFilter']),
             'entry_body_max_chars' => $entryBodyMaxChars,
+            'use_recipe_snippets'  => $filters['useRecipeSnippets'] ?? false,
+            'recipe_keywords'      => $recipeKeywords,
         ];
 
         $guard  = new ResearcherModuleGuard($gatherer);
