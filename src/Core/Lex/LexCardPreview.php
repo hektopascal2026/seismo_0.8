@@ -435,7 +435,7 @@ final class LexCardPreview
         }
         if ($excerpt !== '') {
             $body = self::chBodyFromExcerpt($excerpt);
-            if ($body !== '' && mb_strlen($body) >= 80) {
+            if ($body !== '' && mb_strlen($excerpt) >= 80) {
                 $chunks[] = $body;
             }
         }
@@ -448,19 +448,33 @@ final class LexCardPreview
 
     private static function chSummary(string $description, string $excerpt): string
     {
-        $description = self::stripChAmendmentLeadLine($description);
-        $body        = self::chBodyFromExcerpt($excerpt);
+        // Keep only meta lines if any meta line is present
+        $descLines = preg_split("/\r\n|\n|\r/", $description) ?: [];
+        $hasMeta = false;
+        foreach ($descLines as $line) {
+            if (preg_match('/^(Beschlossen am|Inkrafttreten|Stellungnahmefrist|Vernehmlassung ab|Adopté|Adopted|Entrée|Entry|Deliberato|Entrata|Decidì)/ui', trim($line))) {
+                $hasMeta = true;
+                break;
+            }
+        }
+        if ($hasMeta) {
+            $metaLines = [];
+            foreach ($descLines as $line) {
+                $lineTrim = trim($line);
+                if (preg_match('/^(Beschlossen am|Inkrafttreten|Stellungnahmefrist|Vernehmlassung ab|Adopté|Adopted|Entrée|Entry|Deliberato|Entrata|Decidì)/ui', $lineTrim)) {
+                    $metaLines[] = $lineTrim;
+                }
+            }
+            $description = implode("\n", $metaLines);
+        }
+
+        $body = self::chBodyFromExcerpt($excerpt);
 
         if ($description === '') {
             return self::lead($body, 500);
         }
 
-        if ($body === '' || mb_strlen($body) < 40) {
-            return $description;
-        }
-
-        $descPlain = self::plainExcerpt($description);
-        if ($body === $descPlain || str_starts_with($body, $descPlain)) {
+        if ($body === '' || mb_strlen($excerpt) < 40) {
             return $description;
         }
 
@@ -500,23 +514,16 @@ final class LexCardPreview
             return '';
         }
 
-        $chunks = [];
         if (preg_match('/^(.*?\n\n)(?=I[\n\s]|I\.)/us', $excerpt, $m)) {
-            $head = trim($m[1]);
-            if ($head !== '') {
-                $chunks[] = $head;
-            }
             $rest = trim(substr($excerpt, strlen($m[0])));
             if ($rest !== '') {
-                $chunks[] = $rest;
+                // Strip the leading roman numeral "I" (and optional dot/spaces/newlines)
+                $rest = preg_replace('/^I\b[\s\.\-]*/u', '', $rest) ?? $rest;
+                return trim($rest);
             }
-        } else {
-            $chunks[] = $excerpt;
         }
 
-        $plain = trim(implode("\n\n", $chunks));
-
-        return ($plain !== '' && mb_strlen($plain) >= 40) ? $plain : '';
+        return ($excerpt !== '' && mb_strlen($excerpt) >= 40) ? $excerpt : '';
     }
 
     /**

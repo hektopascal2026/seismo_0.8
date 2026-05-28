@@ -141,7 +141,7 @@ final class LexFedlexContentFetcher
                     continue;
                 }
                 foreach ($nodes as $node) {
-                    $t = trim((string)$node->textContent);
+                    $t = trim(self::getNodeTextWithSpacing($node));
                     if ($t !== '') {
                         $chunks[] = $t;
                     }
@@ -155,13 +155,13 @@ final class LexFedlexContentFetcher
                     $levelNodes = (new \DOMXPath($dom))->query('.//*[local-name()="level"]', $body);
                     if ($levelNodes !== false && $levelNodes->length > 0) {
                         foreach ($levelNodes as $level) {
-                            $t = trim((string)$level->textContent);
+                            $t = trim(self::getNodeTextWithSpacing($level));
                             if ($t !== '') {
                                 $chunks[] = $t;
                             }
                         }
                     } else {
-                        $t = trim((string)$body->textContent);
+                        $t = trim(self::getNodeTextWithSpacing($body));
                         if ($t !== '') {
                             $chunks[] = $t;
                         }
@@ -185,6 +185,35 @@ final class LexFedlexContentFetcher
             libxml_clear_errors();
             libxml_use_internal_errors($prev);
         }
+    }
+
+    private static function getNodeTextWithSpacing(\DOMNode $node): string
+    {
+        if ($node->nodeType === XML_TEXT_NODE) {
+            return $node->nodeValue;
+        }
+
+        $text = '';
+        foreach ($node->childNodes as $child) {
+            $childText = self::getNodeTextWithSpacing($child);
+            if ($childText !== '') {
+                if ($child instanceof \DOMElement) {
+                    $localName = strtolower($child->localName);
+                    $blockElements = [
+                        'num', 'heading', 'p', 'block', 'doctitle', 'title', 'date', 
+                        'level', 'section', 'article', 'li', 'role', 'proem', 'toc', 
+                        'subheading', 'clause', 'paragraph', 'def', 'authorialnote'
+                    ];
+                    if (in_array($localName, $blockElements, true)) {
+                        if ($text !== '' && !preg_match('/\s$/u', $text) && !preg_match('/^\s/u', $childText)) {
+                            $text .= ' ';
+                        }
+                    }
+                }
+                $text .= $childText;
+            }
+        }
+        return $text;
     }
 
     private function resolveXmlFileUrl(string $actUri, string $langPath): ?string

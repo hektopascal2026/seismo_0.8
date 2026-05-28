@@ -21,7 +21,6 @@ final class LexCardPreviewTest extends TestCase
 
         self::assertStringNotContainsString("Änderung\n", $preview);
         self::assertStringContainsString('Beschlossen am: 06.05.2026', $preview);
-        self::assertStringContainsString('Die Bundesversammlung', $preview);
         self::assertStringContainsString('Art. 5 wird geändert', $preview);
     }
 
