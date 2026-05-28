@@ -22,6 +22,7 @@
 declare(strict_types=1);
 
 use Seismo\Core\Mail\EmailBodyProcessorRegistry;
+use Seismo\Http\CsrfToken;
 
 $basePath = getBasePath();
 $processorChoices = EmailBodyProcessorRegistry::choicesForAdmin();
@@ -513,7 +514,7 @@ $sourcesQs = 'action=mail&view=sources';
 
         var formData = new FormData();
         formData.append('id', id);
-        formData.append('csrf_token', '<?= CsrfToken::get() ?>');
+        formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
 
         fetch('<?= e($basePath) ?>/index.php?action=mail_subscription_analyze', {
             method: 'POST',
