@@ -1243,6 +1243,21 @@ textarea.search-input.setup-code-preview {
     border-color: #000000;
 }
 
+.settings-tabs a.settings-tab--error {
+    border-color: #FF2C2C;
+    color: #FF2C2C;
+}
+
+.settings-tabs a.settings-tab--error:hover {
+    box-shadow: 0.125rem 0.125rem 0 #FF2C2C;
+}
+
+.settings-tabs a.settings-tab--error.active {
+    background-color: #FF2C2C;
+    color: #ffffff;
+    border-color: #000000;
+}
+
 /* ═══ Retention grid (Settings) ═══ */
 .retention-table {
     width: 100%;

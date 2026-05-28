@@ -258,6 +258,36 @@ final class SettingsController
         // automatically instead of drifting here.
         $families = array_keys(RetentionService::DEFAULT_POLICIES);
 
+        // Check if any diagnostics fetcher or plugin has an error on its latest run
+        $diagHasError = false;
+        if (!$satellite) {
+            try {
+                $registry = new \Seismo\Service\PluginRegistry();
+                $plugins  = $registry->all();
+                $coreMeta = [
+                    CoreRunner::ID_RSS         => ['label' => 'RSS & Substack', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+                    CoreRunner::ID_PARL_PRESS  => ['label' => 'Parlament Medien (press)', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+                    CoreRunner::ID_SCRAPER     => ['label' => 'Scraper pages', 'min_interval' => 3600, 'entry_type' => 'feed_items'],
+                    CoreRunner::ID_MAIL        => ['label' => 'Mail (IMAP)', 'min_interval' => 900, 'entry_type' => 'emails'],
+                ];
+                $mediaMeta = [
+                    CoreRunner::ID_RSS_MEDIA     => ['label' => 'Media — RSS & hydration', 'min_interval' => 1800, 'entry_type' => 'feed_items'],
+                    CoreRunner::ID_SCRAPER_MEDIA => ['label' => 'Media — scraper listings', 'min_interval' => 3600, 'entry_type' => 'feed_items'],
+                ];
+                $ids = array_merge(array_keys($coreMeta), array_keys($mediaMeta), array_keys($plugins));
+                $log = new \Seismo\Repository\PluginRunLogRepository($pdo);
+                $latest = $log->latestPerPlugin($ids);
+                foreach ($latest as $row) {
+                    if (isset($row['status']) && $row['status'] === 'error') {
+                        $diagHasError = true;
+                        break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                error_log('Seismo settings error check: ' . $e->getMessage());
+            }
+        }
+
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/settings.php';
     }

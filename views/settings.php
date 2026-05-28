@@ -87,7 +87,13 @@ $tabQs = static function (string $t) use ($basePath): string {
             <a href="<?= e($tabQs('mail')) ?>" class="<?= $tab === 'mail' ? 'active' : '' ?>">Mail</a>
             <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
             <a href="<?= e($tabQs('satellite')) ?>" class="<?= $tab === 'satellite' ? 'active' : '' ?>">Satellites</a>
-            <a href="<?= e($tabQs('diagnostics')) ?>" class="<?= $tab === 'diagnostics' ? 'active' : '' ?>">Diagnostics</a>
+            <?php
+            $diagClass = $tab === 'diagnostics' ? 'active' : '';
+            if (isset($diagHasError) && $diagHasError) {
+                $diagClass .= ' settings-tab--error';
+            }
+            ?>
+            <a href="<?= e($tabQs('diagnostics')) ?>" class="<?= e($diagClass) ?>">Diagnostics</a>
             <?php endif; ?>
         </nav>
 
