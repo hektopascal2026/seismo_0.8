@@ -254,7 +254,7 @@ final class MailController
             echo json_encode(['error' => 'Method not allowed']);
             exit;
         }
-        if (!CsrfToken::verifyRequest()) {
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
             http_response_code(403);
             echo json_encode(['error' => 'Session expired — please try again.']);
             exit;
