@@ -261,7 +261,7 @@ PREFIX jolux: <http://data.legilux.public.lu/resource/ontology/jolux#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX dcterms: <http://purl.org/dc/terms/>
 
-SELECT ?cons ?draft ?phaseStart ?phaseEnd ?eff ?desc ?status
+SELECT ?cons ?draft ?phaseStart ?phaseEnd ?eff ?desc ?status ?eventTitle
 WHERE {
   {
     SELECT ?cons ?draft ?phaseStart ?phaseEnd ?eff ?status
@@ -285,6 +285,10 @@ WHERE {
   }
   ?cons jolux:eventDescription ?desc .
   FILTER(LANG(?desc) = "' . $langTag . '")
+  OPTIONAL {
+    ?cons jolux:eventTitle ?eventTitle .
+    FILTER(LANG(?eventTitle) = "' . $langTag . '")
+  }
 }
 ORDER BY DESC(?eff)
 ';
@@ -300,6 +304,7 @@ ORDER BY DESC(?eff)
             $consUri = trim((string)$row->cons);
             $draftUri = trim((string)$row->draft);
             $descLit = isset($row->desc) ? trim((string)$row->desc) : '';
+            $eventTitleLit = isset($row->eventTitle) ? trim((string)$row->eventTitle) : '';
 
             if ($consUri === '' || $draftUri === '' || !str_starts_with($consUri, $fedlexHost)) {
                 continue;
@@ -318,6 +323,7 @@ ORDER BY DESC(?eff)
                     'phase_start' => $phaseStartRaw !== '' ? substr($phaseStartRaw, 0, 10) : null,
                     'phase_end' => $phaseEndRaw !== '' ? substr($phaseEndRaw, 0, 10) : null,
                     'status_uri' => $statusUri,
+                    'event_title' => $eventTitleLit,
                     'text_parts' => [],
                 ];
             }
@@ -330,7 +336,14 @@ ORDER BY DESC(?eff)
         $out = [];
         foreach ($orderKeys as $consUri) {
             $g = $grouped[$consUri];
-            [$title, $body] = self::pickConsultationTitles(array_keys($g['text_parts']));
+            $descriptions = array_keys($g['text_parts']);
+
+            if ($g['event_title'] !== '') {
+                $title = $g['event_title'];
+                $body = implode("\n\n", $descriptions);
+            } else {
+                [$title, $body] = self::pickConsultationTitles($descriptions);
+            }
 
             if ($title === '') {
                 continue;
@@ -372,7 +385,7 @@ ORDER BY DESC(?eff)
                 'description' => $description,
                 'document_date' => $g['document_date'],
                 'document_type' => self::DOCUMENT_TYPE_VERNEHM,
-                'eurlex_url' => 'https://www.fedlex.admin.ch/' . $draftRel . '/' . $langPath,
+                'eurlex_url' => 'https://www.fedlex.admin.ch/' . $celexCons . '/' . $langPath,
                 'work_uri' => $consUri,
                 'source' => 'ch',
             ];
@@ -670,6 +683,7 @@ ORDER BY DESC(?eff)
     public static function parseFedlexType(string $typeUri): string
     {
         $map = [
+            '1'  => 'Verordnung',
             '21' => 'Bundesgesetz',
             '22' => 'Dringl. Bundesgesetz',
             '29' => 'Verordnung BR',
@@ -679,6 +693,7 @@ ORDER BY DESC(?eff)
             '8'  => 'Bundesbeschluss',
             '9'  => 'Bundesbeschluss',
             '10' => 'Bundesbeschluss',
+            '11' => 'Völkerrechtlicher Vertrag',
             '31' => 'Bilateral Treaty',
             '32' => 'Multilateral Treaty',
         ];

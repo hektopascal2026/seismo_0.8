@@ -73,4 +73,12 @@ XML;
         self::assertStringContainsString('Die Bundesversammlung', $plain);
         self::assertStringContainsString('Art. 5 wird wie folgt geändert', $plain);
     }
+
+    public function testParseFedlexType(): void
+    {
+        self::assertSame('Verordnung', LexFedlexPlugin::parseFedlexType('https://fedlex.data.admin.ch/vocabulary/resource-type/1'));
+        self::assertSame('Völkerrechtlicher Vertrag', LexFedlexPlugin::parseFedlexType('https://fedlex.data.admin.ch/vocabulary/resource-type/11'));
+        self::assertSame('Bundesgesetz', LexFedlexPlugin::parseFedlexType('https://fedlex.data.admin.ch/vocabulary/resource-type/21'));
+        self::assertSame('Other', LexFedlexPlugin::parseFedlexType('https://fedlex.data.admin.ch/vocabulary/resource-type/999'));
+    }
 }

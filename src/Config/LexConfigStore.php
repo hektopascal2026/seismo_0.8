@@ -166,6 +166,7 @@ final class LexConfigStore
                 'ingest_vernehmlassungen' => true,
                 'content_fetch_limit' => 10,
                 'resource_types' => [
+                    ['id' => 1,  'label' => 'Verordnung'],
                     ['id' => 21, 'label' => 'Bundesgesetz'],
                     ['id' => 22, 'label' => 'Dringliches Bundesgesetz'],
                     ['id' => 29, 'label' => 'Verordnung des Bundesrates'],
@@ -175,6 +176,7 @@ final class LexConfigStore
                     ['id' => 8,  'label' => 'Einfacher Bundesbeschluss (andere)'],
                     ['id' => 9,  'label' => 'Bundesbeschluss (fakultatives Referendum)'],
                     ['id' => 10, 'label' => 'Bundesbeschluss (obligatorisches Referendum)'],
+                    ['id' => 11, 'label' => 'Völkerrechtlicher Vertrag'],
                     ['id' => 31, 'label' => 'Internationaler Rechtstext bilateral'],
                     ['id' => 32, 'label' => 'Internationaler Rechtstext multilateral'],
                 ],
