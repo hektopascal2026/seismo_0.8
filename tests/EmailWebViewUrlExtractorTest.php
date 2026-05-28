@@ -232,4 +232,14 @@ final class EmailWebViewUrlExtractorTest extends TestCase
 
         self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
     }
+
+    public function testMailchimpWebViewRedirectAllowed(): void
+    {
+        $html = '<a href="https://mailchi.mp/efta/discover-the-new-efta-free-trade-dashboard">Discover the new EFTA Free Trade Dashboard</a>';
+        $plain = "Discover the new EFTA Free Trade Dashboard ( https://mailchi.mp/efta/discover-the-new-efta-free-trade-dashboard )";
+
+        // When resolution preferred locales are loaded, or resolve is run:
+        $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, \Seismo\Core\Mail\EmailAlternateLocalePolicy::englishFirstRanks(), ['efta']);
+        self::assertSame('https://mailchi.mp/efta/discover-the-new-efta-free-trade-dashboard', $resolution->url);
+    }
 }

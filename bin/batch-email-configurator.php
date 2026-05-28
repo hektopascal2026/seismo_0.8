@@ -129,9 +129,17 @@ foreach ($subscriptions as $sub) {
 
     $samples = [];
     foreach ($emails as $email) {
+        $html = trim((string)($email['html_body'] ?? $email['body_html'] ?? ''));
+        if ($html !== '') {
+            $safeHtml = \Seismo\Core\Mail\EmailHtmlSanitizer::sanitize($html, true);
+            $bodyText = \Seismo\Core\Mail\EmailPlainTextExtractor::fromSanitizedHtml($safeHtml, true);
+        } else {
+            $bodyText = (string)($email['text_body'] ?? $email['body_text'] ?? '');
+        }
+
         $samples[] = [
             'subject' => (string)($email['subject'] ?? ''),
-            'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+            'body' => $bodyText,
         ];
     }
 

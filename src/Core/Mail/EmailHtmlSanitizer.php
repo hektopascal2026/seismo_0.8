@@ -20,7 +20,7 @@ final class EmailHtmlSanitizer
 
     private static ?HTMLPurifier $purifier = null;
 
-    public static function sanitize(string $html): string
+    public static function sanitize(string $html, bool $allowWebviewRedirects = false): string
     {
         $html = trim($html);
         if ($html === '') {
@@ -28,7 +28,7 @@ final class EmailHtmlSanitizer
         }
 
         if (strlen($html) > self::PURIFY_MAX_BYTES) {
-            return self::normalizeAnchorHrefs(strip_tags($html));
+            return self::normalizeAnchorHrefs(strip_tags($html), $allowWebviewRedirects);
         }
 
         try {
@@ -44,7 +44,7 @@ final class EmailHtmlSanitizer
             return '';
         }
 
-        return self::normalizeAnchorHrefs($clean);
+        return self::normalizeAnchorHrefs($clean, $allowWebviewRedirects);
     }
 
     private static function purifier(): HTMLPurifier
@@ -73,7 +73,7 @@ final class EmailHtmlSanitizer
         return self::$purifier;
     }
 
-    private static function normalizeAnchorHrefs(string $html): string
+    private static function normalizeAnchorHrefs(string $html, bool $allowWebviewRedirects = false): string
     {
         $prev = libxml_use_internal_errors(true);
         $dom  = new DOMDocument();
@@ -92,7 +92,7 @@ final class EmailHtmlSanitizer
             return $html;
         }
 
-        self::normalizeAnchorsInSubtree($dom, $root);
+        self::normalizeAnchorsInSubtree($dom, $root, $allowWebviewRedirects);
 
         $inner = '';
         foreach ($root->childNodes as $child) {
@@ -102,7 +102,7 @@ final class EmailHtmlSanitizer
         return trim($inner);
     }
 
-    private static function normalizeAnchorsInSubtree(DOMDocument $dom, DOMNode $node): void
+    private static function normalizeAnchorsInSubtree(DOMDocument $dom, DOMNode $node, bool $allowWebviewRedirects = false): void
     {
         $children = [];
         foreach ($node->childNodes as $child) {
@@ -113,7 +113,18 @@ final class EmailHtmlSanitizer
             if ($child instanceof DOMElement && strtolower($child->tagName) === 'a') {
                 $href = trim($child->getAttribute('href'));
                 if ($href !== '') {
-                    if (EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                    $isAllowedRedirect = false;
+                    if ($allowWebviewRedirects && EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                        $lower = mb_strtolower($href, 'UTF-8');
+                        if (str_contains($lower, 'mailchi.mp')
+                            || str_contains($lower, 'campaign-archive.com')
+                            || str_contains($lower, 'list-manage.com')
+                        ) {
+                            $isAllowedRedirect = true;
+                        }
+                    }
+
+                    if (EmailTrackingUrl::isRedirectTrackingUrl($href) && !$isAllowedRedirect) {
                         $label = trim($child->textContent);
                         $text  = $dom->createTextNode($label);
                         $child->parentNode?->replaceChild($text, $child);
@@ -126,7 +137,7 @@ final class EmailHtmlSanitizer
                 }
             }
             if ($child instanceof DOMElement) {
-                self::normalizeAnchorsInSubtree($dom, $child);
+                self::normalizeAnchorsInSubtree($dom, $child, $allowWebviewRedirects);
             }
         }
     }

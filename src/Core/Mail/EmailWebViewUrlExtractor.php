@@ -60,7 +60,7 @@ final class EmailWebViewUrlExtractor
     /**
      * @return list<array{url: string, rank: int}>
      */
-    public static function collectAlternateLocaleCandidates(string $html, string $plain): array
+    public static function collectAlternateLocaleCandidates(string $html, string $plain, bool $allowWebviewRedirects = true): array
     {
         $byUrl = [];
 
@@ -70,8 +70,8 @@ final class EmailWebViewUrlExtractor
                 if (!$anchor instanceof DOMElement) {
                     continue;
                 }
-                $href = self::normalizeHref($anchor->getAttribute('href'));
-                if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                $href = self::normalizeHref($anchor->getAttribute('href'), $allowWebviewRedirects);
+                if ($href === null) {
                     continue;
                 }
                 $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
@@ -87,7 +87,7 @@ final class EmailWebViewUrlExtractor
             }
         }
 
-        self::mergeAlternateCandidatesFromPlain($plain, $byUrl);
+        self::mergeAlternateCandidatesFromPlain($plain, $byUrl, $allowWebviewRedirects);
 
         return array_values(array_map(
             static fn (array $c): array => ['url' => $c['url'], 'rank' => $c['rank']],
@@ -108,7 +108,7 @@ final class EmailWebViewUrlExtractor
     /**
      * @param array<string, array{url: string, rank: int}> $byUrl
      */
-    private static function mergeAlternateCandidatesFromPlain(string $plain, array &$byUrl): void
+    private static function mergeAlternateCandidatesFromPlain(string $plain, array &$byUrl, bool $allowWebviewRedirects = true): void
     {
         $plain = trim($plain);
         if ($plain === '') {
@@ -118,7 +118,7 @@ final class EmailWebViewUrlExtractor
         $lower = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
 
         foreach (EmailWebViewPhraseLexicon::alternateLocaleEntries() as $entry) {
-            $url = self::firstHttpUrlAfterNormalizedPhrase($plain, $entry['phrase']);
+            $url = self::firstHttpUrlAfterNormalizedPhrase($plain, $entry['phrase'], 2500, $allowWebviewRedirects);
             if ($url !== null) {
                 self::mergeAlternateCandidate($byUrl, $url, $entry['rank']);
             }
@@ -135,7 +135,7 @@ final class EmailWebViewUrlExtractor
                 $rank  = $spec['ranks'][$token] ?? EmailWebViewPhraseLexicon::RANK_LOCALE_OTHER;
                 $pos   = (int)($match[1] ?? 0);
                 $slice = mb_substr($plain, $pos, 2500, 'UTF-8');
-                $url   = self::firstHttpUrl($slice);
+                $url   = self::firstHttpUrl($slice, $allowWebviewRedirects);
                 if ($url !== null) {
                     self::mergeAlternateCandidate($byUrl, $url, $rank);
                 }
@@ -199,7 +199,7 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function genericWebViewUrl(string $html, string $plain, array $customKeywords = []): ?string
+    private static function genericWebViewUrl(string $html, string $plain, array $customKeywords = [], bool $allowWebviewRedirects = true): ?string
     {
         $root = self::loadMailRoot($html);
         if ($root instanceof DOMElement) {
@@ -207,7 +207,7 @@ final class EmailWebViewUrlExtractor
                 if (!$anchor instanceof DOMElement) {
                     continue;
                 }
-                $href = self::normalizeHref($anchor->getAttribute('href'));
+                $href = self::normalizeHref($anchor->getAttribute('href'), $allowWebviewRedirects);
                 if ($href === null) {
                     continue;
                 }
@@ -243,13 +243,13 @@ final class EmailWebViewUrlExtractor
         }
 
         if ($customKeywords !== []) {
-            $nearCustom = self::urlNearPhraseList($plain, $customKeywords);
+            $nearCustom = self::urlNearPhraseList($plain, $customKeywords, $allowWebviewRedirects);
             if ($nearCustom !== null) {
                 return $nearCustom;
             }
         }
 
-        $near = self::urlNearWebViewPhrase($plain);
+        $near = self::urlNearWebViewPhrase($plain, $allowWebviewRedirects);
         if ($near !== null) {
             return $near;
         }
@@ -273,7 +273,7 @@ final class EmailWebViewUrlExtractor
             }
 
             if ($matchedCustomLine || EmailWebViewPhraseLexicon::textLooksLikeWebView($line)) {
-                return self::firstHttpUrl($line);
+                return self::firstHttpUrl($line, $allowWebviewRedirects);
             }
         }
 
@@ -304,15 +304,15 @@ final class EmailWebViewUrlExtractor
         return $root instanceof DOMElement ? $root : null;
     }
 
-    private static function urlNearWebViewPhrase(string $text): ?string
+    private static function urlNearWebViewPhrase(string $text, bool $allowWebviewRedirects = false): ?string
     {
-        return self::urlNearPhraseList($text, EmailWebViewPhraseLexicon::allPhrases());
+        return self::urlNearPhraseList($text, EmailWebViewPhraseLexicon::allPhrases(), $allowWebviewRedirects);
     }
 
     /**
      * @param list<string> $phrases
      */
-    private static function urlNearPhraseList(string $text, array $phrases): ?string
+    private static function urlNearPhraseList(string $text, array $phrases, bool $allowWebviewRedirects = false): ?string
     {
         $lower   = EmailWebViewPhraseLexicon::normalizeForMatch($text);
         $bestPos = null;
@@ -329,7 +329,7 @@ final class EmailWebViewUrlExtractor
         // Slice original text so URLs keep their casing (normalizeForMatch lowercases hosts/paths).
         $slice = mb_substr($text, (int)$bestPos, 2500, 'UTF-8');
 
-        return self::firstHttpUrl($slice);
+        return self::firstHttpUrl($slice, $allowWebviewRedirects);
     }
 
     private static function anchorContextText(DOMElement $anchor): string
@@ -566,12 +566,12 @@ final class EmailWebViewUrlExtractor
         return mb_strlen($n, 'UTF-8') < 8;
     }
 
-    private static function firstHttpUrl(string $text): ?string
+    private static function firstHttpUrl(string $text, bool $allowWebviewRedirects = false): ?string
     {
         if (preg_match_all('#<(\s*https?://[^>\s]+)\s*>#iu', $text, $bracketed, PREG_SET_ORDER) !== false) {
             foreach ($bracketed as $m) {
-                $url = self::normalizeHref((string)($m[1] ?? ''));
-                if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+                $url = self::normalizeHref((string)($m[1] ?? ''), $allowWebviewRedirects);
+                if ($url !== null) {
                     return $url;
                 }
             }
@@ -581,8 +581,8 @@ final class EmailWebViewUrlExtractor
             return null;
         }
         foreach ($matches[0] as $raw) {
-            $url = self::normalizeHref(rtrim((string)$raw, '.,;)]'));
-            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+            $url = self::normalizeHref(rtrim((string)$raw, '.,;)]'), $allowWebviewRedirects);
+            if ($url !== null) {
                 return $url;
             }
         }
@@ -590,7 +590,7 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function firstHttpUrlAfterNormalizedPhrase(string $plain, string $phrase, int $len = 2500): ?string
+    private static function firstHttpUrlAfterNormalizedPhrase(string $plain, string $phrase, int $len = 2500, bool $allowWebviewRedirects = false): ?string
     {
         $normalized = EmailWebViewPhraseLexicon::normalizeForMatch($plain);
         $pos = mb_strpos($normalized, $phrase, 0, 'UTF-8');
@@ -600,10 +600,10 @@ final class EmailWebViewUrlExtractor
 
         $slice = mb_substr($plain, (int)$pos, $len, 'UTF-8');
 
-        return self::firstHttpUrl($slice);
+        return self::firstHttpUrl($slice, $allowWebviewRedirects);
     }
 
-    private static function normalizeHref(string $href): ?string
+    private static function normalizeHref(string $href, bool $allowWebviewRedirects = false): ?string
     {
         $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $href = ltrim($href, '[(');
@@ -620,6 +620,15 @@ final class EmailWebViewUrlExtractor
         }
 
         if (EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+            if ($allowWebviewRedirects) {
+                $lower = mb_strtolower($href, 'UTF-8');
+                if (str_contains($lower, 'mailchi.mp')
+                    || str_contains($lower, 'campaign-archive.com')
+                    || str_contains($lower, 'list-manage.com')
+                ) {
+                    return EmailTrackingUrl::cleanNewsletterHref($href);
+                }
+            }
             return null;
         }
 

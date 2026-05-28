@@ -14,7 +14,7 @@ use DOMText;
  */
 final class EmailPlainTextExtractor
 {
-    public static function fromSanitizedHtml(string $html): string
+    public static function fromSanitizedHtml(string $html, bool $allowWebviewRedirects = false): string
     {
         $html = trim($html);
         if ($html === '') {
@@ -38,14 +38,14 @@ final class EmailPlainTextExtractor
             return '';
         }
 
-        $text = self::nodeText($root);
+        $text = self::nodeText($root, $allowWebviewRedirects);
         $text = preg_replace("/[ \t]+\n/", "\n", $text) ?? $text;
         $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
 
         return trim($text);
     }
 
-    private static function nodeText(DOMNode $node): string
+    private static function nodeText(DOMNode $node, bool $allowWebviewRedirects = false): string
     {
         if ($node instanceof DOMText) {
             return self::normaliseInline($node->textContent ?? '');
@@ -54,7 +54,7 @@ final class EmailPlainTextExtractor
         if (!$node instanceof DOMElement) {
             $out = '';
             foreach ($node->childNodes as $child) {
-                $out .= self::nodeText($child);
+                $out .= self::nodeText($child, $allowWebviewRedirects);
             }
 
             return $out;
@@ -67,7 +67,7 @@ final class EmailPlainTextExtractor
 
         $inner = '';
         foreach ($node->childNodes as $child) {
-            $inner .= self::nodeText($child);
+            $inner .= self::nodeText($child, $allowWebviewRedirects);
         }
         $inner = trim($inner);
 
@@ -76,7 +76,17 @@ final class EmailPlainTextExtractor
             if ($inner === '') {
                 return '';
             }
-            if ($href !== '' && !EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+            $isAllowedRedirect = false;
+            if ($allowWebviewRedirects && EmailTrackingUrl::isRedirectTrackingUrl($href)) {
+                $lower = mb_strtolower($href, 'UTF-8');
+                if (str_contains($lower, 'mailchi.mp')
+                    || str_contains($lower, 'campaign-archive.com')
+                    || str_contains($lower, 'list-manage.com')
+                ) {
+                    $isAllowedRedirect = true;
+                }
+            }
+            if ($href !== '' && (!EmailTrackingUrl::isRedirectTrackingUrl($href) || $isAllowedRedirect)) {
                 $href = EmailTrackingUrl::cleanNewsletterHref($href);
 
                 return $inner . ' (' . $href . ')';
