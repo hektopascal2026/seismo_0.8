@@ -89,10 +89,25 @@ final class MailController
                     );
                 }
             }
+            $editRowSamples = [];
             if ($editId > 0) {
                 $editRow = $subRepo->findById($editId);
-                if ($editRow !== null && EmailSubscriptionRepository::isPendingRow($editRow)) {
-                    $reviewingPending = true;
+                if ($editRow !== null) {
+                    if (EmailSubscriptionRepository::isPendingRow($editRow)) {
+                        $reviewingPending = true;
+                    }
+                    $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+                    $editRowEmails = $ingestRepo->fetchRowsForSubscriptionMatch(
+                        (string)$editRow['match_type'],
+                        (string)$editRow['match_value'],
+                        5
+                    );
+                    foreach ($editRowEmails as $email) {
+                        $editRowSamples[] = [
+                            'subject' => (string)($email['subject'] ?? ''),
+                            'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                        ];
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -292,7 +307,7 @@ final class MailController
             $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
             $config = $generator->generateConfig($samples);
 
-            echo json_encode(['success' => true, 'config' => $config]);
+            echo json_encode(['success' => true, 'config' => $config, 'samples' => $samples]);
             exit;
         } catch (\Throwable $e) {
             error_log('Seismo analyzeBoilerplate failed: ' . $e->getMessage());

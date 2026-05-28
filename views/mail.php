@@ -269,6 +269,24 @@ $sourcesQs = 'action=mail&view=sources';
                         </label>
                     </div>
 
+                    <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1rem;">
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
+                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.75rem;">
+                            <label for="preview-sample-select" style="font-size: 0.85rem; font-weight: bold;">Select Email Sample:</label>
+                            <select id="preview-sample-select" class="search-input" style="padding: 2px 5px; font-size: 0.85rem;" onchange="updatePreview()"></select>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <strong style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem; color: #555;">Before (Raw parsed text)</strong>
+                                <pre id="preview-before" style="background: #fdfdfd; border: 1px solid #ccc; padding: 0.5rem; height: 15rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #666;"></pre>
+                            </div>
+                            <div>
+                                <strong style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem; color: #111;">After (With static rules applied locally)</strong>
+                                <pre id="preview-after" style="background: #fff; border: 2px solid black; padding: 0.5rem; height: 15rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #000;"></pre>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="admin-form-field">
                         <p class="admin-hint">Make adjustments to the JSON above if needed, then save to apply locally.</p>
                         <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save">
@@ -501,6 +519,105 @@ $sourcesQs = 'action=mail&view=sources';
         });
     })();
 
+    var activeSamples = <?= json_encode($editRowSamples ?? []) ?>;
+
+    function phpRegexToJs(phpRegexStr) {
+        if (!phpRegexStr) return null;
+        var match = phpRegexStr.match(/^\/(.*)\/([gimuy]*)$/s);
+        if (!match) return null;
+        var pattern = match[1];
+        var flags = match[2] || '';
+        
+        pattern = pattern.replace(/\\x\{([0-9a-fA-F]+)\}/g, function(m, hex) {
+            return '\\u' + ('0000' + hex).slice(-4);
+        });
+
+        if (flags.indexOf('g') === -1) {
+            flags += 'g';
+        }
+
+        try {
+            return new RegExp(pattern, flags);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function applyCleanup(text, config) {
+        if (!config) return text;
+        var cleaned = text;
+        if (config.strip_regexes && Array.isArray(config.strip_regexes)) {
+            config.strip_regexes.forEach(function(regexStr) {
+                var re = phpRegexToJs(regexStr);
+                if (re) {
+                    cleaned = cleaned.replace(re, '');
+                }
+            });
+        }
+        return cleaned;
+    }
+
+    function updatePreview() {
+        var select = document.getElementById('preview-sample-select');
+        var beforeEl = document.getElementById('preview-before');
+        var afterEl = document.getElementById('preview-after');
+        var textarea = document.getElementById('cleanup_config_json');
+        
+        if (!select || !beforeEl || !afterEl || !textarea) return;
+        
+        var index = parseInt(select.value, 10);
+        if (isNaN(index) || !activeSamples[index]) {
+            beforeEl.textContent = '';
+            afterEl.textContent = '';
+            return;
+        }
+        
+        var sample = activeSamples[index];
+        beforeEl.textContent = "Subject: " + sample.subject + "\n\n" + sample.body;
+        
+        var config = null;
+        try {
+            config = JSON.parse(textarea.value);
+        } catch (e) {}
+        
+        var cleanedBody = applyCleanup(sample.body, config);
+        afterEl.textContent = "Subject: " + sample.subject + "\n\n" + cleanedBody;
+    }
+
+    function initPreviewSelect() {
+        var select = document.getElementById('preview-sample-select');
+        var section = document.getElementById('ai-preview-section');
+        if (!select || !section) return;
+        
+        select.innerHTML = '';
+        if (activeSamples.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        
+        activeSamples.forEach(function(sample, i) {
+            var opt = document.createElement('option');
+            opt.value = i;
+            var title = sample.subject || ('Sample #' + (i + 1));
+            if (title.length > 50) {
+                title = title.substring(0, 47) + '...';
+            }
+            opt.textContent = title;
+            select.appendChild(opt);
+        });
+        
+        section.style.display = 'block';
+        updatePreview();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initPreviewSelect();
+        var textarea = document.getElementById('cleanup_config_json');
+        if (textarea) {
+            textarea.addEventListener('input', updatePreview);
+        }
+    });
+
     function runAiAnalysis(id) {
         var btn = document.getElementById('btn-ai-analyze');
         var status = document.getElementById('ai-analysis-status');
@@ -532,6 +649,8 @@ $sourcesQs = 'action=mail&view=sources';
             status.style.color = 'green';
             status.textContent = 'Analysis complete!';
             textarea.value = JSON.stringify(data.config, null, 2);
+            activeSamples = data.samples || [];
+            initPreviewSelect();
             resultsPanel.style.display = 'block';
             btn.disabled = false;
         })
