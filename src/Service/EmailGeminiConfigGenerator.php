@@ -71,6 +71,17 @@ final class EmailGeminiConfigGenerator
                 throw new \RuntimeException('Gemini returned an empty response.');
             }
 
+            // Robust cleaning: Strip markdown code block wraps if returned by the LLM
+            if (str_starts_with($text, '```json')) {
+                $text = substr($text, 7);
+            } elseif (str_starts_with($text, '```')) {
+                $text = substr($text, 3);
+            }
+            if (str_ends_with($text, '```')) {
+                $text = substr($text, 0, -3);
+            }
+            $text = trim($text);
+
             $extracted = json_decode($text, true);
             if (!is_array($extracted)) {
                 throw new \RuntimeException('Failed to parse Gemini output as JSON.');
