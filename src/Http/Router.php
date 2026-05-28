@@ -51,6 +51,7 @@ final class Router
         'logbook'    => true,
         'magnitu'          => true,
         'researcher' => true,
+        'briefing_builder' => true,
         'label'            => true,
         'feeds'      => true,
         'scraper'    => true,

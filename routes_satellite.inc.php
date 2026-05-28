@@ -90,7 +90,17 @@ $router->register(
     true
 );
 $router->register(
+    'briefing_builder',
+    \Seismo\Controller\AiResearcherController::class . '::show',
+    true
+);
+$router->register(
     'researcher_prepare',
+    \Seismo\Controller\AiResearcherController::class . '::prepare',
+    false
+);
+$router->register(
+    'briefing_builder_prepare',
     \Seismo\Controller\AiResearcherController::class . '::prepare',
     false
 );
@@ -100,7 +110,17 @@ $router->register(
     false
 );
 $router->register(
+    'briefing_builder_generate',
+    \Seismo\Controller\AiResearcherController::class . '::generate',
+    false
+);
+$router->register(
     'researcher_save_prompt',
+    \Seismo\Controller\AiResearcherController::class . '::savePrompt',
+    false
+);
+$router->register(
+    'briefing_builder_save_prompt',
     \Seismo\Controller\AiResearcherController::class . '::savePrompt',
     false
 );
@@ -110,12 +130,27 @@ $router->register(
     false
 );
 $router->register(
+    'briefing_prompt_helper',
+    \Seismo\Controller\AiResearcherController::class . '::promptHelper',
+    false
+);
+$router->register(
     'save_researcher_prompt',
     \Seismo\Controller\AiResearcherController::class . '::savePromptLibrary',
     false
 );
 $router->register(
+    'save_briefing_prompt',
+    \Seismo\Controller\AiResearcherController::class . '::savePromptLibrary',
+    false
+);
+$router->register(
     'delete_researcher_prompt',
+    \Seismo\Controller\AiResearcherController::class . '::deletePromptLibrary',
+    false
+);
+$router->register(
+    'delete_briefing_prompt',
     \Seismo\Controller\AiResearcherController::class . '::deletePromptLibrary',
     false
 );
