@@ -47,9 +47,9 @@ final class EmailSubscriptionProcessor
             return $row;
         }
 
-        // 1. Run dynamic regex processor if cleanup_config is populated
+        // 1. Run dynamic regex processor if cleanup_config is populated and specific rules are enabled
         $cfgJson = trim((string)($bestRow['cleanup_config'] ?? ''));
-        if ($cfgJson !== '') {
+        if ($cfgJson !== '' && !empty($bestRow['strip_listing_boilerplate'])) {
             $config = json_decode($cfgJson, true);
             if (is_array($config)) {
                 $dynProcessor = new DynamicRegexEmailProcessor($config);

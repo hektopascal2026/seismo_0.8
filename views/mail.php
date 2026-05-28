@@ -214,21 +214,15 @@ $sourcesQs = 'action=mail&view=sources';
                     <input type="hidden" name="show_in_magnitu" value="0">
                     <label><input type="checkbox" name="show_in_magnitu" value="1" <?= ($editRow === null || !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu'])) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
                 </div>
+                <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate for this sender (also available globally under Settings → Mail; applies at ingest, on cards, recipe scoring, and Magnitu export)</label>
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Use specific Cleanup-Rules (generated regex rules will be applied to clean text and extract titles)</label>
                 </div>
-                <div class="admin-form-field">
-                    <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>
-                    <label>Body processor
-                        <select name="body_processor" class="search-input" style="width:100%; max-width:28rem;">
-                            <?php foreach ($processorChoices as $key => $label): ?>
-                                <option value="<?= e($key) ?>" <?= $proc === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                </div>
-                <p class="admin-hint">Processors run at ingest and when you reprocess stored mail. Use for digests with generic subjects (e.g. EP TODAY).</p>
+                <?php else: ?>
+                <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                <?php endif; ?>
+                <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
                 </div>
@@ -314,7 +308,7 @@ $sourcesQs = 'action=mail&view=sources';
                             <input type="hidden" name="category" value="<?= e((string)$editRow['category']) ?>">
                             <input type="hidden" name="disabled" value="<?= !empty($editRow['disabled']) ? '1' : '0' ?>">
                             <input type="hidden" name="show_in_magnitu" value="<?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? '1' : '0' ?>">
-                            <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                            <input type="hidden" name="strip_listing_boilerplate" value="1">
                             <input type="hidden" name="body_processor" value="<?= e((string)$editRow['body_processor']) ?>">
                             <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
@@ -370,20 +364,15 @@ $sourcesQs = 'action=mail&view=sources';
                     <input type="hidden" name="show_in_magnitu" value="0">
                     <label><input type="checkbox" name="show_in_magnitu" value="1" <?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
                 </div>
+                <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Strip typical boilerplate for this sender</label>
+                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Use specific Cleanup-Rules (generated regex rules will be applied to clean text and extract titles)</label>
                 </div>
-                <div class="admin-form-field">
-                    <?php $proc = (string)($editRow['body_processor'] ?? ''); ?>
-                    <label>Body processor
-                        <select name="body_processor" class="search-input" style="width:100%; max-width:28rem;">
-                            <?php foreach ($processorChoices as $key => $label): ?>
-                                <option value="<?= e($key) ?>" <?= $proc === $key ? 'selected' : '' ?>><?= e($label) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
-                </div>
+                <?php else: ?>
+                <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                <?php endif; ?>
+                <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
                 </div>
