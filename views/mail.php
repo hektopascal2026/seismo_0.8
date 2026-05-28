@@ -278,21 +278,28 @@ $sourcesQs = 'action=mail&view=sources';
                         </label>
                     </div>
 
-                    <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1rem;">
-                        <h4 style="margin-bottom: 0.5rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
-                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.75rem;">
-                            <label for="preview-sample-select" style="font-size: 0.85rem; font-weight: bold;">Select Email Sample:</label>
-                            <select id="preview-sample-select" class="search-input" style="padding: 2px 5px; font-size: 0.85rem;" onchange="updatePreview()"></select>
+                    <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1.5rem;">
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label for="preview-sample-select" style="font-size: 0.85rem; font-weight: bold;">Select Email Sample:</label>
+                                <select id="preview-sample-select" class="search-input" style="padding: 2px 5px; font-size: 0.85rem;" onchange="updatePreview()"></select>
+                            </div>
+                            
+                            <!-- Custom Tab Buttons using Seismo settings-tabs visual language -->
+                            <div class="settings-tabs" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none; display: flex; gap: 4px;">
+                                <button type="button" id="tab-btn-before" class="btn active" onclick="switchPreviewTab('before')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: var(--seismo-accent, #FFFFC5); border-width: 2px; border-color: black; cursor: pointer;">Before (Raw)</button>
+                                <button type="button" id="tab-btn-after" class="btn" onclick="switchPreviewTab('after')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: #ffffff; border-width: 2px; border-color: black; cursor: pointer;">After (Cleaned)</button>
+                            </div>
                         </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                            <div>
-                                <strong style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem; color: #555;">Before (Raw parsed text)</strong>
-                                <pre id="preview-before" style="background: #fdfdfd; border: 1px solid #ccc; padding: 0.5rem; height: 15rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #666;"></pre>
-                            </div>
-                            <div>
-                                <strong style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem; color: #111;">After (With static rules applied locally)</strong>
-                                <pre id="preview-after" style="background: #fff; border: 2px solid black; padding: 0.5rem; height: 15rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #000;"></pre>
-                            </div>
+
+                        <!-- Tab Content Boxes -->
+                        <div id="tab-content-before" style="display: block;">
+                            <pre id="preview-before" style="background: #fdfdfd; border: 2px solid #ccc; padding: 0.75rem; height: 18rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #555;"></pre>
+                        </div>
+                        <div id="tab-content-after" style="display: none;">
+                            <pre id="preview-after" style="background: #fff; border: 2px solid black; padding: 0.75rem; height: 18rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #000;"></pre>
                         </div>
                     </div>
 
@@ -529,6 +536,27 @@ $sourcesQs = 'action=mail&view=sources';
     })();
 
     var activeSamples = <?= json_encode($editRowSamples ?? []) ?>;
+
+    function switchPreviewTab(tab) {
+        var btnBefore = document.getElementById('tab-btn-before');
+        var btnAfter = document.getElementById('tab-btn-after');
+        var contentBefore = document.getElementById('tab-content-before');
+        var contentAfter = document.getElementById('tab-content-after');
+        
+        if (!btnBefore || !btnAfter || !contentBefore || !contentAfter) return;
+        
+        if (tab === 'before') {
+            btnBefore.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
+            btnAfter.style.backgroundColor = '#ffffff';
+            contentBefore.style.display = 'block';
+            contentAfter.style.display = 'none';
+        } else {
+            btnBefore.style.backgroundColor = '#ffffff';
+            btnAfter.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
+            contentBefore.style.display = 'none';
+            contentAfter.style.display = 'block';
+        }
+    }
 
     function phpRegexToJs(phpRegexStr) {
         if (!phpRegexStr) return null;
