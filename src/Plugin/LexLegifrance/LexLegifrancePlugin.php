@@ -194,9 +194,41 @@ final class LexLegifrancePlugin implements SourceFetcherInterface
         if ($consultEnabled && $consultAttempts < $contentLimit && $textCid !== '') {
             ++$consultAttempts;
             $reason = null;
-            $consultCorpus = $fetcher->fetchJorfConsultCorpus($textCid, $reason);
-            if ($consultCorpus !== null && $consultCorpus !== '') {
-                $row['content'] = $consultCorpus;
+            $data = $fetcher->fetchJorfConsultData($textCid, $reason);
+            if ($data !== null && ($data['content'] ?? '') !== '') {
+                $row['content'] = $data['content'];
+
+                $descriptionParts = [];
+                $pubDate = trim((string)($row['document_date'] ?? ''));
+                if ($pubDate !== '') {
+                    $formattedDate = date('d.m.Y', strtotime($pubDate));
+                    $descriptionParts[] = "Publié le : " . $formattedDate;
+                }
+
+                if (!empty($data['notice'])) {
+                    $noticePlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['notice']);
+                    if ($noticePlain !== '') {
+                        $descriptionParts[] = $noticePlain;
+                    }
+                }
+
+                if (!empty($data['prepWork'])) {
+                    $prepPlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['prepWork']);
+                    if ($prepPlain !== '') {
+                        $descriptionParts[] = $prepPlain;
+                    }
+                }
+
+                if (!empty($data['exposeMotif'])) {
+                    $motifPlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['exposeMotif']);
+                    if ($motifPlain !== '') {
+                        $descriptionParts[] = $motifPlain;
+                    }
+                }
+
+                if ($descriptionParts !== []) {
+                    $row['description'] = implode("\n\n", $descriptionParts);
+                }
 
                 return $row;
             }

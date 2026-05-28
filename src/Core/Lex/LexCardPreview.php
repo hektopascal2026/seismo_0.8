@@ -65,19 +65,25 @@ final class LexCardPreview
 
     private static function briefingFrBody(string $description, string $excerpt): string
     {
+        $chunks = [];
+        $synopsis = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
+        if ($synopsis !== '' && !self::frIsBoilerplateOnly($synopsis)) {
+            $chunks[] = $synopsis;
+        }
         if ($excerpt !== '') {
             $body = self::frBodyFromExcerpt($excerpt);
             if ($body !== '' && mb_strlen($body) >= 40) {
-                return $body;
+                $chunks[] = $body;
             }
         }
-
-        $description = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
-        if ($description !== '' && !self::frIsBoilerplateOnly($description)) {
-            return $description;
+        if ($chunks === []) {
+            if ($synopsis !== '') {
+                return $synopsis;
+            }
+            return self::plainExcerpt($excerpt);
         }
 
-        return self::plainExcerpt($excerpt);
+        return trim(implode("\n\n", $chunks));
     }
 
     private static function briefingDeBody(string $description, string $excerpt): string
@@ -235,12 +241,18 @@ final class LexCardPreview
 
     private static function frSummary(string $description, string $excerpt): string
     {
-        $description = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
-        if ($description !== '' && !self::frIsBoilerplateOnly($description)) {
-            return $description;
+        $synopsis = self::frTrimTravauxPreparatoires(self::plainExcerpt($description));
+        $body = self::frBodyFromExcerpt($excerpt);
+
+        if ($synopsis === '' || self::frIsBoilerplateOnly($synopsis)) {
+            return self::lead($body, 600);
         }
 
-        return self::lead(self::frBodyFromExcerpt($excerpt), 600);
+        if ($body === '' || mb_strlen($body) < 40) {
+            return $synopsis;
+        }
+
+        return $synopsis . "\n\n" . self::lead($body, 500);
     }
 
     /**

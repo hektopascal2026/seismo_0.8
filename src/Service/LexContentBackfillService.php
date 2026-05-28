@@ -318,24 +318,47 @@ final class LexContentBackfillService
             }
 
             $reason = null;
-            $title  = trim((string)($row['title'] ?? ''));
-            $content = $fetcher->fetchPlainTextForConsultId(
-                $consultId,
-                $reason,
-                $title !== '' ? $title : null,
-            );
-            if ($content === null || $content === '') {
+            $data = $fetcher->fetchJorfConsultData($consultId, $reason);
+            if ($data === null || ($data['content'] ?? '') === '') {
                 $skipped++;
                 $this->abandonContentFetch($id, $reasons, $reason ?? 'empty_corpus');
                 continue;
             }
 
-            $description = trim((string)($row['description'] ?? ''));
-            if ($description === '') {
-                $description = null;
+            $descriptionParts = [];
+            $pubDate = trim((string)($row['document_date'] ?? ''));
+            if ($pubDate !== '') {
+                $formattedDate = date('d.m.Y', strtotime($pubDate));
+                $descriptionParts[] = "Publié le : " . $formattedDate;
             }
 
-            if ($this->lex->updateCorpus($id, $content, $description)) {
+            if (!empty($data['notice'])) {
+                $noticePlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['notice']);
+                if ($noticePlain !== '') {
+                    $descriptionParts[] = $noticePlain;
+                }
+            }
+
+            if (!empty($data['prepWork'])) {
+                $prepPlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['prepWork']);
+                if ($prepPlain !== '') {
+                    $descriptionParts[] = $prepPlain;
+                }
+            }
+
+            if (!empty($data['exposeMotif'])) {
+                $motifPlain = \Seismo\Core\Lex\LexPlainText::fromHtml($data['exposeMotif']);
+                if ($motifPlain !== '') {
+                    $descriptionParts[] = $motifPlain;
+                }
+            }
+
+            $description = null;
+            if ($descriptionParts !== []) {
+                $description = implode("\n\n", $descriptionParts);
+            }
+
+            if ($this->lex->updateCorpus($id, $data['content'], $description)) {
                 $updated++;
             } else {
                 $failed++;

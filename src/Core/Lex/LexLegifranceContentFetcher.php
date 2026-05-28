@@ -70,6 +70,51 @@ final class LexLegifranceContentFetcher
         return $this->fetchFromJorfConsult($textCid, $failureReason);
     }
 
+    /**
+     * Fetch structured JORF consult response data, retaining original fields (notice, prepWork, exposeMotif)
+     * along with the plain text body content.
+     *
+     * @return array{content: string, notice: string, prepWork: string, exposeMotif: string}|null
+     */
+    public function fetchJorfConsultData(string $textCid, ?string &$failureReason = null): ?array
+    {
+        $textCid = self::normalizeConsultId(trim($textCid));
+        if (!self::isPlainJorfTextCid($textCid)) {
+            $failureReason = 'no_jorf_text_cid';
+
+            return null;
+        }
+
+        $resp = $this->client->postJsonResponse('/consult/jorf', ['textCid' => $textCid]);
+        if ($resp['status'] >= 400) {
+            $failureReason = 'api_error';
+
+            return null;
+        }
+        if (!is_array($resp['decoded'])) {
+            $failureReason = 'invalid_json';
+
+            return null;
+        }
+
+        $decoded = $resp['decoded'];
+        $plainText = $this->plainTextFromJorfResponse($decoded);
+        if ($plainText === null || $plainText === '') {
+            $failureReason = 'empty_corpus';
+
+            return null;
+        }
+
+        $textNode = isset($decoded['text']) && is_array($decoded['text']) ? $decoded['text'] : $decoded;
+
+        return [
+            'content'     => $plainText,
+            'notice'      => trim((string)($textNode['notice'] ?? '')),
+            'prepWork'    => trim((string)($textNode['prepWork'] ?? '')),
+            'exposeMotif' => trim((string)($textNode['exposeMotif'] ?? '')),
+        ];
+    }
+
     public function fetchPlainTextForTextCid(string $textCid, ?string &$failureReason = null): ?string
     {
         return $this->fetchPlainTextForConsultId($textCid, $failureReason);

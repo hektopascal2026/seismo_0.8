@@ -68,5 +68,38 @@ final class LexCardPreviewTest extends TestCase
 
         self::assertSame($synopsis, $preview);
     }
+
+    public function testFrSummaryCombinesDescriptionAndExcerpt(): void
+    {
+        $synopsis = "Publié le : 27.05.2026\n\nTravaux préparatoires : loi n° 2026-404.\nAssemblée nationale : Proposition de loi n° 1102";
+        $excerpt = "LOI n° 2026-404 du 26 mai 2026\n\nArticle 1er\nLe livre III du code de l'action sociale et des familles est ainsi modifié...";
+
+        $preview = LexCardPreview::previewText([
+            'source' => 'fr',
+            'description' => $synopsis,
+            'content_excerpt' => $excerpt,
+        ]);
+
+        self::assertStringContainsString('Publié le : 27.05.2026', $preview);
+        self::assertStringContainsString('Proposition de loi n° 1102', $preview);
+        self::assertStringContainsString('Le livre III du code', $preview);
+        // Excerpt JORF header block should be stripped, but body article kept
+        self::assertStringNotContainsString('LOI n° 2026-404 du 26 mai 2026', $preview);
+    }
+
+    public function testFrBriefingTextCombinesDescriptionAndExcerpt(): void
+    {
+        $row = [
+            'source' => 'fr',
+            'description' => "Publié le : 27.05.2026\n\nNotice : ce décret a pour objet...",
+            'content' => "DÉCRET n° 2026-500\n\nArticle 1er\nLe présent décret entre en vigueur le lendemain...",
+        ];
+
+        $briefing = LexCardPreview::briefingText($row);
+
+        self::assertStringContainsString('Publié le : 27.05.2026', $briefing);
+        self::assertStringContainsString('Notice : ce décret a pour objet', $briefing);
+        self::assertStringContainsString('Le présent décret entre en vigueur', $briefing);
+    }
 }
 
