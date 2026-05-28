@@ -37,8 +37,31 @@ final class EmailWebViewBodyHydrator
         }
 
         try {
-            $html  = $this->fetchPageHtml($url);
-            $plain = PlainTextNormalizer::forIngest($this->extractPlainText($html));
+            $plain = null;
+            if (preg_match('#ec\.europa\.eu/commission/presscorner/detail/([a-z]{2})/([a-z0-9_-]+)#i', $url, $m)) {
+                $lang = $m[1];
+                $refRaw = $m[2];
+                $parts = explode('_', $refRaw);
+                $refFormatted = strtoupper($parts[0]) . '/' . implode('/', array_slice($parts, 1));
+                $apiUrl = "https://ec.europa.eu/commission/presscorner/api/documents?reference=" . urlencode($refFormatted) . "&language=" . urlencode($lang);
+                
+                $res = $this->http->getWebPage($apiUrl, true);
+                if ($res->isOk() && trim($res->body) !== '') {
+                    $data = json_decode($res->body, true);
+                    $htmlContent = $data['docuLanguageResource']['htmlContent'] ?? '';
+                    if ($htmlContent !== '') {
+                        $plain = trim(html_entity_decode(strip_tags($htmlContent), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                    }
+                }
+            }
+
+            if ($plain === null) {
+                $html  = $this->fetchPageHtml($url);
+                $plain = PlainTextNormalizer::forIngest($this->extractPlainText($html));
+            } else {
+                $plain = PlainTextNormalizer::forIngest($plain);
+            }
+
             if (mb_strlen($plain, 'UTF-8') < self::MIN_PLAIN_CHARS) {
                 return $row;
             }
