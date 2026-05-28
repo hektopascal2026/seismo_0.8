@@ -474,15 +474,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era VI: Cognitive AI</span>
                             <span class="era-date">May 2026 (Current)</span>
                         </div>
-                        <h3>v0.7.0 – v0.7.7 &mdash; The AI Researcher</h3>
+                        <h3>v0.7.0 – v0.7.8 &mdash; The AI Researcher</h3>
                         
                         <div class="era-narrative">
                             <p><strong>Rationale:</strong> With thousands of ingested items, manual summary was exhausting. The team designed the **AI Researcher**, bringing LLM capabilities directly into the dashboard. We built a highly reliable, two-pass Gemini pipeline that selects critical items first, and drafts a beautifully organized executive summary complete with dashboard-card attribution lists.</p>
                         </div>
-
+ 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
+                                <li><strong>v0.7.8 &mdash; Gemini Configurator:</strong> Design of a one-time, AI-powered setup assistant that analyzes sample emails, generates regular expressions and webview keywords, and saves a static configuration locally for zero-runtime footprint.</li>
                                 <li><strong>AI Researcher:</strong> Interactive Gemini pipeline (`?action=researcher`) with custom prompt libraries, lookback filters, and category toggles.</li>
                                 <li><strong>Skinny Two-Pass Pipeline:</strong> Standardized on `gemini-3.5-flash` with a two-step prompt. Pass 1 handles logical entry selection (returning a JSON array of used keys). Pass 2 generates a clean, structured Markdown researcher on those items only.</li>
                                 <li><strong>Lenient JSON Repair:</strong> Ported the robust `LenientJsonParser` to recover malformed Gemini JSON (broken markdown fences, missing brackets), preventing interface crashes.</li>
@@ -491,7 +492,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                 <li><strong>Rich Swiss Fedlex Cards:</strong> Leveraged SPARQL queries to extract actual publication and entry-into-force dates, bypassing the default backfill limitations.</li>
                             </ul>
                         </div>
-
+ 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
                             <p>Sending large legal texts to Gemini can easily exceed rate and context limits. We introduced a dynamic token budget controller (`ResearcherModuleGuard`) that scales item bodies between 2k and 12k characters based on the overall context size, keeping cost and latency optimal.</p>
@@ -580,7 +581,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.7.7</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
+                                Currently, Seismo is on version <strong>0.7.8</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

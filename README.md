@@ -1,4 +1,4 @@
-# Seismo 0.7.7
+# Seismo 0.7.8
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.7.8** | **Gemini Configurator** — AI-powered setup assistant that analyzes sample emails, generates regular expressions and webview keywords, and saves a static configuration locally for zero-runtime footprint (no external AI calls during ingestion). Dynamic before/after tabbed live preview workspace. |
 | **0.7.7** | **Swiss Fedlex** — SPARQL decision + entry-into-force dates on cards; Akoma Ntoso XML corpus for OC acts (`LexFedlexContentFetcher`); **`php bin/lex-backfill-content.php --ch`**. Timeline: date-only lex items sort on publication day with ingestion time (no backfill “breaking news”). Consultation ingest no longer uses `dcterms:modified` fallback. |
 | **0.7.6** | **Researcher prompt helper** — **View: Prompt \| Helper** on `?action=researcher`: rough intent → Gemini drafts a full researcher prompt in the style of the desk default (`researcher_prompt_helper`); review, edit, save to library or instance default (syncs the Prompt editor). Generate researcher still uses the Prompt view only. |
 | **0.7.5** | **AI Researcher on Gemini 3.5** — default **`gemini-3.5-flash`** only; skinny **two-pass** pipeline (USER PROMPT in selection + summary, optional `selection_reasoning`, plain Markdown pass 2). **Dynamic entry bodies** (2k–12k chars/pool), **module guard**, 32k system prompts, **thinkingLevel** LOW. HTTP **429** batched retry fixed. Docs: `docs/ai-researcher-builder.md`. |
