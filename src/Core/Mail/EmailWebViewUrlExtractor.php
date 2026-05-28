@@ -574,8 +574,8 @@ final class EmailWebViewUrlExtractor
     private static function normalizeHref(string $href): ?string
     {
         $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $href = ltrim($href, '[');
-        $href = rtrim($href, '].,;');
+        $href = ltrim($href, '[(');
+        $href = rtrim($href, '].,;)');
         if ($href === ''
             || str_starts_with(strtolower($href), 'mailto:')
             || str_starts_with(strtolower($href), 'tel:')
