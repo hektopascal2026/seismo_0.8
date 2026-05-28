@@ -79,13 +79,15 @@ final class LexLegifranceContentFetcher
     public function fetchJorfConsultData(string $textCid, ?string &$failureReason = null): ?array
     {
         $textCid = self::normalizeConsultId(trim($textCid));
-        if (!self::isPlainJorfTextCid($textCid)) {
+        $isDole = str_starts_with($textCid, 'JORFDOLE');
+        if (!self::isPlainJorfTextCid($textCid) && !$isDole) {
             $failureReason = 'no_jorf_text_cid';
 
             return null;
         }
 
-        $resp = $this->client->postJsonResponse('/consult/jorf', ['textCid' => $textCid]);
+        $endpoint = $isDole ? '/consult/dole' : '/consult/jorf';
+        $resp = $this->client->postJsonResponse($endpoint, ['textCid' => $textCid]);
         if ($resp['status'] >= 400) {
             $failureReason = 'api_error';
 
@@ -98,6 +100,33 @@ final class LexLegifranceContentFetcher
         }
 
         $decoded = $resp['decoded'];
+
+        if ($isDole) {
+            $titre = trim((string)($decoded['titre'] ?? ''));
+            $notice = trim((string)($decoded['notice'] ?? ''));
+            $exposeMotif = trim((string)($decoded['exposeMotif'] ?? ''));
+
+            $parts = [];
+            if ($titre !== '') {
+                $parts[] = $titre;
+            }
+            if ($notice !== '') {
+                $parts[] = "Notice :\n" . LexPlainText::fromHtml($notice);
+            }
+            if ($exposeMotif !== '') {
+                $parts[] = "Exposé des motifs :\n" . LexPlainText::fromHtml($exposeMotif);
+            }
+
+            $plainText = trim(implode("\n\n", $parts));
+
+            return [
+                'content'     => $plainText,
+                'notice'      => $notice,
+                'prepWork'    => '',
+                'exposeMotif' => $exposeMotif,
+            ];
+        }
+
         $plainText = $this->plainTextFromJorfResponse($decoded);
         if ($plainText === null || $plainText === '') {
             $failureReason = 'empty_corpus';
@@ -200,9 +229,6 @@ final class LexLegifranceContentFetcher
         return self::consultIdFromRow($row);
     }
 
-    /**
-     * @param array<string, mixed> $row
-     */
     public static function consultIdFromRow(array $row): ?string
     {
         $celex = trim((string)($row['celex'] ?? ''));
@@ -219,6 +245,9 @@ final class LexLegifranceContentFetcher
                 continue;
             }
             if (preg_match('#/jorf/id/(JORFTEXT[0-9A-Z]+)#i', $url, $m)) {
+                return self::normalizeConsultId($m[1]);
+            }
+            if (preg_match('#/dossierlegislatif/(JORFDOLE[0-9A-Z]+)#i', $url, $m)) {
                 return self::normalizeConsultId($m[1]);
             }
         }
@@ -238,6 +267,9 @@ final class LexLegifranceContentFetcher
         if (preg_match('/^(JORFTEXT\d+)(?:_\d{2}-\d{2}-\d{4})?$/', $id, $m)) {
             return $m[1];
         }
+        if (preg_match('/^(JORFDOLE\d+)(?:_\d{2}-\d{2}-\d{4})?$/', $id, $m)) {
+            return $m[1];
+        }
         if (preg_match('/^(LEGITEXT\d+)(?:_.*)?$/', $id, $m)) {
             return $m[1];
         }
@@ -247,14 +279,19 @@ final class LexLegifranceContentFetcher
 
     public static function isJorfTextCid(string $id): bool
     {
+        $id = strtoupper(trim($id));
         return self::isPlainJorfTextCid($id)
-            || (str_starts_with(strtoupper(trim($id)), 'JORFTEXT')
-                && preg_match('/^JORFTEXT\d+(?:_\d{2}-\d{2}-\d{4})?$/i', trim($id)) === 1);
+            || (str_starts_with($id, 'JORFTEXT')
+                && preg_match('/^JORFTEXT\d+(?:_\d{2}-\d{2}-\d{4})?$/i', trim($id)) === 1)
+            || (str_starts_with($id, 'JORFDOLE')
+                && preg_match('/^JORFDOLE\d+(?:_\d{2}-\d{2}-\d{4})?$/i', trim($id)) === 1);
     }
 
     public static function isPlainJorfTextCid(string $id): bool
     {
-        return preg_match('/^JORFTEXT\d+$/i', trim($id)) === 1;
+        $id = strtoupper(trim($id));
+        return preg_match('/^JORFTEXT\d+$/i', $id) === 1
+            || preg_match('/^JORFDOLE\d+$/i', $id) === 1;
     }
 
     public static function isConsultId(string $id): bool
@@ -263,6 +300,7 @@ final class LexLegifranceContentFetcher
 
         return self::isJorfTextCid($id)
             || str_starts_with($id, 'LEGITEXT')
+            || str_starts_with($id, 'JORFDOLE')
             || preg_match('/^[A-Z]{4}\d{9}[A-Z]$/', $id) === 1;
     }
 

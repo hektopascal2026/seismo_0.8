@@ -109,5 +109,15 @@ final class LexCardPreviewTest extends TestCase
 
         self::assertSame('Sénat : Projet de loi n° 550 • Assemblée nationale : Projet de loi n° 481', $brief);
     }
+
+    public function testJorfDoleIdRecognition(): void
+    {
+        $doleRow = ['eurlex_url' => 'https://www.legifrance.gouv.fr/dossierlegislatif/JORFDOLE000051666412/'];
+        $consultId = \Seismo\Core\Lex\LexLegifranceContentFetcher::consultIdFromRow($doleRow);
+
+        self::assertSame('JORFDOLE000051666412', $consultId);
+        self::assertTrue(\Seismo\Core\Lex\LexLegifranceContentFetcher::isConsultId($consultId));
+        self::assertTrue(\Seismo\Core\Lex\LexLegifranceContentFetcher::isJorfTextCid($consultId));
+    }
 }
 
