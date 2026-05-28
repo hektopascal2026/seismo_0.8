@@ -47,6 +47,7 @@ final class EmailIngestNormalizer
             || str_contains($lower, 'view this email')
             || str_contains($lower, 'requires a modern e-mail reader')
             || str_contains($lower, 'requires a modern email reader')
+            || str_contains($lower, 'does not support html')
             || (strlen($plain) < 400 && preg_match('#https?://#', $plain) === 1);
     }
 }
