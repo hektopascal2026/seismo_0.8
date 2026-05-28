@@ -373,13 +373,24 @@ ORDER BY DESC(?eff)
             }
             $description = $descrLines !== [] ? implode("\n\n", $descrLines) : null;
 
+            $statusLbl = '';
+            if ($g['status_uri'] !== '') {
+                $statusLbl = basename(parse_url($g['status_uri'], PHP_URL_PATH) ?: '');
+            }
+            $statusCategory = match ($statusLbl) {
+                '1' => 'foreseen',
+                '2' => 'ongoing',
+                default => 'ended',
+            };
+            $fedlexUrl = 'https://www.fedlex.admin.ch/' . $langPath . '/consultation-procedures/' . $statusCategory . '#' . $consUri;
+
             $out[] = [
                 'celex' => $celexCons,
                 'title' => $title,
                 'description' => $description,
                 'document_date' => $g['document_date'],
                 'document_type' => self::DOCUMENT_TYPE_VERNEHM,
-                'eurlex_url' => 'https://www.fedlex.admin.ch/' . $celexCons . '/' . $langPath,
+                'eurlex_url' => $fedlexUrl,
                 'work_uri' => $consUri,
                 'source' => 'ch',
             ];

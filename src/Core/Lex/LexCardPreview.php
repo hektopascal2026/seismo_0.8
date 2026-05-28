@@ -448,6 +448,10 @@ final class LexCardPreview
 
     private static function chSummary(string $description, string $excerpt): string
     {
+        if ($excerpt === '') {
+            return $description;
+        }
+
         // Keep only meta lines if any meta line is present
         $descLines = preg_split("/\r\n|\n|\r/", $description) ?: [];
         $hasMeta = false;

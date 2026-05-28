@@ -56,4 +56,17 @@ final class LexCardPreviewTest extends TestCase
 
         self::assertSame($line, $preview);
     }
+
+    public function testChSummaryKeepsFullDescriptionWhenExcerptIsEmpty(): void
+    {
+        $synopsis = "Stellungnahmefrist bis 17.09.2026\n\nTeilrevision des Fernmeldegesetzes (FMG) im Bereich Sicherheit";
+        $preview = LexCardPreview::previewText([
+            'source' => 'ch',
+            'description' => $synopsis,
+            'content_excerpt' => '',
+        ]);
+
+        self::assertSame($synopsis, $preview);
+    }
 }
+
