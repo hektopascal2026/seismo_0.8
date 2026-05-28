@@ -114,7 +114,11 @@ final class LexLegifranceContentFetcher
                 $parts[] = "Notice :\n" . LexPlainText::fromHtml($notice);
             }
             if ($exposeMotif !== '') {
-                $parts[] = "Exposé des motifs :\n" . LexPlainText::fromHtml($exposeMotif);
+                $plainMotif = LexPlainText::fromHtml($exposeMotif);
+                if (mb_strlen($plainMotif) > 2000) {
+                    $plainMotif = mb_substr($plainMotif, 0, 2000) . '…';
+                }
+                $parts[] = "Exposé des motifs :\n" . $plainMotif;
             }
 
             $plainText = trim(implode("\n\n", $parts));
