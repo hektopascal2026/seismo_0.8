@@ -278,7 +278,8 @@ final class EmailIngestRepository
             $profile    = EmailLocaleGuesser::profileForEmail((string)($row['subject'] ?? ''), $plainAfterNormalize);
             $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
             $resolution = EmailWebViewUrlExtractor::resolve($htmlBeforeNormalize, $plainAfterNormalize, $ranks, $customKeywords);
-            if (EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)
+            if (($resolution->hydrateBody && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW)
+                || EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)
                 || EmailAlternateLocalePolicy::needsTruncatedWebViewHydration($row, $resolution, $plainAfterNormalize)
             ) {
                 $hydrateHostedBody = true;
