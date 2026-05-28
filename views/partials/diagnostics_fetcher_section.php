@@ -25,10 +25,12 @@ if ($diagCards === []) {
                 <?php foreach ($diagCards as $id => $s): ?>
                 <?php
                     $cardClass = $diagCardClass($s['last']);
-                    $lastStatus = $s['last'] === null ? 'never run' : (string)($s['last']['status'] ?? '');
-                    $lastStatusLabel = $s['last'] === null ? 'never run' : $diagRunStatusLabel($lastStatus);
                     $lastWhen   = $s['last'] !== null ? seismo_format_utc($s['last']['run_at']) : null;
                     $nextWhen   = $s['next_allowed'] !== null ? seismo_format_utc($s['next_allowed']) : null;
+
+                    $friendly = $friendlyPluginStatus($s);
+                    $category = $friendlyCategory($s['entry_type']);
+                    $interval = $friendlyInterval((int)$s['min_interval']);
                 ?>
                 <div class="entry-card <?= e($cardClass) ?>">
                     <div class="entry-header">
@@ -36,48 +38,47 @@ if ($diagCards === []) {
                             <strong><?= e($s['label']) ?></strong>
                             <span class="entry-muted">(<?= e($s['id']) ?>)</span>
                         </span>
-                        <span class="entry-tag entry-tag--meta">family: <?= e((string)$s['entry_type']) ?></span>
-                        <span class="entry-tag entry-tag--meta">
-                            throttle: <?= $s['min_interval'] > 0 ? e((string)round($s['min_interval'] / 60)) . ' min' : 'none' ?>
+                        <span class="entry-tag entry-tag--meta" style="margin-inline-start: auto;">
+                            Category: <?= e($category) ?>
                         </span>
-                        <span class="entry-tag entry-tag--surface entry-tag--emphasis">last: <?= e($lastStatusLabel) ?></span>
-                        <?php if ($s['is_throttled']): ?>
-                            <span class="entry-tag entry-tag--warn-pill">throttled</span>
-                        <?php endif; ?>
                     </div>
-                    <div class="entry-content entry-content--mono-sm">
+
+                    <div style="margin: 0.5rem 0 0.75rem 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
+                        <span class="<?= e($friendly['class']) ?>"><?= e($friendly['label']) ?></span>
+                        <span class="entry-muted" style="font-size: 0.8125rem; font-weight: 500;">
+                            <?= e($friendly['desc']) ?> (Checks: <?= e(strtolower($interval)) ?>)
+                        </span>
+                    </div>
+
+                    <div class="entry-content entry-content--mono-sm" style="opacity: 0.85; border-top: 1px dashed rgba(0,0,0,0.15); padding-top: 0.5rem;">
                         <?php if ($s['last'] === null): ?>
-                            Never run.
+                            Never checked yet.
                         <?php else: ?>
-                            last_run: <?= e((string)$lastWhen) ?>
-                            · items: <?= (int)$s['last']['item_count'] ?>
-                            · duration: <?= (int)$s['last']['duration_ms'] ?> ms
-                            <?php if ($nextWhen !== null): ?>
-                                · next allowed: <?= e($nextWhen) ?>
-                            <?php endif; ?>
+                            <strong>Last check:</strong> <?= e((string)$lastWhen) ?>
+                            · <strong>Items added:</strong> <?= (int)$s['last']['item_count'] ?>
+                            · <strong>Duration:</strong> <?= e($friendlyDuration((int)$s['last']['duration_ms'])) ?>
                         <?php endif; ?>
-                        <?php if (!empty($s['last']['error_message'])): ?>
-                            <?php
-                            $isPartialRun = (($s['last']['status'] ?? '') === 'warn');
-                            $runMsgClass = $isPartialRun ? 'diag-inline-warn' : 'diag-inline-error';
-                            $runMsgLabel = $isPartialRun ? 'partial' : 'error';
-                            ?>
-                            <div class="<?= e($runMsgClass) ?>"><?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?></div>
+
+                        <?php if ($friendly['is_error'] && !empty($s['last']['error_message'])): ?>
+                            <div class="diag-inline-error" style="margin-top: 0.375rem; font-weight: 600;">
+                                ⚠️ System details: <?= e((string)$s['last']['error_message']) ?>
+                            </div>
                         <?php endif; ?>
-                        <?php if (($s['last']['status'] ?? '') === 'skipped' && !empty($s['last_attempt'])): ?>
+
+                        <?php if ($s['last'] !== null && $s['last']['status'] === 'skipped' && !empty($s['last_attempt'])): ?>
                             <?php
                             $att = $s['last_attempt'];
                             $attWhen = date('d.m.Y H:i', $att['run_at']->getTimestamp());
                             $attStatusLabel = $diagRunStatusLabel($att['status']);
                             $attMsgClass = ($att['status'] === 'warn') ? 'diag-inline-warn' : 'diag-inline-error';
                             ?>
-                            <div class="diag-inline-skipped" style="margin-top: 5px; font-size: 0.9em; opacity: 0.85;">
-                                ℹ️ Last attempt (<?= $attWhen ?>): 
-                                <span class="<?= e($attMsgClass) ?>" style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em;">
+                            <div class="diag-inline-skipped" style="margin-top: 0.375rem; font-size: 0.9em; opacity: 0.85;">
+                                ℹ️ Last attempt before skip (<?= $attWhen ?>): 
+                                <span class="<?= e($attMsgClass) ?>" style="display: inline-block; padding: 0.125rem 0.375rem; font-weight: bold;">
                                     <?= e($attStatusLabel) ?>
                                 </span>
-                                <?php if (!empty($att['error_message'])): ?>
-                                    <br><span class="diag-inline-error" style="display: inline-block; margin-top: 3px;"><?= e((string)$att['error_message']) ?></span>
+                                <?php if (!empty($att['error_message']) && $att['status'] !== 'ok' && !str_contains($att['error_message'], 'Throttled') && !str_contains($att['error_message'], 'Disabled')): ?>
+                                    <br><span class="diag-inline-error" style="display: inline-block; margin-top: 0.1875rem;"><?= e((string)$att['error_message']) ?></span>
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
@@ -86,7 +87,7 @@ if ($diagCards === []) {
                         <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form seismo-ajax-refresh-form">
                             <?= $csrfField ?>
                             <input type="hidden" name="plugin_id" value="<?= e($s['id']) ?>">
-                            <button type="submit" class="btn btn-secondary" data-refresh-label="Refresh now"<?= $satellite ? ' disabled' : '' ?>>Refresh now</button>
+                            <button type="submit" class="btn btn-secondary" data-refresh-label="Checking..."<?= $satellite ? ' disabled' : '' ?>>Check now</button>
                         </form>
                     </div>
                     <?php

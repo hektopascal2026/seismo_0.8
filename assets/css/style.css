@@ -1084,6 +1084,23 @@ textarea.search-input.setup-code-preview {
     background-color: #fff3cd;
 }
 
+/* Friendly status badges for Diagnostics */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border: 0.125rem solid #000000;
+    margin-inline-end: 0.5rem;
+    line-height: 1.1;
+    box-sizing: border-box;
+}
+.status-badge--success { background-color: #d4edda; color: #155724; }
+.status-badge--info    { background-color: #e8f4fd; color: #004085; }
+.status-badge--danger  { background-color: #f8d7da; color: #721c24; }
+.status-badge--neutral { background-color: #e2e3e5; color: #383d41; }
+
 .entry-content--mono-sm {
     margin-top: 0.5rem;
     font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
