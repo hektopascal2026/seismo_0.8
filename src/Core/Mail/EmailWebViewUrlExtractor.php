@@ -187,6 +187,7 @@ final class EmailWebViewUrlExtractor
                 self::firstAdminChNewnsbUrl($plain),
                 self::firstEuroparlPressRoomUrl($plain),
                 self::firstEuCommissionPressCornerUrl($plain),
+                self::firstParlamentGvAtUrl($plain),
                 self::firstPressReleaseUrlNearMarker($plain),
             ] as $press
         ) {
@@ -353,6 +354,7 @@ final class EmailWebViewUrlExtractor
             || str_contains($bodyNorm, 'communique de presse')
             || str_contains($bodyNorm, 'press release')
             || str_contains($bodyNorm, 'press corner')
+            || str_contains($bodyNorm, 'parlamentskorrespondenz')
             || (str_contains($bodyNorm, 'press service') && str_contains($bodyNorm, 'european parliament'));
 
         $headlineFallback = null;
@@ -364,7 +366,7 @@ final class EmailWebViewUrlExtractor
             if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
                 continue;
             }
-            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href) || self::isEuCommissionPressCornerUrl($href)) {
+            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href) || self::isEuCommissionPressCornerUrl($href) || self::isParlamentGvAtUrl($href)) {
                 return $href;
             }
             if ($isPress && $headlineFallback === null && self::looksLikePressHeadlineAnchor($anchor, $href)) {
@@ -476,6 +478,33 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
+    private static function isParlamentGvAtUrl(string $url): bool
+    {
+        return preg_match(
+            '#^https?://(?:www\.)?parlament\.gv\.at/[^\s<>"\'\]]*/pk[^\s<>"\'\]]+#i',
+            $url
+        ) === 1;
+    }
+
+    private static function firstParlamentGvAtUrl(string $text): ?string
+    {
+        if (preg_match_all(
+            '#https?://(?:www\.)?parlament\.gv\.at/[^\s<>"\'\]]*/pk[^\s<>"\'\]]+#iu',
+            $text,
+            $matches
+        ) === false) {
+            return null;
+        }
+        foreach ($matches[0] as $raw) {
+            $url = self::normalizeHref((string)$raw);
+            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
     private static function looksLikePressHeadlineAnchor(DOMElement $anchor, string $href): bool
     {
         $label = trim($anchor->textContent ?? '');
@@ -498,6 +527,9 @@ final class EmailWebViewUrlExtractor
         }
         if (str_contains($host, 'ec.europa.eu')) {
             return self::isEuCommissionPressCornerUrl($href);
+        }
+        if (str_contains($host, 'parlament.gv.at')) {
+            return self::isParlamentGvAtUrl($href);
         }
 
         return false;

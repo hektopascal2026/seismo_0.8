@@ -221,4 +221,15 @@ final class EmailWebViewUrlExtractorTest extends TestCase
             EmailWebViewUrlExtractor::fromPlainText($plainWithLink)
         );
     }
+
+    public function testAustrianParliamentHeadlineLinkIsWebViewUrl(): void
+    {
+        $expected = 'https://parlament.gv.at/aktuelles/pk/jahr_2026/pk0488';
+        $plain = "Parlamentskorrespondenz Nr. 488 vom 28.5.2026\n"
+            . "Sportausschuss: Kontrollen und Prävention im Mittelpunkt der NADA-Arbeit\n"
+            . "Sportausschuss: Kontrollen und Prävention im Mittelpunkt der NADA-Arbeit ({$expected})\n"
+            . "Nationale Anti-Doping-Agentur führte 2025 über 3.000 Dopingkontrollen durch";
+
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
 }
