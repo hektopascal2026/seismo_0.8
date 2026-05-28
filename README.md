@@ -217,6 +217,35 @@ Each satellite desk has its own `api_key` and training labels in `seismo_<slug>`
 
 ---
 
+## European Commission Press Corner Ingestion (Option A)
+
+Seismo implements a premium, push-based ingestion strategy (Option A) for European Commission Press Corner releases. Instead of continuously polling noisy, raw RSS feeds or scraping dynamic frontend content, Seismo leverages targeted email alerts to trigger exact, full-text API-driven hydration.
+
+### Why Option A is Superior
+
+1. **Precision & Filtering**: Users subscribe to specific topics, keywords, and languages in the EC Press Corner subscription portal. This ensures Seismo only ingests highly relevant press releases, avoiding the noise of raw, unfiltered feed streams.
+2. **Push-Based Ingestion**: The arrival of an email alert instantly triggers the process, ensuring near-instant delivery of breaking updates on the timeline.
+3. **No Polling Overhead**: Eliminates the resource overhead and potential rate-limiting issues of frequent polling/crawling.
+
+### Hydration Architecture & Flow
+
+When an EC email alert arrives, Seismo processes it through two main components:
+
+1. **Extraction (`EmailWebViewUrlExtractor`)**
+   - Scans the email for European Commission detail links matching `ec.europa.eu/commission/presscorner/detail/{lang}/{ref}`.
+   - Cleans link format anomalies (e.g., stripping wrapping parentheses dynamically via robust trim handling).
+2. **Reference Normalization & Hydration (`EmailWebViewBodyHydrator`)**
+   - The EC detail pages are built as Angular Single Page Applications (SPAs). Standard raw GET requests to the detail URL only return an empty JS shell.
+   - The hydrator automatically parses the document reference (e.g., normalizing `ip_26_1166` to `IP/26/1166`).
+   - It performs a direct, structured REST API call to retrieve the clean HTML content:
+     `https://ec.europa.eu/commission/presscorner/api/documents?reference={REFERENCE}&language={LANG}`
+   - The extracted text content replaces the thin email preview, hydrating the database entry with the official, full-text press release.
+3. **OpenSSL 3 Unexpected EOF Fallback**
+   - Certain EC API hosts close SSL sessions abruptly without standard `close_notify` alerts. Strict OpenSSL 3 configurations in modern cURL implementations will throw a connection error.
+   - Seismo includes a transparent fallback in `BaseClient` that switches to native PHP streams (`file_get_contents` with `ignore_errors` and relaxed SSL settings) if cURL encounters this EOF connection issue, guaranteeing uninterrupted ingestion.
+
+---
+
 ## Deploy notes
 
 - **PHP memory:** `bootstrap.php` raises `memory_limit` to **512M** when php.ini/FPM is lower (scraper, lex backfill). Optional pool override: `php_admin_value[memory_limit] = 512M`. Timeline page size stays capped by `EntryRepository::MAX_LIMIT` (200).
