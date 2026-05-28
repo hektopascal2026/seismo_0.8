@@ -816,6 +816,10 @@ textarea.search-input.setup-code-preview {
     background-color: var(--seismo-pill-leg);
 }
 
+.filter-pill-input:checked + .filter-pill-text--mem {
+    background-color: var(--seismo-pill-lex);
+}
+
 .filter-pill-label:hover .filter-pill-text {
     border-color: #000000;
 }

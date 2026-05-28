@@ -227,11 +227,14 @@ $formAction = $basePath . '/index.php';
                             <?= $legOn ? ' checked' : '' ?>>
                         <span class="filter-pill-text filter-pill-text--leg" title="Parliamentary calendar (Leg)"><?= e(seismo_leg_filter_pill_label()) ?></span>
                     </label>
-                    <span class="filter-toolbar__sep">|</span>
+                </div>
+
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Custom</span>
                     <label class="filter-pill-label" for="df-mem">
                         <input type="checkbox" class="filter-pill-input" id="df-mem" name="filters[mem]" value="1"
                             <?= $timelineFilter->filterMem ? ' checked' : '' ?>>
-                        <span class="filter-pill-text filter-pill-text--leg" title="Swissmem Monitor (Mem)">Mem</span>
+                        <span class="filter-pill-text filter-pill-text--mem" title="Swissmem Monitor (Mem)">Mem</span>
                     </label>
                 </div>
             </form>
