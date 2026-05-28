@@ -64,6 +64,23 @@ if ($diagCards === []) {
                             ?>
                             <div class="<?= e($runMsgClass) ?>"><?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?></div>
                         <?php endif; ?>
+                        <?php if (($s['last']['status'] ?? '') === 'skipped' && !empty($s['last_attempt'])): ?>
+                            <?php
+                            $att = $s['last_attempt'];
+                            $attWhen = date('d.m.Y H:i', $att['run_at']->getTimestamp());
+                            $attStatusLabel = $diagRunStatusLabel($att['status']);
+                            $attMsgClass = ($att['status'] === 'warn') ? 'diag-inline-warn' : 'diag-inline-error';
+                            ?>
+                            <div class="diag-inline-skipped" style="margin-top: 5px; font-size: 0.9em; opacity: 0.85;">
+                                ℹ️ Last attempt (<?= $attWhen ?>): 
+                                <span class="<?= e($attMsgClass) ?>" style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em;">
+                                    <?= e($attStatusLabel) ?>
+                                </span>
+                                <?php if (!empty($att['error_message'])): ?>
+                                    <br><span class="diag-inline-error" style="display: inline-block; margin-top: 3px;"><?= e((string)$att['error_message']) ?></span>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div class="entry-actions diag-actions">
                         <form method="post" action="<?= e($basePath) ?>/index.php?action=refresh_plugin" class="admin-inline-form seismo-ajax-refresh-form">

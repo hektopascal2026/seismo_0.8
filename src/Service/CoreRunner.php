@@ -241,32 +241,25 @@ final class CoreRunner
             $failed = 0;
             $rowsSkipped = 0;
             $cursorAfter = $afterId;
-            $lowestFailedInBatch = null;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
+                $cursorAfter = max($cursorAfter, $id);
                 $attempted++;
                 try {
                     $stats = $this->ingestRssFeed($feed);
                     $total += $stats->inserted;
                     $rowsSkipped += $stats->skipped;
                     $this->logFeedUpsertSkips('core:rss', $id, $stats);
-                    $cursorAfter = max($cursorAfter, $id);
                     $this->feeds->touchFeedSuccess($id);
                 } catch (\Throwable $e) {
                     $failed++;
-                    $lowestFailedInBatch = $lowestFailedInBatch === null
-                        ? $id
-                        : min($lowestFailedInBatch, $id);
                     error_log('Seismo core:rss feed ' . $id . ': ' . $e->getMessage());
                     $this->feeds->touchFeedFailure($id, $e->getMessage());
                 }
-            }
-            if ($lowestFailedInBatch !== null) {
-                $cursorAfter = min($cursorAfter, $lowestFailedInBatch - 1);
             }
 
             $this->addRssAccumulators($total, $attempted, $failed, $rowsSkipped);
@@ -454,9 +447,6 @@ final class CoreRunner
         );
     }
 
-    /**
-     * @param callable(bool): PluginRunResult $runOnce
-     */
     private function runChunkedCoreWithBudget(
         bool $force,
         int $webBudgetSec,
@@ -468,6 +458,7 @@ final class CoreRunner
         $deadline  = microtime(true) + $budgetSec;
         $chunkItemSum = 0;
         $last         = PluginRunResult::ok(0);
+        $budgetExceeded = false;
         for ($i = 0; $i < self::CHUNK_MAX_LOOPS && microtime(true) < $deadline; $i++) {
             $last = $runOnce($force);
             if ($last->isThrottleSkipped()) {
@@ -477,9 +468,26 @@ final class CoreRunner
                 return $last;
             }
             $chunkItemSum += $last->count;
+            if (microtime(true) >= $deadline) {
+                $budgetExceeded = true;
+            }
         }
 
         $via = $force ? 'next cron or refresh' : 'next cron tick';
+        
+        // Track consecutive time-budget pauses
+        $key = 'refresh_chunk:' . strtolower($label) . '_consecutive_pauses';
+        $consecutive = (int)($this->magnituConfig->get($key) ?? '0');
+        $consecutive++;
+        $this->magnituConfig->set($key, (string)$consecutive);
+
+        if ($consecutive >= 3) {
+            $msg = 'Stuck Queue Alert: ' . $label . ' refresh has been paused on the time budget ' . $consecutive . ' consecutive runs. An active feed or scraper is likely deadlocking.';
+            $r = new PluginRunResult('warn', $chunkItemSum, $msg, true);
+            $coreId = ($label === 'RSS') ? self::ID_RSS : self::ID_SCRAPER;
+            $this->record($coreId, $r, (int)($budgetSec * 1000));
+            return $r;
+        }
 
         return new PluginRunResult(
             'ok',
@@ -522,32 +530,25 @@ final class CoreRunner
             $failed = 0;
             $rowsSkipped = 0;
             $cursorAfter = $afterId;
-            $lowestFailedInBatch = null;
             foreach ($batch as $feed) {
                 $id = (int)($feed['id'] ?? 0);
                 $url = trim((string)($feed['url'] ?? ''));
                 if ($id <= 0 || $url === '') {
                     continue;
                 }
+                $cursorAfter = max($cursorAfter, $id);
                 $attempted++;
                 try {
                     $stats = $this->ingestScraperFeed($feed, !$force);
                     $total += $stats->inserted;
                     $rowsSkipped += $stats->skipped;
                     $this->logFeedUpsertSkips('core:scraper', $id, $stats);
-                    $cursorAfter = max($cursorAfter, $id);
                     $this->feeds->touchFeedSuccess($id);
                 } catch (\Throwable $e) {
                     $failed++;
-                    $lowestFailedInBatch = $lowestFailedInBatch === null
-                        ? $id
-                        : min($lowestFailedInBatch, $id);
                     error_log('Seismo core:scraper feed ' . $id . ': ' . $e->getMessage());
                     $this->feeds->touchFeedFailure($id, $e->getMessage());
                 }
-            }
-            if ($lowestFailedInBatch !== null) {
-                $cursorAfter = min($cursorAfter, $lowestFailedInBatch - 1);
             }
 
             $this->addScraperAccumulators($total, $attempted, $failed, $rowsSkipped);
@@ -815,6 +816,7 @@ final class CoreRunner
         $skipped = $this->getAccInt(self::K_RSS_SKIPPED_ACC);
         $this->zeroRssAccumulators();
         $this->magnituConfig->set(self::K_RSS_AFTER, '0');
+        $this->magnituConfig->set('refresh_chunk:rss_consecutive_pauses', '0');
         $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_RSS, $r, $duration);
@@ -858,6 +860,7 @@ final class CoreRunner
         $skipped = $this->getAccInt(self::K_SCRAPER_SKIPPED_ACC);
         $this->zeroScraperAccumulators();
         $this->magnituConfig->set(self::K_SCRAPER_AFTER, '0');
+        $this->magnituConfig->set('refresh_chunk:scraper_consecutive_pauses', '0');
         $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_SCRAPER, $r, $duration);
@@ -1135,16 +1138,14 @@ final class CoreRunner
         if ($lastOk !== null && ($now->getTimestamp() - $lastOk->getTimestamp()) < $minSeconds) {
             return true;
         }
-        $last = $this->runLog->lastRunAt(self::ID_MAIL);
-        if ($last === null) {
-            return false;
-        }
-        $latest = $this->runLog->latestPerPlugin([self::ID_MAIL])[self::ID_MAIL] ?? null;
-        if ($latest === null || $latest['status'] !== 'error') {
-            return false;
+        $lastNonSkipped = $this->runLog->lastNonSkippedRun(self::ID_MAIL);
+        if ($lastNonSkipped !== null && $lastNonSkipped['status'] === 'error') {
+            if (($now->getTimestamp() - $lastNonSkipped['run_at']->getTimestamp()) < $minSeconds) {
+                return true;
+            }
         }
 
-        return ($now->getTimestamp() - $last->getTimestamp()) < $minSeconds;
+        return false;
     }
 
     private function record(string $id, PluginRunResult $result, int $durationMs): void

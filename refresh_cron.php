@@ -91,8 +91,15 @@ if (!$cronMutex->tryAcquireRefreshCron()) {
     $log("[seismo] skipped — another refresh_cron tick is still running (advisory lock).\n");
     exit(0);
 }
-register_shutdown_function(static function () use ($cronMutex): void {
+
+// Track execution start time in DB for Diagnostics warnings
+$cronConfig = new \Seismo\Repository\SystemConfigRepository($pdo);
+$cronConfig->set('refresh_cron:started_at', (string)time());
+
+register_shutdown_function(static function () use ($cronMutex, $pdo): void {
     try {
+        $cronConfig = new \Seismo\Repository\SystemConfigRepository($pdo);
+        $cronConfig->delete('refresh_cron:started_at');
         $cronMutex->releaseRefreshCron();
     } catch (\Throwable) {
         // Connection may already be gone; MySQL also releases locks when the session ends.

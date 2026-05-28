@@ -91,12 +91,17 @@ final class GmailApiInboxClient
         }
 
         $historyAdvanced = false;
-        if ($fetchFailures === 0 && !$safetyCapTruncated && $historyAdvanceId !== '') {
+        if (!$safetyCapTruncated && $historyAdvanceId !== '') {
             $this->config->set(MailConfigKeys::GMAIL_HISTORY_ID, $historyAdvanceId);
             $historyAdvanced = true;
-        } elseif ($fetchFailures > 0) {
+            if ($fetchFailures > 0) {
+                error_log(
+                    '[seismo] Gmail fetch: ' . $fetchFailures . ' message(s) failed but history cursor was advanced past them to avoid queue stall.'
+                );
+            }
+        } elseif ($safetyCapTruncated) {
             error_log(
-                '[seismo] Gmail fetch: ' . $fetchFailures . ' message(s) failed — history cursor unchanged (ids will retry).'
+                '[seismo] Gmail fetch: safety cap truncated history fetch — history cursor unchanged.'
             );
         }
 

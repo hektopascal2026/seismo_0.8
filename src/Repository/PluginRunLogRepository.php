@@ -259,6 +259,35 @@ final class PluginRunLogRepository
     }
 
     /**
+     * Get the latest log entry for a plugin that is NOT 'skipped'.
+     *
+     * @return array{run_at: DateTimeImmutable, status: string}|null
+     */
+    public function lastNonSkippedRun(string $pluginId): ?array
+    {
+        $sql = 'SELECT run_at, status FROM plugin_run_log 
+                WHERE plugin_id = ? AND status != \'skipped\' 
+                ORDER BY run_at DESC LIMIT 1';
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([$pluginId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false || $row === null) {
+                return null;
+            }
+            return [
+                'run_at' => new DateTimeImmutable((string)$row['run_at'], new DateTimeZone('UTC')),
+                'status' => (string)$row['status']
+            ];
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return null;
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * Delete diagnostic rows older than $cutoff (UTC). Keeps throttle / diagnostics queries bounded.
      */
     public function pruneOlderThan(DateTimeImmutable $cutoff): int

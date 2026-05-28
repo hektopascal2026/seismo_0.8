@@ -61,6 +61,13 @@ $diagSourceHealthMail = $diagSourceHealthMail ?? [];
 $diagSourceHealthStaleDays = (int)($diagSourceHealthStaleDays ?? 14);
 $diagSourceHealthError = $diagSourceHealthError ?? null;
 ?>
+        <?php if (isset($cronStalledMinutes) && $cronStalledMinutes !== null): ?>
+            <div class="message message-error" style="margin-bottom: 20px;">
+                <strong>⚠️ Warning: Background cron job appears stalled!</strong><br>
+                The master cron execution started <?= (int)$cronStalledMinutes ?> minutes ago and is still holding the advisory lock. 
+                This usually indicates a stuck loop or a process time-budget deadlock.
+            </div>
+        <?php endif; ?>
         <?php if ($diagLoadError !== null): ?>
             <div class="message message-error"><?= e($diagLoadError) ?></div>
         <?php endif; ?>
@@ -286,6 +293,23 @@ $diagSourceHealthError = $diagSourceHealthError ?? null;
                                 ?>
                                 <div class="<?= e($runMsgClass) ?>">
                                     <?= e($runMsgLabel) ?>: <?= e((string)$s['last']['error_message']) ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (($s['last']['status'] ?? '') === 'skipped' && !empty($s['last_attempt'])): ?>
+                                <?php
+                                $att = $s['last_attempt'];
+                                $attWhen = date('d.m.Y H:i', $att['run_at']->getTimestamp());
+                                $attStatusLabel = $diagRunStatusLabel($att['status']);
+                                $attMsgClass = ($att['status'] === 'warn') ? 'diag-inline-warn' : 'diag-inline-error';
+                                ?>
+                                <div class="diag-inline-skipped" style="margin-top: 5px; font-size: 0.9em; opacity: 0.85;">
+                                    ℹ️ Last attempt (<?= $attWhen ?>): 
+                                    <span class="<?= e($attMsgClass) ?>" style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.9em;">
+                                        <?= e($attStatusLabel) ?>
+                                    </span>
+                                    <?php if (!empty($att['error_message'])): ?>
+                                        <br><span class="diag-inline-error" style="display: inline-block; margin-top: 3px;"><?= e((string)$att['error_message']) ?></span>
+                                    <?php endif; ?>
                                 </div>
                             <?php endif; ?>
                         </div>

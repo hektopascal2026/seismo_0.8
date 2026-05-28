@@ -88,4 +88,19 @@ final class CronMutexRepository
         $stmt = $this->pdo->prepare('SELECT RELEASE_LOCK(?)');
         $stmt->execute([self::satelliteRescoreCronLockName()]);
     }
+
+    /**
+     * Check if the refresh_cron named advisory lock is currently held.
+     */
+    public function isRefreshCronLockHeld(): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT IS_FREE_LOCK(?)');
+        $stmt->execute([self::refreshCronLockName()]);
+        $v = $stmt->fetchColumn();
+        if ($v === false || $v === null) {
+            return false;
+        }
+
+        return (int)$v === 0;
+    }
 }

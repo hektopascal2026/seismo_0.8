@@ -98,6 +98,8 @@ final class DiagnosticsController
         $loadError   = null;
         $runHistory  = [];
         $pdo         = null;
+        $cronStalledMinutes = null;
+        $log         = null;
 
         try {
             $pdo        = getDbConnection();
@@ -105,6 +107,19 @@ final class DiagnosticsController
             $ids        = array_merge(array_keys($coreMeta), array_keys($mediaMeta), array_keys($plugins));
             $latest     = $log->latestPerPlugin($ids);
             $runHistory = $log->recentForPlugins($ids, 8);
+
+            // Stuck Cron Advisory Mutex Warning
+            $mutex = new \Seismo\Repository\CronMutexRepository($pdo);
+            if ($mutex->isRefreshCronLockHeld()) {
+                $configRepo = new \Seismo\Repository\SystemConfigRepository($pdo);
+                $started = $configRepo->get('refresh_cron:started_at');
+                if ($started !== null && $started !== '' && ctype_digit($started)) {
+                    $elapsed = time() - (int)$started;
+                    if ($elapsed > 600) { // 10 minutes
+                        $cronStalledMinutes = (int)round($elapsed / 60);
+                    }
+                }
+            }
         } catch (\Throwable $e) {
             error_log('Seismo diagnostics: ' . $e->getMessage());
             $loadError = 'Could not read plugin_run_log. Has the latest migration run yet? (php migrate.php)';
@@ -114,8 +129,8 @@ final class DiagnosticsController
 
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 
-        $coreStatus  = self::buildFetcherStatusMap($coreMeta, $latest, $now, mailErrorCountsAsThrottle: true);
-        $mediaStatus = self::buildFetcherStatusMap($mediaMeta, $latest, $now, mailErrorCountsAsThrottle: false);
+        $coreStatus  = self::buildFetcherStatusMap($coreMeta, $latest, $now, true, $log);
+        $mediaStatus = self::buildFetcherStatusMap($mediaMeta, $latest, $now, false, $log);
 
         foreach ($plugins as $id => $plugin) {
             $row = $latest[$id] ?? null;
@@ -124,6 +139,11 @@ final class DiagnosticsController
             $nextAllowed = null;
             if ($row !== null && in_array($row['status'], ['ok', 'warn'], true) && $minInterval > 0) {
                 $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
+            }
+
+            $lastAttempt = null;
+            if ($row !== null && $row['status'] === 'skipped' && $log !== null) {
+                $lastAttempt = $log->lastNonSkippedRun($id);
             }
 
             $status[$id] = [
@@ -136,6 +156,7 @@ final class DiagnosticsController
                 'next_allowed'  => $nextAllowed,
                 'is_throttled'  => $nextAllowed !== null && $nextAllowed > $now,
                 'is_core'       => false,
+                'last_attempt'  => $lastAttempt,
             ];
         }
 
@@ -169,6 +190,7 @@ final class DiagnosticsController
             'diagSourceHealthMail'    => $sourceHealthMail,
             'diagSourceHealthStaleDays' => $sourceHealthDays,
             'diagSourceHealthError'   => $sourceHealthError,
+            'cronStalledMinutes'      => $cronStalledMinutes,
         ];
     }
 
@@ -572,6 +594,7 @@ final class DiagnosticsController
     /**
      * @param array<string, array{label: string, min_interval: int, entry_type: string}> $metaById
      * @param array<string, ?array{status: string, run_at: \DateTimeImmutable, item_count: int, error_message: ?string, duration_ms: int}> $latest
+     * @param ?PluginRunLogRepository $log
      *
      * @return array<string, array<string, mixed>>
      */
@@ -580,6 +603,7 @@ final class DiagnosticsController
         array $latest,
         DateTimeImmutable $now,
         bool $mailErrorCountsAsThrottle,
+        ?PluginRunLogRepository $log = null,
     ): array {
         $out = [];
         foreach ($metaById as $id => $meta) {
@@ -592,6 +616,12 @@ final class DiagnosticsController
                     $nextAllowed = $row['run_at']->modify('+' . $minInterval . ' seconds');
                 }
             }
+
+            $lastAttempt = null;
+            if ($row !== null && $row['status'] === 'skipped' && $log !== null) {
+                $lastAttempt = $log->lastNonSkippedRun($id);
+            }
+
             $out[$id] = [
                 'id'           => $id,
                 'label'        => $meta['label'],
@@ -602,6 +632,7 @@ final class DiagnosticsController
                 'next_allowed' => $nextAllowed,
                 'is_throttled' => $nextAllowed !== null && $nextAllowed > $now,
                 'is_core'      => true,
+                'last_attempt' => $lastAttempt,
             ];
         }
 
