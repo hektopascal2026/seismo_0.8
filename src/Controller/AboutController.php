@@ -38,6 +38,12 @@ final class AboutController
         $seismoVersion = SEISMO_VERSION;
         $satellite     = isSatellite();
 
+        $view = $_GET['view'] ?? 'overview';
+        if ($view !== 'history') {
+            $view = 'overview';
+        }
+
         require SEISMO_ROOT . '/views/about.php';
     }
 }
+
