@@ -73,7 +73,7 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                 <h2 class="section-title">
                     <?= count($allItems) ?> <?= count($allItems) === 1 ? 'entry' : 'entries' ?>
                 </h2>
-                <button class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button>
+                <button class="btn btn-secondary entry-expand-all-btn">expand all &#9662;</button>
             </div>
             <?php if ($dashboardError !== null): ?>
             <?php elseif ($allItems !== []): ?>
@@ -286,41 +286,41 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                     });
             });
         }
-        function collapse(card, btn) {
-            var preview = card.querySelector('.entry-preview');
-            var full    = card.querySelector('.entry-full-content');
-            if (!preview || !full) return;
-            full.style.display = 'none';
-            preview.style.display = '';
-            if (btn) btn.textContent = 'expand \u25BC';
-        }
-        function expand(card, btn) {
-            var preview = card.querySelector('.entry-preview');
-            var full    = card.querySelector('.entry-full-content');
-            if (!preview || !full) return;
-            preview.style.display = 'none';
-            full.style.display    = 'block';
-            if (btn) btn.textContent = 'collapse \u25B2';
-        }
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.entry-expand-btn');
-            if (!btn) return;
-            var card = btn.closest('.entry-card');
-            var full = card.querySelector('.entry-full-content');
-            if (!full) return;
-            full.style.display === 'block' ? collapse(card, btn) : expand(card, btn);
-        });
-        document.addEventListener('click', function(e) {
-            var btn = e.target.closest('.entry-expand-all-btn');
-            if (!btn) return;
-            var isExpanded = btn.dataset.expanded === 'true';
-            document.querySelectorAll('.entry-card').forEach(function(card) {
-                var cardBtn = card.querySelector('.entry-expand-btn');
-                isExpanded ? collapse(card, cardBtn) : expand(card, cardBtn);
-            });
-            btn.dataset.expanded = !isExpanded;
-            btn.textContent = !isExpanded ? 'collapse all \u25B2' : 'expand all \u25BC';
-        });
+         function collapse(card, btn) {
+             var preview = card.querySelector('.entry-preview');
+             var full    = card.querySelector('.entry-full-content');
+             if (!preview || !full) return;
+             full.style.display = 'none';
+             preview.style.display = '';
+             if (btn) btn.textContent = 'expand \u25BE';
+         }
+         function expand(card, btn) {
+             var preview = card.querySelector('.entry-preview');
+             var full    = card.querySelector('.entry-full-content');
+             if (!preview || !full) return;
+             preview.style.display = 'none';
+             full.style.display    = 'block';
+             if (btn) btn.textContent = 'collapse \u25B4';
+         }
+         document.addEventListener('click', function(e) {
+             var btn = e.target.closest('.entry-expand-btn');
+             if (!btn) return;
+             var card = btn.closest('.entry-card');
+             var full = card.querySelector('.entry-full-content');
+             if (!full) return;
+             full.style.display === 'block' ? collapse(card, btn) : expand(card, btn);
+         });
+         document.addEventListener('click', function(e) {
+             var btn = e.target.closest('.entry-expand-all-btn');
+             if (!btn) return;
+             var isExpanded = btn.dataset.expanded === 'true';
+             document.querySelectorAll('.entry-card').forEach(function(card) {
+                 var cardBtn = card.querySelector('.entry-expand-btn');
+                 isExpanded ? collapse(card, cardBtn) : expand(card, cardBtn);
+             });
+             btn.dataset.expanded = !isExpanded;
+             btn.textContent = !isExpanded ? 'collapse all \u25B4' : 'expand all \u25BE';
+         });
     })();
     </script>
 </body>

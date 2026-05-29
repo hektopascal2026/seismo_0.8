@@ -27,5 +27,5 @@ $showTimelineHighlightsSortToggle = !empty($showTimelineHighlightsSortToggle);
 <?php if ($showTimelineHighlightsSortToggle): ?>
     <?php require __DIR__ . '/timeline_highlights_sort_toggle.php'; ?>
 <?php endif; ?>
-<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9660;</button>
+<button type="button" class="btn btn-secondary entry-expand-all-btn">expand all &#9662;</button>
 </div>

@@ -63,7 +63,7 @@ if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($scraperHasMore): ?>
-                                        <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                        <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">

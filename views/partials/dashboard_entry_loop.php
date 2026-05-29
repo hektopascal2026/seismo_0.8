@@ -223,21 +223,27 @@ $entryLoopIndex                 = 0;
                                 <?php endif; ?>
                             </h3>
                             <?php if (!empty($lexDesc) && !$lexSkipDescPreview): ?>
-                                <div class="entry-content entry-preview"><?= nl2br(htmlspecialchars($lexPreview)) ?></div>
+                                <div class="entry-content entry-preview">
+                                    <?= nl2br(htmlspecialchars($lexPreview)) ?>
+                                    <?php if ($lexHasUrl): ?>
+                                        <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview"><?= $lexLinkLabel ?></a>
+                                    <?php endif; ?>
+                                </div>
                                 <?php if ($lexHasMore): ?>
                                     <div class="entry-full-content"><?= nl2br(htmlspecialchars($lexDesc)) ?></div>
                                 <?php endif; ?>
+                            <?php elseif ($lexHasUrl): ?>
+                                <div class="entry-content entry-preview">
+                                    <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview"><?= $lexLinkLabel ?></a>
+                                </div>
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if (!empty($lexDesc) && $lexHasMore && !$lexSkipDescPreview): ?>
-                                        <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                        <button class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                     <?php endif; ?>
                                     <?php if (!$lexFooterMonoHide): ?>
                                     <span class="entry-meta-mono<?= $isJus ? ' entry-meta-mono--jus' : '' ?>"><?= htmlspecialchars((string)$lexCelexDisplay) ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($lexHasUrl): ?>
-                                    <a href="<?= htmlspecialchars($lexUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= $lexLinkLabel ?></a>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">
@@ -304,7 +310,7 @@ $entryLoopIndex                 = 0;
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($calHasMore): ?>
-                                        <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                        <button class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                     <?php endif; ?>
                                     <?php if ($calHasUrl): ?>
                                     <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
@@ -393,7 +399,7 @@ $entryLoopIndex                 = 0;
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>
-                                        <button class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                        <button class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                     <?php endif; ?>
                                     <?php if ($webViewUrl !== null && $bodyPreview === ''): ?>
                                         <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link">View in browser &rarr;</a>

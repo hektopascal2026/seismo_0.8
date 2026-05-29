@@ -125,7 +125,7 @@ $timelineMediaToggleFeature = true;
             if (!preview || !full) return;
             full.style.display = 'none';
             preview.style.display = '';
-            if (btn) btn.textContent = 'expand \u25BC';
+            if (btn) btn.textContent = 'expand \u25BE';
         }
         function expand(card, btn) {
             var preview = card.querySelector('.entry-preview');
@@ -133,7 +133,7 @@ $timelineMediaToggleFeature = true;
             if (!preview || !full) return;
             preview.style.display = 'none';
             full.style.display    = 'block';
-            if (btn) btn.textContent = 'collapse \u25B2';
+            if (btn) btn.textContent = 'collapse \u25B4';
         }
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.entry-expand-btn');
@@ -152,7 +152,7 @@ $timelineMediaToggleFeature = true;
                 isExpanded ? collapse(card, cardBtn) : expand(card, cardBtn);
             });
             btn.dataset.expanded = !isExpanded;
-            btn.textContent = !isExpanded ? 'collapse all \u25B2' : 'expand all \u25BC';
+            btn.textContent = !isExpanded ? 'collapse all \u25B4' : 'expand all \u25BE';
         });
     })();
     </script>

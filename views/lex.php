@@ -275,21 +275,27 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
                             <?php endif; ?>
                         </h3>
                         <?php if ($lexDesc !== '' && !$lexSkipDescPreview): ?>
-                            <div class="entry-content entry-preview"><?= nl2br(e($lexPreview)) ?></div>
+                            <div class="entry-content entry-preview">
+                                <?= nl2br(e($lexPreview)) ?>
+                                <?php if ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
+                                    <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview"><?= e($linkLabel) ?></a>
+                                <?php endif; ?>
+                            </div>
                             <?php if ($lexHasMore): ?>
                                 <div class="entry-full-content"><?= nl2br(e($lexDesc)) ?></div>
                             <?php endif; ?>
+                        <?php elseif ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
+                            <div class="entry-content entry-preview">
+                                <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview"><?= e($linkLabel) ?></a>
+                            </div>
                         <?php endif; ?>
                         <div class="entry-actions">
                             <div class="entry-actions-main">
                                 <?php if ($lexHasMore && !$lexSkipDescPreview): ?>
-                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                 <?php endif; ?>
                                 <?php if (!$hideParlMmLexFooterIds && !$lexLexPageFooterMonoHide): ?>
                                     <span class="entry-meta-mono"><?= e((string)($item['celex'] ?? '')) ?></span>
-                                <?php endif; ?>
-                                <?php if ($lexHasUrl && !$hideParlMmLexFooterIds): ?>
-                                        <a href="<?= e($itemUrl) ?>" target="_blank" rel="noopener" class="entry-link"><?= e($linkLabel) ?></a>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($item['document_date'])): ?>
@@ -608,7 +614,7 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
             if (!preview || !full) return;
             full.style.display = 'none';
             preview.style.display = '';
-            if (btn) btn.innerHTML = 'expand \u25BC';
+            if (btn) btn.innerHTML = 'expand \u25BE';
         }
         function expandEntry(card, btn) {
             var preview = card.querySelector('.entry-preview');
@@ -616,7 +622,7 @@ $lexReturnViewHidden = '<input type="hidden" name="return_view" value="sources">
             if (!preview || !full) return;
             preview.style.display = 'none';
             full.style.display = 'block';
-            if (btn) btn.innerHTML = 'collapse \u25B2';
+            if (btn) btn.innerHTML = 'collapse \u25B4';
         }
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.entry-expand-btn');

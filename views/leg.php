@@ -281,7 +281,7 @@ $sourcesQs = 'action=leg&view=sources';
                         <div class="entry-actions">
                             <div class="entry-actions-main">
                                 <?php if ($hasMore): ?>
-                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9660;</button>
+                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                 <?php endif; ?>
                                 <?php if (seismo_is_navigable_url($eventUrl)): ?>
                                     <a href="<?= e($eventUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch →</a>
@@ -374,11 +374,11 @@ $sourcesQs = 'action=leg&view=sources';
             if (full.style.display === 'block') {
                 full.style.display = 'none';
                 preview.style.display = '';
-                btn.innerHTML = 'expand \u25BC';
+                btn.innerHTML = 'expand \u25BE';
             } else {
                 full.style.display = 'block';
                 preview.style.display = 'none';
-                btn.innerHTML = 'collapse \u25B2';
+                btn.innerHTML = 'collapse \u25B4';
             }
         });
     })();

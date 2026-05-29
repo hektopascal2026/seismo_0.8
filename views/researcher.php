@@ -1545,7 +1545,7 @@ $moduleOptions = [
             if (!preview || !full) return;
             full.style.display = 'none';
             preview.style.display = '';
-            if (btn) btn.textContent = 'expand \u25BC';
+            if (btn) btn.textContent = 'expand \u25BE';
         }
         function expandEntryCard(card, btn) {
             var preview = card.querySelector('.entry-preview');
@@ -1553,7 +1553,7 @@ $moduleOptions = [
             if (!preview || !full) return;
             preview.style.display = 'none';
             full.style.display = 'block';
-            if (btn) btn.textContent = 'collapse \u25B2';
+            if (btn) btn.textContent = 'collapse \u25B4';
         }
         document.addEventListener('click', function(e) {
             var btn = e.target.closest('.entry-expand-btn');
