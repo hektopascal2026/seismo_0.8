@@ -24,7 +24,11 @@ $seismoNavLeadThrottleMs = seismo_ui_nav_leading_throttle_ms();
 
 $activeNav = $activeNav ?? 'index';
 $filterNavQs = $filterNavQs ?? 'action=filter';
-?>
+<!-- Premium Design System Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
         <div class="top-bar">
             <div class="top-bar-left">
                 <button type="button" id="seismo-nav-toggle" class="top-bar-btn nav-menu-toggle" aria-expanded="false" aria-controls="seismo-nav-drawer" title="Menu">☰</button>
