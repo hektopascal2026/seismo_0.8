@@ -2,15 +2,46 @@
 
 /* ═══ DESIGN SYSTEM VARIABLES ═══ */
 :root {
+    /* Typographical Stacks */
     --sans-font: 'Inter', system-ui, -apple-system, sans-serif;
     --title-font: 'Outfit', sans-serif;
     --display-font: 'Space Grotesk', sans-serif;
     --mono-font: 'Space Mono', 'Fira Code', monospace;
     
+    /* Curated Harmonies (Brutalist HSL Colors) */
     --color-bg: #f8f9fa;
     --color-dark: #000000;
     --color-light-grey: #f8f9fa;
     --color-border: #000000;
+    
+    /* Unified Tactical States */
+    --color-accent: #ffea00;         /* Vibrant brand yellow */
+    --color-hover-accent: #fff9e6;   /* Creamy yellow */
+    
+    /* Functional Colors (Mapped exactly to styleguide) */
+    --color-success: #00aa00;
+    --color-success-hover: #eafaf1;
+    --color-success-active: #c3e6cb;
+    
+    --color-warning: #ff9900;
+    --color-warning-hover: #fffdf0;
+    --color-warning-active: #ffe8cc;
+    
+    --color-danger: #FF2C2C;
+    --color-danger-hover: #fff5f5;
+    --color-danger-active: #f8d7da;
+    
+    /* Spacing Tokens */
+    --space-xxs: 0.125rem;  /* 2px */
+    --space-xs: 0.25rem;    /* 4px */
+    --space-sm: 0.5rem;     /* 8px */
+    --space-md: 0.625rem;   /* 10px */
+    --space-lg: 0.75rem;    /* 12px */
+    --space-xl: 0.875rem;   /* 14px */
+    --space-xxl: 1rem;      /* 16px */
+    --space-3xl: 1.25rem;   /* 20px */
+    --space-4xl: 1.5rem;    /* 24px */
+    --space-5xl: 2rem;      /* 32px */
 }
 
 /* ═══ Base ═══ */
@@ -3337,6 +3368,182 @@ pre,
 .item-card {
     padding: 1rem 1.25rem !important;
     transition: box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease !important;
+}
+
+/* ==========================================
+   UNIFIED BRUTALIST CLICKABLES & TRANSITIONS
+   Declared last to cleanly override any legacy/duplicate selectors
+   ========================================== */
+
+/* De-clutter joined border navigation drawer box */
+.nav-drawer {
+    display: none;
+    border: none !important;
+    background: transparent !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem 0 !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 1.5rem !important;
+    flex-wrap: wrap !important;
+}
+
+.nav-drawer.open {
+    display: flex !important;
+}
+
+.btn, .top-bar-btn, .settings-tabs a, 
+.view-toggle-bar a, .nav-link, .label-btn, .tag-filter-pill {
+    border: 0.125rem solid #000000 !important;
+    border-radius: 0 !important; /* Locks sharp 90-degree tactile corners */
+    font-weight: 600 !important;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, border-color 0.1s ease !important;
+    box-shadow: 0.125rem 0.125rem 0 #000000 !important; /* Premium tactile 2px shadow standard */
+    cursor: pointer !important;
+    text-decoration: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* 3D Tactile Hover Lift (Strictly no background color changes) */
+.btn:hover, .top-bar-btn:hover, .settings-tabs a:hover, 
+.view-toggle-bar a:hover, .nav-link:hover, .label-btn:hover, .tag-filter-pill:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 0.1875rem 0.1875rem 0 #000000 !important; /* Expanded 3px shadow */
+}
+
+/* 3D Pressed Active State (Transient) */
+.btn:active, .top-bar-btn:active, .settings-tabs a:active, 
+.view-toggle-bar a:active, .nav-link:active, .label-btn:active, .tag-filter-pill:active {
+    transform: translate(1px, 1px) !important;
+    box-shadow: 0 0 0 #000000 !important; /* Collapsed 0px shadow */
+}
+
+/* 3D Selected State (Persistent - rests flat at baseline with 1px drop shadow) */
+.btn.active, .btn.is-active,
+.top-bar-btn.active, 
+.settings-tabs a.active, .nav-link.active, .label-btn.active,
+.tag-filter-pill-active, .tag-filter-pill.active {
+    transform: none !important; /* Rests on baseline */
+    box-shadow: 0.0625rem 0.0625rem 0 #000000 !important; /* Maintains 1px drop shadow */
+    background-color: #ffea00 !important; /* Brand yellow accent */
+    color: #000000 !important; /* High contrast black text */
+}
+
+/* Error setting tab state */
+.settings-tabs a.settings-tab--error {
+    border-color: #FF2C2C !important;
+    color: #FF2C2C !important;
+}
+
+.settings-tabs a.settings-tab--error:hover {
+    box-shadow: 0.1875rem 0.1875rem 0 #FF2C2C !important;
+}
+
+.settings-tabs a.settings-tab--error.active {
+    transform: none !important;
+    box-shadow: 0.0625rem 0.0625rem 0 #FF2C2C !important;
+    background-color: #FF2C2C !important;
+    color: #ffffff !important;
+}
+
+/* Functional Override: SUCCESS */
+.btn-success {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: var(--color-success) !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-success) !important;
+}
+
+.btn-success:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 0.125rem 0.125rem 0 var(--color-success) !important;
+    background-color: var(--color-success-hover) !important;
+}
+
+.btn-success:active {
+    transform: translate(1px, 1px) !important;
+    box-shadow: 0 0 0 var(--color-success) !important;
+}
+
+.btn-success.active {
+    transform: none !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-success) !important;
+    background-color: var(--color-success-active) !important;
+}
+
+/* Functional Override: WARNING */
+.btn-warning {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: var(--color-warning) !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-warning) !important;
+}
+
+.btn-warning:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 0.125rem 0.125rem 0 var(--color-warning) !important;
+    background-color: var(--color-warning-hover) !important;
+}
+
+.btn-warning:active {
+    transform: translate(1px, 1px) !important;
+    box-shadow: 0 0 0 var(--color-warning) !important;
+}
+
+.btn-warning.active {
+    transform: none !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-warning) !important;
+    background-color: var(--color-warning-active) !important;
+}
+
+/* Functional Override: DANGER */
+.btn-danger {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: var(--color-danger) !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-danger) !important;
+}
+
+.btn-danger:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 0.125rem 0.125rem 0 var(--color-danger) !important;
+    background-color: var(--color-danger-hover) !important;
+}
+
+.btn-danger:active {
+    transform: translate(1px, 1px) !important;
+    box-shadow: 0 0 0 var(--color-danger) !important;
+}
+
+.btn-danger.active {
+    transform: none !important;
+    box-shadow: 0.0625rem 0.0625rem 0 var(--color-danger) !important;
+    background-color: var(--color-danger-active) !important;
+}
+
+/* Brutalist Sharp Forms & Input Fields Override */
+.search-input, .feed-input, select, textarea, input[type="text"], input[type="search"], input[type="password"] {
+    border-radius: 0 !important; /* strict 90 degrees */
+    box-shadow: none !important;
+}
+.search-input:hover, .feed-input:hover, select:hover, textarea:hover, input[type="text"]:hover, input[type="search"]:hover, input[type="password"]:hover {
+    box-shadow: 0.125rem 0.125rem 0 #000000 !important;
+}
+.search-input:focus, .feed-input:focus, select:focus, textarea:focus, input[type="text"]:focus, input[type="search"]:focus, input[type="password"]:focus {
+    box-shadow: 0.125rem 0.125rem 0 #000000 !important;
+    background-color: #fafafa !important;
+}
+
+/* Interactive Star & Cross Action Button scaling */
+.hide-entry-btn, .favourite-btn {
+    transition: opacity 0.15s ease, color 0.15s ease, transform 0.10s ease !important;
+}
+
+.hide-entry-btn:hover, .favourite-btn:hover {
+    transform: scale(1.15) !important;
+    opacity: 1 !important;
+    color: #000000 !important;
 }
 
 
