@@ -18,4 +18,18 @@ final class StyleguideController
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/styleguide.php';
     }
+
+    public function showSandbox(): void
+    {
+        $basePath  = getBasePath();
+        require_once SEISMO_ROOT . '/views/helpers.php';
+        require SEISMO_ROOT . '/views/design_sandbox.php';
+    }
+
+    public function showMockup(): void
+    {
+        $basePath  = getBasePath();
+        require_once SEISMO_ROOT . '/views/helpers.php';
+        require SEISMO_ROOT . '/views/design_refresh_mockup.php';
+    }
 }

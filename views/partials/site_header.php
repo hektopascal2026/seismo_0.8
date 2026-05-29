@@ -30,7 +30,7 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                 <button type="button" id="seismo-nav-toggle" class="top-bar-btn nav-menu-toggle" aria-expanded="false" aria-controls="seismo-nav-drawer" title="Menu">☰</button>
                 <span class="top-bar-title">
                     <a href="<?= e($basePath) ?>/index.php?action=index">
-                        <img src="<?= e($basePath) ?>/assets/img/logo.png" alt="" class="logo-icon logo-icon-large" width="38" height="38" decoding="async">
+                        <img src="<?= e($basePath) ?>/assets/img/logo.svg" alt="" class="logo-icon logo-icon-large" width="38" height="38" decoding="async">
                     </a>
                     <?php
                     $brandFull = seismoBrandTitle();

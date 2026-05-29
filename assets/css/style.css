@@ -1,3 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&family=Outfit:wght@400;600;800&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ═══ DESIGN SYSTEM VARIABLES ═══ */
+:root {
+    --sans-font: 'Inter', system-ui, -apple-system, sans-serif;
+    --title-font: 'Outfit', sans-serif;
+    --display-font: 'Space Grotesk', sans-serif;
+    --mono-font: 'Space Mono', 'Fira Code', monospace;
+    
+    --color-bg: #f8f9fa;
+    --color-dark: #000000;
+    --color-light-grey: #f8f9fa;
+    --color-border: #000000;
+}
+
 /* ═══ Base ═══ */
 html {
     font-size: 100%; /* 16px — rem tokens below use this root */
@@ -1274,6 +1289,8 @@ textarea.search-input.setup-code-preview {
 }
 
 .settings-tabs a.settings-tab--error.active {
+    transform: none;
+    box-shadow: 0.0625rem 0.0625rem 0 #FF2C2C;
     background-color: #FF2C2C;
     color: #ffffff;
     border-color: #000000;
@@ -1631,23 +1648,32 @@ textarea.search-input.setup-code-preview {
     margin-bottom: 1.5rem;
 }
 
-/* ═══ Buttons ═══ */
+/* ═══ Buttons & Master Brutalist Clickables ═══ */
+.btn, .top-bar-btn, .settings-tabs a, .nav-link, .label-btn, .tag-filter-pill {
+    border: 0.125rem solid #000000;
+    border-radius: 0 !important; /* Locks sharp 90-degree tactile corners */
+    font-weight: 600;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
+    box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Flat default shadow - refined 1px */
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 3D Tactile Hover Lift */
+.btn:hover, .top-bar-btn:hover, .settings-tabs a:hover, .nav-link:hover, .label-btn:hover, .tag-filter-pill:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 0.125rem 0.125rem 0 #000000; /* Refined 2px shadow on hover */
+}
+
 .btn {
     padding: 0.5rem 1rem;
-    border: 0.125rem solid #000000;
     background-color: #ffffff;
     color: #000000;
     font-size: 0.875rem;                /* medium */
-    font-weight: 600;
-    text-decoration: none;
-    display: inline-block;
-    cursor: pointer;
     font-family: inherit;
-    transition: all 0.15s;
-}
-
-.btn:hover {
-    box-shadow: 0.125rem 0.125rem 0 #000000;
 }
 
 .btn-primary {
@@ -1975,7 +2001,7 @@ textarea.search-input.setup-code-preview {
 .message {
     padding: 0.625rem 0.875rem;
     margin-bottom: 0.75rem;
-    border: 0.125rem solid #000000;
+    border: 0.125rem dashed #000000;
     background-color: #ffffff;
     font-size: 0.75rem;                /* small */
     color: #000000;
@@ -2198,8 +2224,20 @@ textarea.search-input.setup-code-preview {
     box-shadow: 0.125rem 0.125rem 0 #000000;
 }
 
+/* Transient 3D Pressed Click State */
+.btn:active, .top-bar-btn:active, .settings-tabs a:active, .nav-link:active, .label-btn:active, .tag-filter-pill:active {
+    transform: translate(1px, 1px);
+    box-shadow: 0 0 0 #000000; /* Refined 0px shadow when actively clicked */
+}
+
+/* Persistent Selected Active State */
+.btn.active, .btn.is-active,
+.top-bar-btn.active, 
+.settings-tabs a.active, .nav-link.active, .label-btn.active,
 .tag-filter-pill-active {
-    background-color: #f5f562;
+    transform: none;
+    box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Keeps refined 1px shadow */
+    background-color: #ffea00; /* Brand yellow accent */
 }
 
 .tag-filter-pill-active.tag-filter-pill--ch-lex {
@@ -2427,6 +2465,17 @@ textarea.search-input.setup-code-preview {
 .feed-tag-input.feed-tag-saved {
     border-color: #00aa00;
     background-color: #f0fff0;
+}
+
+.btn-warning:active {
+    transform: translate(1px, 1px);
+    box-shadow: 0 0 0 #ff9900;
+}
+
+.btn-warning.active {
+    transform: none;
+    box-shadow: 0.0625rem 0.0625rem 0 #ff9900;
+    background-color: #ffe8cc;
 }
 
 .feed-tag-indicator {
@@ -3211,6 +3260,79 @@ main.about-modern-layout ul:not(.about-history) {
     .timeline-era-card::before {
         left: -1.55rem;
     }
+}
+
+/* ==========================================
+   GLOBAL DESIGN SYSTEM SKIN OVERRIDES
+   Upgrades all live pages to match the Styleguide
+   ========================================== */
+
+body {
+    font-family: var(--sans-font), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
+    background-color: var(--color-bg) !important;
+}
+
+/* Geometrical Headings */
+h1, h2, h3, h4, h5, h6,
+.section-title,
+.admin-section-title,
+.timeline-title,
+.about-card-title,
+.proposal-block h3,
+.top-bar-title,
+.top-bar-title .top-bar-brand-name,
+.top-bar-title .top-bar-brand-version,
+.top-bar-title .top-bar-page-title {
+    font-family: var(--title-font), sans-serif !important;
+}
+
+/* Card titles withOutfit/Sans family and bold weights */
+.entry-title,
+.item-title,
+.entry-title a,
+.item-title a {
+    font-family: var(--sans-font), sans-serif !important;
+    font-size: 0.95rem !important;
+    font-weight: 750 !important;
+    line-height: 1.35 !important;
+}
+
+/* Body Copy and Previews */
+.entry-content,
+.item-content,
+.entry-preview,
+.entry-full-content {
+    font-family: var(--sans-font), sans-serif !important;
+    font-size: 0.8rem !important;
+    line-height: 1.45 !important;
+}
+
+/* Monospace Elements & Badges */
+.entry-date,
+.entry-meta,
+.entry-meta-right,
+.entry-actions,
+.card-date-stamp,
+.card-metadata-mono,
+.magnitu-badge,
+code,
+pre,
+.data-table th,
+.entry-lex-eu-mark,
+.entry-lex-ch-mark,
+.entry-tag,
+.filter-pill-text,
+.top-bar-subtitle,
+.top-bar-actions button,
+.top-bar-btn {
+    font-family: var(--mono-font), ui-monospace, monospace !important;
+}
+
+/* Spacious, High-End timeline cards */
+.entry-card,
+.item-card {
+    padding: 1rem 1.25rem !important;
+    transition: box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease !important;
 }
 
 

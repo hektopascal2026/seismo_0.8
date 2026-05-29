@@ -263,6 +263,16 @@ $router->register(
     true
 );
 $router->register(
+    'design_sandbox',
+    \Seismo\Controller\StyleguideController::class . '::showSandbox',
+    true
+);
+$router->register(
+    'design_mockup',
+    \Seismo\Controller\StyleguideController::class . '::showMockup',
+    true
+);
+$router->register(
     'logbook',
     \Seismo\Controller\LogbookController::class . '::show',
     true
