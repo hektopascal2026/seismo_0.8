@@ -35,7 +35,7 @@ if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
 ?>
                         <div class="entry-card<?= $timelineMediaCardClass ?>"<?= $timelineMediaDataAttr ?>>
                             <div class="entry-header">
-                                <span class="entry-tag entry-tag--scraper">🌐 <?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span>
+                                <span class="entry-tag entry-tag--scraper"><span class="entry-tag-emoji" aria-hidden="true">🌐</span> <span class="entry-tag-text"><?= htmlspecialchars((string)($item['feed_name'] ?? 'Scraper')) ?></span></span>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">

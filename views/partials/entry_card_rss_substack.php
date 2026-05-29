@@ -52,7 +52,7 @@ if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
                                             ? 'Session'
                                             : ($parlCommission !== '' ? $parlCommission : 'Medienmitteilung');
                                     ?>
-                                    <span class="entry-tag entry-tag--parl"><?= $parlIsSda ? '🇨🇭 Parl SDA' : '🇨🇭 Parl MM' ?></span>
+                                    <span class="entry-tag entry-tag--parl"><span class="entry-tag-emoji" aria-hidden="true">🇨🇭</span> <span class="entry-tag-text"><?= $parlIsSda ? 'Parl SDA' : 'Parl MM' ?></span></span>
                                     <span class="entry-tag entry-tag--meta"><?= htmlspecialchars($parlMetaLabel) ?></span>
                                 <?php else: ?>
                                     <?php $feedLabel = seismo_feed_item_pill_label($item); ?>

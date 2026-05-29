@@ -200,7 +200,7 @@ $entryLoopIndex                 = 0;
                             </div>
                             <?php else: ?>
                             <div class="entry-header">
-                                <span class="entry-tag entry-tag--lex-source"><?= $lexSourceEmoji ?> <?= $lexSourceLabel ?></span>
+                                <span class="entry-tag entry-tag--lex-source"><span class="entry-tag-emoji" aria-hidden="true"><?= $lexSourceEmoji ?></span> <span class="entry-tag-text"><?= htmlspecialchars($lexSourceLabel) ?></span></span>
                                 <span class="entry-tag entry-tag--lex-doc"><?= htmlspecialchars($lexDocType) ?></span>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>

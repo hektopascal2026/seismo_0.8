@@ -3546,4 +3546,36 @@ pre,
     color: #000000 !important;
 }
 
+/* Core Monospace Pill Overrides - guarantee no specificity or font fallback overrides */
+.entry-tag,
+.entry-tag-text,
+.entry-tag--parl,
+.entry-tag--meta,
+.entry-tag--feed-rss,
+.entry-tag--feed-substack,
+.entry-tag--feed-media,
+.entry-tag--scraper,
+.entry-tag--lex-source,
+.entry-tag--lex-doc,
+.entry-tag--leg-type,
+.entry-tag--leg-council,
+.entry-tag--email-sender,
+.entry-tag--leg-signal,
+.entry-tag--status-completed,
+.entry-tag--status-cancelled,
+.entry-tag--status-other,
+.entry-tag--surface,
+.entry-tag--emphasis,
+.entry-tag--warn-pill,
+.entry-lex-eu-mark,
+.entry-lex-eu-mark__text,
+.entry-lex-ch-mark,
+.entry-lex-ch-mark__text,
+.filter-pill-text,
+.magnitu-badge {
+    font-family: 'Space Mono', 'Fira Code', monospace !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+}
+
 
