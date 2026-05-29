@@ -83,6 +83,12 @@ body {
     --seismo-pill-lex: #f5f562;
     --seismo-pill-leg: #d4edda;
     --seismo-pill-mail: #ffdbbb;
+    
+    /* Label Button Color Themes */
+    --label-investigation: #FF6B6B;
+    --label-important: #FFA94D;
+    --label-background: #74C0FC;
+    --label-noise: #e0e0e0;
 }
 
 /* ═══ Logo ═══ */
@@ -1688,7 +1694,7 @@ textarea.search-input.setup-code-preview {
 }
 
 /* ═══ Buttons & Master Brutalist Clickables ═══ */
-.btn, .top-bar-btn, .settings-tabs a, .nav-link, .label-btn, .tag-filter-pill {
+.btn, .top-bar-btn, .settings-tabs a, .nav-link, .tag-filter-pill {
     border: 0.125rem solid #000000;
     border-radius: 0 !important; /* Locks sharp 90-degree tactile corners */
     font-weight: 600;
@@ -1702,7 +1708,7 @@ textarea.search-input.setup-code-preview {
 }
 
 /* 3D Tactile Hover Lift */
-.btn:hover, .top-bar-btn:hover, .settings-tabs a:hover, .nav-link:hover, .label-btn:hover, .tag-filter-pill:hover {
+.btn:hover, .top-bar-btn:hover, .settings-tabs a:hover, .nav-link:hover, .tag-filter-pill:hover {
     transform: translate(-1px, -1px);
     box-shadow: 0.125rem 0.125rem 0 #000000; /* Refined 2px shadow on hover */
 }
@@ -2264,7 +2270,7 @@ textarea.search-input.setup-code-preview {
 }
 
 /* Transient 3D Pressed Click State */
-.btn:active, .top-bar-btn:active, .settings-tabs a:active, .nav-link:active, .label-btn:active, .tag-filter-pill:active {
+.btn:active, .top-bar-btn:active, .settings-tabs a:active, .nav-link:active, .tag-filter-pill:active {
     transform: translate(1px, 1px);
     box-shadow: 0 0 0 #000000; /* Refined 0px shadow when actively clicked */
 }
@@ -2272,7 +2278,7 @@ textarea.search-input.setup-code-preview {
 /* Persistent Selected Active State */
 .btn.active, .btn.is-active,
 .top-bar-btn.active, 
-.settings-tabs a.active, .nav-link.active, .label-btn.active,
+.settings-tabs a.active, .nav-link.active,
 .tag-filter-pill-active {
     transform: none;
     box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Keeps refined 1px shadow */
@@ -3404,7 +3410,7 @@ pre,
 }
 
 .btn, .top-bar-btn, .settings-tabs a, 
-.view-toggle-bar a, .nav-link, .label-btn, .tag-filter-pill {
+.view-toggle-bar a, .nav-link, .tag-filter-pill {
     border: 0.125rem solid #000000 !important;
     border-radius: 0 !important; /* Locks sharp 90-degree tactile corners */
     font-weight: 600 !important;
@@ -3419,14 +3425,14 @@ pre,
 
 /* 3D Tactile Hover Lift (Strictly no background color changes) */
 .btn:hover, .top-bar-btn:hover, .settings-tabs a:hover, 
-.view-toggle-bar a:hover, .nav-link:hover, .label-btn:hover, .tag-filter-pill:hover {
+.view-toggle-bar a:hover, .nav-link:hover, .tag-filter-pill:hover {
     transform: translate(-1px, -1px) !important;
     box-shadow: 0.1875rem 0.1875rem 0 #000000 !important; /* Expanded 3px shadow */
 }
 
 /* 3D Pressed Active State (Transient) */
 .btn:active, .top-bar-btn:active, .settings-tabs a:active, 
-.view-toggle-bar a:active, .nav-link:active, .label-btn:active, .tag-filter-pill:active {
+.view-toggle-bar a:active, .nav-link:active, .tag-filter-pill:active {
     transform: translate(1px, 1px) !important;
     box-shadow: 0 0 0 #000000 !important; /* Collapsed 0px shadow */
 }
@@ -3434,7 +3440,7 @@ pre,
 /* 3D Selected State (Persistent - rests flat at baseline with 1px drop shadow) */
 .btn.active, .btn.is-active,
 .top-bar-btn.active, 
-.settings-tabs a.active, .nav-link.active, .label-btn.active,
+.settings-tabs a.active, .nav-link.active,
 .tag-filter-pill-active, .tag-filter-pill.active {
     transform: none !important; /* Rests on baseline */
     box-shadow: 0.0625rem 0.0625rem 0 #000000 !important; /* Maintains 1px drop shadow */
@@ -3588,6 +3594,89 @@ pre,
     font-family: 'Space Mono', 'Fira Code', monospace !important;
     font-weight: 700 !important;
     letter-spacing: -0.01em !important;
+}
+
+/* ═══ Labeling Buttons ═══ */
+.label-btn {
+    padding: 0.65rem 0.4rem;
+    border: 2px solid #111;
+    background: #ffffff;
+    color: #000000;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 0;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Category modifiers for Label Buttons */
+.label-btn--inv { border-color: var(--label-investigation) !important; box-shadow: 1px 1px 0 var(--label-investigation) !important; }
+.label-btn--imp { border-color: var(--label-important) !important; box-shadow: 1px 1px 0 var(--label-important) !important; }
+.label-btn--bg { border-color: var(--label-background) !important; box-shadow: 1px 1px 0 var(--label-background) !important; }
+.label-btn--noise { border-color: var(--label-noise) !important; box-shadow: 1px 1px 0 var(--label-noise) !important; }
+
+/* 3D Pressed Active State (Transient) */
+.label-btn:active {
+    transform: translate(1px, 1px) !important;
+}
+
+/* Hover over state: filled with solid background color, and text changes to black (#000000) */
+.label-btn--inv:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 2px 2px 0 var(--label-investigation) !important;
+    background-color: var(--label-investigation) !important;
+    color: #000000 !important;
+}
+.label-btn--imp:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 2px 2px 0 var(--label-important) !important;
+    background-color: var(--label-important) !important;
+    color: #000000 !important;
+}
+.label-btn--bg:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 2px 2px 0 var(--label-background) !important;
+    background-color: var(--label-background) !important;
+    color: #000000 !important;
+}
+.label-btn--noise:hover {
+    transform: translate(-1px, -1px) !important;
+    box-shadow: 2px 2px 0 var(--label-noise) !important;
+    background-color: var(--label-noise) !important;
+    color: #000000 !important;
+}
+
+/* Clicked/selected persistent .active state: filled with solid background color, and text is black (#000000) */
+.label-btn.active {
+    transform: none !important;
+}
+.label-btn.active.label-btn--inv {
+    background-color: var(--label-investigation) !important;
+    color: #000000 !important;
+    box-shadow: 1px 1px 0 var(--label-investigation) !important;
+    border-color: var(--label-investigation) !important;
+}
+.label-btn.active.label-btn--imp {
+    background-color: var(--label-important) !important;
+    color: #000000 !important;
+    box-shadow: 1px 1px 0 var(--label-important) !important;
+    border-color: var(--label-important) !important;
+}
+.label-btn.active.label-btn--bg {
+    background-color: var(--label-background) !important;
+    color: #000000 !important;
+    box-shadow: 1px 1px 0 var(--label-background) !important;
+    border-color: var(--label-background) !important;
+}
+.label-btn.active.label-btn--noise {
+    background-color: var(--label-noise) !important;
+    color: #000000 !important;
+    box-shadow: 1px 1px 0 var(--label-noise) !important;
+    border-color: var(--label-noise) !important;
 }
 
 

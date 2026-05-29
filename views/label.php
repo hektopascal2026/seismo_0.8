@@ -68,37 +68,6 @@ $pageUrl = static function (string $t, int $off) use ($bp): string {
         .label-reasoning { width:100%; margin-top:0.5rem; padding:0.45rem 0.5rem; border:1.5px solid #ccc; font-size:0.85rem; font-family:inherit; }
         .label-reasoning:focus { outline:none; border-color:#111; }
         .label-btn-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; margin-top:0.5rem; }
-        .label-btn {
-            padding: 0.65rem 0.4rem;
-            border: 2px solid #111;
-            background: #fff;
-            font-size: 0.82rem;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: inherit;
-            border-radius: 0;
-            transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease;
-        }
-        .label-btn--inv { border-color:#FF6B6B; box-shadow: 1px 1px 0 #FF6B6B; }
-        .label-btn--imp { border-color:#FFA94D; box-shadow: 1px 1px 0 #FFA94D; }
-        .label-btn--bg { border-color:#74C0FC; box-shadow: 1px 1px 0 #74C0FC; }
-        .label-btn--noise { border-color:#ddd; box-shadow: 1px 1px 0 #ddd; }
-
-        .label-btn--inv:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 #FF6B6B; }
-        .label-btn--imp:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 #FFA94D; }
-        .label-btn--bg:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 #74C0FC; }
-        .label-btn--noise:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 #ddd; }
-
-        .label-btn:active {
-            transform: translate(1px, 1px);
-        }
-        .label-btn.active {
-            transform: none;
-        }
-        .label-btn.active.label-btn--inv { background:#FF6B6B; color: #000; box-shadow: 1px 1px 0 #FF6B6B; }
-        .label-btn.active.label-btn--imp { background:#FFA94D; color: #000; box-shadow: 1px 1px 0 #FFA94D; }
-        .label-btn.active.label-btn--bg { background:#74C0FC; color: #000; box-shadow: 1px 1px 0 #74C0FC; }
-        .label-btn.active.label-btn--noise { background:#e0e0e0; color: #000; box-shadow: 1px 1px 0 #ddd; }
         .label-hidden-csrf { display:none; }
         .label-progress {
             margin: 0 0 1rem;
