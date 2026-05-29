@@ -196,7 +196,7 @@ body {
     font-family: inherit;
     font-weight: 600;
     text-decoration: none;
-    transition: all 0.15s;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
     flex-shrink: 0;
     padding: 0;
     line-height: 1;
@@ -3376,8 +3376,7 @@ pre,
 .entry-lex-ch-mark,
 .entry-tag,
 .filter-pill-text,
-.top-bar-subtitle,
-.top-bar-actions button {
+.top-bar-subtitle {
     font-family: var(--mono-font), ui-monospace, monospace !important;
 }
 
