@@ -3272,7 +3272,7 @@ body {
     background-color: var(--color-bg) !important;
 }
 
-/* Geometrical Headings */
+/* Geometrical Headings & Navigation Drawer Links */
 h1, h2, h3, h4, h5, h6,
 .section-title,
 .admin-section-title,
@@ -3282,7 +3282,12 @@ h1, h2, h3, h4, h5, h6,
 .top-bar-title,
 .top-bar-title .top-bar-brand-name,
 .top-bar-title .top-bar-brand-version,
-.top-bar-title .top-bar-page-title {
+.top-bar-title .top-bar-page-title,
+.nav-link,
+.settings-tabs a,
+.view-toggle-bar a,
+.top-bar-btn,
+.btn {
     font-family: var(--title-font), sans-serif !important;
 }
 
@@ -3323,8 +3328,7 @@ pre,
 .entry-tag,
 .filter-pill-text,
 .top-bar-subtitle,
-.top-bar-actions button,
-.top-bar-btn {
+.top-bar-actions button {
     font-family: var(--mono-font), ui-monospace, monospace !important;
 }
 
