@@ -24,6 +24,7 @@ $seismoNavLeadThrottleMs = seismo_ui_nav_leading_throttle_ms();
 
 $activeNav = $activeNav ?? 'index';
 $filterNavQs = $filterNavQs ?? 'action=filter';
+?>
 <!-- Premium Design System Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
