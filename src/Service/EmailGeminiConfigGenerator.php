@@ -112,7 +112,10 @@ final class EmailGeminiConfigGenerator
             $prompt .= "Body:\n" . $sample['body'] . "\n\n";
         }
 
-        $prompt .= "Identify the recurring noise lines (e.g. 'Having trouble reading this email? View in browser', social media icons, unsubscribe boilerplate, privacy links, etc.) that appear in multiple samples.\n";
+        $prompt .= "Identify repeating structural boilerplate sections (such as header logo/author/navigation blocks, section dividers, subscription promotions, and legal/unsubscribe footers) that appear in multiple samples.\n";
+        $prompt .= "Generate robust regular expressions that can match these repeating blocks. Specifically, if a block is enclosed in HTML container elements (e.g., `<div id=\"pl-newsletter-header\">...</div>` or specific tables/paragraphs), write a regex that matches the entire block from the opening element to the closing element using wildcards like `.*?` with case-insensitive `/is` or `/iu` flags.\n";
+        $prompt .= "Ensure the regular expressions do not contain fragile specific values (like specific email addresses, tracking IDs, or timestamps) that change between emails; use wildcards or character classes to match them safely.\n";
+        $prompt .= "If you detect that the email bodies contain HTML entities (like `&amp;lt;` or `&amp;gt;` or `&amp;quot;`), generate matching regex patterns for both the escaped entity form and the standard HTML/text form to ensure maximum reliability.\n";
         $prompt .= "Generate a JSON response matching the following keys:\n";
         $prompt .= "1. \"strip_regexes\": An array of safe PHP-compatible regular expression strings (e.g., matching lines/sections, including pattern delimiters like /.../ui or /.../is) to replace the boilerplate text with empty strings. Focus on matching noisy start/end blocks precisely.\n";
         $prompt .= "2. \"webview_keywords\": An array of specific words or short phrases used by this sender to link to their online/web version (e.g., 'webversion', 'online lesen', 'webansicht', 'view online').\n";

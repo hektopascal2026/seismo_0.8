@@ -527,11 +527,15 @@ $sourcesQs = 'action=mail&view=sources';
         if (!btnBefore || !btnAfter || !contentBefore || !contentAfter) return;
         
         if (tab === 'before') {
+            btnBefore.classList.add('active');
+            btnAfter.classList.remove('active');
             btnBefore.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
             btnAfter.style.backgroundColor = '#ffffff';
             contentBefore.style.display = 'block';
             contentAfter.style.display = 'none';
         } else {
+            btnBefore.classList.remove('active');
+            btnAfter.classList.add('active');
             btnBefore.style.backgroundColor = '#ffffff';
             btnAfter.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
             contentBefore.style.display = 'none';

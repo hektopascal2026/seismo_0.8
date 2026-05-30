@@ -608,10 +608,20 @@ final class EmailWebViewUrlExtractor
         $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $href = ltrim($href, '[(');
         $href = rtrim($href, '].,;)');
+        
+        $lower = strtolower($href);
         if ($href === ''
-            || str_starts_with(strtolower($href), 'mailto:')
-            || str_starts_with(strtolower($href), 'tel:')
-            || str_starts_with(strtolower($href), 'javascript:')
+            || str_starts_with($lower, 'mailto:')
+            || str_starts_with($lower, 'tel:')
+            || str_starts_with($lower, 'javascript:')
+            || str_contains($lower, 'mailto:')
+            || str_contains($lower, 'destination=mailto:')
+            || str_contains($lower, 'x.com')
+            || str_contains($lower, 'twitter.com')
+            || str_contains($lower, 'facebook.com')
+            || str_contains($lower, 'linkedin.com')
+            || str_contains($lower, 'instagram.com')
+            || str_contains($lower, 'youtube.com')
         ) {
             return null;
         }

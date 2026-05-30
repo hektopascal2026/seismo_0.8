@@ -18,7 +18,11 @@ final class EmailIngestNormalizer
         $html = trim((string)($row['html_body'] ?? $row['body_html'] ?? ''));
         $plain = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
 
-        if ($html !== '' && ($plain === '' || self::plainLooksLikeBoilerplate($plain))) {
+        if ($html === '' && self::plainContainsHtml($plain)) {
+            $html = $plain;
+        }
+
+        if ($html !== '' && ($plain === '' || self::plainLooksLikeBoilerplate($plain) || self::plainContainsHtml($plain))) {
             $extracted = NewsletterBodyExtractor::fromHtml($html);
             if ($extracted !== '') {
                 $plain = $extracted;
@@ -49,5 +53,12 @@ final class EmailIngestNormalizer
             || str_contains($lower, 'requires a modern email reader')
             || str_contains($lower, 'does not support html')
             || (strlen($plain) < 400 && preg_match('#https?://#', $plain) === 1);
+    }
+
+    private static function plainContainsHtml(string $plain): bool
+    {
+        // Check for common HTML tags (e.g. <div...>) or escaped HTML tags (e.g. &lt;div...>)
+        return preg_match('#<(/?[a-z]+)\b[^>]*>#i', $plain) === 1
+            || preg_match('#&(amp;)?lt;(/?[a-z]+)\b[^&]*&(amp;)?gt;#i', $plain) === 1;
     }
 }

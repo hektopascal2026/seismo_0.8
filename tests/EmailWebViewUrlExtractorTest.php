@@ -242,4 +242,21 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, \Seismo\Core\Mail\EmailAlternateLocalePolicy::englishFirstRanks(), ['efta']);
         self::assertSame('https://mailchi.mp/efta/discover-the-new-efta-free-trade-dashboard', $resolution->url);
     }
+
+    public function testFiltersOutMailtoRedirectUrls(): void
+    {
+        $html = '<p>Send ideas <a href="https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=mailto:jdetsch@politico.com" target="_blank">here</a> | '
+            . '<a href="https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=https://x.com/JackDetsch" target="_blank">@JackDetsch</a> | '
+            . '<a href="https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=https://www.politico.eu/newsletter/global-security/asian-allies-tiptoe-around-china-as-us-influence-wanes/">View in your browser</a></p>';
+        
+        $plain = "Send ideas here ( https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=mailto:jdetsch@politico.com ) | "
+            . "@JackDetsch ( https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=https://x.com/JackDetsch ) | "
+            . "View in your browser ( https://dmp.politico.eu/?email=seismofetcher@gmail.com&amp;destination=https://www.politico.eu/newsletter/global-security/asian-allies-tiptoe-around-china-as-us-influence-wanes/ )";
+
+        $url = EmailWebViewUrlExtractor::fromHtml($html);
+        self::assertSame('https://dmp.politico.eu/?destination=https%3A%2F%2Fwww.politico.eu%2Fnewsletter%2Fglobal-security%2Fasian-allies-tiptoe-around-china-as-us-influence-wanes%2F&email=seismofetcher%40gmail.com', $url);
+
+        $urlPlain = EmailWebViewUrlExtractor::fromPlainText($plain);
+        self::assertSame('https://dmp.politico.eu/?destination=https%3A%2F%2Fwww.politico.eu%2Fnewsletter%2Fglobal-security%2Fasian-allies-tiptoe-around-china-as-us-influence-wanes%2F&email=seismofetcher%40gmail.com', $urlPlain);
+    }
 }
