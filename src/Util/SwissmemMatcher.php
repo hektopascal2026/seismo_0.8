@@ -102,6 +102,28 @@ final class SwissmemMatcher
         return $term;
     }
 
+    private const BLACKLIST_TERMS = [
+        'libs',
+        'aero',
+        'dyno',
+    ];
+
+    private const CASE_SENSITIVE_ACRONYMS = [
+        'VAT',
+        'NEXT',
+        'NUM',
+        'ASS',
+        'ABB',
+        'SFS',
+        'LEM',
+        'SPM',
+        'GIS',
+        'IAR',
+        'PWB',
+        'RWM',
+        'SQS',
+    ];
+
     public static function getRegexPattern(): string
     {
         if (self::$regexPattern !== null) {
@@ -114,8 +136,35 @@ final class SwissmemMatcher
             return self::$regexPattern;
         }
 
-        $quoted = array_map(static fn($t) => preg_quote($t, '/'), $terms);
-        self::$regexPattern = '/\b(' . implode('|', $quoted) . ')\b/ui';
+        $caseSensitive = [];
+        $caseInsensitive = [];
+
+        foreach ($terms as $t) {
+            $lower = strtolower($t);
+            if (in_array($lower, self::BLACKLIST_TERMS, true)) {
+                continue;
+            }
+
+            if (in_array($t, self::CASE_SENSITIVE_ACRONYMS, true)) {
+                $caseSensitive[] = preg_quote($t, '/');
+            } else {
+                $caseInsensitive[] = preg_quote($t, '/');
+            }
+        }
+
+        $patterns = [];
+        if ($caseInsensitive !== []) {
+            $patterns[] = '(?i)\b(' . implode('|', $caseInsensitive) . ')\b(?-i)';
+        }
+        if ($caseSensitive !== []) {
+            $patterns[] = '\b(' . implode('|', $caseSensitive) . ')\b';
+        }
+
+        if ($patterns === []) {
+            self::$regexPattern = '/$foo/';
+        } else {
+            self::$regexPattern = '/' . implode('|', $patterns) . '/u';
+        }
 
         return self::$regexPattern;
     }

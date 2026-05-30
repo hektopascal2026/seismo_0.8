@@ -46,6 +46,22 @@ final class SwissmemMatcherTest extends TestCase
         self::assertFalse(SwissmemMatcher::matches('Dieses Wort hat nichts mit dem Verband zu tun.'));
     }
 
+    public function testPrecisionRegexSensitivityAndBlacklisting(): void
+    {
+        // Blacklisted terms should never match (case-insensitive)
+        self::assertFalse(SwissmemMatcher::matches('Wir verwenden verschiedene libs.'));
+        self::assertFalse(SwissmemMatcher::matches('Das ist aero dynamisch.'));
+        self::assertFalse(SwissmemMatcher::matches('Testing on the dyno.'));
+
+        // Case-sensitive terms should only match when strictly capitalized
+        self::assertTrue(SwissmemMatcher::matches('Neue Vakuumsysteme von VAT.'));
+        self::assertFalse(SwissmemMatcher::matches('Die Mehrwertsteuer wird auch als vat bezeichnet.'));
+        self::assertFalse(SwissmemMatcher::matches('The next step is crucial.'));
+        self::assertTrue(SwissmemMatcher::matches('Software von NEXT SA.'));
+        self::assertFalse(SwissmemMatcher::matches('Eine num. Variable.'));
+        self::assertTrue(SwissmemMatcher::matches('Testing the NUM controller.'));
+    }
+
     public function testMatchesTimelineItem(): void
     {
         $matchingItem = [
