@@ -157,7 +157,7 @@ $moduleOptions = [
         <div class="latest-entries-section">
             <form id="researcher-builder-form" class="admin-form-card">
                 <!-- Data Sources & Time Window -->
-                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                <fieldset style="border: none; padding: 0; margin: 0 0 1.5rem 0;">
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
                         <div class="filter-page-actions" style="margin-bottom:0.75rem;">
@@ -216,7 +216,7 @@ $moduleOptions = [
                     <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 </fieldset>
 
-                <div style="margin-bottom: 2rem; border-top: 0.125rem dashed #000000; padding-top: 1.25rem;">
+                <div style="margin-bottom: 1.5rem; border-top: 0.125rem dashed #000000; padding-top: 1rem;">
                     <button type="button" class="btn btn-secondary entry-expand-btn" id="toggle-advanced-settings-btn">
                         More settings ▾
                     </button>
@@ -276,7 +276,7 @@ $moduleOptions = [
             </fieldset>
             </div>
 
-            <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem; border-top: 0.125rem dashed #000000; padding-top: 1.5rem;">
+            <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem;">
                         <div id="researcher-prompt-panel">
                             <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem; font-weight: 600;">System prompt instructions</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
