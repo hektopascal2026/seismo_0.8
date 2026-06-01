@@ -924,7 +924,7 @@ textarea.search-input.setup-code-preview {
 
 /* Tag colour tokens (timeline cards) */
 .entry-tag--parl {
-    background-color: #f5f562;
+    background-color: var(--seismo-pill-feed-rss);
     border-color: #000000;
 }
 
