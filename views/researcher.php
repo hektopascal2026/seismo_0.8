@@ -204,12 +204,12 @@ $moduleOptions = [
                     </div>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
-                        <label for="researcher_limit" style="margin-bottom: 0.25rem; display:block;">Database fetch limit: <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span> articles per source</label>
+                        <label for="researcher_limit" style="margin-bottom: 0.25rem; display:block;">Database fetch limit: <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span> articles per source (Max: <?= (int)$maxLimit ?>)</label>
                         <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
                             <input type="range" id="researcher_limit" name="limit" class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;"
                                    min="5" max="<?= (int)$maxLimit ?>" step="5" value="<?= (int)$defaultLimit ?>">
                         </div>
-                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">Limits how many records we pull from each database table at most. Keep this low (e.g., 200) to ensure fast database loading times.</p>
+                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">Controls the size of the initial candidate pool loaded from each database table. From this pool, Seismo will filter and select the highest scoring articles to send to the AI.</p>
                     </div>
                 </fieldset>
 
