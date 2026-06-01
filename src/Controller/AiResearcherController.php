@@ -329,6 +329,11 @@ PROMPT;
             return;
         }
 
+        $generationOptions = GeminiResearcherGenerationOptions::fromPost($_POST);
+        $gathered          = null;
+        $gemini            = null;
+        $itemCountForMeta  = $itemCount;
+
         try {
             $pdo = getDbConnection();
             $this->persistMaxContextEntriesFromPost($pdo, $_POST['max_context_entries'] ?? null);
@@ -377,8 +382,7 @@ PROMPT;
                 'use_recipe_snippets'  => $filters['useRecipeSnippets'] ?? false,
                 'recipe_keywords'      => $recipeKeywords,
             ];
-            $generationOptions = GeminiResearcherGenerationOptions::fromPost($_POST);
-            $result            = $gemini->generateSummary(
+            $result = $gemini->generateSummary(
                 $systemPrompt,
                 $markdown,
                 $itemCount,
@@ -475,23 +479,30 @@ PROMPT;
             ]);
         } catch (GeminiResearcherException $e) {
             http_response_code(502);
-            $errorPayload = [
+            $this->echoResearcherJson([
                 'ok'    => false,
                 'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini researcher failed.',
-            ];
-            if (isset($gemini)) {
-                $failureMeta = $gemini->lastGenerationMeta();
-                if ($failureMeta !== []) {
-                    $errorPayload['meta'] = $failureMeta;
-                }
-            }
-            $this->echoResearcherJson($errorPayload);
+                'meta'  => $this->buildResearcherFailureMeta(
+                    $gathered,
+                    $gemini,
+                    $generationOptions,
+                    $itemCountForMeta,
+                    $filters['selection'] ?? null,
+                ),
+            ]);
         } catch (\Throwable $e) {
             error_log('Seismo researcher_generate: ' . $e->getMessage());
             http_response_code(500);
             $this->echoResearcherJson([
                 'ok'    => false,
                 'error' => 'Could not generate researcher.',
+                'meta'  => $this->buildResearcherFailureMeta(
+                    $gathered,
+                    $gemini ?? null,
+                    $generationOptions,
+                    $itemCountForMeta,
+                    $filters['selection'] ?? null,
+                ),
             ]);
         }
     }
@@ -1326,6 +1337,43 @@ PROMPT;
      *     maxContextEntries: int
      * } $gathered
      * @return array<string, int>
+     */
+    /**
+     * @param array<string, mixed>|null $gathered
+     */
+    private function buildResearcherFailureMeta(
+        ?array $gathered,
+        ?GeminiResearcherService $gemini,
+        GeminiResearcherGenerationOptions $generationOptions,
+        int $itemCount,
+        ?ResearcherSourceSelection $selection,
+    ): array {
+        $meta = [
+            'generation_failed'  => true,
+            'tournament_mode'    => $generationOptions->tournamentMode,
+            'pro_selection_mode' => $generationOptions->proSelectionMode,
+            'item_count'         => $itemCount,
+        ];
+
+        if ($gathered !== null) {
+            $meta = array_merge($meta, $this->contextCapMetaFromGathered($gathered));
+            if ($selection !== null) {
+                $meta['modules'] = $this->enabledModuleNames($selection);
+            }
+            if (isset($gathered['contextWarning']) && $gathered['contextWarning'] !== null) {
+                $meta['context_warning'] = (string)$gathered['contextWarning'];
+            }
+        }
+
+        if ($gemini !== null) {
+            $meta = array_merge($meta, $gemini->lastGenerationMeta());
+        }
+
+        return $meta;
+    }
+
+    /**
+     * @param array<string, mixed> $gathered
      */
     private function contextCapMetaFromGathered(array $gathered): array
     {

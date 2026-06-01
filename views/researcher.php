@@ -798,19 +798,46 @@ $moduleOptions = [
             return parts.join(' · ');
         }
 
-        function appendResearcherMetaDebug(container, meta) {
-            if (!container || !meta || typeof meta !== 'object') {
-                return;
-            }
-            var keys = Object.keys(meta);
-            if (!keys.length) {
+        function appendResearcherMeta(container, meta, options) {
+            options = options || {};
+            var isFailure = !!options.failure;
+            if (!container) {
                 return;
             }
             var wrap = document.createElement('div');
             wrap.className = 'researcher-output-meta';
             var title = document.createElement('p');
             title.className = 'researcher-output-meta__title';
-            title.textContent = 'Generation meta (debug)';
+            title.textContent = isFailure ? 'Generation meta' : 'Generation meta (debug)';
+            wrap.appendChild(title);
+
+            if (!meta || typeof meta !== 'object') {
+                if (!isFailure) {
+                    return;
+                }
+                var missing = document.createElement('p');
+                missing.className = 'admin-intro';
+                missing.style.margin = '0';
+                missing.textContent = 'No generation meta was returned by the server.';
+                wrap.appendChild(missing);
+                container.appendChild(wrap);
+                return;
+            }
+
+            var keys = Object.keys(meta);
+            if (!keys.length) {
+                if (!isFailure) {
+                    return;
+                }
+                var empty = document.createElement('p');
+                empty.className = 'admin-intro';
+                empty.style.margin = '0';
+                empty.textContent = 'No generation meta was returned by the server.';
+                wrap.appendChild(empty);
+                container.appendChild(wrap);
+                return;
+            }
+
             var summary = formatContextCapSummary(meta);
             if (summary !== '') {
                 var lead = document.createElement('p');
@@ -826,9 +853,28 @@ $moduleOptions = [
             } catch (e) {
                 pre.textContent = String(meta);
             }
-            wrap.appendChild(title);
             wrap.appendChild(pre);
             container.appendChild(wrap);
+        }
+
+        function appendResearcherMetaDebug(container, meta) {
+            appendResearcherMeta(container, meta, { failure: false });
+        }
+
+        function renderResearcherFailureSummary(container, message, meta) {
+            if (!container) {
+                return;
+            }
+            hideProcessingStatus();
+            container.style.whiteSpace = 'pre-wrap';
+            container.innerHTML = '';
+            if (message) {
+                var errInBox = document.createElement('p');
+                errInBox.className = 'researcher-output-error-inline';
+                errInBox.textContent = message;
+                container.appendChild(errInBox);
+            }
+            appendResearcherMeta(container, meta, { failure: true });
         }
 
         function showCopyBtn(text) {
@@ -1704,14 +1750,7 @@ $moduleOptions = [
                         errEl.textContent = errMsg;
                         errEl.hidden = false;
                     }
-                    hideProcessingStatus();
-                    out.style.whiteSpace = 'pre-wrap';
-                    out.innerHTML = '';
-                    var errInBox = document.createElement('p');
-                    errInBox.className = 'researcher-output-error-inline';
-                    errInBox.textContent = errMsg;
-                    out.appendChild(errInBox);
-                    appendResearcherMetaDebug(out, data.meta);
+                    renderResearcherFailureSummary(out, errMsg, data.meta);
                     return;
                 }
                 function renderResearcherSuccess(payload) {
@@ -1794,19 +1833,18 @@ $moduleOptions = [
                         errEl.textContent = renderMsg;
                         errEl.hidden = false;
                     }
-                    hideProcessingStatus();
-                    out.style.whiteSpace = 'pre-wrap';
                     if (data.text && String(data.text).trim()) {
+                        hideProcessingStatus();
+                        out.style.whiteSpace = 'pre-wrap';
                         out.textContent = String(data.text);
                         showCopyBtn(String(data.text));
                         appendResearcherMetaDebug(out, data.meta);
                     } else {
-                        out.innerHTML = '';
-                        var renderInBox = document.createElement('p');
-                        renderInBox.className = 'researcher-output-error-inline';
-                        renderInBox.textContent = renderMsg;
-                        out.appendChild(renderInBox);
-                        appendResearcherMetaDebug(out, data.meta);
+                        if (errEl) {
+                            errEl.textContent = renderMsg;
+                            errEl.hidden = false;
+                        }
+                        renderResearcherFailureSummary(out, renderMsg, data.meta);
                     }
                 }
             })
@@ -1825,16 +1863,10 @@ $moduleOptions = [
                     errEl.textContent = msg;
                     errEl.hidden = false;
                 }
-                hideProcessingStatus();
-                out.style.whiteSpace = 'pre-wrap';
-                out.innerHTML = '';
                 if (msg) {
-                    var errInBox = document.createElement('p');
-                    errInBox.className = 'researcher-output-error-inline';
-                    errInBox.textContent = msg;
-                    out.appendChild(errInBox);
-                    appendResearcherMetaDebug(out, err && err.meta ? err.meta : null);
+                    renderResearcherFailureSummary(out, msg, err && err.meta ? err.meta : null);
                 } else {
+                    hideProcessingStatus();
                     restoreOutputPlaceholder();
                 }
             })

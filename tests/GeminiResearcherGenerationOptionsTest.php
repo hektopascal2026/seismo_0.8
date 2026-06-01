@@ -32,4 +32,10 @@ final class GeminiResearcherGenerationOptionsTest extends TestCase
         self::assertSame(3, GeminiResearcherService::tournamentSurvivorsForBatchSize(30));
         self::assertSame(3, GeminiResearcherService::tournamentSurvivorsForBatchSize(100));
     }
+
+    public function testUsesGemini31ProModelId(): void
+    {
+        self::assertTrue(GeminiResearcherService::usesGemini31Pro('gemini-3.1-pro-preview'));
+        self::assertFalse(GeminiResearcherService::usesGemini31Pro('gemini-3.5-flash'));
+    }
 }

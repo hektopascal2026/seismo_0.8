@@ -812,20 +812,20 @@ CONTRACT;
         $results = [];
         foreach ($responses as $index => $response) {
             if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
-                $payload = $payloads[$index];
-                $config  = $payload['generationConfig'] ?? [];
-                if (is_array($config)) {
-                    unset($config['responseSchema']);
-                    $payload['generationConfig'] = $config;
-                }
-                $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
+                $payloads[$index] = $this->selectionPayloadWithoutSchema($payloads[$index]);
+                $response         = $this->postPayloadWithSchemaFallback($payloads[$index], $apiKey, 'selection');
             }
 
             if (!$response->isOk()) {
                 throw $this->exceptionFromFailedResponse($response);
             }
 
-            $results[] = $this->parseSelectionResponse($response);
+            $results[] = $this->resolveSelectionPassKeys(
+                $response,
+                $payloads[$index],
+                $apiKey,
+                true,
+            );
         }
 
         return $results;
@@ -1437,11 +1437,81 @@ CONTRACT;
             'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $selectionModel),
             'responseMimeType' => 'application/json',
         ], 'selection', $itemCount, $selectionModel);
-        if ($useStructuredSchema) {
+        if ($useStructuredSchema && self::usesGemini35Family($selectionModel)) {
             $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
         }
 
         return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function selectionPayloadWithoutSchema(array $payload): array
+    {
+        $config = $payload['generationConfig'] ?? null;
+        if (!is_array($config)) {
+            return $payload;
+        }
+        unset($config['responseSchema']);
+        $payload['generationConfig'] = $config;
+
+        return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function selectionPayloadHasSchema(array $payload): bool
+    {
+        $config = $payload['generationConfig'] ?? null;
+
+        return is_array($config) && isset($config['responseSchema']);
+    }
+
+    private function isSelectionSchemaRetryable(GeminiResearcherException $e): bool
+    {
+        $msg = strtolower($e->getMessage());
+
+        return str_contains($msg, 'used_entry_keys')
+            || str_contains($msg, 'json could not be parsed')
+            || str_contains($msg, 'unexpected response');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return list<string>
+     * @throws GeminiResearcherException
+     */
+    private function resolveSelectionPassKeys(
+        Response $response,
+        array $payload,
+        string $apiKey,
+        bool $allowEmptyKeys,
+    ): array {
+        try {
+            $keys = $this->parseSelectionResponse($response, $allowEmptyKeys);
+        } catch (GeminiResearcherException $e) {
+            if (!$this->selectionPayloadHasSchema($payload) || !$this->isSelectionSchemaRetryable($e)) {
+                throw $e;
+            }
+            $keys = [];
+        }
+
+        if ($keys !== [] || !$this->selectionPayloadHasSchema($payload)) {
+            if (!$allowEmptyKeys && $keys === []) {
+                throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
+            }
+
+            return $keys;
+        }
+
+        error_log('GeminiResearcherService: empty used_entry_keys with responseSchema; retrying selection without schema');
+        $retryPayload = $this->selectionPayloadWithoutSchema($payload);
+        $retryResponse  = $this->postPayloadWithSchemaFallback($retryPayload, $apiKey, 'selection');
+
+        return $this->parseSelectionResponse($retryResponse, $allowEmptyKeys);
     }
 
     /**
@@ -1584,7 +1654,7 @@ CONTRACT;
      * @return list<string>
      * @throws GeminiResearcherException
      */
-    private function parseSelectionResponse(Response $response): array
+    private function parseSelectionResponse(Response $response, bool $allowEmptyKeys = false): array
     {
         $raw     = $this->extractCandidateText($response);
         $decoded = $this->decodeResearcherJsonObject($raw);
@@ -1597,12 +1667,32 @@ CONTRACT;
             $this->lastGenerationMeta['selection_reasoning'] = $reasoning;
         }
 
-        $keys = $this->normalizeUsedEntryKeys($decoded['used_entry_keys'] ?? null);
-        if ($keys === []) {
+        $keys = $this->extractUsedEntryKeysFromDecoded($decoded);
+        if ($keys === [] && !$allowEmptyKeys) {
             throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
         }
 
         return $keys;
+    }
+
+    /**
+     * @param array<string, mixed> $decoded
+     * @return list<string>
+     */
+    private function extractUsedEntryKeysFromDecoded(array $decoded): array
+    {
+        foreach (['used_entry_keys', 'selected_entry_keys', 'entry_keys', 'keys'] as $field) {
+            $keys = $this->normalizeUsedEntryKeys($decoded[$field] ?? null);
+            if ($keys !== []) {
+                return $keys;
+            }
+        }
+
+        if (array_is_list($decoded)) {
+            return $this->normalizeUsedEntryKeys($decoded);
+        }
+
+        return [];
     }
 
     /**
