@@ -997,17 +997,19 @@ $moduleOptions = [
             }
             var editingLibrary = activePromptId !== null;
             if (editingLibrary) {
-                savePromptBtn.disabled = false;
-                savePromptBtn.hidden = false;
-                savePromptBtn.style.display = '';
-                savePromptBtn.textContent = 'Save to library';
-                savePromptBtn.title = 'Add the current textarea as a new named prompt in the library';
+                // When editing a library prompt, we do NOT show the default prompt update button,
+                // because the user should only save/update the library prompt via saveLibraryBtn!
+                savePromptBtn.disabled = true;
+                savePromptBtn.hidden = true;
+                savePromptBtn.style.display = 'none';
                 return;
             }
-            // The default prompt cannot be overwritten!
-            savePromptBtn.disabled = true;
-            savePromptBtn.hidden = true;
-            savePromptBtn.style.display = 'none';
+            // For the Default tab (activePromptId === null), show the default prompt save/update button
+            savePromptBtn.disabled = false;
+            savePromptBtn.hidden = false;
+            savePromptBtn.style.display = '';
+            savePromptBtn.textContent = defaultPromptStored ? instanceUpdatePromptLabel : instanceSavePromptLabel;
+            savePromptBtn.title = defaultPromptStored ? 'Update the default prompt for this instance' : 'Save as the default prompt for this instance';
         }
 
         function syncPromptSaveButtons() {
