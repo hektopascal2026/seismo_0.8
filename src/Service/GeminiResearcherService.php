@@ -157,6 +157,23 @@ CONTRACT;
     /** @var array<string, int> */
     private array $lastPipelineContext = [];
 
+    private int $usagePromptTokens = 0;
+
+    private int $usageOutputTokens = 0;
+
+    private int $usageFlashPromptTokens = 0;
+
+    private int $usageFlashOutputTokens = 0;
+
+    private int $usageProPromptTokens = 0;
+
+    private int $usageProOutputTokens = 0;
+
+    private int $usageApiCalls = 0;
+
+    /** @var array<string, array{prompt_tokens: int, output_tokens: int, api_calls: int}> */
+    private array $usageByPhase = [];
+
     private GeminiResearcherGenerationOptions $generationOptions;
 
     public function __construct(
@@ -537,6 +554,8 @@ CONTRACT;
         array $researcherMeta,
         string $apiKey,
     ): GeminiResearcherResult {
+        $this->resetGeminiUsageTotals();
+
         $poolEntries     = $contextEntries;
         $poolCount       = count($poolEntries);
         $selectionTarget = min($effectiveCount, max(1, $poolCount));
@@ -603,7 +622,7 @@ CONTRACT;
             'selection_completed'  => true,
         ]);
 
-        return $this->runSummaryPassWithBatchFallback(
+        $result = $this->runSummaryPassWithBatchFallback(
             $userSystemPrompt,
             $summaryEntries,
             $scoresByKey,
@@ -614,6 +633,9 @@ CONTRACT;
             $finalCount,
             $apiKey,
         );
+        $this->flushGeminiUsageToMeta();
+
+        return $result;
     }
 
     private function composeSelectionSystemInstruction(
@@ -1436,6 +1458,79 @@ CONTRACT;
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, $patch);
     }
 
+    private function resetGeminiUsageTotals(): void
+    {
+        $this->usagePromptTokens      = 0;
+        $this->usageOutputTokens      = 0;
+        $this->usageFlashPromptTokens = 0;
+        $this->usageFlashOutputTokens = 0;
+        $this->usageProPromptTokens   = 0;
+        $this->usageProOutputTokens   = 0;
+        $this->usageApiCalls          = 0;
+        $this->usageByPhase           = [];
+    }
+
+    private function flushGeminiUsageToMeta(): void
+    {
+        if ($this->usageApiCalls < 1) {
+            return;
+        }
+
+        $this->mergeGenerationMeta([
+            'gemini_usage' => [
+                'prompt_tokens'        => $this->usagePromptTokens,
+                'output_tokens'        => $this->usageOutputTokens,
+                'total_tokens'         => $this->usagePromptTokens + $this->usageOutputTokens,
+                'flash_prompt_tokens'  => $this->usageFlashPromptTokens,
+                'flash_output_tokens'  => $this->usageFlashOutputTokens,
+                'pro_prompt_tokens'    => $this->usageProPromptTokens,
+                'pro_output_tokens'    => $this->usageProOutputTokens,
+                'api_calls'            => $this->usageApiCalls,
+                'by_phase'             => $this->usageByPhase,
+            ],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $json
+     */
+    private function recordGeminiUsageFromJson(array $json, string $phase): void
+    {
+        $usage = $json['usageMetadata'] ?? null;
+        if (!is_array($usage)) {
+            return;
+        }
+
+        $prompt = max(0, (int)($usage['promptTokenCount'] ?? 0));
+        $output = max(0, (int)($usage['candidatesTokenCount'] ?? 0))
+            + max(0, (int)($usage['thoughtsTokenCount'] ?? 0));
+
+        $model = $phase === 'selection' ? $this->selectionModel() : $this->model;
+        $isFlash = GeminiResearcherFlashPricing::isFlashModel($model);
+
+        $this->usagePromptTokens += $prompt;
+        $this->usageOutputTokens += $output;
+        $this->usageApiCalls++;
+        if ($isFlash) {
+            $this->usageFlashPromptTokens += $prompt;
+            $this->usageFlashOutputTokens += $output;
+        } else {
+            $this->usageProPromptTokens += $prompt;
+            $this->usageProOutputTokens += $output;
+        }
+
+        if (!isset($this->usageByPhase[$phase])) {
+            $this->usageByPhase[$phase] = [
+                'prompt_tokens' => 0,
+                'output_tokens' => 0,
+                'api_calls'     => 0,
+            ];
+        }
+        $this->usageByPhase[$phase]['prompt_tokens'] += $prompt;
+        $this->usageByPhase[$phase]['output_tokens'] += $output;
+        $this->usageByPhase[$phase]['api_calls']++;
+    }
+
     private function effectiveSelectionThinkingLevel(): string
     {
         if ($this->rateLimitFallbackMode) {
@@ -1811,7 +1906,7 @@ CONTRACT;
      */
     private function parseSelectionResponse(Response $response, bool $allowEmptyKeys = false): array
     {
-        $raw     = $this->extractCandidateText($response, true);
+        $raw     = $this->extractCandidateText($response, true, 'selection');
         $decoded = $this->decodeResearcherJsonObject($raw);
         if ($decoded === null) {
             throw GeminiResearcherException::badResponse('Selection pass JSON could not be parsed.');
@@ -1860,7 +1955,7 @@ CONTRACT;
         bool $enforceLengthHeuristic = true,
         bool $allowTruncatedPartial = false,
     ): GeminiResearcherResult {
-        $raw = $this->extractCandidateText($response, $allowTruncatedPartial);
+        $raw = $this->extractCandidateText($response, $allowTruncatedPartial, 'summary');
         if (!str_starts_with(trim($raw), '{')) {
             $markdown = trim($raw);
             if ($markdown === '') {
@@ -2164,14 +2259,19 @@ CONTRACT;
     /**
      * @throws GeminiResearcherException
      */
-    private function extractCandidateText(Response $response, bool $allowTruncatedPartial = false): string
-    {
+    private function extractCandidateText(
+        Response $response,
+        bool $allowTruncatedPartial = false,
+        string $phase = 'summary',
+    ): string {
         try {
             $json = $response->json();
         } catch (\JsonException $e) {
             error_log('GeminiResearcherService response JSON: ' . $e->getMessage());
             throw GeminiResearcherException::badResponse('Could not parse API JSON: ' . $e->getMessage());
         }
+
+        $this->recordGeminiUsageFromJson($json, $phase);
 
         if (isset($json['error']) && is_array($json['error'])) {
             $msg = trim((string)($json['error']['message'] ?? ''));

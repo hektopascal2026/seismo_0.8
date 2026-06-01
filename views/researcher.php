@@ -134,6 +134,37 @@ $moduleOptions = [
         max-height: 24rem;
         overflow-y: auto;
     }
+    .researcher-cost-estimate {
+        margin-top: 0.65rem;
+        padding: 0.55rem 0.7rem;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+        background: #f8f8f8;
+        border: 0.0625rem solid #000000;
+        max-width: 100%;
+    }
+    .researcher-cost-estimate__amount {
+        margin: 0 0 0.25rem;
+        font-weight: 600;
+        font-size: 0.9375rem;
+    }
+    .researcher-cost-estimate__detail,
+    .researcher-cost-estimate__note {
+        margin: 0;
+        opacity: 0.9;
+        font-size: 0.75rem;
+    }
+    .researcher-cost-estimate__note {
+        margin-top: 0.35rem;
+        opacity: 0.75;
+    }
+    .researcher-cost-estimate__console {
+        margin: 0.35rem 0 0;
+        font-size: 0.75rem;
+    }
+    .researcher-cost-estimate__console a {
+        color: inherit;
+    }
     </style>
 </head>
 <body>
@@ -374,6 +405,7 @@ $moduleOptions = [
             <div id="researcher-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
                 <p class="admin-intro" id="researcher-output-placeholder">Generated text will appear here.</p>
             </div>
+            <div id="researcher-cost-estimate" class="researcher-cost-estimate" hidden aria-live="polite"></div>
         </div>
 
         <div class="latest-entries-section module-section-spaced" id="researcher-sources-section" hidden>
@@ -392,6 +424,7 @@ $moduleOptions = [
         var form = document.getElementById('researcher-builder-form');
         var btn = document.getElementById('researcher-generate-btn');
         var out = document.getElementById('researcher-output');
+        var costEstimateEl = document.getElementById('researcher-cost-estimate');
         var placeholder = document.getElementById('researcher-output-placeholder');
         var errEl = document.getElementById('researcher-output-error');
         var warnEl = document.getElementById('researcher-output-warning');
@@ -878,6 +911,87 @@ $moduleOptions = [
 
         function appendResearcherMetaDebug(container, meta) {
             appendResearcherMeta(container, meta, { failure: false });
+        }
+
+        function hideResearcherCostEstimate() {
+            if (!costEstimateEl) {
+                return;
+            }
+            costEstimateEl.hidden = true;
+            costEstimateEl.innerHTML = '';
+        }
+
+        function renderResearcherCostEstimate(meta) {
+            if (!costEstimateEl) {
+                return;
+            }
+            hideResearcherCostEstimate();
+            if (!meta || typeof meta !== 'object') {
+                return;
+            }
+            var est = meta.cost_estimate;
+            if (!est || typeof est !== 'object' || !est.estimated_usd_display) {
+                return;
+            }
+
+            function formatInt(n) {
+                var v = parseInt(n, 10);
+                return isNaN(v) ? '0' : v.toLocaleString();
+            }
+
+            var pipelineLabel = est.pipeline === 'tournament' ? 'Tournament' : 'Standard';
+            var amount = document.createElement('p');
+            amount.className = 'researcher-cost-estimate__amount';
+            amount.textContent = 'Estimated cost: ' + String(est.estimated_usd_display) + ' USD';
+
+            var detail = document.createElement('p');
+            detail.className = 'researcher-cost-estimate__detail';
+            var detailParts = [
+                pipelineLabel + ' pipeline',
+                'Gemini 3.5 Flash (Standard API)',
+                formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens',
+                String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's')
+            ];
+            if (est.by_phase && typeof est.by_phase === 'object') {
+                var phaseBits = [];
+                if (est.by_phase.selection) {
+                    phaseBits.push(
+                        'selection ' + formatInt(est.by_phase.selection.prompt_tokens)
+                        + '+' + formatInt(est.by_phase.selection.output_tokens)
+                    );
+                }
+                if (est.by_phase.summary) {
+                    phaseBits.push(
+                        'summary ' + formatInt(est.by_phase.summary.prompt_tokens)
+                        + '+' + formatInt(est.by_phase.summary.output_tokens)
+                    );
+                }
+                if (phaseBits.length) {
+                    detailParts.push(phaseBits.join(', '));
+                }
+            }
+            detail.textContent = detailParts.join(' · ');
+
+            var note = document.createElement('p');
+            note.className = 'researcher-cost-estimate__note';
+            var rateNote = '$' + est.input_usd_per_m + ' / $' + est.output_usd_per_m + ' per 1M tokens (input / output). ';
+            note.textContent = rateNote + (est.disclaimer || 'Rough estimate only.');
+
+            costEstimateEl.appendChild(amount);
+            costEstimateEl.appendChild(detail);
+            costEstimateEl.appendChild(note);
+            if (est.spend_console_url) {
+                var consoleLine = document.createElement('p');
+                consoleLine.className = 'researcher-cost-estimate__console';
+                var consoleLink = document.createElement('a');
+                consoleLink.href = String(est.spend_console_url);
+                consoleLink.target = '_blank';
+                consoleLink.rel = 'noopener noreferrer';
+                consoleLink.textContent = '(→ Google Console)';
+                consoleLine.appendChild(consoleLink);
+                costEstimateEl.appendChild(consoleLine);
+            }
+            costEstimateEl.hidden = false;
         }
 
         function renderResearcherFailureSummary(container, message, meta) {
@@ -1678,6 +1792,7 @@ $moduleOptions = [
         form.addEventListener('submit', function(ev) {
             ev.preventDefault();
             hideCopyBtn();
+            hideResearcherCostEstimate();
             if (errEl) {
                 errEl.hidden = true;
                 errEl.textContent = '';
@@ -1798,10 +1913,12 @@ $moduleOptions = [
                         out.textContent = emptyMsg;
                         hideCopyBtn();
                         appendResearcherMetaDebug(out, payload.meta);
+                        renderResearcherCostEstimate(payload.meta);
                         return;
                     }
                     out.textContent = researcherText;
                     showCopyBtn(researcherText);
+                    renderResearcherCostEstimate(payload.meta);
                     appendResearcherMetaDebug(out, payload.meta);
                     if (payload.entries_html && sourcesCards) {
                         try {
@@ -1857,6 +1974,7 @@ $moduleOptions = [
                         out.style.whiteSpace = 'pre-wrap';
                         out.textContent = String(data.text);
                         showCopyBtn(String(data.text));
+                        renderResearcherCostEstimate(data.meta);
                         appendResearcherMetaDebug(out, data.meta);
                     } else {
                         if (errEl) {

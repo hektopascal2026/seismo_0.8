@@ -206,7 +206,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, and source-card attribution (mothership and path satellites).</li>
+                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, optional tournament selection for large pools, post-run Flash cost estimate, and source-card attribution (mothership and path satellites).</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
@@ -472,9 +472,9 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <div class="timeline-era-card current-version-card">
                         <div class="era-meta-row">
                             <span class="era-badge era-badge-ai">Era VI: Cognitive AI</span>
-                            <span class="era-date">May 2026 (Current)</span>
+                            <span class="era-date">June 2026 (Current)</span>
                         </div>
-                        <h3>v0.7.0 – v0.7.8 &mdash; The AI Researcher</h3>
+                        <h3>v0.7.0 – v0.8.2 &mdash; The AI Researcher</h3>
                         
                         <div class="era-narrative">
                             <p><strong>Rationale:</strong> With thousands of ingested items, manual summary was exhausting. The team designed the **AI Researcher**, bringing LLM capabilities directly into the dashboard. We built a highly reliable, two-pass Gemini pipeline that selects critical items first, and drafts a beautifully organized executive summary complete with dashboard-card attribution lists.</p>
@@ -483,6 +483,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
+                                <li><strong>v0.8.2 &mdash; Tournament selection &amp; cost estimate:</strong> Optional parallel batch prelims (top 3 per ~35-entry batch) plus a championship selection pass for large pools; rough USD estimate after each run from API token usage (Gemini 3.5 Flash Standard rates) with a shortcut to Google AI Studio billing.</li>
                                 <li><strong>v0.7.8 &mdash; Gemini Configurator:</strong> Design of a one-time, AI-powered setup assistant that analyzes sample emails, generates regular expressions and webview keywords, and saves a static configuration locally for zero-runtime footprint.</li>
                                 <li><strong>AI Researcher:</strong> Interactive Gemini pipeline (`?action=researcher`) with custom prompt libraries, lookback filters, and category toggles.</li>
                                 <li><strong>Skinny Two-Pass Pipeline:</strong> Standardized on `gemini-3.5-flash` with a two-step prompt. Pass 1 handles logical entry selection (returning a JSON array of used keys). Pass 2 generates a clean, structured Markdown researcher on those items only.</li>
@@ -581,7 +582,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.7.8</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
+                                Currently, Seismo is on version <strong>0.8.2</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

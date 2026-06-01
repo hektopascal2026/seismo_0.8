@@ -87,8 +87,67 @@ final class GeminiResearcherGenerationMeta
             && $merged['selection_model'] !== $merged['summary_model'];
 
         $merged['meta_summary_line'] = self::formatSummaryLine($merged);
+        $merged['cost_estimate']       = self::buildCostEstimate($merged);
 
         return $merged;
+    }
+
+    /**
+     * Rough USD estimate from {@see GeminiResearcherService} usage totals (Flash Standard rates).
+     *
+     * @param array<string, mixed> $meta
+     * @return array<string, mixed>|null
+     */
+    public static function buildCostEstimate(array $meta): ?array
+    {
+        $usage = $meta['gemini_usage'] ?? null;
+        if (!is_array($usage)) {
+            return null;
+        }
+
+        $promptTokens = (int)($usage['prompt_tokens'] ?? 0);
+        $outputTokens = (int)($usage['output_tokens'] ?? 0);
+        if ($promptTokens < 1 && $outputTokens < 1) {
+            return null;
+        }
+
+        $flashPrompt = (int)($usage['flash_prompt_tokens'] ?? $promptTokens);
+        $flashOutput = (int)($usage['flash_output_tokens'] ?? $outputTokens);
+        $proPrompt   = (int)($usage['pro_prompt_tokens'] ?? 0);
+        $proOutput   = (int)($usage['pro_output_tokens'] ?? 0);
+
+        $usd = GeminiResearcherFlashPricing::estimateStandardUsd($flashPrompt, $flashOutput);
+        $pipelineLabel = !empty($meta['tournament_mode']) ? 'tournament' : 'standard';
+
+        $estimate = [
+            'pipeline'              => $pipelineLabel,
+            'pricing_tier'          => GeminiResearcherFlashPricing::TIER_STANDARD,
+            'model_priced'          => 'gemini-3.5-flash',
+            'input_usd_per_m'       => GeminiResearcherFlashPricing::STANDARD_INPUT_USD_PER_M,
+            'output_usd_per_m'      => GeminiResearcherFlashPricing::STANDARD_OUTPUT_USD_PER_M,
+            'prompt_tokens'         => $promptTokens,
+            'output_tokens'         => $outputTokens,
+            'flash_prompt_tokens'   => $flashPrompt,
+            'flash_output_tokens'   => $flashOutput,
+            'api_calls'             => (int)($usage['api_calls'] ?? 0),
+            'estimated_usd'         => round($usd, 6),
+            'estimated_usd_display' => GeminiResearcherFlashPricing::formatUsd($usd),
+            'disclaimer'            => 'Rough estimate from API usageMetadata; Standard (not Batch) Flash list prices.',
+            'spend_console_url'     => 'https://aistudio.google.com/spend?project=gen-lang-client-0854484393',
+        ];
+
+        if ($proPrompt > 0 || $proOutput > 0) {
+            $estimate['pro_prompt_tokens'] = $proPrompt;
+            $estimate['pro_output_tokens'] = $proOutput;
+            $estimate['pro_tokens_excluded'] = true;
+            $estimate['disclaimer'] .= ' Pro selection tokens are shown but not priced here.';
+        }
+
+        if (isset($usage['by_phase']) && is_array($usage['by_phase'])) {
+            $estimate['by_phase'] = $usage['by_phase'];
+        }
+
+        return $estimate;
     }
 
     /**
