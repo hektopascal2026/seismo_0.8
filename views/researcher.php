@@ -208,7 +208,7 @@ $moduleOptions = [
 
                 <div style="margin-bottom: 2rem; border-top: 0.125rem dashed #000000; padding-top: 1.25rem;">
                     <button type="button" class="btn btn-secondary" id="toggle-advanced-settings-btn" style="width: 100%; text-align: center; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">
-                        Show Advanced Settings (Steps 2–4) ▾
+                        Show Advanced Settings (Steps 2–3) ▾
                     </button>
                 </div>
 
@@ -263,9 +263,10 @@ $moduleOptions = [
                             <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
                                 Caps the number of qualified items sent to the AI. If you enabled Magnitu Snippets above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
                             </p>
-                        </div>
                     </div>
-                </fieldset>
+                </div>
+            </fieldset>
+            </div>
 
                 <!-- Step 4: AI Report Generation -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
@@ -326,9 +327,7 @@ $moduleOptions = [
                         </p>
                         <textarea id="researcher_helper_result" rows="22" class="search-input"
                                   style="width:100%; max-width:40rem;"></textarea>
-                    </div>
                 </fieldset>
-                </div>
 
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
                     <button type="submit" class="btn btn-success" id="researcher-generate-btn"
