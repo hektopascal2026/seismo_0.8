@@ -217,8 +217,8 @@ $moduleOptions = [
                 </fieldset>
 
                 <div style="margin-bottom: 2rem; border-top: 0.125rem dashed #000000; padding-top: 1.25rem;">
-                    <button type="button" class="btn btn-secondary" id="toggle-advanced-settings-btn" style="width: 100%; text-align: center; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">
-                        Show Advanced Settings (Relevance & Pool) ▾
+                    <button type="button" class="btn btn-secondary entry-expand-btn" id="toggle-advanced-settings-btn">
+                        More settings ▾
                     </button>
                 </div>
 
@@ -1654,10 +1654,10 @@ $moduleOptions = [
                 var isHidden = advancedWrapper.style.display === 'none';
                 if (isHidden) {
                     advancedWrapper.style.display = 'block';
-                    toggleAdvancedBtn.textContent = 'Hide Advanced Settings (Relevance & Pool) \u25B4';
+                    toggleAdvancedBtn.textContent = 'Less settings ▴';
                 } else {
                     advancedWrapper.style.display = 'none';
-                    toggleAdvancedBtn.textContent = 'Show Advanced Settings (Relevance & Pool) \u25BE';
+                    toggleAdvancedBtn.textContent = 'More settings ▾';
                 }
             });
         }
