@@ -38,6 +38,23 @@ ENTRIES_DATA:
 {markdownContext}
 CONTRACT;
 
+    private const SELECTION_BATCH_OUTPUT_CONTRACT = <<<'CONTRACT'
+SYSTEM DIRECTIVE — TOURNAMENT BATCH SELECTION (PASS 1 OF 2):
+The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
+You see ONE batch of ENTRIES_DATA only (not the full pool). Compare every entry in this batch; pick the strongest matches for the USER PROMPT.
+
+{temporalContext}
+
+RULES:
+- ENTRIES_DATA: XML <entry> blocks for this batch only. Each has <id>entry_type:entry_id</id>.
+- Return JSON with used_entry_keys (required) and selection_reasoning (optional): brief rationale, then up to {maxCoreItems} distinct <id> values, most important first.
+- Selecting fewer is correct when strict USER PROMPT criteria apply.
+- Never invent IDs.
+
+ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
+
     private const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
 Entries are already chosen. Output plain Markdown only (no JSON wrapper).
@@ -65,6 +82,12 @@ CONTRACT;
     public const CONFIG_KEY_MAX_OUTPUT_TOKENS = 'gemini:max_output_tokens';
 
     public const DEFAULT_MODEL = 'gemini-3.5-flash';
+
+    /** Pass-1 selection when Pro mode is enabled on the researcher form. */
+    public const MODEL_GEMINI_31_PRO_PREVIEW = 'gemini-3.1-pro-preview';
+
+    /** Local picks promoted from each tournament batch (cap). */
+    public const TOURNAMENT_SURVIVORS_PER_BATCH = 3;
 
     /** Hard API output cap for Gemini 3.5 Flash (GA). */
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
@@ -122,11 +145,14 @@ CONTRACT;
     /** @var array<string, mixed> */
     private array $lastGenerationMeta = [];
 
+    private GeminiResearcherGenerationOptions $generationOptions;
+
     public function __construct(
         private readonly SystemConfigRepository $config,
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
         ?ResearcherGeminiContext $researcherContext = null,
     ) {
+        $this->generationOptions = GeminiResearcherGenerationOptions::defaults();
         $this->researcherContext = $researcherContext ?? new ResearcherGeminiContext($config);
         $configured = trim((string)($config->get(self::CONFIG_KEY_MODEL) ?? ''));
         $model      = $configured !== '' ? $configured : self::DEFAULT_MODEL;
@@ -154,9 +180,24 @@ CONTRACT;
 
     public static function modelHardOutputCapFor(string $model): int
     {
-        return self::usesGemini35Family($model)
-            ? self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH
-            : self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH;
+        if (self::usesGemini35Family($model)) {
+            return self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH;
+        }
+
+        if (preg_match('/gemini-3\.1-pro/i', $model) === 1) {
+            return 65536;
+        }
+
+        return self::MODEL_OUTPUT_CAP_GEMINI_35_FLASH;
+    }
+
+    public static function tournamentSurvivorsForBatchSize(int $entryCount): int
+    {
+        if ($entryCount < 1) {
+            return 1;
+        }
+
+        return max(1, min(self::TOURNAMENT_SURVIVORS_PER_BATCH, $entryCount));
     }
 
     private function modelHardOutputCap(): int
@@ -217,12 +258,14 @@ CONTRACT;
         array $scoresByKey = [],
         array $researcherMeta = [],
         ?ResearcherSourceSelection $moduleSelection = null,
+        ?GeminiResearcherGenerationOptions $generationOptions = null,
     ): GeminiResearcherResult {
         $apiKey = trim((string)($this->config->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
             throw GeminiResearcherException::missingApiKey();
         }
 
+        $this->generationOptions       = $generationOptions ?? GeminiResearcherGenerationOptions::defaults();
         $this->rateLimitFallbackMode = false;
         $this->rateLimitFallbackUsed = false;
 
@@ -313,11 +356,16 @@ CONTRACT;
         $effectiveCount = $this->effectiveCitationCount($itemCount, $contextEntryCount);
         $this->lastEffectiveCitationCount = $effectiveCount;
 
+        $selectionModel = $this->selectionModel();
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'model'               => $this->model,
-            'thinking_selection'  => self::THINKING_LEVEL_SELECTION,
-            'thinking_summary'    => self::THINKING_LEVEL_SUMMARY,
-            'rate_limit_thinking' => $this->rateLimitFallbackMode,
+            'model'                => $this->model,
+            'summary_model'        => $this->model,
+            'selection_model'      => $selectionModel,
+            'tournament_mode'      => $this->generationOptions->tournamentMode,
+            'pro_selection_mode'   => $this->generationOptions->proSelectionMode,
+            'thinking_selection'   => self::THINKING_LEVEL_SELECTION,
+            'thinking_summary'     => self::THINKING_LEVEL_SUMMARY,
+            'rate_limit_thinking'  => $this->rateLimitFallbackMode,
         ]);
 
         return $this->generateSummaryTwoPass(
@@ -433,7 +481,18 @@ CONTRACT;
 
         $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $researcherMeta, $markdownContext);
 
-        if ($poolCount >= $this->batchedSelectionMinEntries()) {
+        if ($this->generationOptions->tournamentMode && $poolCount >= 2) {
+            $selectedKeys = $this->runTournamentSelectionPasses(
+                $userSystemPrompt,
+                $poolEntries,
+                $scoresByKey,
+                $researcherMeta,
+                $poolContext,
+                $itemCount,
+                $selectionTarget,
+                $apiKey,
+            );
+        } elseif ($poolCount >= $this->batchedSelectionMinEntries()) {
             $selectedKeys = $this->runBatchedSelectionPasses(
                 $userSystemPrompt,
                 $poolEntries,
@@ -454,6 +513,7 @@ CONTRACT;
                 $itemCount,
                 $selectionTarget,
                 $apiKey,
+                false,
             );
             $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
                 'skinny_global_selection' => true,
@@ -485,8 +545,10 @@ CONTRACT;
         string $poolContext,
         int $itemCount,
         int $selectionTarget,
+        bool $batchLocal = false,
     ): string {
-        $envelope = $this->expandContract(self::SELECTION_OUTPUT_CONTRACT, [
+        $contract = $batchLocal ? self::SELECTION_BATCH_OUTPUT_CONTRACT : self::SELECTION_OUTPUT_CONTRACT;
+        $envelope = $this->expandContract($contract, [
             '{itemCount}'       => (string)$itemCount,
             '{maxCoreItems}'    => (string)$selectionTarget,
             '{markdownContext}' => trim($poolContext),
@@ -524,33 +586,308 @@ CONTRACT;
      * @return list<string>
      * @throws GeminiResearcherException
      */
-    private function runSelectionPass(
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSelectionPayload(
         string $userSystemPrompt,
         string $poolContext,
         int $itemCount,
         int $selectionTarget,
-        string $apiKey,
+        bool $batchLocal,
     ): array {
         $systemText = $this->composeSelectionSystemInstruction(
             $userSystemPrompt,
             $poolContext,
             $itemCount,
             $selectionTarget,
+            $batchLocal,
         );
 
-        $userText = 'Wähle bis zu ' . $selectionTarget . ' Einträge global aus ENTRIES_DATA. '
-            . 'Strikte Einhaltung des USER PROMPT (weniger ist korrekt). '
-            . 'JSON: used_entry_keys in Researcher-Reihenfolge.';
+        $userText = $batchLocal
+            ? 'Wähle bis zu ' . $selectionTarget . ' Einträge nur aus diesem ENTRIES_DATA-Batch. '
+                . 'Vergleiche jeden Eintrag im Block. Strikte Einhaltung des USER PROMPT (weniger ist korrekt). '
+                . 'JSON: used_entry_keys in Researcher-Reihenfolge.'
+            : 'Wähle bis zu ' . $selectionTarget . ' Einträge global aus ENTRIES_DATA. '
+                . 'Strikte Einhaltung des USER PROMPT (weniger ist korrekt). '
+                . 'JSON: used_entry_keys in Researcher-Reihenfolge.';
 
-        $payload = [
+        return [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
             'generationConfig'  => $this->selectionGenerationConfig($itemCount, $selectionTarget, true),
         ];
+    }
 
+    /**
+     * @return list<string>
+     * @throws GeminiResearcherException
+     */
+    private function runSelectionPass(
+        string $userSystemPrompt,
+        string $poolContext,
+        int $itemCount,
+        int $selectionTarget,
+        string $apiKey,
+        bool $batchLocal = false,
+    ): array {
+        $payload  = $this->buildSelectionPayload(
+            $userSystemPrompt,
+            $poolContext,
+            $itemCount,
+            $selectionTarget,
+            $batchLocal,
+        );
         $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
 
         return $this->parseSelectionResponse($response);
+    }
+
+    /**
+     * Tournament prelims (parallel) + optional championship pass.
+     *
+     * @param list<array<string, mixed>> $poolEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
+     * @return list<string>
+     * @throws GeminiResearcherException
+     */
+    private function runTournamentSelectionPasses(
+        string $userSystemPrompt,
+        array $poolEntries,
+        array $scoresByKey,
+        array $researcherMeta,
+        string $fallbackXml,
+        int $itemCount,
+        int $selectionTarget,
+        string $apiKey,
+    ): array {
+        $batchSize  = $this->researcherContext->selectionBatchSize();
+        $batches    = ResearcherGeminiContext::chunkEntryList($poolEntries, $batchSize);
+        $batchCount = count($batches);
+        if ($batchCount === 0) {
+            return [];
+        }
+
+        /** @var list<array{poolContext: string, selectionTarget: int, batchLocal: bool}> $jobs */
+        $jobs = [];
+        foreach ($batches as $batch) {
+            $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $researcherMeta, $fallbackXml);
+            $jobs[]       = [
+                'poolContext'      => $batchContext,
+                'selectionTarget'  => self::tournamentSurvivorsForBatchSize(count($batch)),
+                'batchLocal'       => $batchCount > 1,
+            ];
+        }
+
+        $batchKeyLists = $batchCount > 1
+            ? $this->runSelectionPassesParallel($userSystemPrompt, $jobs, $itemCount, $apiKey)
+            : [
+                $this->runSelectionPass(
+                    $userSystemPrompt,
+                    $jobs[0]['poolContext'],
+                    $itemCount,
+                    $jobs[0]['selectionTarget'],
+                    $apiKey,
+                    $jobs[0]['batchLocal'],
+                ),
+            ];
+
+        $merged = [];
+        $seen   = [];
+        foreach ($batchKeyLists as $keys) {
+            foreach ($keys as $key) {
+                $normalized = strtolower(trim($key));
+                if ($normalized === '' || isset($seen[$normalized])) {
+                    continue;
+                }
+                $seen[$normalized] = true;
+                $merged[]          = $key;
+            }
+        }
+
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'tournament_selection'      => true,
+            'batched_selection'         => true,
+            'selection_batches'         => $batchCount,
+            'selection_batch_size'      => $batchSize,
+            'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
+            'selection_parallel'        => $batchCount > 1,
+            'selection_championship'    => false,
+        ]);
+
+        if (count($merged) <= $selectionTarget) {
+            return $merged;
+        }
+
+        $finalists = $this->entriesForKeys($poolEntries, $merged);
+        if ($finalists === []) {
+            return array_slice($merged, 0, $selectionTarget);
+        }
+
+        $championContext = $this->buildEntryXmlContext(
+            $finalists,
+            $scoresByKey,
+            $researcherMeta,
+            $fallbackXml,
+        );
+        $championKeys = $this->runSelectionPass(
+            $userSystemPrompt,
+            $championContext,
+            $itemCount,
+            $selectionTarget,
+            $apiKey,
+            false,
+        );
+
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'selection_championship' => true,
+            'selection_finalists'    => count($finalists),
+        ]);
+
+        if ($championKeys !== []) {
+            return $this->finalizeSelectedKeys($championKeys, $selectionTarget);
+        }
+
+        return array_slice($merged, 0, $selectionTarget);
+    }
+
+    /**
+     * @param list<array{poolContext: string, selectionTarget: int, batchLocal: bool}> $jobs
+     * @return list<list<string>>
+     * @throws GeminiResearcherException
+     */
+    private function runSelectionPassesParallel(
+        string $userSystemPrompt,
+        array $jobs,
+        int $itemCount,
+        string $apiKey,
+    ): array {
+        $payloads = [];
+        foreach ($jobs as $job) {
+            $payloads[] = $this->buildSelectionPayload(
+                $userSystemPrompt,
+                $job['poolContext'],
+                $itemCount,
+                $job['selectionTarget'],
+                $job['batchLocal'],
+            );
+        }
+
+        $responses = $this->postSelectionPayloadsParallel($payloads, $apiKey);
+
+        $results = [];
+        foreach ($responses as $index => $response) {
+            if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
+                $payload = $payloads[$index];
+                $config  = $payload['generationConfig'] ?? [];
+                if (is_array($config)) {
+                    unset($config['responseSchema']);
+                    $payload['generationConfig'] = $config;
+                }
+                $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
+            }
+
+            if (!$response->isOk()) {
+                throw $this->exceptionFromFailedResponse($response);
+            }
+
+            $results[] = $this->parseSelectionResponse($response);
+        }
+
+        return $results;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $payloads
+     * @return list<Response>
+     * @throws GeminiResearcherException
+     */
+    private function postSelectionPayloadsParallel(array $payloads, string $apiKey): array
+    {
+        if ($payloads === []) {
+            return [];
+        }
+
+        if (!function_exists('curl_init') || !function_exists('curl_multi_init')) {
+            $responses = [];
+            foreach ($payloads as $payload) {
+                $responses[] = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
+            }
+
+            return $responses;
+        }
+
+        $model   = $this->selectionModel();
+        $url     = self::API_BASE . rawurlencode($model) . ':generateContent';
+        $timeout = self::HTTP_TIMEOUT_TWO_PASS_SECONDS;
+        $mh      = curl_multi_init();
+        if ($mh === false) {
+            throw GeminiResearcherException::transportFailed();
+        }
+
+        /** @var list<\CurlHandle> $handles */
+        $handles = [];
+        foreach ($payloads as $payload) {
+            $body = json_encode($payload, JSON_THROW_ON_ERROR);
+            $ch   = curl_init($url);
+            if ($ch === false) {
+                foreach ($handles as $handle) {
+                    curl_multi_remove_handle($mh, $handle);
+                    curl_close($handle);
+                }
+                curl_multi_close($mh);
+                throw GeminiResearcherException::transportFailed();
+            }
+
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_HTTPHEADER     => [
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                    'x-goog-api-key: ' . $apiKey,
+                ],
+                CURLOPT_POSTFIELDS     => $body,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[] = $ch;
+        }
+
+        $running = null;
+        do {
+            $status = curl_multi_exec($mh, $running);
+            if ($running > 0) {
+                curl_multi_select($mh, 1.0);
+            }
+        } while ($running > 0 && $status === CURLM_OK);
+
+        $responses = [];
+        foreach ($handles as $ch) {
+            $raw    = curl_multi_getcontent($ch);
+            $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            if ($raw === false || $raw === '') {
+                $raw = '';
+            }
+            $responses[] = new Response($status, $raw, [], $url);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+
+        curl_multi_close($mh);
+
+        return $responses;
+    }
+
+    private function selectionModel(): string
+    {
+        if ($this->generationOptions->proSelectionMode) {
+            return self::MODEL_GEMINI_31_PRO_PREVIEW;
+        }
+
+        return $this->model;
     }
 
     /**
@@ -595,6 +932,7 @@ CONTRACT;
                 $itemCount,
                 $batchTarget,
                 $apiKey,
+                false,
             );
 
             foreach ($keys as $key) {
@@ -636,6 +974,7 @@ CONTRACT;
             $itemCount,
             $selectionTarget,
             $apiKey,
+            false,
         );
 
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
@@ -999,13 +1338,14 @@ CONTRACT;
      */
     private function postPayloadWithSchemaFallback(array $payload, string $apiKey, string $phase): Response
     {
-        $url      = self::API_BASE . rawurlencode($this->model) . ':generateContent';
+        $model    = $phase === 'selection' ? $this->selectionModel() : $this->model;
+        $url      = self::API_BASE . rawurlencode($model) . ':generateContent';
         $response = $this->postWithRetries($url, $payload, $apiKey, $phase === 'selection' || $phase === 'summary');
 
         if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
             error_log(
                 'GeminiResearcherService: responseSchema rejected for ' . $phase
-                . ' on model ' . $this->model . '; retrying without schema'
+                . ' on model ' . $model . '; retrying without schema'
             );
             $config = $payload['generationConfig'] ?? [];
             if (is_array($config)) {
@@ -1027,10 +1367,11 @@ CONTRACT;
      */
     private function selectionGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
     {
-        $config = $this->applyModelGenerationDefaults([
-            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $this->model),
+        $selectionModel = $this->selectionModel();
+        $config         = $this->applyModelGenerationDefaults([
+            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $selectionModel),
             'responseMimeType' => 'application/json',
-        ], 'selection', $itemCount);
+        ], 'selection', $itemCount, $selectionModel);
         if ($useStructuredSchema) {
             $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
         }
@@ -1046,20 +1387,24 @@ CONTRACT;
         return $this->applyModelGenerationDefaults([
             'maxOutputTokens' => self::resolveOutputTokenBudget($effectiveCount, $this->maxOutputTokens, $this->model),
             'responseMimeType' => 'text/plain',
-        ], 'summary', $itemCount);
+        ], 'summary', $itemCount, $this->model);
     }
 
     /**
      * @param array<string, mixed> $config
      * @return array<string, mixed>
      */
-    private function applyModelGenerationDefaults(array $config, string $phase, int $itemCount): array
-    {
+    private function applyModelGenerationDefaults(
+        array $config,
+        string $phase,
+        int $itemCount,
+        string $model,
+    ): array {
         $config['maxOutputTokens'] = min(
             (int)($config['maxOutputTokens'] ?? $this->maxOutputTokens),
-            $this->modelHardOutputCap(),
+            self::modelHardOutputCapFor($model),
         );
-        $thinking = $this->thinkingConfigForPhase($phase, $itemCount);
+        $thinking = $this->thinkingConfigForPhase($phase, $itemCount, $model);
         if ($thinking !== []) {
             $config['thinkingConfig'] = $thinking;
         }
@@ -1070,10 +1415,14 @@ CONTRACT;
     /**
      * @return array<string, mixed>
      */
-    private function thinkingConfigForPhase(string $phase, int $itemCount): array
+    private function thinkingConfigForPhase(string $phase, int $itemCount, string $model): array
     {
         if ($this->rateLimitFallbackMode) {
-            return ['thinkingLevel' => 'MINIMAL'];
+            return self::usesGemini35Family($model) ? ['thinkingLevel' => 'MINIMAL'] : [];
+        }
+
+        if (!self::usesGemini35Family($model)) {
+            return [];
         }
 
         $level = match ($phase) {

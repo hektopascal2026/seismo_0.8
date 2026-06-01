@@ -274,6 +274,28 @@ $moduleOptions = [
                     </div>
                 </div>
             </fieldset>
+
+                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Deep selection</legend>
+
+                    <div class="admin-form-field" style="margin-bottom: 1.25rem;">
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
+                            <input type="checkbox" id="researcher_tournament_mode" name="tournament_mode" value="1">
+                            Tournament selection
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 1rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            Splits the pool into batches (about 35 items each). Gemini picks the top 3 per batch in parallel, then a final pass chooses your featured stories. Better for large pools where a single pass might miss details.
+                        </p>
+
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
+                            <input type="checkbox" id="researcher_pro_selection_mode" name="pro_selection_mode" value="1">
+                            Pro selection (Gemini 3.1)
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 0 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            Uses <code>gemini-3.1-pro-preview</code> for entry selection only; the briefing text still uses fast <code>gemini-3.5-flash</code>. Higher cost per run, best for strict legal or blind-spot prompts.
+                        </p>
+                    </div>
+                </fieldset>
             </div>
 
             <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem;">
@@ -756,6 +778,15 @@ $moduleOptions = [
             }
             if (meta.cited_entry_count !== undefined) {
                 parts.push(meta.cited_entry_count + ' cited in researcher');
+            }
+            if (meta.tournament_mode) {
+                parts.push('tournament');
+            }
+            if (meta.pro_selection_mode) {
+                parts.push('pro selection');
+            }
+            if (meta.selection_model && meta.summary_model && meta.selection_model !== meta.summary_model) {
+                parts.push('sel ' + meta.selection_model);
             }
             return parts.join(' · ');
         }
