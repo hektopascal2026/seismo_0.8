@@ -434,6 +434,10 @@ SEL,
             }
         }
 
+        if (self::looksLikeSubstackHtml($html)) {
+            $excludeSelectors = trim($excludeSelectors . "\n" . self::substackExcludeSelectors());
+        }
+
         $candidates = [];
 
         $jsonLd = self::extractJsonLdArticleBody($html);
@@ -469,6 +473,44 @@ SEL,
     {
         return str_contains($html, 'articlepage__article')
             || str_contains($html, 'class="articlepage"');
+    }
+
+    public static function looksLikeSubstackHtml(string $html): bool
+    {
+        return str_contains($html, 'substackcdn.com')
+            || str_contains($html, 'pencraft pc-')
+            || str_contains($html, 'single-post-container');
+    }
+
+    public static function substackExcludeSelectors(): string
+    {
+        return <<<'SEL'
+header
+nav
+footer
+[id="discussion"]
+[class*="pubInvertedTheme"]
+.main-menu
+.navbar-buttons
+.post-header
+.post-footer
+.subscription-widget
+.subscribe-widget
+.button-wrapper
+.post-ufi-button
+.like-button-container
+.footer-wrap
+.publication-footer
+.footer
+.single-post-section
+.comments-page
+.portable-archive
+.comments
+.comment-section
+.comments-section
+.subscribe-section
+button
+SEL;
     }
 
     /**

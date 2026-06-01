@@ -1029,7 +1029,8 @@ final class CoreRunner
         }
 
         $items = $this->rss->fetchFeedItems($url);
-        if ((int)($feed['extract_full_text'] ?? 0) === 1) {
+        $hydrate = ((int)($feed['extract_full_text'] ?? 0) === 1) || (($feed['source_type'] ?? '') === 'substack');
+        if ($hydrate) {
             $items = $this->rssHydrator->hydrateThinItems($items, true);
         }
 

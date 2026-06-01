@@ -284,7 +284,7 @@ final class FeedModuleHandler
         $loopType = $sourceType === 'substack' ? 'substack' : 'feed';
 
         $warnings = [];
-        $hydrate  = ((string)($_POST['extract_full_text'] ?? '0')) === '1';
+        $hydrate  = ((string)($_POST['extract_full_text'] ?? '0')) === '1' || $sourceType === 'substack';
         if ($hydrate) {
             $hydrator = new RssArticleHydrator();
             $rows     = $hydrator->hydrateThinItems($rows, true, self::PREVIEW_MAX_ITEMS);
