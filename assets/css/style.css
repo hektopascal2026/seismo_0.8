@@ -3475,11 +3475,18 @@ pre,
 .btn.active, .btn.is-active,
 .top-bar-btn.active, 
 .settings-tabs a.active, .nav-link.active,
-.tag-filter-pill-active, .tag-filter-pill.active {
+.tag-filter-pill.active {
     transform: none !important; /* Rests on baseline */
     box-shadow: 0.0625rem 0.0625rem 0 #000000 !important; /* Maintains 1px drop shadow */
     background-color: #ffea00 !important; /* Brand yellow accent */
     color: #000000 !important; /* High contrast black text */
+}
+
+.tag-filter-pill-active {
+    transform: none !important;
+    box-shadow: 0.0625rem 0.0625rem 0 #000000 !important;
+    background-color: #ffea00; /* Fallback brand yellow accent without !important */
+    color: #000000 !important;
 }
 
 /* Error setting tab state */

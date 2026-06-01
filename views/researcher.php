@@ -1095,7 +1095,7 @@ $moduleOptions = [
                             lexState = 1;
                             lexInput.value = 'lex';
                             lexInput.disabled = false;
-                            lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                            lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--lex';
                             lexLabel.textContent = 'Lex';
                         }
                     } else {
@@ -1108,7 +1108,7 @@ $moduleOptions = [
                             if (lexPill && lexInput && lexLabel) {
                                 lexState = 0;
                                 lexInput.disabled = true;
-                                lexPill.className = 'tag-filter-pill';
+                                lexPill.className = 'tag-filter-pill tag-filter-pill--lex';
                                 lexLabel.textContent = 'Lex';
                             }
                         }
