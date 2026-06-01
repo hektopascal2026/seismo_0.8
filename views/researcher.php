@@ -215,9 +215,11 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="researcher_limit">Entry limit (per module)</label>
-                    <input type="number" id="researcher_limit" name="limit" class="search-input" style="width:7rem;"
-                           min="1" max="<?= (int)$maxLimit ?>" value="<?= (int)$defaultLimit ?>">
+                    <label for="researcher_limit">Entry limit (per module): <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span></label>
+                    <div style="display:flex; align-items:center; gap:1rem;">
+                        <input type="range" id="researcher_limit" name="limit" class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;"
+                               min="5" max="<?= (int)$maxLimit ?>" step="5" value="<?= (int)$defaultLimit ?>">
+                    </div>
                 </div>
 
                 <div class="admin-form-field">
@@ -233,15 +235,17 @@ $moduleOptions = [
                 </div>
 
                 <div class="admin-form-field">
-                    <label for="researcher_max_context_entries">Max entries sent to Gemini</label>
-                    <input type="number" id="researcher_max_context_entries" name="max_context_entries"
-                           min="<?= (int)$maxContextMin ?>" max="<?= (int)$maxContextMax ?>"
-                           value="<?= (int)$maxContextEntries ?>"
-                           class="search-input" style="width:7rem;">
-                    <p class="admin-intro" style="margin:0.25rem 0 0;">
+                    <label for="researcher_max_context_entries">Max entries sent to Gemini: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
+                    <div style="display:flex; align-items:center; gap:1rem;">
+                        <input type="range" id="researcher_max_context_entries" name="max_context_entries"
+                               min="<?= (int)$maxContextMin ?>" max="150"
+                               value="<?= (int)$maxContextEntries ?>"
+                               class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
+                    </div>
+                    <p class="admin-intro" style="margin:0.25rem 0 0;" id="max-context-entries-help">
                         Caps how many rows enter the XML pool (<?= (int)$maxContextMin ?>–<?= (int)$maxContextMax ?>, default <?= (int)$maxContextDefault ?>).
-                        Gemini 3.5 allows a large input window; higher values add rows but share one body budget (text per entry scales down).
-                        Saved when you prepare or generate. Fair share per enabled module when several are on.
+                        Higher values add rows but share one body budget.
+                        <strong>Pro-tip:</strong> Check "Use recipe-driven dynamic snippets" below to expand this limit up to <?= (int)$maxContextMax ?>!
                     </p>
                 </div>
 
@@ -1297,6 +1301,61 @@ $moduleOptions = [
                     syncPromptSaveButtons();
                 });
             });
+        }
+
+        // Sliders initialization and dynamic snippet cap expansion
+        var limitSlider = document.getElementById('researcher_limit');
+        var limitValSpan = document.getElementById('researcher_limit_val');
+        var maxEntriesSlider = document.getElementById('researcher_max_context_entries');
+        var maxEntriesValSpan = document.getElementById('researcher_max_val');
+        var useSnippetsCb = document.getElementById('researcher_use_recipe_snippets');
+
+        if (limitSlider && limitValSpan) {
+            limitSlider.addEventListener('input', function() {
+                limitValSpan.textContent = limitSlider.value;
+            });
+        }
+
+        function updateMaxEntriesSlider() {
+            if (!maxEntriesSlider || !maxEntriesValSpan || !useSnippetsCb) return;
+            var isChecked = useSnippetsCb.checked;
+            var absoluteMax = parseInt(<?= (int)$maxContextMax ?>, 10) || 500;
+            var standardMax = 150;
+            
+            var prevMax = parseInt(maxEntriesSlider.max, 10);
+            var currentVal = parseInt(maxEntriesSlider.value, 10);
+
+            if (isChecked) {
+                maxEntriesSlider.max = absoluteMax;
+                maxEntriesSlider.title = "Recipe snippets active: context capacity expanded up to " + absoluteMax + " entries!";
+            } else {
+                maxEntriesSlider.max = standardMax;
+                maxEntriesSlider.title = "Standard context: max entries capped at " + standardMax + " for output reliability.";
+                if (currentVal > standardMax) {
+                    maxEntriesSlider.value = standardMax;
+                    maxEntriesValSpan.textContent = standardMax;
+                }
+            }
+            maxEntriesValSpan.textContent = maxEntriesSlider.value;
+        }
+
+        if (maxEntriesSlider && maxEntriesValSpan && useSnippetsCb) {
+            maxEntriesSlider.addEventListener('input', function() {
+                maxEntriesValSpan.textContent = maxEntriesSlider.value;
+            });
+            useSnippetsCb.addEventListener('change', function() {
+                updateMaxEntriesSlider();
+                if (useSnippetsCb.checked) {
+                    maxEntriesSlider.style.transition = "outline 0.3s ease, transform 0.3s ease";
+                    maxEntriesSlider.style.outline = "2px solid #28a745";
+                    maxEntriesSlider.style.transform = "scale(1.02)";
+                    setTimeout(function() {
+                        maxEntriesSlider.style.outline = "none";
+                        maxEntriesSlider.style.transform = "scale(1)";
+                    }, 800);
+                }
+            });
+            updateMaxEntriesSlider();
         }
 
         if (!form || !btn || !out) return;
