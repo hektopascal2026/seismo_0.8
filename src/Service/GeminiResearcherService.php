@@ -117,6 +117,9 @@ CONTRACT;
     /** Skip monolithic pass 2 when this many entries are selected (batch size 2 from the start). */
     private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 8;
 
+    /** Tournament runs always use batched pass 2 (full entry bodies on few picks). */
+    private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT = 3;
+
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
     private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 120;
@@ -253,6 +256,21 @@ CONTRACT;
             + self::SELECTION_REASONING_TOKEN_HEADROOM;
 
         return min($configuredMax, max(512, $visible));
+    }
+
+    /** Pass 1 tournament batch (longer rationale over ~35 XML entries). */
+    public static function resolveTournamentBatchSelectionTokenBudget(
+        int $selectionTarget,
+        int $configuredMax,
+        string $model = self::DEFAULT_MODEL,
+    ): int {
+        $hardCap       = self::modelHardOutputCapFor($model);
+        $configuredMax = max(512, min($hardCap, $configuredMax));
+        $visible       = self::SELECTION_OUTPUT_TOKENS_BASE
+            + max(1, $selectionTarget) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM
+            + 2048;
+
+        return min($configuredMax, max(1024, $visible));
     }
 
     /**
@@ -538,6 +556,9 @@ CONTRACT;
 
         $finalCount = count($selectedKeys);
         $this->lastEffectiveCitationCount = max(1, $finalCount);
+        $this->lastGenerationMeta         = array_merge($this->lastGenerationMeta, [
+            'selected_entry_keys' => $selectedKeys,
+        ]);
 
         return $this->runSummaryPassWithBatchFallback(
             $userSystemPrompt,
@@ -627,7 +648,7 @@ CONTRACT;
         return [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
-            'generationConfig'  => $this->selectionGenerationConfig($itemCount, $selectionTarget, true),
+            'generationConfig'  => $this->selectionGenerationConfig($itemCount, $selectionTarget, true, $batchLocal),
         ];
     }
 
@@ -682,6 +703,16 @@ CONTRACT;
             return [];
         }
 
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            'tournament_selection'      => true,
+            'batched_selection'         => true,
+            'selection_batches'         => $batchCount,
+            'selection_batch_size'      => $batchSize,
+            'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
+            'selection_parallel'        => $batchCount > 1,
+            'selection_championship'    => false,
+        ]);
+
         /** @var list<array{poolContext: string, selectionTarget: int, batchLocal: bool}> $jobs */
         $jobs = [];
         foreach ($batches as $batch) {
@@ -725,14 +756,7 @@ CONTRACT;
         }
 
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'tournament_selection'      => true,
-            'batched_selection'         => true,
-            'selection_batches'         => $batchCount,
-            'selection_batches_empty'   => $emptyBatches,
-            'selection_batch_size'      => $batchSize,
-            'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
-            'selection_parallel'        => $batchCount > 1,
-            'selection_championship'    => false,
+            'selection_batches_empty' => $emptyBatches,
         ]);
 
         if ($merged === []) {
@@ -809,7 +833,8 @@ CONTRACT;
 
         $responses = $this->postSelectionPayloadsParallel($payloads, $apiKey);
 
-        $results = [];
+        $results      = [];
+        $batchErrors  = [];
         foreach ($responses as $index => $response) {
             if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
                 $payloads[$index] = $this->selectionPayloadWithoutSchema($payloads[$index]);
@@ -820,12 +845,30 @@ CONTRACT;
                 throw $this->exceptionFromFailedResponse($response);
             }
 
-            $results[] = $this->resolveSelectionPassKeys(
-                $response,
-                $payloads[$index],
-                $apiKey,
-                true,
-            );
+            try {
+                $results[] = $this->resolveSelectionPassKeys(
+                    $response,
+                    $payloads[$index],
+                    $apiKey,
+                    true,
+                );
+            } catch (GeminiResearcherException $e) {
+                error_log(
+                    'GeminiResearcherService: tournament batch ' . ($index + 1)
+                    . ' selection failed: ' . $e->getMessage()
+                );
+                $batchErrors[] = [
+                    'batch'   => $index + 1,
+                    'message' => $e->getMessage(),
+                ];
+                $results[]     = [];
+            }
+        }
+
+        if ($batchErrors !== []) {
+            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+                'selection_batch_errors' => $batchErrors,
+            ]);
         }
 
         return $results;
@@ -1040,7 +1083,11 @@ CONTRACT;
         int $effectiveCount,
         string $apiKey,
     ): GeminiResearcherResult {
-        if ($effectiveCount >= self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS) {
+        $proactiveMin = $this->generationOptions->tournamentMode
+            ? self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT
+            : self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS;
+
+        if ($effectiveCount >= $proactiveMin) {
             $batchSize = min(self::SUMMARY_BATCH_SIZE, $effectiveCount);
             error_log(
                 'GeminiResearcherService: proactive batched pass 2 for ' . $effectiveCount
@@ -1430,11 +1477,18 @@ CONTRACT;
     /**
      * @return array<string, mixed>
      */
-    private function selectionGenerationConfig(int $itemCount, int $effectiveCount, bool $useStructuredSchema): array
-    {
+    private function selectionGenerationConfig(
+        int $itemCount,
+        int $effectiveCount,
+        bool $useStructuredSchema,
+        bool $batchLocal = false,
+    ): array {
         $selectionModel = $this->selectionModel();
-        $config         = $this->applyModelGenerationDefaults([
-            'maxOutputTokens' => self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $selectionModel),
+        $tokenBudget      = $batchLocal
+            ? self::resolveTournamentBatchSelectionTokenBudget($effectiveCount, $this->maxOutputTokens, $selectionModel)
+            : self::resolveSelectionPassTokenBudget($itemCount, $this->maxOutputTokens, $selectionModel);
+        $config           = $this->applyModelGenerationDefaults([
+            'maxOutputTokens' => $tokenBudget,
             'responseMimeType' => 'application/json',
         ], 'selection', $itemCount, $selectionModel);
         if ($useStructuredSchema && self::usesGemini35Family($selectionModel)) {
@@ -1561,7 +1615,9 @@ CONTRACT;
         }
 
         $level = match ($phase) {
-            'selection' => self::THINKING_LEVEL_SELECTION,
+            'selection' => $this->generationOptions->tournamentMode
+                ? self::THINKING_LEVEL_SUMMARY
+                : self::THINKING_LEVEL_SELECTION,
             'summary'   => self::THINKING_LEVEL_SUMMARY,
             default     => self::THINKING_LEVEL_SUMMARY,
         };
@@ -1656,7 +1712,7 @@ CONTRACT;
      */
     private function parseSelectionResponse(Response $response, bool $allowEmptyKeys = false): array
     {
-        $raw     = $this->extractCandidateText($response);
+        $raw     = $this->extractCandidateText($response, true);
         $decoded = $this->decodeResearcherJsonObject($raw);
         if ($decoded === null) {
             throw GeminiResearcherException::badResponse('Selection pass JSON could not be parsed.');
@@ -2167,10 +2223,6 @@ CONTRACT;
             );
             $this->lastGenerationMeta['citation_keys_in_markdown'] = $keysInMarkdown;
             $this->lastGenerationMeta['citation_gap']             = true;
-
-            if ($mayThrowOnShortOutput) {
-                throw GeminiResearcherException::outputTruncated();
-            }
 
             return;
         }

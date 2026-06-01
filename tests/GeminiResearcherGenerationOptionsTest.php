@@ -38,4 +38,11 @@ final class GeminiResearcherGenerationOptionsTest extends TestCase
         self::assertTrue(GeminiResearcherService::usesGemini31Pro('gemini-3.1-pro-preview'));
         self::assertFalse(GeminiResearcherService::usesGemini31Pro('gemini-3.5-flash'));
     }
+
+    public function testTournamentBatchSelectionTokenBudgetIsLargerThanDefault(): void
+    {
+        $default = GeminiResearcherService::resolveSelectionPassTokenBudget(5, 8192, 'gemini-3.5-flash');
+        $batch   = GeminiResearcherService::resolveTournamentBatchSelectionTokenBudget(3, 8192, 'gemini-3.5-flash');
+        self::assertGreaterThan($default, $batch);
+    }
 }
