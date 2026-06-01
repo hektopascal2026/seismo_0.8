@@ -3230,6 +3230,8 @@ main.about-modern-layout ul:not(.about-history) {
 .era-badge-consolidation { background: #f3e5f5; }
 .era-badge-satellites { background: #efebe9; }
 .era-badge-ai { background: #fffdec; border-color: #b2a100; color: #6d6200; }
+.era-badge-design { background: #e0f2f1; border-color: #00796b; color: #004d40; }
+.era-badge-intelligence { background: #ede7f6; border-color: #5e35b1; color: #311b92; }
 
 .era-date {
     font-size: 0.8rem;
