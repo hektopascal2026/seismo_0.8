@@ -158,7 +158,7 @@ $moduleOptions = [
             <form id="researcher-builder-form" class="admin-form-card">
                 <!-- Step 1: Data Sources & Time Window -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 1: Data Sources & Time Window</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 1: Data Sources & Time Window</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
@@ -208,7 +208,7 @@ $moduleOptions = [
 
                 <!-- Step 2: Relevance & Filtering -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
 
                     <div class="admin-form-field">
                         <label style="margin-bottom: 0.5rem; display:block;">Relevance scoring</label>
@@ -234,7 +234,7 @@ $moduleOptions = [
 
                 <!-- Step 3: Pool -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: Pool</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: Pool</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
@@ -262,7 +262,7 @@ $moduleOptions = [
 
                 <!-- Step 4: AI Report Generation -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 4: AI Report Generation</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 4: AI Report Generation</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
