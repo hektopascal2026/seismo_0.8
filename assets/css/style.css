@@ -3678,4 +3678,86 @@ pre,
     border-color: var(--label-noise) !important;
 }
 
+/* ═══ Brutalist Custom Select & Sliders Overrides ═══ */
+select.search-input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 0.875rem !important;
+    padding-right: 2.25rem !important;
+    border-radius: 0 !important;
+}
+
+/* Sliders (Range Input) */
+input[type="range"].search-input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    background: transparent;
+    cursor: pointer;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0.5rem 0 !important;
+}
+
+input[type="range"].search-input:focus {
+    outline: none;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+input[type="range"].search-input::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 0.5rem;
+    cursor: pointer;
+    background: #ffffff;
+    border: 0.125rem solid #000000;
+    border-radius: 0 !important;
+}
+
+input[type="range"].search-input::-moz-range-track {
+    width: 100%;
+    height: 0.5rem;
+    cursor: pointer;
+    background: #ffffff;
+    border: 0.125rem solid #000000;
+    border-radius: 0 !important;
+}
+
+input[type="range"].search-input::-webkit-slider-thumb {
+    height: 1.25rem;
+    width: 0.75rem;
+    border: 0.125rem solid #000000;
+    background: var(--seismo-accent, #ffea00);
+    cursor: pointer;
+    -webkit-appearance: none;
+    margin-top: -0.425rem; /* center on track */
+    border-radius: 0 !important;
+    transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type="range"].search-input::-webkit-slider-thumb:hover {
+    background: #000000;
+    transform: scale(1.1);
+}
+
+input[type="range"].search-input::-moz-range-thumb {
+    height: 1.25rem;
+    width: 0.75rem;
+    border: 0.125rem solid #000000;
+    background: var(--seismo-accent, #ffea00);
+    cursor: pointer;
+    border-radius: 0 !important;
+    transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type="range"].search-input::-moz-range-thumb:hover {
+    background: #000000;
+    transform: scale(1.1);
+}
+
+
 
