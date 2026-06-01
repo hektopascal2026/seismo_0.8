@@ -156,106 +156,129 @@ $moduleOptions = [
 
         <div class="latest-entries-section">
             <form id="researcher-builder-form" class="admin-form-card">
-                <div class="filter-page-actions" style="margin-bottom:0.75rem;">
-                    <button type="button" class="btn btn-primary" id="researcher-modules-all">All sources</button>
-                    <button type="button" class="btn btn-secondary" id="researcher-modules-none">None</button>
-                </div>
+                <!-- Step 1: Data Sources & Time Window -->
+                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 1: Data Sources & Time Window</legend>
 
-                <div class="tag-filter-section tag-filter-section--spaced-bottom">
-                    <div class="tag-filter-list">
-                        <?php foreach ($moduleOptions as $mod): ?>
-                        <?php if ($mod['key'] === 'lex'): ?>
-                        <label class="tag-filter-pill tag-filter-pill-active" id="lex-pill" style="user-select: none;">
-                            <input type="hidden" name="modules[]" value="lex" id="lex-input">
-                            <span id="lex-label">Lex</span>
-                        </label>
-                        <?php else: ?>
-                        <?php
-                            $isMem = $mod['key'] === 'mem';
-                            $pillClass = $isMem ? 'tag-filter-pill' : 'tag-filter-pill tag-filter-pill-active';
-                            $checkedAttr = $isMem ? '' : ' checked';
-                        ?>
-                        <label class="<?= $pillClass ?>">
-                            <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $checkedAttr ?>
-                                   class="researcher-module-cb">
-                            <span><?= e($mod['label']) ?></span>
-                        </label>
-                        <?php endif; ?>
-                        <?php endforeach; ?>
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
+                        <div class="filter-page-actions" style="margin-bottom:0.75rem;">
+                            <button type="button" class="btn btn-primary" id="researcher-modules-all">All sources</button>
+                            <button type="button" class="btn btn-secondary" id="researcher-modules-none">None</button>
+                        </div>
+                        <div class="tag-filter-section tag-filter-section--spaced-bottom">
+                            <div class="tag-filter-list">
+                                <?php foreach ($moduleOptions as $mod): ?>
+                                <?php if ($mod['key'] === 'lex'): ?>
+                                <label class="tag-filter-pill tag-filter-pill-active" id="lex-pill" style="user-select: none;">
+                                    <input type="hidden" name="modules[]" value="lex" id="lex-input">
+                                    <span id="lex-label">Lex</span>
+                                </label>
+                                <?php else: ?>
+                                <?php
+                                    $isMem = $mod['key'] === 'mem';
+                                    $pillClass = $isMem ? 'tag-filter-pill' : 'tag-filter-pill tag-filter-pill-active';
+                                    $checkedAttr = $isMem ? '' : ' checked';
+                                ?>
+                                <label class="<?= $pillClass ?>">
+                                    <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $checkedAttr ?>
+                                           class="researcher-module-cb">
+                                    <span><?= e($mod['label']) ?></span>
+                                </label>
+                                <?php endif; ?>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <div class="admin-form-field">
-                    <label>Relevance</label>
-                    <p class="admin-intro" id="researcher-relevance-intro" style="margin:0.25rem 0 0.5rem;">
-                        Highlights tier (≥ <?= (int)$alertThresholdPct ?>%) is always included.
-                    </p>
-                    <label id="researcher-include-important-label">
-                        <input type="checkbox" id="researcher_include_important" name="include_important" value="1">
-                        Also include important band below threshold (&gt; 50%, &lt; <?= (int)$alertThresholdPct ?>%)
-                    </label>
-                    <label style="display:block; margin-top:0.5rem;">
-                        <input type="checkbox" id="researcher_disregard_magnitu" name="disregard_magnitu" value="1">
-                        Disregard Magnitu (experimental)
-                    </label>
-                    <p class="admin-intro" id="researcher-disregard-magnitu-hint" style="margin:0.25rem 0 0;" hidden>
-                        All in-window entries from selected modules are eligible; Gemini receives up to the context cap ordered by highest relevance, then newest. Magnitu score thresholds are not applied.
-                    </p>
-                </div>
-
-                <div class="admin-form-field">
-                    <label for="researcher_lookback">Lookback window</label>
-                    <select id="researcher_lookback" name="lookback_days" class="search-input" style="width:auto;">
-                        <?php for ($d = 1; $d <= 7; $d++): ?>
-                        <option value="<?= $d ?>"<?= $defaultLookbackDays === $d ? ' selected' : '' ?>>
-                            <?= $d === 1 ? '1 day' : $d . ' days' ?>
-                        </option>
-                        <?php endfor; ?>
-                    </select>
-                </div>
-
-                <div class="admin-form-field">
-                    <label for="researcher_limit">Entry limit (per module): <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span></label>
-                    <div style="display:flex; align-items:center; gap:1rem;">
-                        <input type="range" id="researcher_limit" name="limit" class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;"
-                               min="5" max="<?= (int)$maxLimit ?>" step="5" value="<?= (int)$defaultLimit ?>">
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label for="researcher_lookback" style="margin-bottom: 0.25rem; display:block;">Lookback window</label>
+                        <select id="researcher_lookback" name="lookback_days" class="search-input" style="width:auto; margin-bottom: 0.25rem;">
+                            <?php for ($d = 1; $d <= 7; $d++): ?>
+                            <option value="<?= $d ?>"<?= $defaultLookbackDays === $d ? ' selected' : '' ?>>
+                                <?= $d === 1 ? '1 day' : $d . ' days' ?>
+                            </option>
+                            <?php endfor; ?>
+                        </select>
+                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">How far back should we search for news and updates?</p>
                     </div>
-                </div>
 
-                <div class="admin-form-field">
-                    <label for="researcher_item_count">Number of items</label>
-                    <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto;">
-                        <?php foreach ($itemCountOptions as $n): ?>
-                        <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
-                            <?= (int)$n ?> items
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <p class="admin-intro" style="margin:0.25rem 0 0;">Fixes how many cited core items Gemini must return (and matching source cards). Headings and layout come from your prompt.</p>
-                </div>
-
-                <div class="admin-form-field">
-                    <label for="researcher_max_context_entries">Max entries sent to Gemini: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
-                    <div style="display:flex; align-items:center; gap:1rem;">
-                        <input type="range" id="researcher_max_context_entries" name="max_context_entries"
-                               min="<?= (int)$maxContextMin ?>" max="150"
-                               value="<?= (int)$maxContextEntries ?>"
-                               class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label for="researcher_limit" style="margin-bottom: 0.25rem; display:block;">Database fetch limit: <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span> articles per source</label>
+                        <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
+                            <input type="range" id="researcher_limit" name="limit" class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;"
+                                   min="5" max="<?= (int)$maxLimit ?>" step="5" value="<?= (int)$defaultLimit ?>">
+                        </div>
+                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">Limits how many records we pull from each database table at most. Keep this low (e.g., 200) to ensure fast database loading times.</p>
                     </div>
-                    <p class="admin-intro" style="margin:0.25rem 0 0;" id="max-context-entries-help">
-                        Caps how many rows enter the XML pool (<?= (int)$maxContextMin ?>–<?= (int)$maxContextMax ?>, default <?= (int)$maxContextDefault ?>).
-                        Higher values add rows but share one body budget.
-                        <strong>Pro-tip:</strong> Check "Use recipe-driven dynamic snippets" below to expand this limit up to <?= (int)$maxContextMax ?>!
-                    </p>
-                </div>
+                </fieldset>
 
-                <div class="admin-form-field" id="researcher-prompt-field">
-                    <div id="researcher-prompt-panel">
-                        <label style="display:block; margin-bottom:0.75rem; user-select:none; font-weight:600;">
-                            <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
-                            Use recipe-driven dynamic snippets (extract 200 words around matching scoring keywords)
+                <!-- Step 2: Relevance & Filtering -->
+                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
+
+                    <div class="admin-form-field">
+                        <label style="margin-bottom: 0.5rem; display:block;">Relevance scoring</label>
+                        <p class="admin-intro" id="researcher-relevance-intro" style="margin:0 0 0.5rem; font-size:0.875rem;">
+                            High-priority news (Highlights tier ≥ <?= (int)$alertThresholdPct ?>%) is always included.
+                        </p>
+                        
+                        <label id="researcher-include-important-label" style="display:block; margin-bottom:0.75rem; font-weight:normal; user-select:none;">
+                            <input type="checkbox" id="researcher_include_important" name="include_important" value="1">
+                            Include secondary news (scores below <?= (int)$alertThresholdPct ?>%)
                         </label>
-                        <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem;">System prompt</label>
+                        <p class="admin-intro" style="margin:-0.5rem 0 1rem 1.5rem; font-size:0.8125rem; opacity:0.8;">If checked, we also consider news with slightly lower priority scores. If unchecked, we strictly focus only on highest-priority alerts.</p>
+
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:normal; user-select:none;">
+                            <input type="checkbox" id="researcher_disregard_magnitu" name="disregard_magnitu" value="1">
+                            Bypass relevance scoring (expert mode)
+                        </label>
+                        <p class="admin-intro" style="margin:-0.25rem 0 0 1.5rem; font-size:0.8125rem; opacity:0.8;" id="researcher-disregard-magnitu-hint" hidden>
+                            Bypasses our smart classification filters entirely. The AI will receive articles purely in chronological order, regardless of their priority.
+                        </p>
+                    </div>
+                </fieldset>
+
+                <!-- Step 3: AI Report Generation -->
+                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: AI Report Generation</legend>
+
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
+                        <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto; margin-bottom: 0.25rem;">
+                            <?php foreach ($itemCountOptions as $n): ?>
+                            <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
+                                <?= (int)$n ?> items
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">The exact number of top-priority stories the AI will write about in the final executive briefing.</p>
+                    </div>
+
+                    <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem;">
+                        <div id="researcher-prompt-panel">
+                            <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
+                                <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
+                                Use Magnitu Snippets (Highly Recommended)
+                            </label>
+                            <p class="admin-intro" style="margin:0 0 1.25rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                                Highly recommended. Instead of sending full articles, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full articles are sent, but you may exceed the memory cap.
+                            </p>
+
+                            <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                                <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum articles sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
+                                <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
+                                    <input type="range" id="researcher_max_context_entries" name="max_context_entries"
+                                           min="<?= (int)$maxContextMin ?>" max="500"
+                                           value="<?= (int)$maxContextEntries ?>"
+                                           class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
+                                </div>
+                                <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
+                                    Caps the number of qualified articles sent to the AI. If you enabled **Magnitu Snippets** above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
+                                </p>
+                            </div>
+
+                            <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem; font-weight: 600;">System prompt instructions</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                             <?php foreach ($savedPrompts as $i => $sp): ?>
                             <div class="prompt-tab-wrap">
@@ -1327,7 +1350,7 @@ $moduleOptions = [
 
             if (isChecked) {
                 maxEntriesSlider.max = absoluteMax;
-                maxEntriesSlider.title = "Recipe snippets active: context capacity expanded up to " + absoluteMax + " entries!";
+                maxEntriesSlider.title = "Magnitu snippets active: context capacity expanded up to " + absoluteMax + " entries!";
             } else {
                 maxEntriesSlider.max = standardMax;
                 maxEntriesSlider.title = "Standard context: max entries capped at " + standardMax + " for output reliability.";
