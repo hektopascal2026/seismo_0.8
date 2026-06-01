@@ -188,6 +188,7 @@ final class EmailWebViewUrlExtractor
                 self::firstEuroparlPressRoomUrl($plain),
                 self::firstEuCommissionPressCornerUrl($plain),
                 self::firstParlamentGvAtUrl($plain),
+                self::firstParlamentChNewsUrl($plain),
                 self::firstPressReleaseUrlNearMarker($plain),
             ] as $press
         ) {
@@ -366,7 +367,7 @@ final class EmailWebViewUrlExtractor
             if ($href === null || EmailTrackingUrl::isRedirectTrackingUrl($href)) {
                 continue;
             }
-            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href) || self::isEuCommissionPressCornerUrl($href) || self::isParlamentGvAtUrl($href)) {
+            if (self::isAdminChNewnsbUrl($href) || self::isEuroparlPressRoomUrl($href) || self::isEuCommissionPressCornerUrl($href) || self::isParlamentGvAtUrl($href) || self::isParlamentChNewsUrl($href)) {
                 return $href;
             }
             if ($isPress && $headlineFallback === null && self::looksLikePressHeadlineAnchor($anchor, $href)) {
@@ -478,6 +479,33 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
+    private static function isParlamentChNewsUrl(string $url): bool
+    {
+        return preg_match(
+            '#^https?://(?:[a-z0-9.-]+\.)?parlament\.ch/[^\s<>"\'\]]*/news/[^\s<>"\'\]]+#i',
+            $url
+        ) === 1;
+    }
+
+    private static function firstParlamentChNewsUrl(string $text): ?string
+    {
+        if (preg_match_all(
+            '#https?://(?:[a-z0-9.-]+\.)?parlament\.ch/[^\s<>"\'\]]*/news/[^\s<>"\'\]]+#iu',
+            $text,
+            $matches
+        ) === false) {
+            return null;
+        }
+        foreach ($matches[0] as $raw) {
+            $url = self::normalizeHref((string)$raw);
+            if ($url !== null && !EmailTrackingUrl::isRedirectTrackingUrl($url)) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
     private static function isParlamentGvAtUrl(string $url): bool
     {
         return preg_match(
@@ -530,6 +558,9 @@ final class EmailWebViewUrlExtractor
         }
         if (str_contains($host, 'parlament.gv.at')) {
             return self::isParlamentGvAtUrl($href);
+        }
+        if (str_contains($host, 'parlament.ch')) {
+            return self::isParlamentChNewsUrl($href);
         }
 
         return false;

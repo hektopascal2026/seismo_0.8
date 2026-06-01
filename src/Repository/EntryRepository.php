@@ -155,7 +155,7 @@ final class EntryRepository
             $sortByRelevance,
             null,
         );
-        $items = $this->deduplicateFeedItemsByLink($items);
+        $items = $this->deduplicateTimelineItemsByLink($items);
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
@@ -199,7 +199,7 @@ final class EntryRepository
             $sortByRelevance,
             $q,
         );
-        $items = $this->deduplicateFeedItemsByLink($items);
+        $items = $this->deduplicateTimelineItemsByLink($items);
         $this->attachScores($items);
         $this->sortMergedTimeline($items, $sortByRelevance);
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
@@ -281,7 +281,7 @@ final class EntryRepository
         }
 
         $items = $this->hydrateTimelineFromHighlightScoreRowsPreservingOrder($scoreRows);
-        $items = $this->deduplicateFeedItemsByLink($items);
+        $items = $this->deduplicateTimelineItemsByLink($items);
         if ($excludeMediaCategory) {
             $items = array_values(array_filter(
                 $items,
@@ -522,25 +522,33 @@ final class EntryRepository
     }
 
     /**
-     * Collapse duplicate RSS/scraper cards that share the same article URL (e.g. Watson
-     * topic feeds). Keeps the row with the highest relevance score when scored.
+     * Collapse duplicate RSS/scraper/email cards that share the same article URL.
+     * Keeps feed_items over emails. Within the same type, keeps the row with the
+     * highest relevance score.
      *
      * @param array<int, array<string, mixed>> $items
      * @return array<int, array<string, mixed>>
      */
-    private function deduplicateFeedItemsByLink(array $items): array
+    private function deduplicateTimelineItemsByLink(array $items): array
     {
         /** @var array<string, int> $indexByLink */
         $indexByLink = [];
         $out         = [];
 
         foreach ($items as $item) {
-            if (($item['entry_type'] ?? '') !== 'feed_item') {
+            $type = $item['entry_type'] ?? '';
+            if ($type !== 'feed_item' && $type !== 'email') {
                 $out[] = $item;
                 continue;
             }
 
-            $link = trim((string)($item['data']['link'] ?? ''));
+            $link = '';
+            if ($type === 'feed_item') {
+                $link = trim((string)($item['data']['link'] ?? ''));
+            } elseif ($type === 'email') {
+                $link = trim((string)($this->emailWebViewUrl($item['data']) ?? ''));
+            }
+
             if ($link === '') {
                 $out[] = $item;
                 continue;
@@ -558,8 +566,21 @@ final class EntryRepository
                 continue;
             }
 
-            $existingIdx = $indexByLink[$key];
-            $existing    = $out[$existingIdx];
+            $existingIdx   = $indexByLink[$key];
+            $existing      = $out[$existingIdx];
+            $existingType  = $existing['entry_type'] ?? '';
+
+            // Precedence rule: feed_item ALWAYS beats email.
+            if ($existingType === 'email' && $type === 'feed_item') {
+                $out[$existingIdx] = $item;
+                continue;
+            }
+            if ($existingType === 'feed_item' && $type === 'email') {
+                // Discard duplicate email in favor of existing feed_item.
+                continue;
+            }
+
+            // Same-type collision: keep the one with the highest score
             $existingScore = isset($existing['score']['relevance_score'])
                 ? (float)$existing['score']['relevance_score']
                 : -1.0;
@@ -573,6 +594,24 @@ final class EntryRepository
         }
 
         return $out;
+    }
+
+    private function emailWebViewUrl(array $email): ?string
+    {
+        $url = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($email['metadata'] ?? null);
+        if ($url !== null && $url !== '') {
+            return $url;
+        }
+
+        $html  = trim((string)($email['html_body'] ?? $email['body_html'] ?? ''));
+        $plain = trim((string)($email['text_body'] ?? $email['body_text'] ?? ''));
+        $profile = \Seismo\Core\Mail\EmailLocaleGuesser::profileForEmail(
+            (string)($email['subject'] ?? ''),
+            $plain
+        );
+        $ranks = \Seismo\Core\Mail\EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
+        
+        return \Seismo\Core\Mail\EmailWebViewUrlExtractor::resolve($html, $plain, $ranks)->url;
     }
 
     /**
@@ -1950,7 +1989,7 @@ final class EntryRepository
         }
         $this->attachScores($items);
         $this->attachFavourites($items);
-        $items = $this->deduplicateFeedItemsByLink($items);
+        $items = $this->deduplicateTimelineItemsByLink($items);
 
         return $items;
     }

@@ -233,6 +233,17 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
     }
 
+    public function testSwissParliamentHeadlineLinkIsWebViewUrl(): void
+    {
+        $expected = 'https://parlament.ch/de/services/news/Seiten/2026/20260601043044096194158159026_bsd009.aspx';
+        $plain = "Neue Treffer für Trefferliste News\n"
+            . "Die Bundesversammlung — Das Schweizer Parlament\n"
+            . "Räte streiten über freien Handel, neue AKWs und teure Rüstungsgüter ({$expected})\n"
+            . "Montag, 1. Juni 2026";
+
+        self::assertSame($expected, EmailWebViewUrlExtractor::fromPlainText($plain));
+    }
+
     public function testMailchimpWebViewRedirectAllowed(): void
     {
         $html = '<a href="https://mailchi.mp/efta/discover-the-new-efta-free-trade-dashboard">Discover the new EFTA Free Trade Dashboard</a>';
