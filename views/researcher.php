@@ -980,10 +980,11 @@ $moduleOptions = [
                 }
                 return;
             }
-            saveLibraryBtn.textContent = activePromptId ? 'Update prompt' : 'Save to library';
-            saveLibraryBtn.title = activePromptId
-                ? 'Save changes to the selected library prompt'
-                : 'Add the current textarea as a named prompt in the library';
+            
+            // For custom library prompts on Prompt view:
+            // saveLibraryBtn always acts as "Save to library" (saves as a new library prompt)
+            saveLibraryBtn.textContent = 'Save to library';
+            saveLibraryBtn.title = 'Add the current textarea as a new named prompt in the library';
             saveLibraryBtn.style.display = '';
         }
 
@@ -997,11 +998,13 @@ $moduleOptions = [
             }
             var editingLibrary = activePromptId !== null;
             if (editingLibrary) {
-                // When editing a library prompt, we do NOT show the default prompt update button,
-                // because the user should only save/update the library prompt via saveLibraryBtn!
-                savePromptBtn.disabled = true;
-                savePromptBtn.hidden = true;
-                savePromptBtn.style.display = 'none';
+                // When viewing/editing an existing library prompt, we display a distinct "Update prompt"
+                // button to update the currently open library prompt (which saves back to activePromptId).
+                savePromptBtn.disabled = false;
+                savePromptBtn.hidden = false;
+                savePromptBtn.style.display = '';
+                savePromptBtn.textContent = 'Update prompt';
+                savePromptBtn.title = 'Save changes to the selected library prompt';
                 return;
             }
             // For the Default tab (activePromptId === null), show the default prompt save/update button
@@ -1396,7 +1399,7 @@ $moduleOptions = [
         if (savePromptBtn && savePromptUrl) {
             savePromptBtn.addEventListener('click', function() {
                 if (activePromptId !== null) {
-                    persistLibraryPrompt(true);
+                    persistLibraryPrompt(false);
                     return;
                 }
                 if (!promptTextarea && !helperResultEl) return;
