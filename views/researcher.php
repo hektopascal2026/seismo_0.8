@@ -156,10 +156,8 @@ $moduleOptions = [
 
         <div class="latest-entries-section">
             <form id="researcher-builder-form" class="admin-form-card">
-                <!-- Step 1: Data Sources & Time Window -->
+                <!-- Data Sources & Time Window -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Data Sources & Time Window</legend>
-
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
                         <div class="filter-page-actions" style="margin-bottom:0.75rem;">
@@ -201,6 +199,18 @@ $moduleOptions = [
                             <?php endfor; ?>
                         </select>
                         <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">How far back should we search for news and updates?</p>
+                    </div>
+
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
+                        <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto; margin-bottom: 0.25rem;">
+                            <?php foreach ($itemCountOptions as $n): ?>
+                            <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
+                                <?= (int)$n ?> items
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">The exact number of top-priority stories the AI will write about in the final executive briefing.</p>
                     </div>
 
                     <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
@@ -266,23 +276,7 @@ $moduleOptions = [
             </fieldset>
             </div>
 
-                <!-- AI Report Generation -->
-                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">AI Report Generation</legend>
-
-                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
-                        <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
-                        <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto; margin-bottom: 0.25rem;">
-                            <?php foreach ($itemCountOptions as $n): ?>
-                            <option value="<?= (int)$n ?>"<?= $defaultItemCount === $n ? ' selected' : '' ?>>
-                                <?= (int)$n ?> items
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">The exact number of top-priority stories the AI will write about in the final executive briefing.</p>
-                    </div>
-
-                    <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem;">
+            <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem; border-top: 0.125rem dashed #000000; padding-top: 1.5rem;">
                         <div id="researcher-prompt-panel">
                             <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem; font-weight: 600;">System prompt instructions</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
