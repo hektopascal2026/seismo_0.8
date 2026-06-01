@@ -168,14 +168,14 @@ $moduleOptions = [
                             <div class="tag-filter-list">
                                 <?php foreach ($moduleOptions as $mod): ?>
                                 <?php if ($mod['key'] === 'lex'): ?>
-                                <label class="tag-filter-pill tag-filter-pill-active" id="lex-pill" style="user-select: none;">
+                                <label class="tag-filter-pill tag-filter-pill-active tag-filter-pill--lex" id="lex-pill" style="user-select: none;">
                                     <input type="hidden" name="modules[]" value="lex" id="lex-input">
                                     <span id="lex-label">Lex</span>
                                 </label>
                                 <?php else: ?>
                                 <?php
                                     $isMem = $mod['key'] === 'mem';
-                                    $pillClass = $isMem ? 'tag-filter-pill' : 'tag-filter-pill tag-filter-pill-active';
+                                    $pillClass = $isMem ? 'tag-filter-pill tag-filter-pill--mem' : 'tag-filter-pill tag-filter-pill-active tag-filter-pill--' . e($mod['key']);
                                     $checkedAttr = $isMem ? '' : ' checked';
                                 ?>
                                 <label class="<?= $pillClass ?>">
@@ -432,12 +432,12 @@ $moduleOptions = [
                     lexState = 1;
                     lexInput.value = 'lex';
                     lexInput.disabled = false;
-                    lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                    lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--lex';
                     lexLabel.textContent = 'Lex';
                 } else {
                     lexState = 0;
                     lexInput.disabled = true;
-                    lexPill.className = 'tag-filter-pill';
+                    lexPill.className = 'tag-filter-pill tag-filter-pill--lex';
                     lexLabel.textContent = 'Lex';
                 }
             }
@@ -477,14 +477,14 @@ $moduleOptions = [
                         // CH Lex -> Off
                         lexState = 0;
                         lexInput.disabled = true;
-                        lexPill.className = 'tag-filter-pill';
+                        lexPill.className = 'tag-filter-pill tag-filter-pill--lex';
                         lexLabel.textContent = 'Lex';
                     } else {
                         // Off -> All
                         lexState = 1;
                         lexInput.value = 'lex';
                         lexInput.disabled = false;
-                        lexPill.className = 'tag-filter-pill tag-filter-pill-active';
+                        lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--lex';
                         lexLabel.textContent = 'Lex';
                     }
                 });

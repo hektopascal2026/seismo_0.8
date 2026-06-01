@@ -745,6 +745,7 @@ $activeNav = 'styleguide';
                 <nav class="sidebar-links">
                     <a href="#grids" class="active" onclick="activateLink(this)">Grids & Spacing</a>
                     <a href="#clickables" onclick="activateLink(this)">Clickable Components</a>
+                    <a href="#source-colors" onclick="activateLink(this)">Source Color Schemes</a>
                     <a href="#cards" onclick="activateLink(this)">Card Typology Showcase</a>
                     <a href="#simulator" onclick="activateLink(this)">Responsive Simulator</a>
                     <a href="#specs" onclick="activateLink(this)">Stylesheet Blueprint</a>
@@ -852,7 +853,63 @@ $activeNav = 'styleguide';
                     </div>
                 </section>
                 
-                <!-- SECTION 3: CARDS TYPOLOGY SHOWCASE -->
+                <!-- SECTION 3: SOURCE COLOR SCHEMES -->
+                <section id="source-colors" class="showcase-section">
+                    <div class="section-header">
+                        <h2>Source Color Schemes</h2>
+                        <p>Brutalist tag pills and interactive filters utilize dedicated color mapping. These colors differentiate content families at a glance across card lists, detail sheets, and settings dashboards.</p>
+                    </div>
+                    
+                    <div class="visual-spacing-grid" style="grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));">
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-rss);">
+                            <span class="pill-source" style="background-color: var(--pill-rss); margin-bottom: var(--space-sm);">RSS FEEDS</span>
+                            <label>#ADD8E6</label>
+                            <span>--seismo-pill-feed-rss<br>Standard web streams</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-substack);">
+                            <span class="pill-source" style="background-color: var(--pill-substack); margin-bottom: var(--space-sm);">SUBSTACK</span>
+                            <label>#C5B4D1</label>
+                            <span>--seismo-pill-feed-substack<br>Newsletter streams</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-media);">
+                            <span class="pill-source" style="background-color: var(--pill-media); margin-bottom: var(--space-sm);">MEDIA</span>
+                            <label>#FFC4C4</label>
+                            <span>--seismo-pill-feed-media<br>Press / Editorial news</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-scraper);">
+                            <span class="pill-source" style="background-color: var(--pill-scraper); margin-bottom: var(--space-sm);">SCRAPER</span>
+                            <label>#ADD8E6</label>
+                            <span>--seismo-pill-scraper<br>Hydrated full-text views</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-lex);">
+                            <span class="pill-source" style="background-color: var(--pill-lex); margin-bottom: var(--space-sm);">LEX</span>
+                            <label>#F5F562</label>
+                            <span>--seismo-pill-lex<br>General Legislation</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-lex-ch);">
+                            <span class="pill-source" style="background-color: var(--pill-lex-ch); margin-bottom: var(--space-sm);">CH LEX</span>
+                            <label>#FFFFB3</label>
+                            <span>--pill-lex-ch<br>Swiss Fedlex regulation</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-leg);">
+                            <span class="pill-source" style="background-color: var(--pill-leg); margin-bottom: var(--space-sm);">PARL LEG</span>
+                            <label>#D4EDDA</label>
+                            <span>--seismo-pill-leg<br>Swiss deliberative events</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-mail);">
+                            <span class="pill-source" style="background-color: var(--pill-mail); margin-bottom: var(--space-sm);">EMAIL INGEST</span>
+                            <label>#FFDBBB</label>
+                            <span>--seismo-pill-mail<br>Email newsletter parsing</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid #e0e0e0;">
+                            <span class="pill-source" style="background-color: #e0e0e0; margin-bottom: var(--space-sm);">SWISSMEM</span>
+                            <label>#E0E0E0</label>
+                            <span>Grey toggle<br>Swissmem monitor source</span>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- SECTION 4: CARDS TYPOLOGY SHOWCASE -->
                 <section id="cards" class="showcase-section">
                     <div class="section-header">
                         <h2>Card Typology Showcase</h2>

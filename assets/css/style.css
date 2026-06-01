@@ -2297,6 +2297,39 @@ textarea.search-input.setup-code-preview {
     background-color: #e2e3f1;
 }
 
+/* Researcher / Filter Pill active background overrides matching the styleguide sources color scheme */
+.tag-filter-pill-active.tag-filter-pill--feeds {
+    background-color: var(--seismo-pill-feed-rss, #add8e6);
+}
+
+.tag-filter-pill-active.tag-filter-pill--substack {
+    background-color: var(--seismo-pill-feed-substack, #c5b4d1);
+}
+
+.tag-filter-pill-active.tag-filter-pill--media {
+    background-color: var(--seismo-pill-feed-media, #ffc4c4);
+}
+
+.tag-filter-pill-active.tag-filter-pill--scraper {
+    background-color: var(--seismo-pill-scraper, #add8e6);
+}
+
+.tag-filter-pill-active.tag-filter-pill--lex {
+    background-color: var(--seismo-pill-lex, #f5f562);
+}
+
+.tag-filter-pill-active.tag-filter-pill--leg {
+    background-color: var(--seismo-pill-leg, #d4edda);
+}
+
+.tag-filter-pill-active.tag-filter-pill--email {
+    background-color: var(--seismo-pill-mail, #ffdbbb);
+}
+
+.tag-filter-pill-active.tag-filter-pill--mem {
+    background-color: #e0e0e0; /* Grey toggle for Swissmem for now */
+}
+
 /* ═══ Category Filters ═══ */
 .category-filter {
     display: flex;
