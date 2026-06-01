@@ -206,9 +206,16 @@ $moduleOptions = [
                     <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 </fieldset>
 
-                <!-- Step 2: Relevance & Filtering -->
-                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
+                <div style="margin-bottom: 2rem; border-top: 0.125rem dashed #000000; padding-top: 1.25rem;">
+                    <button type="button" class="btn btn-secondary" id="toggle-advanced-settings-btn" style="width: 100%; text-align: center; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">
+                        Show Advanced Settings (Steps 2–4) ▾
+                    </button>
+                </div>
+
+                <div id="advanced-settings-wrapper" style="display: none;">
+                    <!-- Step 2: Relevance & Filtering -->
+                    <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                        <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
 
                     <div class="admin-form-field">
                         <label style="margin-bottom: 0.5rem; display:block;">Relevance scoring</label>
@@ -320,6 +327,7 @@ $moduleOptions = [
                         <textarea id="researcher_helper_result" rows="22" class="search-input"
                                   style="width:100%; max-width:40rem;"></textarea>
                     </div>
+                </fieldset>
                 </div>
 
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
@@ -1646,6 +1654,22 @@ $moduleOptions = [
                 ? collapseEntryCard(card, btn)
                 : expandEntryCard(card, btn);
         });
+        // Advanced settings toggle logic
+        var toggleAdvancedBtn = document.getElementById('toggle-advanced-settings-btn');
+        var advancedWrapper = document.getElementById('advanced-settings-wrapper');
+        if (toggleAdvancedBtn && advancedWrapper) {
+            toggleAdvancedBtn.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                var isHidden = advancedWrapper.style.display === 'none';
+                if (isHidden) {
+                    advancedWrapper.style.display = 'block';
+                    toggleAdvancedBtn.textContent = 'Hide Advanced Settings (Steps 2–4) \u25B4';
+                } else {
+                    advancedWrapper.style.display = 'none';
+                    toggleAdvancedBtn.textContent = 'Show Advanced Settings (Steps 2–4) \u25BE';
+                }
+            });
+        }
     })();
     </script>
 </body>
