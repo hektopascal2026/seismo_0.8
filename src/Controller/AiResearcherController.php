@@ -134,7 +134,7 @@ Inhaltliche Regeln (beide Phasen):
 PROMPT;
 
     /** Allowed “number of items” values in the Researcher UI. */
-    public const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12, 15];
+    public const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12];
 
     public const DEFAULT_ITEM_COUNT = 5;
 

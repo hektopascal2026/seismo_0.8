@@ -78,7 +78,7 @@ CONTRACT;
 
     private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 180;
 
-    private const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
+    private const DEFAULT_MAX_OUTPUT_TOKENS = 65536;
 
     private const OUTPUT_TOKEN_FLOOR = 2048;
 
@@ -700,6 +700,7 @@ CONTRACT;
             $fallbackXml,
             $selectedKeys,
             $itemCount,
+            $effectiveCount,
             $apiKey,
         );
     }
