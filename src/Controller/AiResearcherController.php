@@ -114,19 +114,19 @@ PHASE 2 — BRIEFING (nur Markdown für die bereits gewählten SELECTED_ENTRY_KE
 - Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. (feed_item:123). Das ist Pflicht neben dem lesbaren Quellennamen.
 - Kein JSON, kein Meta-Chat ("Hier ist das Researcher...").
 
-Verwende in Phase 2 ZWINGEND folgende Struktur:
+Verwende in Phase 2 ZWINGEND folgende Struktur (Zusammenfassung und Radar/Ausblick werden NICHT benötigt):
 
 # 📊 Swissmem Monitor: (ein kurzer prägnanter Titel, der klar macht, warum man das Briefing lesen soll)
 
-**Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der rote Faden für die MEM-Industrie? Direkter Einstieg in die Analyse ohne Einleitungsfloskeln.)
+### 🔍 Selektions-Begründungen (Auswahlmotive)
+(Formatiere die Selektions-Begründung aus Phase 1 zwingend als informative Bulletpoint-Liste an dieser Stelle. Jedes Bulletpoint muss den Akteur/das Unternehmen/das Thema fettgedruckt hervorheben, gefolgt von einer prägnanten, hochgradig informativen Begründung, warum dieser Eintrag heute ausgewählt wurde):
+* **[Unternehmen / Akteur / Kern-Thema]:** [Kurze, informative Begründung für die Auswahl dieses Eintrags.] (entry_type:entry_id)
+* (Ein Bullet pro SELECTED_ENTRY_KEYS-Eintrag; nach jedem Bullet eine Leerzeile.)
 
 ### 📌 Die wichtigsten Entwicklungen für die Tech-Industrie
 
 * **[Actionable Headline]:** [3-4 Sätze: 1. Konkreter Auslöser mit Bezug zu MEM-Unternehmen/Werkplatz. 2. Wirtschaftspolitische Einordnung. 3. Direkter Impact auf Schweizer Industrie. Flüssige Übergänge.] *(Quelle: [Name der Quelle])* (entry_type:entry_id)
 * (Pro SELECTED_ENTRY_KEYS-Eintrag genau ein Bullet; nach jedem Bullet eine Leerzeile.)
-
-### 🔭 Radar / Ausblick
-(2-3 Sätze zu einem strategischen Trend für den Schweizer Werkplatz — z.B. Gas-/Strompreise, Zinswende oder Freihandelsabkommen. Nur CEO-relevante Planungsthemen.)
 
 Inhaltliche Regeln (beide Phasen):
 - Erfinde keine Fakten oder Quellen.
@@ -709,6 +709,7 @@ PROMPT;
                 $hasDefault = true;
             }
             if ($name === 'Swissmem') {
+                $library[$i]['content'] = self::SWISSMEM_PRESET_PROMPT;
                 $hasSwissmem = true;
             }
         }
