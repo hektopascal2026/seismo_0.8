@@ -952,17 +952,35 @@ $moduleOptions = [
 
         initResearcherPromptViewToggle();
 
+        // Track if prompt was saved to library and if it has been edited since
+        var isHelperPromptSaved = false;
+        var helperPromptSavedContent = '';
+
         function syncLibrarySaveButtonLabel() {
             if (!saveLibraryBtn) return;
             if (researcherPromptView === 'helper') {
-                saveLibraryBtn.textContent = 'Save to library';
-                saveLibraryBtn.title = 'Save the generated prompt to your library';
+                if (isHelperPromptSaved) {
+                    var currentText = helperResultEl ? helperResultEl.value : '';
+                    if (currentText !== helperPromptSavedContent) {
+                        saveLibraryBtn.textContent = 'Update prompt text';
+                        saveLibraryBtn.title = 'Update the changes made to this prompt in the library';
+                        saveLibraryBtn.style.display = '';
+                    } else {
+                        // Exactly identical to saved content, hide the update button
+                        saveLibraryBtn.style.display = 'none';
+                    }
+                } else {
+                    saveLibraryBtn.textContent = 'Save to library';
+                    saveLibraryBtn.title = 'Save the generated prompt to your library';
+                    saveLibraryBtn.style.display = '';
+                }
                 return;
             }
             saveLibraryBtn.textContent = activePromptId ? 'Update prompt' : 'Save to library';
             saveLibraryBtn.title = activePromptId
                 ? 'Save changes to the selected library prompt'
                 : 'Add the current textarea as a named prompt in the library';
+            saveLibraryBtn.style.display = '';
         }
 
         function syncInstanceSaveButton() {
@@ -991,6 +1009,15 @@ $moduleOptions = [
         function syncPromptSaveButtons() {
             syncLibrarySaveButtonLabel();
             syncInstanceSaveButton();
+        }
+
+        // Listen for prompt text edits in helperResultEl
+        if (helperResultEl) {
+            helperResultEl.addEventListener('input', function() {
+                if (researcherPromptView === 'helper') {
+                    syncPromptSaveButtons();
+                }
+            });
         }
 
         function highlightPromptTab(id) {
@@ -1178,7 +1205,8 @@ $moduleOptions = [
 
         function persistLibraryPrompt(forceCreate) {
             if (!saveLibraryUrl || (!promptTextarea && !helperResultEl)) return;
-            var updating = !forceCreate && !!activePromptId;
+            // On helper view, if we already saved it once, we update that saved prompt id
+            var updating = !forceCreate && (researcherPromptView === 'helper' ? isHelperPromptSaved && !!activePromptId : !!activePromptId);
             var name = '';
             if (!updating) {
                 name = window.prompt('Prompt name');
@@ -1227,6 +1255,10 @@ $moduleOptions = [
                 renderPromptTabs(data.prompts);
                 var savedContent = activePromptContent();
                 syncPromptEditorAfterSave(savedContent);
+                if (researcherPromptView === 'helper') {
+                    isHelperPromptSaved = true;
+                    helperPromptSavedContent = savedContent;
+                }
                 if (updating) {
                     var row = savedPrompts.find(function(p) { return p.id === activePromptId; });
                     if (row) {
@@ -1337,6 +1369,9 @@ $moduleOptions = [
                         return;
                     }
                     helperResultEl.value = data.prompt || '';
+                    isHelperPromptSaved = false;
+                    helperPromptSavedContent = '';
+                    activePromptId = null;
                     showHelperMsg('Prompt generated. Review, edit, then save if you want.', false);
                 })
                 .catch(function() {
