@@ -185,12 +185,12 @@ PROMPT;
             $config = new SystemConfigRepository(getDbConnection());
             $key    = $config->get(SettingsController::KEY_GEMINI_API_KEY);
             $geminiConfigured = $key !== null && trim($key) !== '';
-            $storedDefault    = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
+            $storedDefault       = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
             $defaultPromptStored = $storedDefault !== null && trim($storedDefault) !== '';
-            $instancePrompt = self::resolveStoredSystemPrompt($config);
-            $savedPrompts   = self::ensurePromptLibrarySeeded($config, $instancePrompt);
-            $defaultRow     = self::findPromptLibraryEntryByName($savedPrompts, self::PROMPT_LIBRARY_SEED_NAME);
-            $systemPrompt   = $defaultRow !== null ? $defaultRow['content'] : $instancePrompt;
+            $savedPrompts        = self::withBuiltinPromptContents(
+                self::ensurePromptLibrarySeeded($config)
+            );
+            $systemPrompt = self::DEFAULT_SYSTEM_PROMPT;
         } catch (\Throwable $e) {
             error_log('Seismo researcher show: ' . $e->getMessage());
         }
@@ -324,7 +324,7 @@ PROMPT;
         $itemCount = $this->parseItemCount($_POST['item_count'] ?? null);
 
         try {
-            $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
+            $systemPrompt = $this->resolveSystemPromptFromPost($_POST);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -523,7 +523,7 @@ PROMPT;
         try {
             $intent = trim((string)($_POST['intent'] ?? ''));
             $config = new SystemConfigRepository(getDbConnection());
-            $style  = self::resolveStoredSystemPrompt($config);
+            $style  = self::DEFAULT_SYSTEM_PROMPT;
             $helper = new ResearcherPromptHelperService($config);
             $prompt = $helper->reformulate($intent, $style);
             $prompt = $this->parseSystemPrompt($prompt);
@@ -702,35 +702,30 @@ PROMPT;
         }
     }
 
-    public static function ensurePromptLibrarySeeded(
-        SystemConfigRepository $config,
-        string $systemPrompt,
-    ): array {
-        // Enforce the new DEFAULT_SYSTEM_PROMPT in the system_config
-        $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, self::DEFAULT_SYSTEM_PROMPT);
-
+    public static function ensurePromptLibrarySeeded(SystemConfigRepository $config): array
+    {
         $library = self::loadPromptLibrary($config);
 
-        $hasDefault = false;
+        $hasDefault  = false;
         $hasSwissmem = false;
-        foreach ($library as $i => $row) {
+        foreach ($library as $row) {
             $name = $row['name'] ?? '';
             if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
-                $library[$i]['content'] = self::DEFAULT_SYSTEM_PROMPT;
                 $hasDefault = true;
             }
             if ($name === 'Swissmem') {
-                $library[$i]['content'] = self::SWISSMEM_PRESET_PROMPT;
                 $hasSwissmem = true;
             }
         }
 
+        $changed = false;
         if (!$hasDefault) {
             $library[] = [
                 'id'      => bin2hex(random_bytes(8)),
                 'name'    => self::PROMPT_LIBRARY_SEED_NAME,
                 'content' => self::DEFAULT_SYSTEM_PROMPT,
             ];
+            $changed = true;
         }
 
         if (!$hasSwissmem) {
@@ -739,10 +734,44 @@ PROMPT;
                 'name'    => 'Swissmem',
                 'content' => self::SWISSMEM_PRESET_PROMPT,
             ];
+            $changed = true;
         }
 
-        // Guarantee Default is leftmost
-        $ordered = [];
+        $ordered      = self::orderPromptLibraryDefaultFirst($library);
+        $orderChanged = $ordered !== $library;
+        $library      = $ordered;
+
+        if ($changed || $orderChanged) {
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+        }
+
+        return $library;
+    }
+
+    /**
+     * Inject shipped builtin prompt text for library tabs backed by code constants.
+     *
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    public static function withBuiltinPromptContents(array $library): array
+    {
+        foreach ($library as $i => $row) {
+            if (($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
+                $library[$i]['content'] = self::DEFAULT_SYSTEM_PROMPT;
+            }
+        }
+
+        return $library;
+    }
+
+    /**
+     * @param list<array{id: string, name: string, content: string}> $library
+     * @return list<array{id: string, name: string, content: string}>
+     */
+    private static function orderPromptLibraryDefaultFirst(array $library): array
+    {
+        $ordered      = [];
         $defaultEntry = null;
         foreach ($library as $row) {
             if (($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
@@ -754,11 +783,8 @@ PROMPT;
         if ($defaultEntry !== null) {
             array_unshift($ordered, $defaultEntry);
         }
-        $library = $ordered;
 
-        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
-
-        return $library;
+        return $ordered;
     }
 
     /**
@@ -789,21 +815,7 @@ PROMPT;
             $out[] = ['id' => $id, 'name' => $name, 'content' => $content];
         }
 
-        // Guarantee Default is leftmost
-        $ordered = [];
-        $defaultEntry = null;
-        foreach ($out as $row) {
-            if (($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
-                $defaultEntry = $row;
-            } else {
-                $ordered[] = $row;
-            }
-        }
-        if ($defaultEntry !== null) {
-            array_unshift($ordered, $defaultEntry);
-        }
-
-        return $ordered;
+        return self::orderPromptLibraryDefaultFirst($out);
     }
 
     /**
@@ -867,12 +879,29 @@ PROMPT;
 
     public static function resolveStoredSystemPrompt(SystemConfigRepository $config): string
     {
-        $stored = $config->get(self::CONFIG_KEY_SYSTEM_PROMPT);
-        if ($stored !== null && trim($stored) !== '') {
-            return $stored;
+        return self::DEFAULT_SYSTEM_PROMPT;
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     * @throws \InvalidArgumentException
+     */
+    private function resolveSystemPromptFromPost(array $post): string
+    {
+        $libraryId = trim((string)($post['prompt_library_id'] ?? ''));
+        if ($libraryId !== '') {
+            $config  = new SystemConfigRepository(getDbConnection());
+            $library = self::loadPromptLibrary($config);
+            foreach ($library as $row) {
+                if (($row['id'] ?? '') === $libraryId
+                    && ($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME
+                ) {
+                    return self::DEFAULT_SYSTEM_PROMPT;
+                }
+            }
         }
 
-        return self::DEFAULT_SYSTEM_PROMPT;
+        return $this->parseSystemPrompt($post['system_prompt'] ?? null);
     }
 
     /**

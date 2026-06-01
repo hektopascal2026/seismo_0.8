@@ -318,8 +318,13 @@ $moduleOptions = [
                             <?php endforeach; ?>
                         </div>
                         <span id="prompt-library-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
+                        <input type="hidden" id="researcher_prompt_library_id" name="prompt_library_id"
+                               value="<?= e((string)($initialActivePromptTabId ?? '')) ?>">
                         <textarea id="researcher_system_prompt" name="system_prompt" rows="22" class="search-input"
                                   style="width:100%; max-width:40rem;"><?= e($systemPrompt) ?></textarea>
+                        <p class="admin-intro" id="researcher-default-prompt-note" style="margin:0.35rem 0 0; font-size:0.8125rem; opacity:0.85;" hidden>
+                            The Default prompt is fixed by the application and cannot be edited or saved.
+                        </p>
                     </div>
 
                     <div id="researcher-helper-panel" hidden>
@@ -407,6 +412,8 @@ $moduleOptions = [
         var promptTabsEl = document.getElementById('prompt-tabs');
         var promptLibraryMsg = document.getElementById('prompt-library-msg');
         var promptTextarea = document.getElementById('researcher_system_prompt');
+        var promptLibraryIdInput = document.getElementById('researcher_prompt_library_id');
+        var defaultPromptNoteEl = document.getElementById('researcher-default-prompt-note');
         var helperIntentEl = document.getElementById('researcher_helper_intent');
         var helperResultEl = document.getElementById('researcher_helper_result');
         var helperGenerateBtn = document.getElementById('researcher-helper-generate-btn');
@@ -1027,6 +1034,12 @@ $moduleOptions = [
                 savePromptBtn.style.setProperty('display', 'none', 'important');
                 return;
             }
+            if (isDefaultPromptTabActive()) {
+                savePromptBtn.disabled = true;
+                savePromptBtn.hidden = true;
+                savePromptBtn.style.setProperty('display', 'none', 'important');
+                return;
+            }
             var editingLibrary = activePromptId !== null;
             if (editingLibrary) {
                 // When viewing/editing an existing library prompt, we display a distinct "Update prompt"
@@ -1069,23 +1082,64 @@ $moduleOptions = [
             });
         }
 
+        function defaultPromptRow() {
+            return savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; }) || null;
+        }
+
         function highlightedPromptTabId() {
             if (activePromptId) {
                 return activePromptId;
             }
-            var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+            var def = defaultPromptRow();
             return def ? def.id : null;
         }
 
+        function isDefaultPromptTabActive() {
+            var def = defaultPromptRow();
+            if (!def) {
+                return true;
+            }
+            return highlightedPromptTabId() === def.id;
+        }
+
+        function setPromptLibraryIdForRow(row) {
+            if (!promptLibraryIdInput) {
+                return;
+            }
+            promptLibraryIdInput.value = row && row.id ? row.id : '';
+        }
+
+        function syncPromptTextareaEditability() {
+            if (!promptTextarea) {
+                return;
+            }
+            var onDefault = isDefaultPromptTabActive();
+            if (onDefault) {
+                var def = defaultPromptRow();
+                if (def) {
+                    promptTextarea.value = def.content;
+                }
+                promptTextarea.setAttribute('readonly', '');
+            } else {
+                promptTextarea.removeAttribute('readonly');
+            }
+            if (defaultPromptNoteEl) {
+                defaultPromptNoteEl.hidden = !onDefault;
+            }
+        }
+
         function selectInstanceDefaultPrompt() {
-            var row = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
+            var row = defaultPromptRow();
             activePromptId = null;
             if (row && promptTextarea) {
                 promptTextarea.value = row.content;
                 highlightPromptTab(row.id);
+                setPromptLibraryIdForRow(row);
             } else {
                 highlightPromptTab(null);
+                setPromptLibraryIdForRow(null);
             }
+            syncPromptTextareaEditability();
             syncPromptSaveButtons();
         }
 
@@ -1094,6 +1148,8 @@ $moduleOptions = [
             activePromptId = row.id;
             promptTextarea.value = row.content;
             highlightPromptTab(row.id);
+            setPromptLibraryIdForRow(row);
+            syncPromptTextareaEditability();
             syncPromptSaveButtons();
         }
 
@@ -1142,6 +1198,7 @@ $moduleOptions = [
                 promptTabsEl.appendChild(wrap);
             });
             bindPromptTabEvents();
+            syncPromptTextareaEditability();
             syncPromptSaveButtons();
         }
 
@@ -1240,7 +1297,18 @@ $moduleOptions = [
         bindPromptTabEvents();
         if (initialActivePromptTabId) {
             highlightPromptTab(initialActivePromptTabId);
+            var initialRow = savedPrompts.find(function(p) { return p.id === initialActivePromptTabId; });
+            if (initialRow) {
+                if (initialRow.name === PROMPT_TAB_DEFAULT_NAME) {
+                    selectInstanceDefaultPrompt();
+                } else {
+                    selectLibraryPrompt(initialRow);
+                }
+            }
+        } else {
+            selectInstanceDefaultPrompt();
         }
+        syncPromptTextareaEditability();
         syncPromptSaveButtons();
 
         function persistLibraryPrompt(forceCreate) {
