@@ -158,7 +158,7 @@ $moduleOptions = [
             <form id="researcher-builder-form" class="admin-form-card">
                 <!-- Step 1: Data Sources & Time Window -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 1: Data Sources & Time Window</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Data Sources & Time Window</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
@@ -208,14 +208,13 @@ $moduleOptions = [
 
                 <div style="margin-bottom: 2rem; border-top: 0.125rem dashed #000000; padding-top: 1.25rem;">
                     <button type="button" class="btn btn-secondary" id="toggle-advanced-settings-btn" style="width: 100%; text-align: center; font-weight: bold; letter-spacing: 0.05em; text-transform: uppercase;">
-                        Show Advanced Settings (Steps 2–3) ▾
+                        Show Advanced Settings (Relevance & Pool) ▾
                     </button>
                 </div>
 
                 <div id="advanced-settings-wrapper" style="display: none;">
-                    <!-- Step 2: Relevance & Filtering -->
                     <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                        <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 2: Relevance & Filtering</legend>
+                        <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Relevance & Filtering</legend>
 
                     <div class="admin-form-field">
                         <label style="margin-bottom: 0.5rem; display:block;">Relevance scoring</label>
@@ -239,9 +238,8 @@ $moduleOptions = [
                     </div>
                 </fieldset>
 
-                <!-- Step 3: Pool -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: Pool</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Pool</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
@@ -268,9 +266,9 @@ $moduleOptions = [
             </fieldset>
             </div>
 
-                <!-- Step 4: AI Report Generation -->
+                <!-- AI Report Generation -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 4: AI Report Generation</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">AI Report Generation</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
@@ -1662,10 +1660,10 @@ $moduleOptions = [
                 var isHidden = advancedWrapper.style.display === 'none';
                 if (isHidden) {
                     advancedWrapper.style.display = 'block';
-                    toggleAdvancedBtn.textContent = 'Hide Advanced Settings (Steps 2–4) \u25B4';
+                    toggleAdvancedBtn.textContent = 'Hide Advanced Settings (Relevance & Pool) \u25B4';
                 } else {
                     advancedWrapper.style.display = 'none';
-                    toggleAdvancedBtn.textContent = 'Show Advanced Settings (Steps 2–4) \u25BE';
+                    toggleAdvancedBtn.textContent = 'Show Advanced Settings (Relevance & Pool) \u25BE';
                 }
             });
         }
