@@ -281,16 +281,16 @@ $moduleOptions = [
 
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
                     <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Pool</legend>
-
+ 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
                             <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
-                            Use Magnitu Snippets (Highly Recommended)
+                            Use Magnitu Snippets
                         </label>
                         <p class="admin-intro" style="margin:0 0 1.25rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Highly recommended. Instead of sending full items, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full items are sent, but you may exceed the memory cap.
+                            Instead of sending full articles, this sends only the key 200-word passages containing the terms that matched your topics. This allows the AI to scan large amounts of information without getting overwhelmed or cutting off. If unchecked, the entire text of every item is sent, which can exceed the AI's reading limit.
                         </p>
-
+ 
                         <div class="admin-form-field" style="margin-bottom: 0;">
                             <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum items sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
                             <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
@@ -300,30 +300,30 @@ $moduleOptions = [
                                        class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
                             </div>
                             <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
-                                Caps the number of qualified items sent to the AI. If you enabled Magnitu Snippets above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
+                                Caps the number of matching items sent to the AI. With Magnitu Snippets enabled, you can safely scan up to 500 items at once. Without snippets, keep this under 100 to prevent the AI from exceeding its reading limit.
                             </p>
                     </div>
                 </div>
             </fieldset>
-
+ 
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
                     <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Deep selection</legend>
-
+ 
                     <div class="admin-form-field" style="margin-bottom: 1.25rem;">
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
                             <input type="checkbox" id="researcher_tournament_mode" name="tournament_mode" value="1">
                             Tournament selection
                         </label>
                         <p class="admin-intro" style="margin:0 0 1rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Splits the pool into batches (about 35 items each). Gemini picks the top 3 per batch in parallel, then a final pass chooses your featured stories. Better for large pools where a single pass might miss details.
+                            Splits the list of items into smaller batches of about 35 items. The AI pre-screens each batch in parallel, then compiles a final shortlist for your summary. Highly recommended for large collections where a single pass might skip important details.
                         </p>
-
+ 
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
                             <input type="checkbox" id="researcher_pro_selection_mode" name="pro_selection_mode" value="1">
                             Pro selection (Gemini 3.1)
                         </label>
                         <p class="admin-intro" style="margin:0 0 0 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Uses <code>gemini-3.1-pro-preview</code> for entry selection only; the briefing text still uses fast <code>gemini-3.5-flash</code>. Higher cost per run, best for strict legal or blind-spot prompts.
+                            Uses Google's most powerful reasoning model (Gemini Pro) to carefully choose the entries, while using the fast standard model (Gemini Flash) to write the summary. Excellent for complex legal filtering or finding subtle, hidden connections.
                         </p>
                     </div>
                 </fieldset>

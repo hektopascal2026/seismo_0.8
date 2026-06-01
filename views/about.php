@@ -469,34 +469,88 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <!-- Era VI -->
-                    <div class="timeline-era-card current-version-card">
+                    <div class="timeline-era-card">
                         <div class="era-meta-row">
-                            <span class="era-badge era-badge-ai">Era VI: Cognitive AI</span>
-                            <span class="era-date">June 2026 (Current)</span>
+                            <span class="era-badge era-badge-ai">Era VI: Cognitive AI Genesis</span>
+                            <span class="era-date">May 2026</span>
                         </div>
-                        <h3>v0.7.0 – v0.8.2 &mdash; The AI Researcher</h3>
+                        <h3>v0.7.0 – v0.7.8 &mdash; The Gemini Ingestion &amp; Prompt Workspace</h3>
                         
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> With thousands of ingested items, manual summary was exhausting. The team designed the **AI Researcher**, bringing LLM capabilities directly into the dashboard. We built a highly reliable, two-pass Gemini pipeline that selects critical items first, and drafts a beautifully organized executive summary complete with dashboard-card attribution lists.</p>
+                            <p><strong>Rationale:</strong> With high item volumes, manual summarization became a key bottleneck. The team designed the **AI Researcher**, integrating Gemini LLM capability natively. To manage ingestion quality, we introduced the **Gemini Configurator** setup assistant, generating regular expressions and webview extraction keywords dynamically with a live preview sandbox, resulting in a zero-runtime external AI footprint during normal cron runs.</p>
                         </div>
  
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>v0.8.2 &mdash; Tournament selection &amp; cost estimate:</strong> Optional parallel batch prelims (top 3 per ~35-entry batch) plus a championship selection pass for large pools; rough USD estimate after each run from API token usage (Gemini 3.5 Flash Standard rates) with a shortcut to Google AI Studio billing.</li>
-                                <li><strong>v0.7.8 &mdash; Gemini Configurator:</strong> Design of a one-time, AI-powered setup assistant that analyzes sample emails, generates regular expressions and webview keywords, and saves a static configuration locally for zero-runtime footprint.</li>
-                                <li><strong>AI Researcher:</strong> Interactive Gemini pipeline (`?action=researcher`) with custom prompt libraries, lookback filters, and category toggles.</li>
-                                <li><strong>Skinny Two-Pass Pipeline:</strong> Standardized on `gemini-3.5-flash` with a two-step prompt. Pass 1 handles logical entry selection (returning a JSON array of used keys). Pass 2 generates a clean, structured Markdown researcher on those items only.</li>
-                                <li><strong>Lenient JSON Repair:</strong> Ported the robust `LenientJsonParser` to recover malformed Gemini JSON (broken markdown fences, missing brackets), preventing interface crashes.</li>
-                                <li><strong>Attribution Grounding:</strong> The researcher output dynamically renders actual timeline cards for cited entries, allowing users to fact-check LLM summaries.</li>
-                                <li><strong>Bilingual Mail Hydration:</strong> Added locale-aware webview processing that automatically fetches cleaner German or English editions of newsletter emails.</li>
-                                <li><strong>Rich Swiss Fedlex Cards:</strong> Leveraged SPARQL queries to extract actual publication and entry-into-force dates, bypassing the default backfill limitations.</li>
+                                <li><strong>v0.7.8 &mdash; Gemini Configurator:</strong> Interactive, tabbed configuration tool analyzing sample email texts, extracting regular expressions and webview selectors, and storing settings locally to completely prevent external runtime API calls during background cron.</li>
+                                <li><strong>v0.7.5 &mdash; Skinny Two-Pass Gemini 3.5 Pipeline:</strong> A two-step pipeline using `gemini-3.5-flash` where Pass 1 selects key entries (producing pure selection tracking JSON) and Pass 2 drafts the markdown briefing on chosen items, optimizing output reliability.</li>
+                                <li><strong>v0.7.4 &mdash; Bilingual Mail Hydration:</strong> Multi-locale newsletter body hydration, parsing the best-matched German or English edition based on user inbox languages.</li>
+                                <li><strong>v0.7.3 &mdash; Custom prompt libraries:</strong> Added dynamic tabs to save, manage, and load named prompt templates directly in the Researcher dashboard context.</li>
+                                <li><strong>v0.7.2 &mdash; Lenient JSON Repair:</strong> Integrated `LenientJsonParser` to clean up and recover broken JSON fences or missing closing elements from LLM outputs.</li>
+                                <li><strong>v0.7.1 &mdash; Attribution Grounding:</strong> Referenced source entries dynamically rendering as actual dashboard cards at the bottom of generated summaries.</li>
                             </ul>
                         </div>
  
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Sending large legal texts to Gemini can easily exceed rate and context limits. We introduced a dynamic token budget controller (`ResearcherModuleGuard`) that scales item bodies between 2k and 12k characters based on the overall context size, keeping cost and latency optimal.</p>
+                            <p>Using large language models over extensive legislative lists risked hitting context and token rate limitations. We introduced `ResearcherModuleGuard` to dynamically compute and scale context boundaries, restricting entry bodies to between 2k and 12k characters depending on the pool scale.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era VII -->
+                    <div class="timeline-era-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-design">Era VII: The Brutalist Design Revolution</span>
+                            <span class="era-date">May 2026</span>
+                        </div>
+                        <h3>v0.7.9 – v0.8.0 &mdash; High-Contrast Styling &amp; Typography</h3>
+                        
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> As Seismo expanded from a chronological aggregator to an intelligence cockpit, reading efficiency became critical. The team completely refactored the visual layout to introduce a high-contrast Brutalist theme. This layout leverages geometric spacing, precise Outfit and Space Mono fonts, and zero-radius form boundaries to increase readability and streamline dashboard navigation.</p>
+                        </div>
+ 
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.8.0 &mdash; Premium Outfit Typography:</strong> Loaded the beautiful geometric Outfit font stack globally, updating the main sidebar, menu layouts, and action headers to prioritize visual scanning.</li>
+                                <li><strong>v0.7.9 &mdash; Brutalist Design Overhaul:</strong> Refactored the core CSS styles into a high-contrast design system. Replaced rounded UI cards with clean black-bordered layouts, sharp 90-degree tactile interactive shapes, and interactive 3D pressed actions.</li>
+                                <li><strong>Tactile Navigation Drawer:</strong> Streamlined the primary header into responsive, spaced-out tactile buttons.</li>
+                                <li><strong>Cache-Busting Versions:</strong> Integrated a global cache-busting version parameter (`SEISMO_VERSION`) to CSS/JS link elements to avoid browser rendering lags on production updates.</li>
+                            </ul>
+                        </div>
+ 
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Using a pure Brutalist design meant avoiding standard UI library dependencies (like Tailwind or Bootstrap). We chose native CSS custom properties to manage layout tokens, keeping asset sizes extremely light and loading fast on thin shared hosting sockets.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era VIII -->
+                    <div class="timeline-era-card current-version-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-intelligence">Era VIII: Advanced Selection &amp; UX</span>
+                            <span class="era-date">June 2026 (Current)</span>
+                        </div>
+                        <h3>v0.8.1 – v0.8.2 &mdash; Tournament Selection &amp; Cost Estimation</h3>
+                        
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> Summarizing hundreds of active feed items required a smarter way to select candidates without exceeding single-call context bounds or incurring prohibitive costs. The team built a dual-pass tournament selection engine and added real-time cost transparency. We also refined the Researcher layout to hide advanced configurations under collapsible settings panels.</p>
+                        </div>
+ 
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.8.2 &mdash; Dual-Pass Tournament Selection:</strong> Added tournament and Pro modes. The system runs parallel batch preliminaries (filtering candidates) before compiling a final championship summary, expanding the pool limit beyond previous boundaries.</li>
+                                <li><strong>v0.8.2 &mdash; Gemini Cost Calculator:</strong> Uses `usageMetadata` to compute a rough USD estimate after each researcher run, linking directly to Google AI Studio spend metrics.</li>
+                                <li><strong>v0.8.1 &mdash; Compact Settings Workspace:</strong> Redesigned the Researcher builder form. Placed complex parameters in an expand/collapse toggle ("More settings") and replaced numeric text fields with compact range sliders.</li>
+                                <li><strong>v0.8.1 &mdash; Default Prompt Protection:</strong> Hardened the active workspace to completely prevent users from editing, overwriting, or deleting the default system prompt, preserving baseline recovery paths.</li>
+                            </ul>
+                        </div>
+ 
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Managing large batches in the tournament mode meant running serial HTTP API calls. To maintain browser responsiveness, we optimized the chunk size and raised the default output token limit to 65k to prevent selection truncations during the championship pass.</p>
                         </div>
                     </div>
                 </div>
