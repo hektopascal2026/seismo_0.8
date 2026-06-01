@@ -18,7 +18,7 @@ $isParlPressFeed = ($feedSourceType === 'parl_press');
 $itemUrl = seismo_feed_item_resolved_link($item);
 $fromContent = trim(strip_tags((string)($item['content'] ?? '')));
 $fromDesc = trim(strip_tags((string)($item['description'] ?? '')));
-$fullContent = $fromContent !== '' ? $fromContent : $fromDesc;
+$fullContent = (mb_strlen($fromContent) >= mb_strlen($fromDesc)) ? $fromContent : $fromDesc;
 if ($fullContent === '' && !empty($item['title'])) {
     $fullContent = trim((string)$item['title']);
 }

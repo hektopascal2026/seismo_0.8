@@ -38,7 +38,7 @@ final class ParlPressFetchService
     public const DEFAULT_SDA_LIST_ITEMS_URL = 'https://www.parlament.ch/de/services/news/_api/web/lists/getByTitle(\'Seiten\')/items';
 
     /** Base list columns; {@see listODataSelect()} adds per-language Title_* / Content_*. */
-    private const LIST_ODATA_SELECT_BASE = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate';
+    private const LIST_ODATA_SELECT_BASE = 'Title,FileRef,EncodedAbsUrl,FileLeafRef,Created,ArticleStartDate,PublishingPageContent,Lead';
 
     public function __construct(?BaseClient $http = null)
     {
@@ -313,7 +313,17 @@ final class ParlPressFetchService
 
         $contentField = 'Content_' . $lang;
         $rawContent = (string)($item[$contentField] ?? '');
-        $plain      = trim(strip_tags($rawContent));
+        if ($rawContent === '') {
+            $lead = trim(strip_tags((string)($item['Lead'] ?? '')));
+            $pageContent = trim(strip_tags((string)($item['PublishingPageContent'] ?? '')));
+            if ($lead !== '' && $pageContent !== '') {
+                $plain = $lead . "\n\n" . $pageContent;
+            } else {
+                $plain = $lead !== '' ? $lead : $pageContent;
+            }
+        } else {
+            $plain = trim(strip_tags($rawContent));
+        }
 
         $guid = $guidPrefix . ':' . $slug;
         $guid = mb_substr($guid, 0, 500);

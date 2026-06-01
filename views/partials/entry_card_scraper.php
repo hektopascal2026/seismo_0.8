@@ -16,7 +16,7 @@ $item = $itemWrapper['data'];
 $scraperLink = seismo_feed_item_resolved_link($item);
 $rawSc = trim(strip_tags((string)($item['content'] ?? '')));
 $rawDesc = trim(strip_tags((string)($item['description'] ?? '')));
-$scraperContent = $rawSc !== '' ? $rawSc : $rawDesc;
+$scraperContent = (mb_strlen($rawSc) >= mb_strlen($rawDesc)) ? $rawSc : $rawDesc;
 if ($scraperContent === '' && !empty($item['title'])) {
     $scraperContent = trim((string)$item['title']);
 }
