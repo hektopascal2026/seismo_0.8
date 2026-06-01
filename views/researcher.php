@@ -157,7 +157,7 @@ $moduleOptions = [
         <div class="latest-entries-section">
             <form id="researcher-builder-form" class="admin-form-card">
                 <!-- Data Sources & Time Window -->
-                <fieldset style="border: none; padding: 0; margin: 0 0 1.5rem 0;">
+                <fieldset style="border: none; padding: 0; margin: 0 0 0.75rem 0;">
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
                         <div class="filter-page-actions" style="margin-bottom:0.75rem;">
@@ -201,7 +201,7 @@ $moduleOptions = [
                         <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">How far back should we search for news and updates?</p>
                     </div>
 
-                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                    <div class="admin-form-field" style="margin-bottom: 1.25rem;">
                         <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
                         <select id="researcher_item_count" name="item_count" class="search-input" style="width:auto; margin-bottom: 0.25rem;">
                             <?php foreach ($itemCountOptions as $n): ?>
@@ -216,7 +216,7 @@ $moduleOptions = [
                     <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 </fieldset>
 
-                <div style="margin-bottom: 1.5rem; border-top: 0.125rem dashed #000000; padding-top: 1rem;">
+                <div style="margin-bottom: 1rem; border-top: 0.125rem dashed #000000; padding-top: 1rem;">
                     <button type="button" class="btn btn-secondary entry-expand-btn" id="toggle-advanced-settings-btn">
                         More settings ▾
                     </button>
