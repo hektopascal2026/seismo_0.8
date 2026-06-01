@@ -308,17 +308,18 @@ $moduleOptions = [
                         <textarea id="researcher_helper_intent" rows="5" class="search-input"
                                   style="width:100%; max-width:40rem;"
                                   placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
-                        <div style="margin:0.5rem 0;">
+                        <div style="margin:0.5rem 0 1.5rem 0;">
                             <button type="button" class="btn btn-secondary" id="researcher-helper-generate-btn"
                                     <?= $geminiConfigured ? '' : ' disabled' ?>>Generate prompt</button>
                         </div>
                         <span id="researcher-helper-msg" class="message" style="margin:0.25rem 0 0;" hidden role="status" aria-live="polite"></span>
-                        <label for="researcher_helper_result">Generated prompt</label>
-                        <p class="admin-intro" style="margin:0.25rem 0 0.5rem;">
-                            Review and edit, then save to the library or as the instance default. Generate researcher uses the Prompt view only.
-                        </p>
-                        <textarea id="researcher_helper_result" rows="22" class="search-input"
-                                  style="width:100%; max-width:40rem;"></textarea>
+                        
+                        <div style="margin-top: 1.5rem;">
+                            <label for="researcher_helper_result" style="display:block; margin-bottom: 0.5rem; font-weight: 600;">Generated prompt</label>
+                            <textarea id="researcher_helper_result" rows="22" class="search-input"
+                                      style="width:100%; max-width:40rem; margin-bottom: 1rem;"></textarea>
+                        </div>
+                    </div>
                 </fieldset>
 
                 <div class="admin-form-actions" style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
@@ -328,6 +329,8 @@ $moduleOptions = [
                             title="<?= e($saveDefaultPromptTitle) ?>"><?= e($saveDefaultPromptLabel) ?></button>
                     <button type="button" class="btn btn-secondary" id="save-prompt-library-btn"
                             title="Add the current textarea as a named prompt in the library">Save to library</button>
+                    <button type="button" class="btn btn-secondary" id="helper-copy-to-clipboard-btn" style="display: none;"
+                            title="Copy the generated prompt to clipboard">Copy to clipboard</button>
                     <span id="researcher-prompt-save-msg" class="message" style="margin:0; flex-basis:100%;" hidden role="status" aria-live="polite"></span>
                 </div>
             </form>
@@ -891,7 +894,46 @@ $moduleOptions = [
                 viewHelperBtn.classList.toggle('btn-primary', researcherPromptView === 'helper');
                 viewHelperBtn.classList.toggle('btn-secondary', researcherPromptView !== 'helper');
             }
-            syncPromptSaveButtons();
+
+            // Hide/Show elements based on whether we are on prompt view or helper view
+            var firstFieldset = form ? form.querySelector('fieldset') : null;
+            var toggleAdvancedBtnWrap = document.getElementById('toggle-advanced-settings-btn') ? document.getElementById('toggle-advanced-settings-btn').parentNode : null;
+            var advancedWrapper = document.getElementById('advanced-settings-wrapper');
+            var researcherGenerateBtn = document.getElementById('researcher-generate-btn');
+            var researcherSavePromptBtn = document.getElementById('researcher-save-prompt-btn');
+            var savePromptLibraryBtn = document.getElementById('save-prompt-library-btn');
+            var helperCopyBtn = document.getElementById('helper-copy-to-clipboard-btn');
+
+            if (researcherPromptView === 'helper') {
+                if (firstFieldset) firstFieldset.style.display = 'none';
+                if (toggleAdvancedBtnWrap) toggleAdvancedBtnWrap.style.display = 'none';
+                if (advancedWrapper) advancedWrapper.style.display = 'none';
+                if (researcherGenerateBtn) researcherGenerateBtn.style.display = 'none';
+                if (researcherSavePromptBtn) researcherSavePromptBtn.style.display = 'none';
+                if (savePromptLibraryBtn) {
+                    savePromptLibraryBtn.style.display = '';
+                    savePromptLibraryBtn.textContent = 'Save to library';
+                    savePromptLibraryBtn.title = 'Save the generated prompt to your library';
+                }
+                if (helperCopyBtn) helperCopyBtn.style.display = '';
+            } else {
+                if (firstFieldset) firstFieldset.style.display = '';
+                if (toggleAdvancedBtnWrap) toggleAdvancedBtnWrap.style.display = '';
+                if (advancedWrapper) {
+                    // Restore toggle state
+                    var toggleAdvancedBtn = document.getElementById('toggle-advanced-settings-btn');
+                    if (toggleAdvancedBtn && toggleAdvancedBtn.textContent.indexOf('Less') !== -1) {
+                        advancedWrapper.style.display = 'block';
+                    } else {
+                        advancedWrapper.style.display = 'none';
+                    }
+                }
+                if (researcherGenerateBtn) researcherGenerateBtn.style.display = '';
+                if (researcherSavePromptBtn) researcherSavePromptBtn.style.display = '';
+                if (savePromptLibraryBtn) savePromptLibraryBtn.style.display = '';
+                if (helperCopyBtn) helperCopyBtn.style.display = 'none';
+                syncPromptSaveButtons();
+            }
         }
 
         function initResearcherPromptViewToggle() {
@@ -912,6 +954,11 @@ $moduleOptions = [
 
         function syncLibrarySaveButtonLabel() {
             if (!saveLibraryBtn) return;
+            if (researcherPromptView === 'helper') {
+                saveLibraryBtn.textContent = 'Save to library';
+                saveLibraryBtn.title = 'Save the generated prompt to your library';
+                return;
+            }
             saveLibraryBtn.textContent = activePromptId ? 'Update prompt' : 'Save to library';
             saveLibraryBtn.title = activePromptId
                 ? 'Save changes to the selected library prompt'
@@ -920,10 +967,17 @@ $moduleOptions = [
 
         function syncInstanceSaveButton() {
             if (!savePromptBtn) return;
+            if (researcherPromptView === 'helper') {
+                savePromptBtn.disabled = true;
+                savePromptBtn.hidden = true;
+                savePromptBtn.style.display = 'none';
+                return;
+            }
             var editingLibrary = activePromptId !== null;
             if (editingLibrary) {
                 savePromptBtn.disabled = false;
                 savePromptBtn.hidden = false;
+                savePromptBtn.style.display = '';
                 savePromptBtn.textContent = 'Save to library';
                 savePromptBtn.title = 'Add the current textarea as a new named prompt in the library';
                 return;
@@ -931,6 +985,7 @@ $moduleOptions = [
             // The default prompt cannot be overwritten!
             savePromptBtn.disabled = true;
             savePromptBtn.hidden = true;
+            savePromptBtn.style.display = 'none';
         }
 
         function syncPromptSaveButtons() {
@@ -1207,6 +1262,36 @@ $moduleOptions = [
         if (saveLibraryBtn && saveLibraryUrl && (promptTextarea || helperResultEl)) {
             saveLibraryBtn.addEventListener('click', function() {
                 persistLibraryPrompt(false);
+            });
+        }
+
+        var helperCopyBtn = document.getElementById('helper-copy-to-clipboard-btn');
+        if (helperCopyBtn && helperResultEl) {
+            helperCopyBtn.addEventListener('click', function() {
+                var text = helperResultEl.value;
+                if (text.trim() === '') return;
+                function copied() {
+                    helperCopyBtn.textContent = 'Copied';
+                    setTimeout(function() { helperCopyBtn.textContent = 'Copy to clipboard'; }, 2000);
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(copied).catch(fallbackCopy);
+                    return;
+                }
+                fallbackCopy();
+                function fallbackCopy() {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try {
+                        if (document.execCommand('copy')) copied();
+                    } catch (e) { /* ignore */ }
+                    document.body.removeChild(ta);
+                }
             });
         }
 
