@@ -766,10 +766,16 @@ $moduleOptions = [
         }
 
         function formatContextCapSummary(meta) {
-            if (!meta || meta.entries_sent_to_gemini === undefined) {
+            if (!meta || typeof meta !== 'object') {
                 return '';
             }
-            var sent = meta.entries_sent_to_gemini;
+            if (meta.meta_summary_line && String(meta.meta_summary_line).trim() !== '') {
+                return String(meta.meta_summary_line);
+            }
+            if (meta.entries_sent_to_gemini === undefined && meta.pool_entry_count === undefined) {
+                return '';
+            }
+            var sent = meta.entries_sent_to_gemini !== undefined ? meta.entries_sent_to_gemini : meta.pool_entry_count;
             var parts = [sent + ' sent to Gemini'];
             if (meta.max_context_entries !== undefined) {
                 parts.push('cap ' + meta.max_context_entries);
@@ -780,20 +786,33 @@ $moduleOptions = [
             if (meta.entries_eligible_before_cap !== undefined) {
                 parts.push(meta.entries_eligible_before_cap + ' eligible before cap');
             }
-            if (meta.item_count !== undefined) {
+            if (meta.selection_target !== undefined) {
+                parts.push(meta.selection_target + ' picks requested');
+            } else if (meta.item_count !== undefined) {
                 parts.push(meta.item_count + ' developments requested');
             }
-            if (meta.cited_entry_count !== undefined) {
+            if (meta.selection_keys_count !== undefined && meta.selection_keys_count > 0) {
+                parts.push(meta.selection_keys_count + ' selected');
+            } else if (meta.cited_entry_count !== undefined) {
                 parts.push(meta.cited_entry_count + ' cited in researcher');
+            }
+            if (meta.selection_strategy) {
+                parts.push('sel: ' + String(meta.selection_strategy).replace(/_/g, ' '));
+            }
+            if (meta.summary_strategy) {
+                parts.push('sum: ' + String(meta.summary_strategy).replace(/_/g, ' '));
             }
             if (meta.tournament_mode) {
                 parts.push('tournament');
             }
             if (meta.pro_selection_mode) {
-                parts.push('pro selection');
+                parts.push('Pro sel');
             }
-            if (meta.selection_model && meta.summary_model && meta.selection_model !== meta.summary_model) {
-                parts.push('sel ' + meta.selection_model);
+            if (meta.dual_model_selection && meta.selection_model) {
+                parts.push('sel model ' + meta.selection_model);
+            }
+            if (meta.generation_failed) {
+                parts.push('failed');
             }
             return parts.join(' · ');
         }
@@ -808,7 +827,7 @@ $moduleOptions = [
             wrap.className = 'researcher-output-meta';
             var title = document.createElement('p');
             title.className = 'researcher-output-meta__title';
-            title.textContent = isFailure ? 'Generation meta' : 'Generation meta (debug)';
+            title.textContent = 'Generation meta';
             wrap.appendChild(title);
 
             if (!meta || typeof meta !== 'object') {

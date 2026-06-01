@@ -20,6 +20,7 @@ use Seismo\Service\ResearcherScoreFilter;
 use Seismo\Service\ResearcherSourceSelection;
 use Seismo\Service\ResearcherPromptHelperService;
 use Seismo\Service\GeminiResearcherException;
+use Seismo\Service\GeminiResearcherGenerationMeta;
 use Seismo\Service\GeminiResearcherGenerationOptions;
 use Seismo\Service\GeminiResearcherService;
 
@@ -447,6 +448,11 @@ PROMPT;
                 ],
             );
             $meta = array_merge($meta, $attributionMeta, $gemini->lastGenerationMeta());
+            $meta = GeminiResearcherGenerationMeta::normalize(
+                $meta,
+                $generationOptions,
+                $this->researcherPipelineContext($contextEntryCount, $itemCount),
+            );
             if ($contextWarning !== null) {
                 $meta['context_warning'] = $contextWarning;
             }
@@ -482,12 +488,17 @@ PROMPT;
             $this->echoResearcherJson([
                 'ok'    => false,
                 'error' => $e->getMessage() !== '' ? $e->getMessage() : 'Gemini researcher failed.',
-                'meta'  => $this->buildResearcherFailureMeta(
-                    $gathered,
-                    $gemini,
+                'meta'  => $this->normalizeResearcherResponseMeta(
+                    $this->buildResearcherFailureMeta(
+                        $gathered,
+                        $gemini,
+                        $generationOptions,
+                        $itemCountForMeta,
+                        $filters['selection'] ?? null,
+                    ),
                     $generationOptions,
+                    $gathered,
                     $itemCountForMeta,
-                    $filters['selection'] ?? null,
                 ),
             ]);
         } catch (\Throwable $e) {
@@ -496,12 +507,17 @@ PROMPT;
             $this->echoResearcherJson([
                 'ok'    => false,
                 'error' => 'Could not generate researcher.',
-                'meta'  => $this->buildResearcherFailureMeta(
-                    $gathered,
-                    $gemini ?? null,
+                'meta'  => $this->normalizeResearcherResponseMeta(
+                    $this->buildResearcherFailureMeta(
+                        $gathered,
+                        $gemini ?? null,
+                        $generationOptions,
+                        $itemCountForMeta,
+                        $filters['selection'] ?? null,
+                    ),
                     $generationOptions,
+                    $gathered,
                     $itemCountForMeta,
-                    $filters['selection'] ?? null,
                 ),
             ]);
         }
@@ -1370,6 +1386,41 @@ PROMPT;
         }
 
         return $meta;
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     * @param array<string, mixed>|null $gathered
+     * @return array<string, mixed>
+     */
+    private function normalizeResearcherResponseMeta(
+        array $meta,
+        GeminiResearcherGenerationOptions $generationOptions,
+        ?array $gathered,
+        int $itemCount,
+    ): array {
+        $poolCount = $gathered !== null ? count($gathered['entries']) : (int)($meta['pool_entry_count'] ?? 0);
+
+        return GeminiResearcherGenerationMeta::normalize(
+            $meta,
+            $generationOptions,
+            $this->researcherPipelineContext($poolCount, $itemCount),
+        );
+    }
+
+    /**
+     * @return array{pool_entry_count: int, context_entry_count: int, item_count: int, selection_target: int}
+     */
+    private function researcherPipelineContext(int $poolCount, int $itemCount): array
+    {
+        $poolCount = max(0, $poolCount);
+
+        return [
+            'pool_entry_count'    => $poolCount,
+            'context_entry_count' => $poolCount,
+            'item_count'          => $itemCount,
+            'selection_target'    => min($itemCount, max(1, $poolCount)),
+        ];
     }
 
     /**

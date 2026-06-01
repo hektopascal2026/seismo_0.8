@@ -115,10 +115,10 @@ CONTRACT;
     private const SUMMARY_BATCH_SIZE = 2;
 
     /** Skip monolithic pass 2 when this many entries are selected (batch size 2 from the start). */
-    private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 8;
+    public const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 8;
 
     /** Tournament runs always use batched pass 2 (full entry bodies on few picks). */
-    private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT = 3;
+    public const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT = 3;
 
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
@@ -153,6 +153,9 @@ CONTRACT;
 
     /** @var array<string, mixed> */
     private array $lastGenerationMeta = [];
+
+    /** @var array<string, int> */
+    private array $lastPipelineContext = [];
 
     private GeminiResearcherGenerationOptions $generationOptions;
 
@@ -225,6 +228,18 @@ CONTRACT;
     public function lastGenerationMeta(): array
     {
         return $this->lastGenerationMeta;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function normalizedGenerationMeta(): array
+    {
+        return GeminiResearcherGenerationMeta::normalize(
+            $this->lastGenerationMeta,
+            $this->generationOptions,
+            $this->lastPipelineContext,
+        );
     }
 
     /** Pass 2 visible prose budget (thinking is configured separately). */
@@ -329,11 +344,12 @@ CONTRACT;
                 $moduleSelection,
             );
 
-            $this->lastGenerationMeta = [
+            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
                 'rate_limit_fallback'              => true,
                 'rate_limit_fallback_max_entries'  => $this->researcherContext->rateLimitFallbackMaxEntries(),
                 'rate_limit_fallback_batch_size'   => ResearcherGeminiContext::RATE_LIMIT_FALLBACK_BATCH_SIZE,
-            ];
+                'selection_strategy'               => 'rate_limit_batched_selection',
+            ]);
 
             return $this->executeGenerateSummary(
                 $userSystemPrompt,
@@ -385,17 +401,33 @@ CONTRACT;
 
         $effectiveCount = $this->effectiveCitationCount($itemCount, $contextEntryCount);
         $this->lastEffectiveCitationCount = $effectiveCount;
+        $selectionTarget                = min($itemCount, max(1, $contextEntryCount));
+
+        $this->lastPipelineContext = [
+            'pool_entry_count'   => $contextEntryCount,
+            'context_entry_count' => $contextEntryCount,
+            'item_count'         => $itemCount,
+            'selection_target'   => $selectionTarget,
+        ];
 
         $selectionModel = $this->selectionModel();
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-            'model'                => $this->model,
-            'summary_model'        => $this->model,
-            'selection_model'      => $selectionModel,
-            'tournament_mode'      => $this->generationOptions->tournamentMode,
-            'pro_selection_mode'   => $this->generationOptions->proSelectionMode,
-            'thinking_selection'   => self::THINKING_LEVEL_SELECTION,
-            'thinking_summary'     => self::THINKING_LEVEL_SUMMARY,
-            'rate_limit_thinking'  => $this->rateLimitFallbackMode,
+            'model'                       => $this->model,
+            'summary_model'               => $this->model,
+            'selection_model'             => $selectionModel,
+            'tournament_mode'             => $this->generationOptions->tournamentMode,
+            'pro_selection_mode'          => $this->generationOptions->proSelectionMode,
+            'pool_entry_count'            => $contextEntryCount,
+            'item_count'                  => $itemCount,
+            'selection_target'            => $selectionTarget,
+            'max_output_tokens_configured' => $this->maxOutputTokens,
+            'selection_batch_size_configured' => $this->researcherContext->selectionBatchSize(),
+            'thinking_selection_configured' => self::THINKING_LEVEL_SELECTION,
+            'thinking_selection_effective'  => $this->effectiveSelectionThinkingLevel(),
+            'thinking_summary'              => self::THINKING_LEVEL_SUMMARY,
+            'rate_limit_thinking'           => $this->rateLimitFallbackMode,
+            'selection_strategy_planned'    => $this->plannedSelectionStrategy($contextEntryCount),
+            'summary_strategy_planned'      => $this->plannedSummaryStrategy($effectiveCount),
         ]);
 
         return $this->generateSummaryTwoPass(
@@ -511,6 +543,13 @@ CONTRACT;
 
         $poolContext = $this->buildEntryXmlContext($poolEntries, $scoresByKey, $researcherMeta, $markdownContext);
 
+        $this->lastPipelineContext['pool_entry_count'] = $poolCount;
+        $this->lastPipelineContext['selection_target'] = $selectionTarget;
+        $this->mergeGenerationMeta([
+            'pool_entry_count'   => $poolCount,
+            'selection_target'   => $selectionTarget,
+        ]);
+
         if ($this->generationOptions->tournamentMode && $poolCount >= 2) {
             $selectedKeys = $this->runTournamentSelectionPasses(
                 $userSystemPrompt,
@@ -533,8 +572,9 @@ CONTRACT;
                 $selectionTarget,
                 $apiKey,
             );
-            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
-                'batched_selection' => true,
+            $this->mergeGenerationMeta([
+                'batched_selection'    => true,
+                'selection_strategy'   => 'rate_limit_batched_selection',
             ]);
         } else {
             $selectedKeys = $this->runSelectionPass(
@@ -545,8 +585,9 @@ CONTRACT;
                 $apiKey,
                 false,
             );
-            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            $this->mergeGenerationMeta([
                 'skinny_global_selection' => true,
+                'selection_strategy'      => 'global_single_pass',
             ]);
         }
 
@@ -556,8 +597,10 @@ CONTRACT;
 
         $finalCount = count($selectedKeys);
         $this->lastEffectiveCitationCount = max(1, $finalCount);
-        $this->lastGenerationMeta         = array_merge($this->lastGenerationMeta, [
-            'selected_entry_keys' => $selectedKeys,
+        $this->mergeGenerationMeta([
+            'selected_entry_keys'  => $selectedKeys,
+            'selection_keys_count' => $finalCount,
+            'selection_completed'  => true,
         ]);
 
         return $this->runSummaryPassWithBatchFallback(
@@ -703,9 +746,10 @@ CONTRACT;
             return [];
         }
 
-        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+        $this->mergeGenerationMeta([
             'tournament_selection'      => true,
             'batched_selection'         => true,
+            'selection_strategy'        => $batchCount > 1 ? 'tournament_parallel_batches' : 'tournament_batches',
             'selection_batches'         => $batchCount,
             'selection_batch_size'      => $batchSize,
             'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
@@ -755,7 +799,7 @@ CONTRACT;
             }
         }
 
-        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+        $this->mergeGenerationMeta([
             'selection_batches_empty' => $emptyBatches,
         ]);
 
@@ -791,7 +835,7 @@ CONTRACT;
             true,
         );
 
-        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+        $this->mergeGenerationMeta([
             'selection_championship' => true,
             'selection_finalists'    => count($finalists),
         ]);
@@ -804,7 +848,7 @@ CONTRACT;
             'GeminiResearcherService: championship returned no used_entry_keys; '
             . 'using tournament prelim order (' . count($merged) . ' finalists)'
         );
-        $this->lastGenerationMeta['selection_championship_fallback'] = true;
+        $this->mergeGenerationMeta(['selection_championship_fallback' => true]);
 
         return array_slice($merged, 0, $selectionTarget);
     }
@@ -1093,8 +1137,9 @@ CONTRACT;
                 'GeminiResearcherService: proactive batched pass 2 for ' . $effectiveCount
                 . ' cited item(s) (batch size ' . $batchSize . ')'
             );
-            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+            $this->mergeGenerationMeta([
                 'summary_proactive_batch' => true,
+                'summary_strategy'        => 'proactive_batched',
                 'summary_batch_size'      => $batchSize,
             ]);
 
@@ -1119,8 +1164,12 @@ CONTRACT;
             $selectedKeys,
         );
 
+        $this->mergeGenerationMeta([
+            'summary_strategy' => 'monolithic_single_pass',
+        ]);
+
         try {
-            return $this->runSummaryPass(
+            $result = $this->runSummaryPass(
                 $userSystemPrompt,
                 $summaryContext,
                 $selectedKeys,
@@ -1129,6 +1178,9 @@ CONTRACT;
                 $apiKey,
                 true,
             );
+            $this->mergeGenerationMeta(['summary_completed' => true]);
+
+            return $result;
         } catch (GeminiResearcherException $e) {
             if (!$this->shouldRetrySummaryInBatches($e, $effectiveCount)) {
                 throw $e;
@@ -1168,8 +1220,9 @@ CONTRACT;
             'GeminiResearcherService: pass 2 output truncated for ' . $effectiveCount
             . ' cited item(s); retrying with batched summary (batch size ' . $batchSize . ')'
         );
-        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+        $this->mergeGenerationMeta([
             'summary_batch_retry_attempted' => true,
+            'summary_strategy'              => 'reactive_batched',
             'summary_batch_retry_reason'    => 'output_truncated',
             'summary_batch_retry_size'      => $batchSize,
         ]);
@@ -1360,8 +1413,9 @@ CONTRACT;
             throw GeminiResearcherException::emptyResponse('Batched summary passes returned no Markdown.');
         }
 
-        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+        $this->mergeGenerationMeta([
             'batched_summary'       => true,
+            'summary_completed'     => true,
             'summary_batches'       => $batchCount,
             'summary_batch_size'    => $batchSize,
             'summary_output_tokens' => self::resolveOutputTokenBudget(
@@ -1372,6 +1426,51 @@ CONTRACT;
         ]);
 
         return new GeminiResearcherResult($merged, $selectedKeys, true);
+    }
+
+    /**
+     * @param array<string, mixed> $patch
+     */
+    private function mergeGenerationMeta(array $patch): void
+    {
+        $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, $patch);
+    }
+
+    private function effectiveSelectionThinkingLevel(): string
+    {
+        if ($this->rateLimitFallbackMode) {
+            return 'MINIMAL';
+        }
+
+        return $this->generationOptions->tournamentMode
+            ? self::THINKING_LEVEL_SUMMARY
+            : self::THINKING_LEVEL_SELECTION;
+    }
+
+    private function plannedSelectionStrategy(int $poolCount): string
+    {
+        if ($this->generationOptions->tournamentMode && $poolCount >= 2) {
+            return 'tournament_parallel_batches';
+        }
+
+        if ($poolCount >= $this->batchedSelectionMinEntries()) {
+            return 'rate_limit_batched_selection';
+        }
+
+        return 'global_single_pass';
+    }
+
+    private function plannedSummaryStrategy(int $effectiveCount): string
+    {
+        $proactiveMin = $this->generationOptions->tournamentMode
+            ? self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT
+            : self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS;
+
+        if ($effectiveCount >= $proactiveMin) {
+            return 'proactive_batched';
+        }
+
+        return 'monolithic_single_pass';
     }
 
     /**
