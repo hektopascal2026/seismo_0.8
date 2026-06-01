@@ -183,6 +183,11 @@ $router->register(
     false
 );
 $router->register(
+    'settings_restore_researcher_builtin_prompts',
+    \Seismo\Controller\SettingsController::class . '::restoreResearcherBuiltinPrompts',
+    false
+);
+$router->register(
     'settings_save_admin_password',
     \Seismo\Controller\SettingsController::class . '::saveAdminPassword',
     false

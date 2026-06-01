@@ -64,6 +64,25 @@ declare(strict_types=1);
             </form>
         </div>
 
+        <div class="latest-entries-section module-section-spaced">
+            <h2 class="section-title">AI Researcher prompts</h2>
+            <p class="admin-intro">
+                Restores the built-in <strong>Default</strong> and <strong>Swissmem</strong> prompt texts shipped with this Seismo version
+                (library tabs and the desk default used when you click <strong>Save prompt (default)</strong> on
+                <a href="<?= e($basePath) ?>/index.php?action=researcher">AI Researcher</a>).
+            </p>
+            <p class="message message-warning">
+                Overwrites only those two built-in prompts. Custom tabs in your prompt library keep their names, IDs, and content unchanged.
+            </p>
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=settings_restore_researcher_builtin_prompts" class="admin-inline-form">
+                <?= $csrfField ?>
+                <button type="submit" class="btn btn-danger"
+                        onclick="return confirm('Restore built-in Default and Swissmem prompts to the version shipped with this app?\n\nYour other saved prompts will not be deleted or changed.');">
+                    Restore default prompts
+                </button>
+            </form>
+        </div>
+
         <?php if (empty($satellite)): ?>
         <div class="latest-entries-section module-section-spaced">
             <h2 class="section-title">Source config export</h2>

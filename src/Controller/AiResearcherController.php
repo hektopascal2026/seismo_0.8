@@ -43,6 +43,8 @@ final class AiResearcherController
 
     private const PROMPT_LIBRARY_SEED_NAME = 'Default';
 
+    private const PROMPT_LIBRARY_SWISSMEM_NAME = 'Swissmem';
+
     private const MAX_PROMPT_LIBRARY = 50;
 
     private const MAX_PROMPT_NAME_LEN = 80;
@@ -72,19 +74,14 @@ PHASE 2 — BRIEFING (nur Markdown für SELECTED_ENTRY_KEYS):
 - Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. *(Quelle: [Name der Quelle])* (entry_type:entry_id).
 - Erfinde keine Fakten oder externen Quellen, die nicht in SELECTED_ENTRIES_DATA stehen.
 
-Verwende in Phase 2 ZWINGEND folgende Struktur:
+Verwende in Phase 2 ZWINGEND folgende Struktur (keine Zusammenfassung, kein Radar/Ausblick):
 
 # 📊 Executive Briefing: [Prägnanter, strategischer Titel]
-
-**Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der makroökonomische, regulatorische oder politische rote Faden der ausgewählten Top-Signale? Direkter Einstieg in die Analyse, keine Meta-Einleitungen.)
 
 ### 📌 Die wichtigsten Entwicklungen
 
 * **[Actionable Headline]:** [3-4 Sätze: 1. Konkreter Auslöser/Fakt aus der Quelle. 2. Politisch-wirtschaftliche Einordnung. 3. Harter Impact auf Schweizer Unternehmen / den Werkplatz.] *(Quelle: [Name der Quelle])* (entry_type:entry_id)
 * (Pro SELECTED_ENTRY_KEYS-Eintrag ein Bullet; nach jedem Bullet eine Leerzeile.)
-
-### 🔭 Radar / Ausblick
-(2-3 Sätze zu einem strategischen Trend aus den gewählten Daten — z. B. regulatorischer Shift, EU-Spillover, Energie/Zins-Entwicklung. Harte CEO-Warnung und konkretes Planungsthema, kein Makro-Bla-Bla.)
 
 Inhaltliche Regeln (beide Phasen):
 - Erfinde keine Fakten oder Quellen.
@@ -713,7 +710,7 @@ PROMPT;
             if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
                 $hasDefault = true;
             }
-            if ($name === 'Swissmem') {
+            if ($name === self::PROMPT_LIBRARY_SWISSMEM_NAME) {
                 $hasSwissmem = true;
             }
         }
@@ -731,7 +728,7 @@ PROMPT;
         if (!$hasSwissmem) {
             $library[] = [
                 'id'      => bin2hex(random_bytes(8)),
-                'name'    => 'Swissmem',
+                'name'    => self::PROMPT_LIBRARY_SWISSMEM_NAME,
                 'content' => self::SWISSMEM_PRESET_PROMPT,
             ];
             $changed = true;
@@ -746,6 +743,64 @@ PROMPT;
         }
 
         return $library;
+    }
+
+    /**
+     * Reset shipped Default + Swissmem prompt text and the desk default system prompt.
+     * Other library tabs (custom names/IDs) are left unchanged.
+     *
+     * @return array{default_updated: bool, swissmem_updated: bool, default_added: bool, swissmem_added: bool}
+     */
+    public static function restoreBuiltinResearcherPrompts(SystemConfigRepository $config): array
+    {
+        $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, self::DEFAULT_SYSTEM_PROMPT);
+
+        $library       = self::loadPromptLibrary($config);
+        $hasDefault    = false;
+        $hasSwissmem   = false;
+        $defaultAdded  = false;
+        $swissmemAdded = false;
+
+        foreach ($library as $i => $row) {
+            $name = (string)($row['name'] ?? '');
+            if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
+                $library[$i]['content'] = self::DEFAULT_SYSTEM_PROMPT;
+                $hasDefault             = true;
+            }
+            if ($name === self::PROMPT_LIBRARY_SWISSMEM_NAME) {
+                $library[$i]['content'] = self::SWISSMEM_PRESET_PROMPT;
+                $hasSwissmem            = true;
+            }
+        }
+
+        if (!$hasDefault) {
+            $library[] = [
+                'id'      => bin2hex(random_bytes(8)),
+                'name'    => self::PROMPT_LIBRARY_SEED_NAME,
+                'content' => self::DEFAULT_SYSTEM_PROMPT,
+            ];
+            $hasDefault   = true;
+            $defaultAdded = true;
+        }
+
+        if (!$hasSwissmem) {
+            $library[] = [
+                'id'      => bin2hex(random_bytes(8)),
+                'name'    => self::PROMPT_LIBRARY_SWISSMEM_NAME,
+                'content' => self::SWISSMEM_PRESET_PROMPT,
+            ];
+            $hasSwissmem   = true;
+            $swissmemAdded = true;
+        }
+
+        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, self::orderPromptLibraryDefaultFirst($library));
+
+        return [
+            'default_updated'  => $hasDefault && !$defaultAdded,
+            'swissmem_updated' => $hasSwissmem && !$swissmemAdded,
+            'default_added'    => $defaultAdded,
+            'swissmem_added'   => $swissmemAdded,
+        ];
     }
 
     /**

@@ -447,6 +447,43 @@ final class SettingsController
         $this->redirectGeneral();
     }
 
+    public function restoreResearcherBuiltinPrompts(): void
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            $this->redirectGeneral();
+            return;
+        }
+        if (!CsrfToken::verifyRequest()) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $this->redirectGeneral();
+            return;
+        }
+
+        try {
+            $result = AiResearcherController::restoreBuiltinResearcherPrompts(
+                new SystemConfigRepository(getDbConnection()),
+            );
+            $parts = ['Restored built-in AI Researcher prompts for this desk.'];
+            if ($result['default_added'] || $result['swissmem_added']) {
+                $added = [];
+                if ($result['default_added']) {
+                    $added[] = 'Default';
+                }
+                if ($result['swissmem_added']) {
+                    $added[] = 'Swissmem';
+                }
+                $parts[] = 'Added missing library tab(s): ' . implode(', ', $added) . '.';
+            }
+            $parts[] = 'Other saved prompts in your library were not changed.';
+            $_SESSION['success'] = implode(' ', $parts);
+        } catch (\Throwable $e) {
+            error_log('Seismo settings_restore_researcher_builtin_prompts: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not restore built-in researcher prompts.';
+        }
+
+        $this->redirectGeneral();
+    }
+
     public function saveAdminPassword(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

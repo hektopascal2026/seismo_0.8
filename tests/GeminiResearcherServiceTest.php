@@ -19,14 +19,15 @@ final class GeminiResearcherServiceTest extends TestCase
     public function testResolveOutputTokenBudgetClampsToPracticalCap(): void
     {
         self::assertSame(8192, GeminiResearcherService::resolveOutputTokenBudget(15, 8192, 'gemini-3.5-flash'));
-        self::assertSame(49152, GeminiResearcherService::resolveOutputTokenBudget(15, 65536, 'gemini-3.5-flash'));
+        self::assertSame(65536, GeminiResearcherService::resolveOutputTokenBudget(15, 65536, 'gemini-3.5-flash'));
         self::assertSame(8192, GeminiResearcherService::resolveOutputTokenBudget(5, 8192, 'gemini-3.5-flash'));
-        self::assertSame(27512, GeminiResearcherService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
-        self::assertSame(49152, GeminiResearcherService::resolveOutputTokenBudget(1, 65536, 'gemini-3.5-flash'));
+        self::assertSame(28536, GeminiResearcherService::resolveOutputTokenBudget(6, 65536, 'gemini-3.5-flash'));
+        self::assertSame(65536, GeminiResearcherService::resolveOutputTokenBudget(1, 65536, 'gemini-3.5-flash'));
+        self::assertSame(10536, GeminiResearcherService::resolveOutputTokenBudget(2, 65536, 'gemini-3.5-flash'));
     }
 
     public function testResolveSelectionPassTokenBudgetIncludesReasoningHeadroom(): void
     {
-        self::assertSame(656, GeminiResearcherService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-3.5-flash'));
+        self::assertSame(1104, GeminiResearcherService::resolveSelectionPassTokenBudget(6, 8192, 'gemini-3.5-flash'));
     }
 }

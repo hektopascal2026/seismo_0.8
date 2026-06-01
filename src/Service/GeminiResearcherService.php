@@ -92,8 +92,8 @@ CONTRACT;
     /** Hard API output cap for Gemini 3.5 Flash (GA). */
     public const MODEL_OUTPUT_CAP_GEMINI_35_FLASH = 65536;
 
-    /** Practical prose cap per researcher (cost/latency), below model hard cap. */
-    public const BRIEFING_SUMMARY_OUTPUT_CAP = 49152;
+    /** Practical prose cap per researcher — aligned with Gemini 3.5 Flash hard cap. */
+    public const BRIEFING_SUMMARY_OUTPUT_CAP = 65536;
 
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -108,14 +108,20 @@ CONTRACT;
     /** Visible pass-2 tokens scaled per cited item (structured / legal blocks need more than one paragraph). */
     private const OUTPUT_TOKENS_PER_ITEM = 4500;
 
+    /** Reserved for title/headings outside the per-entry bullet budget. */
+    private const SUMMARY_FIXED_OVERHEAD_TOKENS = 1536;
+
     /** Pass-2 batched retry when a single call hits output limits. */
     private const SUMMARY_BATCH_SIZE = 2;
 
+    /** Skip monolithic pass 2 when this many entries are selected (batch size 2 from the start). */
+    private const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 8;
+
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
-    private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 24;
+    private const SELECTION_OUTPUT_TOKENS_PER_ITEM = 120;
 
-    private const SELECTION_REASONING_TOKEN_HEADROOM = 384;
+    private const SELECTION_REASONING_TOKEN_HEADROOM = 256;
 
     /** Gemini 3.5 {@see thinkingConfigForPhase()} levels (REST uses uppercase). */
     private const THINKING_LEVEL_SELECTION = 'LOW';
@@ -178,6 +184,11 @@ CONTRACT;
         return preg_match('/gemini-3[.-]5/i', $model) === 1;
     }
 
+    public static function usesGemini31Pro(string $model): bool
+    {
+        return preg_match('/gemini-3\.1-pro/i', $model) === 1;
+    }
+
     public static function modelHardOutputCapFor(string $model): int
     {
         if (self::usesGemini35Family($model)) {
@@ -224,23 +235,24 @@ CONTRACT;
         $configuredMax = max(256, min($hardCap, $configuredMax));
         $scaled        = $itemCount <= 1
             ? $practical
-            : 512 + max(1, $itemCount) * self::OUTPUT_TOKENS_PER_ITEM;
+            : self::SUMMARY_FIXED_OVERHEAD_TOKENS + max(1, $itemCount) * self::OUTPUT_TOKENS_PER_ITEM;
 
         return min($practical, $configuredMax, max(self::OUTPUT_TOKEN_FLOOR, $scaled));
     }
 
-    /** Pass 1 JSON envelope (IDs + optional selection_reasoning). */
+    /** Pass 1 JSON envelope (IDs + selection_reasoning). */
     public static function resolveSelectionPassTokenBudget(
         int $itemCount,
         int $configuredMax,
         string $model = self::DEFAULT_MODEL,
     ): int {
-        $hardCap = self::modelHardOutputCapFor($model);
-        $visible = self::SELECTION_OUTPUT_TOKENS_BASE
+        $hardCap       = self::modelHardOutputCapFor($model);
+        $configuredMax = max(512, min($hardCap, $configuredMax));
+        $visible       = self::SELECTION_OUTPUT_TOKENS_BASE
             + max(1, $itemCount) * self::SELECTION_OUTPUT_TOKENS_PER_ITEM
             + self::SELECTION_REASONING_TOKEN_HEADROOM;
 
-        return min($hardCap, max(512, $visible));
+        return min($configuredMax, max(512, $visible));
     }
 
     /**
@@ -630,6 +642,7 @@ CONTRACT;
         int $selectionTarget,
         string $apiKey,
         bool $batchLocal = false,
+        bool $allowEmptyKeys = false,
     ): array {
         $payload  = $this->buildSelectionPayload(
             $userSystemPrompt,
@@ -640,7 +653,7 @@ CONTRACT;
         );
         $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
 
-        return $this->parseSelectionResponse($response);
+        return $this->resolveSelectionPassKeys($response, $payload, $apiKey, $allowEmptyKeys);
     }
 
     /**
@@ -690,12 +703,17 @@ CONTRACT;
                     $jobs[0]['selectionTarget'],
                     $apiKey,
                     $jobs[0]['batchLocal'],
+                    true,
                 ),
             ];
 
         $merged = [];
         $seen   = [];
+        $emptyBatches = 0;
         foreach ($batchKeyLists as $keys) {
+            if ($keys === []) {
+                $emptyBatches++;
+            }
             foreach ($keys as $key) {
                 $normalized = strtolower(trim($key));
                 if ($normalized === '' || isset($seen[$normalized])) {
@@ -710,11 +728,19 @@ CONTRACT;
             'tournament_selection'      => true,
             'batched_selection'         => true,
             'selection_batches'         => $batchCount,
+            'selection_batches_empty'   => $emptyBatches,
             'selection_batch_size'      => $batchSize,
             'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
             'selection_parallel'        => $batchCount > 1,
             'selection_championship'    => false,
         ]);
+
+        if ($merged === []) {
+            throw GeminiResearcherException::invalidInput(
+                'Tournament selection found no entries matching your prompt in any batch. '
+                . 'Relax your criteria, widen the pool, or turn off tournament mode.',
+            );
+        }
 
         if (count($merged) <= $selectionTarget) {
             return $merged;
@@ -738,6 +764,7 @@ CONTRACT;
             $selectionTarget,
             $apiKey,
             false,
+            true,
         );
 
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
@@ -748,6 +775,12 @@ CONTRACT;
         if ($championKeys !== []) {
             return $this->finalizeSelectedKeys($championKeys, $selectionTarget);
         }
+
+        error_log(
+            'GeminiResearcherService: championship returned no used_entry_keys; '
+            . 'using tournament prelim order (' . count($merged) . ' finalists)'
+        );
+        $this->lastGenerationMeta['selection_championship_fallback'] = true;
 
         return array_slice($merged, 0, $selectionTarget);
     }
@@ -1007,6 +1040,30 @@ CONTRACT;
         int $effectiveCount,
         string $apiKey,
     ): GeminiResearcherResult {
+        if ($effectiveCount >= self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS) {
+            $batchSize = min(self::SUMMARY_BATCH_SIZE, $effectiveCount);
+            error_log(
+                'GeminiResearcherService: proactive batched pass 2 for ' . $effectiveCount
+                . ' cited item(s) (batch size ' . $batchSize . ')'
+            );
+            $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
+                'summary_proactive_batch' => true,
+                'summary_batch_size'      => $batchSize,
+            ]);
+
+            return $this->runBatchedSummaryPasses(
+                $userSystemPrompt,
+                $summaryEntries,
+                $scoresByKey,
+                $researcherMeta,
+                $fallbackXml,
+                $selectedKeys,
+                $itemCount,
+                $apiKey,
+                $batchSize,
+            );
+        }
+
         $summaryContext = $this->buildSummaryContextForKeys(
             $summaryEntries,
             $scoresByKey,
@@ -1260,7 +1317,11 @@ CONTRACT;
             'batched_summary'       => true,
             'summary_batches'       => $batchCount,
             'summary_batch_size'    => $batchSize,
-            'summary_output_tokens' => self::resolveOutputTokenBudget(1, $this->maxOutputTokens, $this->model),
+            'summary_output_tokens' => self::resolveOutputTokenBudget(
+                max(1, $batchSize),
+                $this->maxOutputTokens,
+                $this->model,
+            ),
         ]);
 
         return new GeminiResearcherResult($merged, $selectedKeys, true);
@@ -1291,16 +1352,20 @@ CONTRACT;
         $systemText = trim($userSystemPrompt) . "\n\n" . $envelope;
 
         if ($batchCount > 1 && !$includeFullResearcherIntro) {
-            $userText = 'Setze das Executive Researcher fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
-                . 'Wiederhole weder die Hauptüberschrift noch die Executive Summary. '
-                . 'Decke nur diese ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab: '
+            $userText = 'Setze das Briefing fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
+                . 'KEINE Hauptüberschrift (# …), KEINE Zusammenfassung, KEIN Radar/Ausblick. '
+                . 'Nur die Entwicklungs-Bullets unter ### 📌 für genau diese ' . $effectiveCount
+                . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge: '
                 . implode(', ', $selectedKeys) . '. '
                 . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
         } else {
-            $userText = 'Schreibe das vollständige Executive Researcher als plain Markdown. '
+            $userText = 'Schreibe das vollständige Briefing als plain Markdown. '
                 . 'Decke alle ' . $effectiveCount . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge ab. '
                 . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
-            if ($batchCount > 1) {
+            if ($batchCount > 1 && $includeFullResearcherIntro) {
+                $userText .= ' Teil 1 von ' . $batchCount . ': nur Überschrift (# …) und die Bullets für die obigen Keys'
+                    . ' — keine Zusammenfassung, kein Radar/Ausblick.';
+            } elseif ($batchCount > 1) {
                 $userText .= ' (Teil ' . $batchIndex . ' von ' . $batchCount . ' — nur die obigen Keys in diesem Aufruf.)';
             }
         }
