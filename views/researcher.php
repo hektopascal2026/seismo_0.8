@@ -232,9 +232,37 @@ $moduleOptions = [
                     </div>
                 </fieldset>
 
-                <!-- Step 3: AI Report Generation -->
+                <!-- Step 3: Pool -->
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
-                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: AI Report Generation</legend>
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 3: Pool</legend>
+
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
+                            <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
+                            Use Magnitu Snippets (Highly Recommended)
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 1.25rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            Highly recommended. Instead of sending full items, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full items are sent, but you may exceed the memory cap.
+                        </p>
+
+                        <div class="admin-form-field" style="margin-bottom: 0;">
+                            <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum items sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
+                            <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
+                                <input type="range" id="researcher_max_context_entries" name="max_context_entries"
+                                       min="<?= (int)$maxContextMin ?>" max="500"
+                                       value="<?= (int)$maxContextEntries ?>"
+                                       class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
+                            </div>
+                            <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
+                                Caps the number of qualified items sent to the AI. If you enabled Magnitu Snippets above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
+                            </p>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- Step 4: AI Report Generation -->
+                <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
+                    <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem solid #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Step 4: AI Report Generation</legend>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label for="researcher_item_count" style="margin-bottom: 0.25rem; display:block;">Number of featured stories in report</label>
@@ -250,27 +278,6 @@ $moduleOptions = [
 
                     <div class="admin-form-field" id="researcher-prompt-field" style="margin-bottom: 1.5rem;">
                         <div id="researcher-prompt-panel">
-                            <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
-                                <input type="checkbox" id="researcher_use_recipe_snippets" name="use_recipe_snippets" value="1">
-                                Use Magnitu Snippets (Highly Recommended)
-                            </label>
-                            <p class="admin-intro" style="margin:0 0 1.25rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                                Highly recommended. Instead of sending full items, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full items are sent, but you may exceed the memory cap.
-                            </p>
-
-                            <div class="admin-form-field" style="margin-bottom: 1.5rem;">
-                                <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum items sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
-                                <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
-                                    <input type="range" id="researcher_max_context_entries" name="max_context_entries"
-                                           min="<?= (int)$maxContextMin ?>" max="500"
-                                           value="<?= (int)$maxContextEntries ?>"
-                                           class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
-                                </div>
-                                <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
-                                    Caps the number of qualified items sent to the AI. If you enabled **Magnitu Snippets** above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
-                                </p>
-                            </div>
-
                             <label for="researcher_system_prompt" style="display:block; margin-bottom:0.35rem; font-weight: 600;">System prompt instructions</label>
                         <div class="prompt-tabs" id="prompt-tabs" role="tablist" aria-label="Saved prompts">
                             <?php foreach ($savedPrompts as $i => $sp): ?>
