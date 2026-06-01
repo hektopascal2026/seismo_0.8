@@ -897,17 +897,14 @@ $moduleOptions = [
             var editingLibrary = activePromptId !== null;
             if (editingLibrary) {
                 savePromptBtn.disabled = false;
+                savePromptBtn.hidden = false;
                 savePromptBtn.textContent = 'Save to library';
                 savePromptBtn.title = 'Add the current textarea as a new named prompt in the library';
                 return;
             }
-            savePromptBtn.disabled = false;
-            savePromptBtn.textContent = defaultPromptStored
-                ? instanceUpdatePromptLabel
-                : instanceSavePromptLabel;
-            savePromptBtn.title = defaultPromptStored
-                ? 'Update the default prompt for this instance'
-                : 'Save as the default prompt for this instance';
+            // The default prompt cannot be overwritten!
+            savePromptBtn.disabled = true;
+            savePromptBtn.hidden = true;
         }
 
         function syncPromptSaveButtons() {
@@ -983,16 +980,17 @@ $moduleOptions = [
                 label.textContent = p.name;
                 tab.appendChild(label);
 
-                var del = document.createElement('button');
-                del.type = 'button';
-                del.className = 'prompt-tab-delete';
-                del.setAttribute('data-id', p.id);
-                del.setAttribute('aria-label', 'Delete prompt ' + p.name);
-                del.setAttribute('title', 'Delete');
-                del.textContent = '\u00d7';
-
                 wrap.appendChild(tab);
-                wrap.appendChild(del);
+                if (p.name !== PROMPT_TAB_DEFAULT_NAME) {
+                    var del = document.createElement('button');
+                    del.type = 'button';
+                    del.className = 'prompt-tab-delete';
+                    del.setAttribute('data-id', p.id);
+                    del.setAttribute('aria-label', 'Delete prompt ' + p.name);
+                    del.setAttribute('title', 'Delete');
+                    del.textContent = '\u00d7';
+                    wrap.appendChild(del);
+                }
                 promptTabsEl.appendChild(wrap);
             });
             bindPromptTabEvents();

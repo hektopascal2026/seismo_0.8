@@ -48,41 +48,42 @@ final class AiResearcherController
 
     public const DEFAULT_SYSTEM_PROMPT = <<<'PROMPT'
 SYSTEM INSTRUCTIONS:
-Du bist ein leitender politischer und wirtschaftlicher Analyst in der Schweiz. Deine Zielgruppe sind Entscheidungsträger (CEOs, Verwaltungsräte, Verbandskader), die unter Informationsüberflutung leiden. Du lieferst strategische "Intelligence" und filterst das Tagesrauschen rigoros.
+Du bist ein leitender politischer und wirtschaftlicher Intelligence-Analyst in der Schweiz. Deine Aufgabe ist es, für C-Level-Entscheider (CEOs, Verwaltungsräte) die absolut wichtigsten und strategisch relevantesten Signale aus den vorliegenden Daten herauszufiltern und kompakt aufzubereiten.
 
-Dein Schreibstil folgt strikt dem "Economist-Benchmark":
-- Analytische Eleganz: Schreibe prägnant, aber intellektuell anregend in geschliffenem Deutsch.
-- Das "Delta" elegant einweben: Nenne den tagesaktuellen Trigger zwingend, aber natürlich (z.B. "Ein neuer Bericht der IEA warnt...", "Der Bundesrat hat am Mittwoch..."). VERBOTEN sind mechanische Phrasen wie "Heute wird bekannt, dass..." oder "Heute zeigt sich...".
-- Angelsächsischer Ansatz: Beende die künstliche Trennung von Wirtschaft und Politik.
-- Strikte Relevanz (Triage): Ignoriere reine Konsum-News, Human-Interest, Sport oder Kriminal-Kuriositäten. Fokussiere dich AUSSCHLIESSLICH auf harte Makroökonomie, Regulierung, Geopolitik und systemische Marktverschiebungen.
-- Harter Impact statt Binsenweisheiten: Schreibe niemals "Unternehmen müssen das beobachten" oder "Entscheider müssen reagieren". Nenne stattdessen konkrete Folgen: Steigende Compliance-Kosten, Fachkräftemangel, Lieferketten-Risiken oder neue Marktbarrieren.
+Dein Schreibstil folgt strikt dem "Economist-Benchmark": Extrem dicht, analytisch, nüchtern und auf den Punkt. Keine Floskeln.
+
+DEINE KERN-LOGIK (TRIAGE & RELEVANZ):
+In ENTRIES_DATA befinden sich diverse Einträge (Feeds, Medien-Artikel, Scraper-News, E-Mails, Parlaments- und Gesetzgebungs-Updates).
+- Bewerte alle Einträge rein nach ihrer strategischen Tragweite, ihrem systemischen Risiko und ihrer Relevanz für Schweizer Unternehmen.
+- Ignoriere irrelevantes Tagesrauschen, weiche Themen oder reine PR-Meldungen.
+- Wähle die vom System vorgegebene Anzahl an Einträgen aus, die den höchsten Impact auf den Schweizer Wirtschaftsstandort und hiesige Unternehmen haben.
 
 SYSTEM-ABLAUF (ZWEI PHASEN — ZWINGEND EINHALTEN):
 
-PHASE 1 — AUSWAHL (nur JSON, kein Researcher-Text):
-- Wähle aus ENTRIES_DATA die vom USER PROMPT und "Number of items" geforderte Anzahl an Einträgen.
-- Priorisiere harte Makro-, Regulierungs- und Geopolitik-Signale; streiche weiche Themen.
-- Gib nur JSON zurück: used_entry_keys (Reihenfolge = spätere Researcher-Reihenfolge) und optional selection_reasoning (kurz: warum diese IDs, warum andere ausgeschlossen).
-- Schreibe in Phase 1 KEIN Markdown, keine Überschriften, kein Executive Researcher.
+PHASE 1 — AUSWAHL (nur JSON):
+- Wähle aus ENTRIES_DATA die vom USER PROMPT und "Number of items" geforderte Anzahl der wichtigsten und relevantesten Einträge.
+- Gib nur valides JSON zurück: used_entry_keys (Reihenfolge = spätere Briefing-Reihenfolge) und selection_reasoning (kurze Begründung pro ID: Welches strategische Signal macht diesen Eintrag heute wichtiger als andere).
+- Kein Markdown, keine Überschriften, kein Analysten-Text in Phase 1.
 
-PHASE 2 — BRIEFING (nur Markdown für die bereits gewählten SELECTED_ENTRY_KEYS):
+PHASE 2 — BRIEFING (nur Markdown für SELECTED_ENTRY_KEYS):
+- Du siehst nur die ausgewählten Volltexte.
 - Decke jeden Eintrag in SELECTED_ENTRY_KEYS genau einmal ab, in dieser Reihenfolge — ein Bullet pro Eintrag.
-- Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. (feed_item:123). Das ist Pflicht neben dem lesbaren Quellennamen.
-- Kein JSON, kein Meta-Chat ("Hier ist das Researcher...").
+- Zitiere jeden Eintrag zusätzlich mit der System-ID in Klammern, z.B. *(Quelle: [Name der Quelle])* (entry_type:entry_id).
+- Erfinde keine Fakten oder externen Quellen, die nicht in SELECTED_ENTRIES_DATA stehen.
 
 Verwende in Phase 2 ZWINGEND folgende Struktur:
 
-# 📊 Executive Researcher: (ein kurzer prägnanter Titel, der klar macht, warum man das Researcher lesen soll)
+# 📊 Executive Briefing: [Prägnanter, strategischer Titel]
 
-**Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der makroökonomische oder politische rote Faden? VERBOTEN: Meta-Einleitungen wie "Die heutigen Meldungen zeichnen ein Bild...". Direkter Einstieg in die Analyse.)
+**Zusammenfassung:** (Ein flüssiger Absatz, 3-4 Sätze. Was ist der makroökonomische, regulatorische oder politische rote Faden der ausgewählten Top-Signale? Direkter Einstieg in die Analyse, keine Meta-Einleitungen.)
 
 ### 📌 Die wichtigsten Entwicklungen
 
-* **[Actionable Headline]:** [3-4 Sätze: 1. Konkreter Auslöser. 2. Politisch-wirtschaftliche Einordnung. 3. Harter Impact auf Schweizer Unternehmen/Werkplatz. Flüssige Übergänge.] *(Quelle: [Name der Quelle])* (entry_type:entry_id)
-* (Pro SELECTED_ENTRY_KEYS-Eintrag genau ein Bullet; nach jedem Bullet eine Leerzeile.)
+* **[Actionable Headline]:** [3-4 Sätze: 1. Konkreter Auslöser/Fakt aus der Quelle. 2. Politisch-wirtschaftliche Einordnung. 3. Harter Impact auf Schweizer Unternehmen / den Werkplatz.] *(Quelle: [Name der Quelle])* (entry_type:entry_id)
+* (Pro SELECTED_ENTRY_KEYS-Eintrag ein Bullet; nach jedem Bullet eine Leerzeile.)
 
 ### 🔭 Radar / Ausblick
-(2-3 Sätze zu einem strategischen Trend aus den gewählten Daten — z.B. EU-Spillover, geopolitischer Shift. Keine Kuriositäten; nur CEO-relevante Planungsthemen.)
+(2-3 Sätze zu einem strategischen Trend aus den gewählten Daten — z. B. regulatorischer Shift, EU-Spillover, Energie/Zins-Entwicklung. Harte CEO-Warnung und konkretes Planungsthema, kein Makro-Bla-Bla.)
 
 Inhaltliche Regeln (beide Phasen):
 - Erfinde keine Fakten oder Quellen.
@@ -551,13 +552,7 @@ PROMPT;
         }
 
         try {
-            $systemPrompt = $this->parseSystemPrompt($_POST['system_prompt'] ?? null);
-            $config       = new SystemConfigRepository(getDbConnection());
-            $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, $systemPrompt);
-            $library = self::loadPromptLibrary($config);
-            $library = self::upsertDefaultLibraryEntry($library, $systemPrompt);
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
-            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+            throw new \InvalidArgumentException('The default prompt cannot be overwritten.');
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
@@ -595,6 +590,11 @@ PROMPT;
             $library = self::loadPromptLibrary($config);
             $id      = trim((string)($_POST['id'] ?? ''));
             if ($id !== '') {
+                foreach ($library as $row) {
+                    if (($row['id'] ?? '') === $id && ($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
+                        throw new \InvalidArgumentException('The default prompt cannot be overwritten.');
+                    }
+                }
                 $library = self::updatePromptLibraryEntry($library, $id, $content);
                 $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
                 echo json_encode(['ok' => true, 'prompts' => $library], JSON_UNESCAPED_UNICODE);
@@ -603,6 +603,9 @@ PROMPT;
             }
 
             $name = $this->parsePromptLibraryName($_POST['name'] ?? null);
+            if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
+                throw new \InvalidArgumentException('Cannot create or update a prompt with the reserved name "' . self::PROMPT_LIBRARY_SEED_NAME . '".');
+            }
             if (count($library) >= self::MAX_PROMPT_LIBRARY) {
                 throw new \InvalidArgumentException(
                     'Prompt library is full (maximum ' . self::MAX_PROMPT_LIBRARY . ' prompts). Delete one first.'
@@ -653,6 +656,18 @@ PROMPT;
             }
             $config  = new SystemConfigRepository(getDbConnection());
             $library = self::loadPromptLibrary($config);
+
+            $toDelete = null;
+            foreach ($library as $row) {
+                if (($row['id'] ?? '') === $id) {
+                    $toDelete = $row;
+                    break;
+                }
+            }
+            if ($toDelete !== null && ($toDelete['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
+                throw new \InvalidArgumentException('The default prompt cannot be deleted.');
+            }
+
             $before  = count($library);
             $library = array_values(array_filter(
                 $library,
@@ -680,13 +695,17 @@ PROMPT;
         SystemConfigRepository $config,
         string $systemPrompt,
     ): array {
+        // Enforce the new DEFAULT_SYSTEM_PROMPT in the system_config
+        $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, self::DEFAULT_SYSTEM_PROMPT);
+
         $library = self::loadPromptLibrary($config);
 
         $hasDefault = false;
         $hasSwissmem = false;
-        foreach ($library as $row) {
+        foreach ($library as $i => $row) {
             $name = $row['name'] ?? '';
             if ($name === self::PROMPT_LIBRARY_SEED_NAME) {
+                $library[$i]['content'] = self::DEFAULT_SYSTEM_PROMPT;
                 $hasDefault = true;
             }
             if ($name === 'Swissmem') {
@@ -694,14 +713,12 @@ PROMPT;
             }
         }
 
-        $dirty = false;
         if (!$hasDefault) {
             $library[] = [
                 'id'      => bin2hex(random_bytes(8)),
                 'name'    => self::PROMPT_LIBRARY_SEED_NAME,
-                'content' => $systemPrompt,
+                'content' => self::DEFAULT_SYSTEM_PROMPT,
             ];
-            $dirty = true;
         }
 
         if (!$hasSwissmem) {
@@ -710,12 +727,24 @@ PROMPT;
                 'name'    => 'Swissmem',
                 'content' => self::SWISSMEM_PRESET_PROMPT,
             ];
-            $dirty = true;
         }
 
-        if ($dirty) {
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+        // Guarantee Default is leftmost
+        $ordered = [];
+        $defaultEntry = null;
+        foreach ($library as $row) {
+            if (($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
+                $defaultEntry = $row;
+            } else {
+                $ordered[] = $row;
+            }
         }
+        if ($defaultEntry !== null) {
+            array_unshift($ordered, $defaultEntry);
+        }
+        $library = $ordered;
+
+        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
 
         return $library;
     }
@@ -748,7 +777,21 @@ PROMPT;
             $out[] = ['id' => $id, 'name' => $name, 'content' => $content];
         }
 
-        return $out;
+        // Guarantee Default is leftmost
+        $ordered = [];
+        $defaultEntry = null;
+        foreach ($out as $row) {
+            if (($row['name'] ?? '') === self::PROMPT_LIBRARY_SEED_NAME) {
+                $defaultEntry = $row;
+            } else {
+                $ordered[] = $row;
+            }
+        }
+        if ($defaultEntry !== null) {
+            array_unshift($ordered, $defaultEntry);
+        }
+
+        return $ordered;
     }
 
     /**
