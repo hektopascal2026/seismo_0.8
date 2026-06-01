@@ -51,7 +51,7 @@ final class EntryRepository
     ];
 
     /** Max body characters loaded into PHP for dashboard cards (emails + feeds). */
-    private const TIMELINE_BODY_CHARS = 2000;
+    private const TIMELINE_BODY_CHARS = 10000;
 
     /**
      * Explicit feed_items column list for JOIN queries — never `fi.*` so joined
