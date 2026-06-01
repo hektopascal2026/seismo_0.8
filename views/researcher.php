@@ -909,7 +909,11 @@ $moduleOptions = [
                 if (toggleAdvancedBtnWrap) toggleAdvancedBtnWrap.style.display = 'none';
                 if (advancedWrapper) advancedWrapper.style.display = 'none';
                 if (researcherGenerateBtn) researcherGenerateBtn.style.display = 'none';
-                if (researcherSavePromptBtn) researcherSavePromptBtn.style.display = 'none';
+                if (researcherSavePromptBtn) {
+                    researcherSavePromptBtn.disabled = true;
+                    researcherSavePromptBtn.hidden = true;
+                    researcherSavePromptBtn.style.setProperty('display', 'none', 'important');
+                }
                 if (savePromptLibraryBtn) {
                     savePromptLibraryBtn.style.display = '';
                     savePromptLibraryBtn.textContent = 'Save to library';
@@ -988,7 +992,7 @@ $moduleOptions = [
             if (researcherPromptView === 'helper') {
                 savePromptBtn.disabled = true;
                 savePromptBtn.hidden = true;
-                savePromptBtn.style.display = 'none';
+                savePromptBtn.style.setProperty('display', 'none', 'important');
                 return;
             }
             var editingLibrary = activePromptId !== null;
