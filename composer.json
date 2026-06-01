@@ -1,6 +1,6 @@
 {
     "name": "hektopascal/seismo",
-    "description": "Seismo 0.6 — legislation / feed monitor",
+    "description": "Seismo 0.8 — legislation / feed monitor",
     "require": {
         "php": ">=8.1",
         "easyrdf/easyrdf": "^1.1",
