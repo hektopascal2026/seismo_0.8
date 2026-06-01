@@ -203,14 +203,7 @@ $moduleOptions = [
                         <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">How far back should we search for news and updates?</p>
                     </div>
 
-                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
-                        <label for="researcher_limit" style="margin-bottom: 0.25rem; display:block;">Database fetch limit: <span id="researcher_limit_val" style="font-weight:bold;"><?= (int)$defaultLimit ?></span> articles per source (Max: <?= (int)$maxLimit ?>)</label>
-                        <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
-                            <input type="range" id="researcher_limit" name="limit" class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;"
-                                   min="5" max="<?= (int)$maxLimit ?>" step="5" value="<?= (int)$defaultLimit ?>">
-                        </div>
-                        <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;">Controls the size of the initial candidate pool loaded from each database table. From this pool, Seismo will filter and select the highest scoring articles to send to the AI.</p>
-                    </div>
+                    <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 </fieldset>
 
                 <!-- Step 2: Relevance & Filtering -->
@@ -234,7 +227,7 @@ $moduleOptions = [
                             Bypass relevance scoring (expert mode)
                         </label>
                         <p class="admin-intro" style="margin:-0.25rem 0 0 1.5rem; font-size:0.8125rem; opacity:0.8;" id="researcher-disregard-magnitu-hint" hidden>
-                            Bypasses our smart classification filters entirely. The AI will receive articles purely in chronological order, regardless of their priority.
+                            Bypasses our smart classification filters entirely. The AI will receive items purely in chronological order, regardless of their priority.
                         </p>
                     </div>
                 </fieldset>
@@ -262,11 +255,11 @@ $moduleOptions = [
                                 Use Magnitu Snippets (Highly Recommended)
                             </label>
                             <p class="admin-intro" style="margin:0 0 1.25rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                                Highly recommended. Instead of sending full articles, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full articles are sent, but you may exceed the memory cap.
+                                Highly recommended. Instead of sending full items, this extracts exactly 200 words surrounding the high-impact keywords that triggered the classification. If you choose this, the AI can scan vast quantities of news without running out of memory. If you uncheck it, full items are sent, but you may exceed the memory cap.
                             </p>
 
                             <div class="admin-form-field" style="margin-bottom: 1.5rem;">
-                                <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum articles sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
+                                <label for="researcher_max_context_entries" style="margin-bottom: 0.25rem; display:block;">Maximum items sent to AI: <span id="researcher_max_val" style="font-weight:bold;"><?= (int)$maxContextEntries ?></span></label>
                                 <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.25rem;">
                                     <input type="range" id="researcher_max_context_entries" name="max_context_entries"
                                            min="<?= (int)$maxContextMin ?>" max="500"
@@ -274,7 +267,7 @@ $moduleOptions = [
                                            class="search-input" style="flex-grow:1; max-width:20rem; padding: 0.25rem 0;">
                                 </div>
                                 <p class="admin-intro" style="margin:0; font-size:0.8125rem; opacity:0.85;" id="max-context-entries-help">
-                                    Caps the number of qualified articles sent to the AI. If you enabled **Magnitu Snippets** above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
+                                    Caps the number of qualified items sent to the AI. If you enabled **Magnitu Snippets** above, you can safely drag this slider up to 500 to scan massive datasets. Without snippets, keep this under 100 to prevent memory failures.
                                 </p>
                             </div>
 
