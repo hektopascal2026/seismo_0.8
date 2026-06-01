@@ -2421,7 +2421,9 @@ textarea.search-input.setup-code-preview {
     justify-content: space-between;
     gap: 0.625rem;
     align-items: center;
-    margin-top: 0.25rem;
+    margin-top: 0.5rem;
+    padding-top: 0.625rem;
+    border-top: 0.0625rem dashed #dddddd;
 }
 
 .entry-meta-right {
