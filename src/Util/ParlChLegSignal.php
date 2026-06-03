@@ -108,25 +108,32 @@ final class ParlChLegSignal
      */
     public static function canonicalFeedAt(array $meta, string $signal, ?string $existingCreatedAt): string
     {
+        $now = gmdate('Y-m-d H:i:s');
+        $feedAt = null;
+
         if ($signal === self::SIGNAL_ANTWORT_BR) {
             $dateOnly = trim((string)($meta['br_response_date'] ?? ''));
             if (self::isDateOnly($dateOnly)) {
-                return $dateOnly . ' 12:00:00';
+                $feedAt = $dateOnly . ' 12:00:00';
             }
         }
-        if ($signal === self::SIGNAL_NEW) {
+        if ($signal === self::SIGNAL_NEW && $feedAt === null) {
             $dateOnly = trim((string)($meta['submission_date'] ?? ''));
             if (self::isDateOnly($dateOnly)) {
-                return $dateOnly . ' 12:00:00';
+                $feedAt = $dateOnly . ' 12:00:00';
             }
         }
 
-        $created = trim((string)$existingCreatedAt);
-        if ($created !== '') {
-            return $created;
+        if ($feedAt === null) {
+            $created = trim((string)$existingCreatedAt);
+            $feedAt = $created !== '' ? $created : $now;
         }
 
-        return gmdate('Y-m-d H:i:s');
+        if ($feedAt > $now) {
+            return $now;
+        }
+
+        return $feedAt;
     }
 
     private static function isDateOnly(string $value): bool
