@@ -172,8 +172,9 @@ final class TimelineEntryDatetime
     public static function feedItemUnix(array $row): int
     {
         $raw = self::feedItemStoredDatetime($row);
-
-        return $raw !== null ? self::storedUtcToUnix($raw) : 0;
+        $unix = $raw !== null ? self::storedUtcToUnix($raw) : 0;
+        $ingested = trim((string)($row['cached_at'] ?? ''));
+        return self::capToIngestionTime($unix, $ingested);
     }
 
     /**
@@ -181,9 +182,12 @@ final class TimelineEntryDatetime
      */
     public static function formatFeedItemDatetime(array $row, string $format = self::CARD_FORMAT_DATETIME): string
     {
-        $raw = self::feedItemStoredDatetime($row);
-
-        return $raw !== null ? self::formatStoredUtcDatetime($raw, $format) : '';
+        $unix = self::feedItemUnix($row);
+        if ($unix <= 0) {
+            return '';
+        }
+        $tz = self::viewTimezone();
+        return (new \DateTimeImmutable('@' . $unix))->setTimezone($tz)->format($format);
     }
 
     /**
@@ -207,8 +211,9 @@ final class TimelineEntryDatetime
     public static function emailUnix(array $row): int
     {
         $raw = self::emailStoredDatetime($row);
-
-        return $raw !== null ? self::storedUtcToUnix($raw) : 0;
+        $unix = $raw !== null ? self::storedUtcToUnix($raw) : 0;
+        $ingested = trim((string)($row['created_at'] ?? ''));
+        return self::capToIngestionTime($unix, $ingested);
     }
 
     /**
@@ -216,9 +221,12 @@ final class TimelineEntryDatetime
      */
     public static function formatEmailDatetime(array $row, string $format = self::CARD_FORMAT_DATETIME): string
     {
-        $raw = self::emailStoredDatetime($row);
-
-        return $raw !== null ? self::formatStoredUtcDatetime($raw, $format) : '';
+        $unix = self::emailUnix($row);
+        if ($unix <= 0) {
+            return '';
+        }
+        $tz = self::viewTimezone();
+        return (new \DateTimeImmutable('@' . $unix))->setTimezone($tz)->format($format);
     }
 
     public static function isDateOnlyString(?string $value): bool
@@ -281,7 +289,9 @@ final class TimelineEntryDatetime
      */
     public static function lexItemUnix(array $row): int
     {
-        return self::unixForOfficialDateOrIngestion($row, 'document_date');
+        $unix = self::unixForOfficialDateOrIngestion($row, 'document_date');
+        $ingested = trim((string)($row['created_at'] ?? ''));
+        return self::capToIngestionTime($unix, $ingested);
     }
 
     /**
@@ -314,18 +324,19 @@ final class TimelineEntryDatetime
     public static function calendarEventUnix(array $row): int
     {
         $feedUnix = self::calendarEventLegFeedUnix($row);
+        $ingested = trim((string)($row['created_at'] ?? ''));
         if ($feedUnix > 0) {
-            return $feedUnix;
+            return self::capToIngestionTime($feedUnix, $ingested);
         }
 
         // Mirror {@see CalendarEventRepository::legFeedAtOrderExpression()}:
         // COALESCE(leg_feed_at, created_at) — not event_date when leg_feed_at is absent.
-        $created = trim((string)($row['created_at'] ?? ''));
-        if ($created !== '') {
-            return self::storedUtcToUnix($created);
+        if ($ingested !== '') {
+            return self::storedUtcToUnix($ingested);
         }
 
-        return self::unixForOfficialDateOrIngestion($row, 'event_date');
+        $unix = self::unixForOfficialDateOrIngestion($row, 'event_date');
+        return self::capToIngestionTime($unix, $ingested);
     }
 
     /**
@@ -425,5 +436,17 @@ final class TimelineEntryDatetime
         }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private static function capToIngestionTime(int $unix, ?string $ingestionStored): int
+    {
+        if ($unix <= 0) {
+            return 0;
+        }
+        $ingestionUnix = self::storedUtcToUnix($ingestionStored);
+        if ($ingestionUnix > 0 && $unix > $ingestionUnix) {
+            return $ingestionUnix;
+        }
+        return $unix;
     }
 }

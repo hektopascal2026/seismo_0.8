@@ -117,4 +117,42 @@ final class TimelineEntryDatetimeTest extends TestCase
 
         self::assertSame('21.05.2026 11:00', $wrapper['clock_label']);
     }
+
+    public function testFutureFeedItemIsCappedAtCachedAt(): void
+    {
+        $row = [
+            'published_date' => '2026-06-12 09:00:00', // future
+            'cached_at'      => '2026-06-03 08:30:00', // ingestion (today)
+        ];
+
+        // The Unix timestamp should resolve to cached_at, not published_date
+        self::assertSame(
+            TimelineEntryDatetime::storedUtcToUnix('2026-06-03 08:30:00'),
+            TimelineEntryDatetime::feedItemUnix($row)
+        );
+
+        // The clock label should format to Zurich time for cached_at (08:30 UTC -> 10:30 Zurich)
+        self::assertSame('03.06.2026 10:30', TimelineEntryDatetime::formatFeedItemDatetime($row));
+    }
+
+    public function testFutureCalendarEventIsCappedAtCreatedAt(): void
+    {
+        $row = [
+            'event_date'  => '2026-06-12',
+            'created_at'  => '2026-06-03 08:57:00', // ingestion (today)
+            'metadata'    => json_encode([
+                'leg_signal'  => 'antwort_br',
+                'leg_feed_at' => '2026-06-03 12:00:00', // future compared to created_at
+            ], JSON_THROW_ON_ERROR),
+        ];
+
+        // The Unix timestamp should resolve to created_at
+        self::assertSame(
+            TimelineEntryDatetime::storedUtcToUnix('2026-06-03 08:57:00'),
+            TimelineEntryDatetime::calendarEventUnix($row)
+        );
+
+        // The clock label should format to Zurich time for created_at (08:57 UTC -> 10:57 Zurich)
+        self::assertSame('03.06.2026 10:57', TimelineEntryDatetime::formatCalendarEventDate($row));
+    }
 }
