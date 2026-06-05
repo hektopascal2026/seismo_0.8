@@ -902,8 +902,19 @@ textarea.search-input.setup-code-preview {
     gap: 0.625rem;
 }
 
+.entry-content.entry-preview {
+    display: block;
+    text-align: start;
+}
+
+.entry-preview-text {
+    display: inline;
+}
+
 .entry-link--after-preview {
-    margin-inline-start: 0.25rem;
+    display: inline;
+    margin-inline-start: 0.35rem;
+    white-space: nowrap;
 }
 
 .entry-meta-mono {

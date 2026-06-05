@@ -562,6 +562,61 @@ if (!function_exists('seismo_format_email_body_for_display')) {
     }
 }
 
+if (!function_exists('seismo_email_plain_body_for_display')) {
+    /**
+     * Plain-text body for dashboard email cards (never HTML markup).
+     *
+     * @param array<string, mixed> $email
+     */
+    function seismo_email_plain_body_for_display(array $email): string
+    {
+        $body = trim((string)($email['text_body'] ?? $email['body_text'] ?? ''));
+        if ($body === '') {
+            $body = (string)($email['html_body'] ?? $email['body_html'] ?? '');
+        }
+        $body = html_entity_decode(strip_tags($body), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim($body);
+    }
+}
+
+if (!function_exists('seismo_trim_email_preview_for_webview_link')) {
+    /**
+     * Drop trailing read-more / web-view boilerplate when a separate link is shown.
+     */
+    function seismo_trim_email_preview_for_webview_link(string $preview): string
+    {
+        $preview = trim(html_entity_decode(strip_tags($preview), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($preview === '') {
+            return '';
+        }
+        $preview = trim(preg_replace('/\s+/u', ' ', $preview) ?? '');
+        $webviewPhrases = [
+            'view in browser',
+            'view this email in your browser',
+            'im browser ansehen',
+            'im browser öffnen',
+            'online lesen',
+            'webansicht',
+            'online version',
+            'version en ligne',
+        ];
+        $phrasePattern = implode('|', array_map(static fn (string $p): string => preg_quote($p, '/'), $webviewPhrases));
+        $preview = trim((string) preg_replace(
+            '/\s*(\.{2,}|…)+\s*(?:' . $phrasePattern . ').*$/iu',
+            '',
+            $preview,
+        ));
+        foreach ($webviewPhrases as $phrase) {
+            $pattern = '/\s*' . preg_quote($phrase, '/') . '.*$/iu';
+            $preview = trim((string) preg_replace($pattern, '', $preview));
+        }
+        $preview = trim((string) preg_replace('/\s*(\.{2,}|…)+\s*$/u', '', $preview));
+
+        return trim((string) preg_replace('/\s*https?:\/\/\S+\s*$/iu', '', $preview));
+    }
+}
+
 if (!function_exists('seismo_strip_email_listing_boilerplate')) {
     /**
      * Remove fixed “News Service Bund … | date … / … , place , date -” listing lines

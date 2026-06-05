@@ -339,10 +339,7 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                             }
                             $displayTitle = seismo_email_display_title($email);
 
-                            $body = (string)($email['text_body'] ?? $email['body_text'] ?? '');
-                            if ($body === '') {
-                                $body = strip_tags((string)($email['html_body'] ?? $email['body_html'] ?? ''));
-                            }
+                            $body = seismo_email_plain_body_for_display($email);
                             $body = seismo_strip_email_listing_boilerplate(
                                 $body,
                                 $fromEmail,
@@ -370,6 +367,9 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                 $hasMore = false;
                             }
                             $webViewUrl = seismo_email_web_view_url($email);
+                            if ($webViewUrl !== null && $bodyPreview !== '') {
+                                $bodyPreview = seismo_trim_email_preview_for_webview_link($bodyPreview);
+                            }
                             if ($renderNestedDigestStories && $digestChildCount > 0) {
                                 foreach ($digestChildren as $digestChildRow) {
                                     $digestChildMeta = $digestChildRow['metadata'] ?? null;
@@ -417,17 +417,23 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                 <?php endif; ?>
                             </h3>
                             <div class="entry-content entry-preview">
-                                <?php 
-                                    if ($bodyPreview === '' && $body === '') {
-                                        echo '<span class="entry-muted">(No body text)</span>';
-                                    } elseif (!empty($searchQuery)) {
-                                        echo seismo_highlight_search_term($bodyPreview, $searchQuery);
-                                    } else {
-                                        echo htmlspecialchars($bodyPreview);
-                                    }
-                                ?>
-                                <?php if ($webViewUrl !== null): ?>
-                                    <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                <?php if ($bodyPreview === '' && $body === ''): ?>
+                                    <span class="entry-muted">(No body text)</span>
+                                    <?php if ($webViewUrl !== null): ?>
+                                        <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <?php if ($bodyPreview !== ''): ?>
+                                        <span class="entry-preview-text"><?php
+                                            if (!empty($searchQuery)) {
+                                                echo seismo_highlight_search_term($bodyPreview, $searchQuery);
+                                            } else {
+                                                echo htmlspecialchars($bodyPreview);
+                                            }
+                                        ?></span><?php if ($webViewUrl !== null): ?> <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a><?php endif; ?>
+                                    <?php elseif ($webViewUrl !== null): ?>
+                                        <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                             <?php if ($renderNestedDigestStories && !empty($email['child_stories'])): ?>
@@ -439,16 +445,13 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                             $childScoreBadgeClass = $childRelScore !== null ? \Seismo\Core\MagnituScoreBands::badgeCssClass($childRelScore) : '';
                                             
                                             $childTitle = trim((string)($child['derived_title'] ?? $child['subject'] ?? ''));
-                                            $childBody = (string)($child['text_body'] ?? $child['body_text'] ?? '');
-                                            if ($childBody === '') {
-                                                $childBody = strip_tags((string)($child['html_body'] ?? $child['body_html'] ?? ''));
-                                            }
+                                            $childBody = seismo_email_plain_body_for_display($child);
                                             $childBodyDisplay = $childBody !== '' ? seismo_format_email_body_for_display($childBody) : '';
                                             if ($childBodyDisplay === '') {
                                                 $childPreview = '';
                                                 $childHasMore = false;
                                             } else {
-                                                $childPreviewFlat = trim(preg_replace('/\s+/', ' ', $childBodyDisplay) ?? '');
+                                                $childPreviewFlat = trim(preg_replace('/\s+/u', ' ', $childBodyDisplay) ?? '');
                                                 $childPreview = mb_substr($childPreviewFlat, 0, 200);
                                                 if (mb_strlen($childPreviewFlat) > 200) {
                                                     $childPreview .= '...';
