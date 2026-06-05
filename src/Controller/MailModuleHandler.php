@@ -86,14 +86,16 @@ final class MailModuleHandler
                     $sid = (int)$row['id'];
                     $subscriptionLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
                         (string)$row['match_type'],
-                        (string)$row['match_value']
+                        (string)$row['match_value'],
+                        $this->module->scope,
                     );
                 }
                 foreach ($pendingSenders as $row) {
                     $sid = (int)$row['id'];
                     $pendingLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
                         (string)$row['match_type'],
-                        (string)$row['match_value']
+                        (string)$row['match_value'],
+                        $this->module->scope,
                     );
                 }
             }

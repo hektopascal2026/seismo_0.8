@@ -141,12 +141,12 @@ namespace Seismo\Tests {
             ");
         }
 
-        public function testTimelineFiltersOutChildEmailsAndAttachesThem(): void
+        public function testNewsletterTimelineFiltersOutChildEmailsAndAttachesThem(): void
         {
             // 0. Insert matching subscription row
         $this->pdo->exec("
             INSERT INTO email_subscriptions (match_type, match_value, display_name, module_scope, disabled, auto_detected)
-            VALUES ('domain', 'nzz.ch', 'NZZ am Morgen', 'mail', 0, 0)
+            VALUES ('domain', 'nzz.ch', 'NZZ am Morgen', 'newsletter', 0, 0)
         ");
 
         // 1. Insert parent email
@@ -177,8 +177,8 @@ namespace Seismo\Tests {
 
             $repo = new EntryRepository($this->pdo);
 
-            // Get timeline (using getEmailModuleTimeline so it only queries emails)
-            $timeline = $repo->getEmailModuleTimeline(10, 0);
+            // Newsletter feed keeps parent rows and nests child stories beneath them.
+            $timeline = $repo->getEmailModuleTimeline(10, 0, 'newsletter');
 
             // We only expect one email entry (the parent ID 10) in the top-level timeline
             $emails = array_values(array_filter($timeline, fn($item) => $item['type'] === 'email'));
@@ -198,6 +198,36 @@ namespace Seismo\Tests {
             self::assertSame(12, (int)$data['child_stories'][1]['id']);
             self::assertNotNull($data['child_stories'][1]['score']);
             self::assertSame(0.42, (float)$data['child_stories'][1]['score']['relevance_score']);
+        }
+
+        public function testMailTimelineShowsChildStoriesAsStandaloneCards(): void
+        {
+            $this->pdo->exec("
+                INSERT INTO email_subscriptions (match_type, match_value, display_name, module_scope, disabled, auto_detected)
+                VALUES ('domain', 'nzz.ch', 'NZZ am Morgen', 'mail', 0, 0)
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (10, NULL, 'NZZ am Morgen', 'NZZ am Morgen', 'newsletter@nzz.ch', 'Raw parent email body', '<html>Parent</html>', 0, '2026-06-05 12:00:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (11, 10, 'Story 1', 'Story 1', 'newsletter@nzz.ch', 'Child story 1 text', '<html>Story 1</html>', 0, '2026-06-05 12:01:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (12, 10, 'Story 2', 'Story 2', 'newsletter@nzz.ch', 'Child story 2 text', '<html>Story 2</html>', 0, '2026-06-05 12:02:00')
+            ");
+
+            $repo = new EntryRepository($this->pdo);
+            $timeline = $repo->getEmailModuleTimeline(10, 0, 'mail');
+
+            $emails = array_values(array_filter($timeline, fn($item) => $item['type'] === 'email'));
+            self::assertCount(2, $emails);
+            self::assertSame(12, (int)$emails[0]['entry_id']);
+            self::assertSame(11, (int)$emails[1]['entry_id']);
+            self::assertEmpty($emails[0]['data']['child_stories'] ?? []);
+            self::assertEmpty($emails[1]['data']['child_stories'] ?? []);
         }
 
         public function testHighlightsShowsChildStoriesNotParentDigest(): void

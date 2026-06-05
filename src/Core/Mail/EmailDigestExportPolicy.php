@@ -7,9 +7,10 @@ namespace Seismo\Core\Mail;
 /**
  * Visibility rules for split digest emails outside the Mail admin timeline.
  *
- * Mail module keeps the parent digest card with nested {@see attachEmailChildStories()}.
- * Highlights, Magnitu export, Researcher, and recipe rescoring must surface individual
- * story rows only — hide a parent when it has visible child emails.
+ * Newsletter admin (`module_scope = newsletter`) keeps the parent digest card with
+ * nested {@see attachEmailChildStories()}. Every other timeline — index, Mail, Highlights,
+ * Magnitu export, Researcher, and recipe rescoring — surfaces individual story rows only
+ * and hides a parent when it has visible child emails.
  */
 final class EmailDigestExportPolicy
 {

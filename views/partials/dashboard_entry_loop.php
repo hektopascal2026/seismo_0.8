@@ -38,6 +38,7 @@ $embedTimelineExpandAllInDayRow = !empty($embedTimelineExpandAllInDayRow);
 $embedDashboardTimelineSearch   = !empty($embedDashboardTimelineSearch);
 $timelineExpandAllInDayRowDone  = false;
 $entryLoopIndex                 = 0;
+$renderNestedDigestStories      = !empty($renderNestedDigestStories);
 ?>
                 <?php foreach ($allItems as $itemWrapper): ?>
                     <?php
@@ -361,7 +362,7 @@ $entryLoopIndex                 = 0;
                             $hasMore = $bodyDisplay !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $bodyDisplay) ?? '')) > 200;
                             $digestChildren = is_array($email['child_stories'] ?? null) ? $email['child_stories'] : [];
                             $digestChildCount = count($digestChildren);
-                            if ($digestChildCount > 0) {
+                            if ($renderNestedDigestStories && $digestChildCount > 0) {
                                 $bodyPreview = $digestChildCount . ' '
                                     . ($digestChildCount === 1 ? 'story' : 'stories')
                                     . ' in this digest — see below.';
@@ -417,7 +418,7 @@ $entryLoopIndex                 = 0;
                                     <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
                                 <?php endif; ?>
                             </div>
-                            <?php if (!empty($email['child_stories'])): ?>
+                            <?php if ($renderNestedDigestStories && !empty($email['child_stories'])): ?>
                                 <div class="digest-child-stories" aria-label="Stories in this digest">
                                     <?php foreach ($email['child_stories'] as $child): ?>
                                         <?php

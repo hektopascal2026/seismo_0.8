@@ -2767,12 +2767,11 @@ textarea.search-input.setup-code-preview {
 
 .digest-child-item {
     padding: 0.625rem 0;
-    border-bottom: 0.0625rem dashed #dddddd;
+    border-top: 0.125rem dashed #000000;
 }
 
-.digest-child-item:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
+.digest-child-item:first-child {
+    border-top: none;
 }
 
 .digest-child-item__head {

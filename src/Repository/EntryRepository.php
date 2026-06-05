@@ -104,8 +104,29 @@ final class EntryRepository
 
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const SQL_EMAIL_VISIBLE = 'e.hidden = 0';
-    private const SQL_EMAIL_ROOT_VISIBLE = 'e.hidden = 0 AND e.parent_email_id IS NULL';
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
+
+    private function sqlEmailRootVisible(string $alias = 'e'): string
+    {
+        return "{$alias}.hidden = 0 AND {$alias}.parent_email_id IS NULL";
+    }
+
+    private function sqlEmailExportableVisible(string $alias = 'e'): string
+    {
+        return "{$alias}.hidden = 0 AND " . EmailDigestExportPolicy::sqlExportableEmail($alias);
+    }
+
+    private function moduleScopeUsesNestedDigestParents(string $moduleScope): bool
+    {
+        return EmailSubscriptionRepository::normalizeModuleScope($moduleScope) === EmailSubscriptionRepository::MODULE_NEWSLETTER;
+    }
+
+    private function sqlEmailVisibilityForModuleScope(string $moduleScope, string $alias = 'e'): string
+    {
+        return $this->moduleScopeUsesNestedDigestParents($moduleScope)
+            ? $this->sqlEmailRootVisible($alias)
+            : $this->sqlEmailExportableVisible($alias);
+    }
 
     /**
      * Per-table memo for {@see resolveEmailDateColumns()}.
@@ -163,7 +184,6 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
-        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -208,7 +228,6 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
-        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -490,7 +509,6 @@ final class EntryRepository
 
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
-        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1059,7 +1077,7 @@ final class EntryRepository
         foreach ($this->fetchFeedRowsByIds($byType['feed_item']) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->fetchEmailRowsByIds($byType['email']) as $row) {
+        foreach ($this->fetchEmailRowsByIds($byType['email'], true) as $row) {
             $items[] = $this->wrapEmail($row);
         }
         foreach ($this->fetchLexRowsByIds($byType['lex_item']) as $row) {
@@ -1096,7 +1114,6 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->attachEmailSubscriptionDisplayNames($items);
-        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1190,7 +1207,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailExportableVisible('e') . '
                   AND ' . $tagFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1212,7 +1229,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailExportableVisible('e') . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1229,7 +1246,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+            WHERE ' . $this->sqlEmailExportableVisible('e') . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
 
@@ -1468,7 +1485,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailExportableVisible('e') . '
                   AND ' . $tagFrag['sql'] . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1492,7 +1509,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailExportableVisible('e') . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1511,7 +1528,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+            WHERE ' . $this->sqlEmailExportableVisible('e') . '
               AND ' . $where . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
@@ -2035,7 +2052,9 @@ final class EntryRepository
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items, $moduleScope);
         $this->stampEmailModuleScopeOnItems($items, $moduleScope);
-        $this->attachEmailChildStories($items);
+        if ($this->moduleScopeUsesNestedDigestParents($moduleScope)) {
+            $this->attachEmailChildStories($items);
+        }
 
         return $items;
     }
@@ -2055,7 +2074,7 @@ final class EntryRepository
     ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
-        $rows   = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, $limit, $offset);
+        $rows   = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, $limit, $offset, $moduleScope);
         $items  = [];
         foreach ($rows as $row) {
             $items[] = $this->wrapEmail($row);
@@ -2064,7 +2083,9 @@ final class EntryRepository
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items, $moduleScope);
         $this->stampEmailModuleScopeOnItems($items, $moduleScope);
-        $this->attachEmailChildStories($items);
+        if ($this->moduleScopeUsesNestedDigestParents($moduleScope)) {
+            $this->attachEmailChildStories($items);
+        }
 
         return $items;
     }
@@ -2074,9 +2095,13 @@ final class EntryRepository
      *
      * @return ?array{email_id: int, subject: ?string}
      */
-    public function peekLatestEmailForSubscription(string $matchType, string $matchValue): ?array
+    public function peekLatestEmailForSubscription(
+        string $matchType,
+        string $matchValue,
+        string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
+    ): ?array
     {
-        $rows = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, 1, 0);
+        $rows = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, 1, 0, $moduleScope);
         if ($rows === []) {
             return null;
         }
@@ -2182,7 +2207,7 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailVisibilityForModuleScope($moduleScope, 'e') . '
                   AND ' . $scopeFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
@@ -2213,7 +2238,13 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchEmailsMatchingSubscription(string $matchType, string $matchValue, int $limit, int $offset): array
+    private function fetchEmailsMatchingSubscription(
+        string $matchType,
+        string $matchValue,
+        int $limit,
+        int $offset,
+        string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
+    ): array
     {
         $matchType = strtolower(trim($matchType));
         if ($matchType !== 'domain' && $matchType !== 'email') {
@@ -2256,7 +2287,7 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
+                WHERE ' . $this->sqlEmailVisibilityForModuleScope($moduleScope, 'e') . '
                   AND ' . $whereSql . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;

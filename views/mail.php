@@ -105,7 +105,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             </div>
             <?php if ($dashboardError !== null): ?>
             <?php elseif ($allItems !== []): ?>
-                <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
+                <?php
+                    $renderNestedDigestStories = $mailModule->isNewsletter();
+                    include __DIR__ . '/partials/dashboard_entry_loop.php';
+                ?>
             <?php else: ?>
                 <div class="empty-state">
                     <?php $sourcesHref = $basePath . '/index.php?' . $sourcesQs; ?>
