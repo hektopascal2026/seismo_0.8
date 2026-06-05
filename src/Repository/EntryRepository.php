@@ -1840,7 +1840,7 @@ final class EntryRepository
      *
      * @param array<int, array<string, mixed>> $items
      */
-    private function attachEmailSubscriptionDisplayNames(array &$items): void
+    private function attachEmailSubscriptionDisplayNames(array &$items, ?string $moduleScope = null): void
     {
         $hasEmail = false;
         foreach ($items as $it) {
@@ -1853,8 +1853,10 @@ final class EntryRepository
             return;
         }
         try {
-            $subs = (new EmailSubscriptionRepository($this->pdo))
-                ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            $subRepo = new EmailSubscriptionRepository($this->pdo);
+            $subs = $moduleScope !== null
+                ? $subRepo->listActiveForModule($moduleScope, EmailSubscriptionRepository::MAX_LIMIT, 0)
+                : $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         } catch (\Throwable) {
             return;
         }
@@ -1875,6 +1877,22 @@ final class EntryRepository
             $it['data']['subscription_module_scope'] = $ui['module_scope'];
             if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui, $globalStripBoilerplate)) {
                 $it['data']['subscription_strip_listing_boilerplate'] = true;
+            }
+        }
+        unset($it);
+    }
+
+    /**
+     * Mail/Newsletter module timelines are already scoped in SQL — stamp pills accordingly.
+     *
+     * @param array<int, array<string, mixed>> $items
+     */
+    private function stampEmailModuleScopeOnItems(array &$items, string $moduleScope): void
+    {
+        $scope = EmailSubscriptionRepository::normalizeModuleScope($moduleScope);
+        foreach ($items as &$it) {
+            if (($it['type'] ?? '') === 'email') {
+                $it['data']['subscription_module_scope'] = $scope;
             }
         }
         unset($it);
@@ -2006,7 +2024,8 @@ final class EntryRepository
         }
         $this->attachScores($items);
         $this->attachFavourites($items);
-        $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailSubscriptionDisplayNames($items, $moduleScope);
+        $this->stampEmailModuleScopeOnItems($items, $moduleScope);
         $this->attachEmailChildStories($items);
 
         return $items;
@@ -2018,8 +2037,13 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getEmailModuleTimelineForSubscription(string $matchType, string $matchValue, int $limit, int $offset): array
-    {
+    public function getEmailModuleTimelineForSubscription(
+        string $matchType,
+        string $matchValue,
+        int $limit,
+        int $offset,
+        string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
+    ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
         $rows   = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, $limit, $offset);
@@ -2029,7 +2053,8 @@ final class EntryRepository
         }
         $this->attachScores($items);
         $this->attachFavourites($items);
-        $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailSubscriptionDisplayNames($items, $moduleScope);
+        $this->stampEmailModuleScopeOnItems($items, $moduleScope);
         $this->attachEmailChildStories($items);
 
         return $items;
