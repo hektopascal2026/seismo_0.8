@@ -334,17 +334,75 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
                             <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
                             <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
-                            <input type="hidden" id="digest_split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
-                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value; document.getElementById('digest_split_config_hidden').value = document.getElementById('digest_split_config_json').value;">
+                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value;">
                                 Save Config &amp; Apply
                             </button>
                         </form>
                     </div>
                 </div>
             </div>
+
+            <?php if ($mailModule->isNewsletter()): ?>
+            <div class="admin-form-card" style="margin-top: 1.5rem;" id="ai-split-configurator">
+                <h3>AI Split Configurator</h3>
+                <p class="admin-intro">Select 5 recent emails from this sender to analyze with Gemini and statically generate regular expressions and selector configurations to split digests into individual newsletter cards.</p>
+
+                <div class="admin-form-field">
+                    <button type="button" id="btn-ai-split-analyze" class="btn btn-secondary" onclick="runAiSplitAnalysis(<?= (int)$editRow['id'] ?>)">
+                        Analyze sample emails for splitting
+                    </button>
+                    <span id="ai-split-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
+                </div>
+
+                <div id="ai-split-results-panel" style="display: <?= !empty($editRow['digest_split_config']) ? 'block' : 'none' ?>;">
+                    <div class="admin-form-field">
+                        <label>Proposed Split Config (JSON):
+                            <textarea id="split_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"split_rules": {"split_method": "html_selector", "story_selector": "div.story"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                        </label>
+                    </div>
+
+                    <div class="admin-form-field" id="ai-split-preview-section" style="display: none; margin-top: 1.5rem;">
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Split Preview (Generated Cards)</h4>
+                        
+                        <div id="split-preview-cards-container" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1rem; max-height: 25rem; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; background-color: #fafafa;">
+                            <!-- Dynamically generated story cards will go here -->
+                        </div>
+                    </div>
+
+                    <div class="admin-form-field">
+                        <p class="admin-hint">Review the generated splits. Click "Apply Split Config" to save the splitting rules.</p>
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
+                            <?= $csrfField ?>
+                            <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
+                            <input type="hidden" name="match_type" value="<?= e((string)$editRow['match_type']) ?>">
+                            <input type="hidden" name="match_value" value="<?= e((string)$editRow['match_value']) ?>">
+                            <input type="hidden" name="display_name" value="<?= e((string)$editRow['display_name']) ?>">
+                            <input type="hidden" name="category" value="<?= e((string)$editRow['category']) ?>">
+                            <input type="hidden" name="disabled" value="<?= !empty($editRow['disabled']) ? '1' : '0' ?>">
+                            <input type="hidden" name="show_in_magnitu" value="<?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? '1' : '0' ?>">
+                            <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                            <input type="hidden" name="body_processor" value="<?= e((string)$editRow['body_processor']) ?>">
+                            <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
+                            <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
+                            <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
+                            <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
+                            <input type="hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
+                            
+                            <input type="hidden" id="split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            
+                            <button type="submit" class="btn btn-success" onclick="document.getElementById('split_config_hidden').value = document.getElementById('split_config_json').value;">
+                                Apply Split Config
+                            </button>
+                            <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel</a>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
             <?php endif; ?>
 
             <?php if ($editRow): ?>
@@ -749,6 +807,135 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             btn.disabled = false;
         });
     }
+
+    function runAiSplitAnalysis(id) {
+        var btn = document.getElementById('btn-ai-split-analyze');
+        var status = document.getElementById('ai-split-status');
+        var resultsPanel = document.getElementById('ai-split-results-panel');
+        var textarea = document.getElementById('split_config_json');
+        var previewSection = document.getElementById('ai-split-preview-section');
+        var container = document.getElementById('split-preview-cards-container');
+
+        btn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Analyzing splitting structure with Gemini...';
+        container.innerHTML = '';
+        previewSection.style.display = 'none';
+
+        var formData = new FormData();
+        formData.append('id', id);
+        formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
+
+        fetch('<?= e($basePath) ?>/index.php?action=<?= e($mailModule->analyzeSplittingAction) ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(res) {
+            return res.json().then(function(data) {
+                if (!res.ok) {
+                    throw new Error(data.error || 'Request failed');
+                }
+                return data;
+            });
+        })
+        .then(function(data) {
+            status.style.color = 'green';
+            status.textContent = 'Analysis complete!';
+            
+            if (data.digest_split_config) {
+                try {
+                    var parsed = typeof data.digest_split_config === 'string' 
+                        ? JSON.parse(data.digest_split_config) 
+                        : data.digest_split_config;
+                    textarea.value = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    textarea.value = data.digest_split_config;
+                }
+            } else {
+                textarea.value = '';
+            }
+
+            if (data.preview_stories && data.preview_stories.length > 0) {
+                data.preview_stories.forEach(function(story) {
+                    var card = document.createElement('div');
+                    card.style.background = '#ffffff';
+                    card.style.border = '2px solid black';
+                    card.style.padding = '1rem';
+                    card.style.position = 'relative';
+                    card.style.boxShadow = '3px 3px 0px rgba(0,0,0,1)';
+                    card.style.display = 'flex';
+                    card.style.flexDirection = 'column';
+                    card.style.gap = '0.5rem';
+
+                    var header = document.createElement('div');
+                    header.style.display = 'flex';
+                    header.style.justifyContent = 'space-between';
+                    header.style.alignItems = 'center';
+                    header.style.borderBottom = '1px solid #eee';
+                    header.style.paddingBottom = '0.25rem';
+
+                    var badge = document.createElement('span');
+                    badge.textContent = 'Split Section Preview';
+                    badge.style.fontSize = '0.75rem';
+                    badge.style.fontWeight = 'bold';
+                    badge.style.background = 'var(--seismo-accent, #FFFFC5)';
+                    badge.style.border = '1px solid black';
+                    badge.style.padding = '1px 6px';
+                    header.appendChild(badge);
+
+                    card.appendChild(header);
+
+                    var title = document.createElement('h4');
+                    title.textContent = story.title || '(No Title)';
+                    title.style.margin = '0';
+                    title.style.fontSize = '1rem';
+                    title.style.fontWeight = 'bold';
+                    card.appendChild(title);
+
+                    var body = document.createElement('div');
+                    body.textContent = story.text_body || '';
+                    body.style.fontSize = '0.85rem';
+                    body.style.color = '#333';
+                    body.style.lineHeight = '1.4';
+                    card.appendChild(body);
+
+                    if (story.link) {
+                        var link = document.createElement('a');
+                        link.href = story.link;
+                        link.target = '_blank';
+                        link.textContent = 'Read Link →';
+                        link.style.fontSize = '0.8rem';
+                        link.style.fontWeight = 'bold';
+                        link.style.color = 'black';
+                        link.style.textDecoration = 'underline';
+                        link.style.alignSelf = 'flex-start';
+                        card.appendChild(link);
+                    }
+
+                    container.appendChild(card);
+                });
+                previewSection.style.display = 'block';
+            } else {
+                var empty = document.createElement('div');
+                empty.textContent = 'No split stories generated by the config rules.';
+                empty.style.padding = '1rem';
+                empty.style.color = '#888';
+                empty.style.fontStyle = 'italic';
+                container.appendChild(empty);
+                previewSection.style.display = 'block';
+            }
+
+            resultsPanel.style.display = 'block';
+            btn.disabled = false;
+        })
+        .catch(function(err) {
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+        });
+    }
     </script>
 </body>
 </html>
+
