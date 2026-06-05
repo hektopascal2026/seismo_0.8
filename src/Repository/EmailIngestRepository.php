@@ -608,7 +608,9 @@ final class EmailIngestRepository
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
+                'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
+                        message_id, text_body, body_text, html_body, body_html, metadata,
+                        date_utc, date_received, date_sent
                  FROM ' . $t . ' WHERE LOWER(from_email) = ? AND parent_email_id IS NULL ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
             $stmt->execute([$param]);
@@ -618,7 +620,9 @@ final class EmailIngestRepository
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
+                'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
+                        message_id, text_body, body_text, html_body, body_html, metadata,
+                        date_utc, date_received, date_sent
                  FROM ' . $t . '
                  WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . ' AND parent_email_id IS NULL
                  ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
@@ -689,6 +693,7 @@ final class EmailIngestRepository
 
     public function splitAndIngestStories(int $parentId, array $parentRow, array $cfg): void
     {
+        $parentRow = $this->resolveParentRowForSplit($parentId, $parentRow);
         $t = entryTable('emails');
         $scoreRepo = new EntryScoreRepository($this->pdo);
 
@@ -730,13 +735,22 @@ final class EmailIngestRepository
                 $childMsgId = $parentRow['message_id'] . '_story_' . $index;
             }
 
-            $meta = null;
+            $metaPayload = [];
             if ($story['link'] !== null) {
-                $meta = json_encode([
-                    'link' => $story['link'],
-                    'web_view_url' => $story['link'],
-                ]);
+                $metaPayload['link'] = $story['link'];
+                $metaPayload['web_view_url'] = $story['link'];
             }
+            $parentInboxDate = trim((string)($parentRow['date_received'] ?? ''));
+            if ($parentInboxDate === '') {
+                $parentInboxDate = trim((string)($parentRow['date_utc'] ?? ''));
+            }
+            if ($parentInboxDate === '') {
+                $parentInboxDate = trim((string)($parentRow['date_sent'] ?? ''));
+            }
+            if ($parentInboxDate !== '') {
+                $metaPayload['parent_inbox_date'] = $parentInboxDate;
+            }
+            $meta = $metaPayload === [] ? null : json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             $stmtIns->execute([
                 $childMsgId,
@@ -760,5 +774,43 @@ final class EmailIngestRepository
         }
 
         $scoreRepo->deleteForEntry('email', $parentId);
+    }
+
+    /**
+     * Reprocess passes a slim parent row (no dates). Always merge inbox timestamps from DB.
+     *
+     * @param array<string, mixed> $parentRow
+     * @return array<string, mixed>
+     */
+    private function resolveParentRowForSplit(int $parentId, array $parentRow): array
+    {
+        if ($parentId <= 0) {
+            return $parentRow;
+        }
+
+        $t = entryTable('emails');
+        $stmt = $this->pdo->prepare(
+            "SELECT message_id, from_addr, to_addr, cc_addr, from_email, from_name,
+                    date_utc, date_received, date_sent
+               FROM {$t} WHERE id = ? LIMIT 1"
+        );
+        $stmt->execute([$parentId]);
+        $dbRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($dbRow)) {
+            return $parentRow;
+        }
+
+        $merged = array_merge($dbRow, $parentRow);
+        foreach (['message_id', 'from_addr', 'to_addr', 'cc_addr', 'from_email', 'from_name', 'date_utc', 'date_received', 'date_sent'] as $col) {
+            $fromDb = $dbRow[$col] ?? null;
+            $fromRow = $parentRow[$col] ?? null;
+            if (($merged[$col] === null || $merged[$col] === '') && $fromDb !== null && $fromDb !== '') {
+                $merged[$col] = $fromDb;
+            } elseif (($fromRow === null || $fromRow === '') && $fromDb !== null && $fromDb !== '') {
+                $merged[$col] = $fromDb;
+            }
+        }
+
+        return $merged;
     }
 }

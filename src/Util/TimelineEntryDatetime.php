@@ -195,6 +195,21 @@ final class TimelineEntryDatetime
      */
     public static function emailStoredDatetime(array $row): ?string
     {
+        if (!empty($row['parent_email_id'])) {
+            $fromMeta = self::digestChildInboxDateFromMetadata($row['metadata'] ?? null);
+            if ($fromMeta !== null) {
+                return $fromMeta;
+            }
+            foreach (['date_received', 'date_utc', 'date_sent'] as $col) {
+                $v = trim((string)($row[$col] ?? ''));
+                if ($v !== '') {
+                    return $v;
+                }
+            }
+
+            return null;
+        }
+
         foreach (['date_received', 'date_utc', 'created_at', 'date_sent'] as $col) {
             $v = trim((string)($row[$col] ?? ''));
             if ($v !== '') {
@@ -203,6 +218,31 @@ final class TimelineEntryDatetime
         }
 
         return null;
+    }
+
+    /**
+     * @param mixed $metadata JSON string or decoded array from digest child rows.
+     */
+    private static function digestChildInboxDateFromMetadata(mixed $metadata): ?string
+    {
+        if (is_string($metadata)) {
+            $trimmed = trim($metadata);
+            if ($trimmed === '') {
+                return null;
+            }
+            try {
+                $decoded = json_decode($trimmed, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\Exception) {
+                return null;
+            }
+            $metadata = $decoded;
+        }
+        if (!is_array($metadata)) {
+            return null;
+        }
+        $date = trim((string)($metadata['parent_inbox_date'] ?? ''));
+
+        return $date !== '' ? $date : null;
     }
 
     /**

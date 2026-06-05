@@ -135,6 +135,32 @@ final class TimelineEntryDatetimeTest extends TestCase
         self::assertSame('03.06.2026 10:30', TimelineEntryDatetime::formatFeedItemDatetime($row));
     }
 
+    public function testDigestChildUsesParentInboxDateNotSplitCreatedAt(): void
+    {
+        $row = [
+            'parent_email_id' => 10,
+            'date_received'   => '2026-06-05 06:30:00',
+            'created_at'      => '2026-06-05 16:24:00',
+        ];
+
+        self::assertSame(
+            TimelineEntryDatetime::storedUtcToUnix('2026-06-05 06:30:00'),
+            TimelineEntryDatetime::emailUnix($row)
+        );
+        self::assertSame('05.06.2026 08:30', TimelineEntryDatetime::formatEmailDatetime($row));
+    }
+
+    public function testDigestChildFallsBackToMetadataParentInboxDate(): void
+    {
+        $row = [
+            'parent_email_id' => 10,
+            'created_at'      => '2026-06-05 16:24:00',
+            'metadata'        => json_encode(['parent_inbox_date' => '2026-06-05 06:30:00'], JSON_THROW_ON_ERROR),
+        ];
+
+        self::assertSame('05.06.2026 08:30', TimelineEntryDatetime::formatEmailDatetime($row));
+    }
+
     public function testFutureCalendarEventIsCappedAtCreatedAt(): void
     {
         $row = [

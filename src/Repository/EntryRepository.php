@@ -83,7 +83,7 @@ final class EntryRepository
 
     /** @var array<int, string> */
     private const EMAIL_TIMELINE_SCALAR_COLUMNS = [
-        'id', 'subject', 'derived_title', 'from_email', 'from_name', 'from_addr',
+        'id', 'parent_email_id', 'subject', 'derived_title', 'from_email', 'from_name', 'from_addr',
         'metadata', 'hidden', 'date_utc', 'date_received', 'date_sent', 'created_at',
     ];
 
@@ -1926,7 +1926,8 @@ final class EntryRepository
 
         $ph = implode(',', array_fill(0, count($parentIds), '?'));
         $t = entryTable('emails');
-        $sql = "SELECT id, parent_email_id, subject, derived_title, from_email, text_body, html_body, metadata
+        $sql = "SELECT id, parent_email_id, subject, derived_title, from_email, text_body, html_body, metadata,
+                       date_utc, date_received, date_sent, created_at
                 FROM {$t}
                 WHERE parent_email_id IN ({$ph}) AND hidden = 0
                 ORDER BY id ASC";
