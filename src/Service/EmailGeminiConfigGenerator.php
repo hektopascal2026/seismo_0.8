@@ -33,29 +33,46 @@ final class EmailGeminiConfigGenerator
     private const PROMPT_HTML_MAX_CHARS = 15000;
 
     private const SPLIT_V1_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert email structure analyzer. Your goal is to detect digest structures and generate CSS selector or Regex split configurations for them.
+You are an expert DOM Engineering Agent specializing in parsing email template layouts.
+Your goal is to detect digest structures in newsletters and generate precise, resilient CSS selector rules.
+
+You are highly familiar with compilation frameworks and layouts like:
+- MJML (e.g. div.mj-column-per-100, mj-column-px)
+- TYPO3 / punkt4 (e.g. div.csc-frame-default, nested table structures)
+- Mailchimp, Substack, Campaign Monitor, and Ghost templates.
+
+CRITICAL DESIGN PRINCIPLES:
+1. Target the absolute outermost wrapper for each story card. Never target individual paragraphs or headings as the story wrapper.
+2. Favor semantic classes (e.g., .story, .article, .item, .csc-frame-default) or repeated table containers.
+3. Avoid fragile ID selectors containing dynamic hashes or numeric counters (e.g., #body_12345).
+4. Rely on tag hierarchies only as a last resort, keeping them as short as possible.
+5. If the newsletter is not a digest (i.e. single main story or no repeated article cards), set is_digest to false.
 TEXT;
 
     private const SPLIT_REFINE_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert email structure analyzer. Refine digest split_rules to exclude noise blocks while keeping story cards.
+You are an expert DOM Engineering Agent specializing in parsing email template layouts.
+Refine digest split_rules to exclude noise blocks while keeping story cards. Use exclude_selectors (.class, #id, tag) or narrow story_selector to drop noise blocks.
 TEXT;
 
     private const SPLIT_SIMPLE_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert email structure analyzer. Detect digest HTML structure and return runnable split_rules only.
+You are an expert DOM Engineering Agent specializing in parsing email template layouts.
+Detect digest HTML structure and return runnable split_rules only.
 Prefer simple class-based selectors (.csc-frame-default, table wrappers) over fragile inline-style attribute selectors.
 TEXT;
 
     private const CLEANUP_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert newsletter editor preparing emails for a clean reading timeline.
+You are a Newsletter Editorial Architect specializing in content extraction, text normalization, and PHP regular expressions.
+Your goal is to strip boilerplate and noise from plain-text email bodies while perfectly preserving the core articles.
 
-CONTENT the reader wants: headlines, article paragraphs, bylines, story links, quotes, datelines.
-NOISE to strip: mastheads, logos-as-text, navigation, "view in browser" / webversion lines, ads,
-social follow blocks, section dividers with no article text, legal footers, unsubscribe/preferences,
-tracking boilerplate, empty spacer lines, repeated subject-line banners.
+CLASSIFICATION RULES:
+- KEEP: Headlines, article paragraphs, bylines, direct links, datelines, quotes, and core analysis.
+- STRIP: Mastheads, navigation links, "view in browser", dynamic ads, social sharing widgets, empty lines, copyright lines, unsubscribe/preference links, and tracking headers.
 
-Your strip_regexes run as PHP preg_replace on plain text_body (after HTML→text conversion).
-Use robust patterns with /iu or /is delimiters. Match whole noise blocks; never match core article text.
-Include text_snippet (8+ chars, copied verbatim from plain text) for every content and noise item in analysis.
+REGEX SAFETY CONTRACT:
+1. Ensure your PHP preg_replace patterns use robust delimiters like /iu or /is.
+2. Match whole noise blocks by anchoring or using line boundaries (e.g., /^View in browser.*$/imu) rather than matching partial text.
+3. Use wildcard characters for variable URL parameters, tokens, or dates (e.g., do not hardcode a specific date or token).
+4. Never generate overly broad patterns that could match article paragraphs or sentences.
 TEXT;
 
     public function __construct(
@@ -359,8 +376,8 @@ TEXT;
 
         $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
         $prompt .= "If they do, suggest a JSON split configuration matching our split schema:\n";
-        $prompt .= "- For HTML emails: {\"type\": \"html_css\", \"selector_story\": \"CSS selector for story wrapper\", \"selector_title\": \"CSS selector for title\", \"selector_body\": \"CSS selector for body content\", \"selector_link\": \"CSS selector for story URL\"}\n";
-        $prompt .= "- For plain text or regex-delimited emails: {\"type\": \"regex\", \"pattern_split\": \"PHP regex delimiter\", \"pattern_title\": \"regex pattern\", \"pattern_body\": \"regex pattern\", \"pattern_link\": \"regex pattern\"}\n\n";
+        $prompt .= "- For HTML emails: {\"split_method\": \"html_selector\", \"story_selector\": \"CSS selector for story wrapper\", \"title_selector\": \"CSS selector for title relative to story node\", \"body_selector\": \"CSS selector for body content relative to story node\", \"link_selector\": \"CSS selector for story URL relative to story node\"}\n";
+        $prompt .= "- For plain text or regex-delimited emails: {\"split_method\": \"regex_split\", \"split_pattern\": \"PHP regex delimiter\", \"title_pattern\": \"regex pattern\", \"body_pattern\": \"regex pattern\", \"link_pattern\": \"regex pattern\"}\n\n";
         $prompt .= 'Return ONLY the JSON split config object (or null). Do not include markdown wraps like ```json.';
 
         return $prompt;
@@ -880,7 +897,8 @@ TEXT;
         $prompt .= "Return split_rules that our PHP splitter can run — focus on DOM structure, not editorial topic counts.\n\n";
 
         if ($hasHtml) {
-            $prompt .= "REQUIRED: samples include html_body → use split_method \"html_selector\" only.\n\n";
+            $prompt .= "REQUIRED: samples include html_body → use split_method \"html_selector\" only.\n";
+            $prompt .= "Carefully analyze the repeated elements detected in the scan below. Integrate or prioritize them for story_selector if they match the article cards.\n\n";
             $hintBlock = $this->structureHint->formatForPrompt($samples);
             if ($hintBlock !== '') {
                 $prompt .= $hintBlock;
@@ -1024,11 +1042,12 @@ TEXT;
 
         $html = trim((string)($sample['html_body'] ?? ''));
         if ($html !== '') {
+            $sanitizedHtml = \Seismo\Core\Mail\EmailHtmlSanitizer::sanitize($html);
             $block .= "HTML Body (primary source for digest structure";
-            if (mb_strlen($html) > self::PROMPT_HTML_MAX_CHARS) {
+            if (mb_strlen($sanitizedHtml) > self::PROMPT_HTML_MAX_CHARS) {
                 $block .= ', truncated';
             }
-            $block .= "):\n" . $this->truncateForPrompt($html, self::PROMPT_HTML_MAX_CHARS) . "\n";
+            $block .= "):\n" . $this->truncateForPrompt($sanitizedHtml, self::PROMPT_HTML_MAX_CHARS) . "\n";
         }
 
         $text = trim((string)($sample['text_body'] ?? $sample['body'] ?? ''));

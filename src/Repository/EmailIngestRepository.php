@@ -832,6 +832,9 @@ final class EmailIngestRepository
         $t = entryTable('emails');
         $scoreRepo = new EntryScoreRepository($this->pdo);
 
+        $subRepo = new EmailSubscriptionRepository($this->pdo);
+        $subs = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+
         $stmtChildIds = $this->pdo->prepare("SELECT id FROM {$t} WHERE parent_email_id = ?");
         $stmtChildIds->execute([$parentId]);
         $oldChildIds = $stmtChildIds->fetchAll(PDO::FETCH_COLUMN);
@@ -873,6 +876,16 @@ final class EmailIngestRepository
                 $childMsgId = $parentRow['message_id'] . '_story_' . $index;
             }
 
+            $childRow = [
+                'from_email' => $parentRow['from_email'] ?? null,
+                'subject' => $story['title'],
+                'text_body' => $story['text_body'],
+                'body_text' => $story['text_body'],
+                'html_body' => $story['html_body'],
+                'body_html' => $story['html_body'],
+            ];
+            $childRow = EmailSubscriptionProcessor::apply($childRow, $subs);
+
             $metaPayload = [];
             if ($story['link'] !== null) {
                 $metaPayload['link'] = $story['link'];
@@ -904,10 +917,10 @@ final class EmailIngestRepository
                 $parentRow['date_utc'] ?? null,
                 $parentRow['date_received'] ?? null,
                 $parentRow['date_sent'] ?? null,
-                $story['text_body'], // body_text
-                $story['html_body'], // body_html
-                $story['text_body'], // text_body
-                $story['html_body'], // html_body
+                $childRow['body_text'] ?? $story['text_body'], // body_text
+                $childRow['body_html'] ?? $story['html_body'], // body_html
+                $childRow['text_body'] ?? $story['text_body'], // text_body
+                $childRow['html_body'] ?? $story['html_body'], // html_body
                 $meta
             ]);
         }
