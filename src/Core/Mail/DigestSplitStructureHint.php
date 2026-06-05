@@ -26,6 +26,39 @@ final class DigestSplitStructureHint
     /**
      * @return list<array{selector: string, count: int, sample_text: string}>
      */
+    public function typo3CandidatesFromHtml(string $html): array
+    {
+        $dom = $this->loadDom($html);
+        if ($dom === null) {
+            return [];
+        }
+
+        $xpath = new DOMXPath($dom);
+        $candidates = [];
+        foreach ([
+            'div.csc-frame-default' => './/div[contains(concat(" ", normalize-space(@class), " "), " csc-frame-default ")]',
+            'h1.csc-firstHeader' => './/h1[contains(concat(" ", normalize-space(@class), " "), " csc-firstHeader ")]',
+            'p.bodytext' => './/p[contains(concat(" ", normalize-space(@class), " "), " bodytext ")]',
+        ] as $selector => $query) {
+            $nodes = $xpath->query($query);
+            $count = $nodes !== false ? $nodes->length : 0;
+            if ($count === 0) {
+                continue;
+            }
+            $sampleText = '';
+            if ($nodes !== false && $nodes->item(0) !== null) {
+                $sampleText = trim(mb_substr($nodes->item(0)->textContent, 0, 120));
+            }
+            $candidates[] = [
+                'selector' => $selector,
+                'count' => $count,
+                'sample_text' => $sampleText,
+            ];
+        }
+
+        return $candidates;
+    }
+
     public function candidatesFromHtml(string $html): array
     {
         $html = trim($html);
@@ -33,16 +66,13 @@ final class DigestSplitStructureHint
             return [];
         }
 
-        $prev = libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        if (stripos($html, 'encoding=') === false) {
-            $html = '<?xml encoding="UTF-8">' . $html;
+        $typo3 = $this->typo3CandidatesFromHtml($html);
+        if ($typo3 !== []) {
+            return $typo3;
         }
-        $loaded = $dom->loadHTML($html, LIBXML_NONET);
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
 
-        if (!$loaded) {
+        $dom = $this->loadDom($html);
+        if ($dom === null) {
             return [];
         }
 
@@ -118,12 +148,72 @@ final class DigestSplitStructureHint
                 }
                 $block .= "\n";
             }
-            $block .= "Pick a selector whose match count equals expected_card_count. Do NOT count plain-text topics.\n\n";
+            if ($this->looksLikeTypo3Newsletter($candidates)) {
+                $block .= "TYPO3/punkt4 digest detected. Prefer:\n";
+                $block .= "story_selector: \"div.csc-frame-default, table table table table td\"\n";
+                $block .= "title_selector: \"h1.csc-firstHeader, a\"\n";
+                $block .= "link_selector: \"a\"\n";
+                $block .= "body_selector: \"p.bodytext, td\"\n";
+            } else {
+                $block .= "Pick a selector whose match count equals expected_card_count. Do NOT count plain-text topics.\n";
+            }
+            $block .= "\n";
 
             return $block;
         }
 
         return '';
+    }
+
+    private function loadDom(string $html): ?DOMDocument
+    {
+        $html = trim($html);
+        if ($html === '') {
+            return null;
+        }
+
+        $prev = libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        if (stripos($html, 'encoding=') === false) {
+            $html = '<?xml encoding="UTF-8">' . $html;
+        }
+        $loaded = $dom->loadHTML($html, LIBXML_NONET);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+
+        return $loaded ? $dom : null;
+    }
+
+    /**
+     * @param list<array{selector: string, count: int, sample_text: string}> $candidates
+     */
+    private function looksLikeTypo3Newsletter(array $candidates): bool
+    {
+        foreach ($candidates as $row) {
+            if ($row['selector'] === 'div.csc-frame-default' && $row['count'] > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     */
+    public function detectTypo3InSamples(array $samples): bool
+    {
+        foreach ($samples as $sample) {
+            $html = trim((string)($sample['html_body'] ?? ''));
+            if ($html === '') {
+                continue;
+            }
+            if ($this->looksLikeTypo3Newsletter($this->typo3CandidatesFromHtml($html))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -29,16 +29,27 @@ HTML;
         self::assertSame(3, $candidates[0]['count']);
     }
 
-    public function testFormatForPromptIncludesSelectorCounts(): void
+    public function testDetectsTypo3InSamples(): void
     {
-        $html = '<div class="item">A</div><div class="item">B</div>';
+        $html = file_get_contents(__DIR__ . '/fixtures/zhk_digest_sample.html');
+        self::assertNotFalse($html);
+
+        $hint = new DigestSplitStructureHint();
+        self::assertTrue($hint->detectTypo3InSamples([['subject' => 'ZHK', 'html_body' => $html]]));
+    }
+
+    public function testFormatForPromptIncludesTypo3Template(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/zhk_digest_sample.html');
+        self::assertNotFalse($html);
+
         $hint = new DigestSplitStructureHint();
         $block = $hint->formatForPrompt([
             ['subject' => 'Test', 'html_body' => $html],
         ]);
 
-        self::assertStringContainsString('div.item', $block);
-        self::assertStringContainsString('2 nodes', $block);
+        self::assertStringContainsString('div.csc-frame-default', $block);
+        self::assertStringContainsString('TYPO3/punkt4', $block);
     }
 
     public function testSamplesHaveHtml(): void

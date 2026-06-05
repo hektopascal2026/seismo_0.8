@@ -86,6 +86,8 @@ final class EmailDigestSplitterService
             return [];
         }
 
+        $storyNodes = $this->innermostStoryNodes($nodes);
+
         $titleSelector = trim((string)($rules['title_selector'] ?? ''));
         $linkSelector = trim((string)($rules['link_selector'] ?? ''));
         $bodySelector = trim((string)($rules['body_selector'] ?? ''));
@@ -96,12 +98,12 @@ final class EmailDigestSplitterService
             $excludeSelectors = [];
         }
 
-        foreach ($nodes as $node) {
-            if (!$node instanceof DOMElement) {
+        foreach ($storyNodes as $node) {
+            if ($this->nodeMatchesExcludeSelector($node, $excludeSelectors)) {
                 continue;
             }
 
-            if ($this->nodeMatchesExcludeSelector($node, $excludeSelectors)) {
+            if (!$this->nodeLooksLikeStory($xpath, $node)) {
                 continue;
             }
 
@@ -152,7 +154,7 @@ final class EmailDigestSplitterService
                     $bodyNodes = false;
                 }
                 if ($bodyNodes !== false && $bodyNodes->length > 0) {
-                    $storyText = trim($bodyNodes->item(0)->textContent);
+                    $storyText = $this->longestNodeText($bodyNodes, $title);
                 }
             } else {
                 $storyText = trim($node->textContent);
@@ -179,6 +181,104 @@ final class EmailDigestSplitterService
         }
 
         return $stories;
+    }
+
+    /**
+     * @return list<DOMElement>
+     */
+    private function innermostStoryNodes(\DOMNodeList $nodes): array
+    {
+        /** @var list<DOMElement> $elements */
+        $elements = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $elements[] = $node;
+            }
+        }
+
+        $innermost = [];
+        foreach ($elements as $node) {
+            $hasMatchingDescendant = false;
+            foreach ($elements as $other) {
+                if ($other !== $node && $this->isDescendantOf($other, $node)) {
+                    $hasMatchingDescendant = true;
+                    break;
+                }
+            }
+            if (!$hasMatchingDescendant) {
+                $innermost[] = $node;
+            }
+        }
+
+        return $innermost;
+    }
+
+    private function isDescendantOf(DOMElement $node, DOMElement $ancestor): bool
+    {
+        $parent = $node->parentNode;
+        while ($parent instanceof DOMElement) {
+            if ($parent === $ancestor) {
+                return true;
+            }
+            $parent = $parent->parentNode;
+        }
+
+        return false;
+    }
+
+    private function longestNodeText(\DOMNodeList $nodes, string $title): string
+    {
+        $best = '';
+        foreach ($nodes as $bodyNode) {
+            $text = trim((string)$bodyNode->textContent);
+            if ($text === '' || $text === $title) {
+                continue;
+            }
+            if (mb_strlen($text) > mb_strlen($best)) {
+                $best = $text;
+            }
+        }
+
+        if ($best !== '') {
+            return $best;
+        }
+
+        $first = $nodes->item(0);
+
+        return $first !== null ? trim((string)$first->textContent) : '';
+    }
+
+    private function nodeLooksLikeStory(DOMXPath $xpath, DOMElement $node): bool
+    {
+        foreach (['h1', 'h2', 'h3'] as $headingTag) {
+            $headings = @$xpath->query('.//' . $headingTag, $node);
+            if ($headings !== false && $headings->length > 0) {
+                return true;
+            }
+        }
+
+        $anchors = @$xpath->query('.//a', $node);
+        if ($anchors === false) {
+            return false;
+        }
+
+        foreach ($anchors as $anchor) {
+            if (!$anchor instanceof DOMElement) {
+                continue;
+            }
+            $style = strtolower($anchor->getAttribute('style'));
+            if (!str_contains($style, 'font-weight:bold') && !str_contains($style, 'font-weight: bold')) {
+                continue;
+            }
+            $text = trim($anchor->textContent);
+            if ($text === '' || strcasecmp($text, 'Mehr') === 0 || mb_strlen($text) < 12) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -240,7 +340,7 @@ final class EmailDigestSplitterService
     }
 
     /**
-     * Minimal CSS selector to XPath converter. Supports tags, classes, and IDs.
+     * CSS selector to XPath. Supports tags, classes, IDs, space descendants, and [attr*="…"].
      */
     private function cssToXPath(string $css): string
     {
@@ -260,22 +360,57 @@ final class EmailDigestSplitterService
                 if ($subPart === '') {
                     continue;
                 }
-                if (preg_match('/^([a-zA-Z0-9*-]*)\.([a-zA-Z0-9_-]+)$/', $subPart, $m)) {
-                    $tag = $m[1] !== '' ? $m[1] : '*';
-                    $class = $m[2];
-                    $subXPaths[] = "descendant-or-self::{$tag}[contains(concat(' ', normalize-space(@class), ' '), ' {$class} ')]";
-                } elseif (preg_match('/^([a-zA-Z0-9*-]*)#([a-zA-Z0-9_-]+)$/', $subPart, $m)) {
-                    $tag = $m[1] !== '' ? $m[1] : '*';
-                    $id = $m[2];
-                    $subXPaths[] = "descendant-or-self::{$tag}[@id='{$id}']";
-                } else {
-                    $subXPaths[] = "descendant-or-self::{$subPart}";
+                $converted = $this->cssTokenToXPath($subPart);
+                if ($converted !== '') {
+                    $subXPaths[] = $converted;
                 }
             }
-            $xpathParts[] = './/' . implode('//', $subXPaths);
+            if ($subXPaths !== []) {
+                $xpathParts[] = './/' . implode('//', $subXPaths);
+            }
         }
 
         return implode(' | ', $xpathParts);
+    }
+
+    private function cssTokenToXPath(string $token): string
+    {
+        if (preg_match('/^([a-zA-Z0-9*-]*)\.([a-zA-Z0-9_-]+)$/', $token, $m)) {
+            $tag = $m[1] !== '' ? $m[1] : '*';
+
+            return "descendant-or-self::{$tag}[contains(concat(' ', normalize-space(@class), ' '), ' {$m[2]} ')]";
+        }
+
+        if (preg_match('/^([a-zA-Z0-9*-]*)#([a-zA-Z0-9_-]+)$/', $token, $m)) {
+            $tag = $m[1] !== '' ? $m[1] : '*';
+
+            return "descendant-or-self::{$tag}[@id='{$m[2]}']";
+        }
+
+        if (preg_match('/^\.([a-zA-Z0-9_-]+)$/', $token, $m)) {
+            return "descendant-or-self::*[contains(concat(' ', normalize-space(@class), ' '), ' {$m[1]} ')]";
+        }
+
+        if (preg_match('/^#([a-zA-Z0-9_-]+)$/', $token, $m)) {
+            return "descendant-or-self::*[@id='{$m[1]}']";
+        }
+
+        if (preg_match('/^([a-zA-Z0-9*-]+)\[([^=\]]+)(\*="([^"]+)"|"([^"]+)")?\]$/', $token, $m)) {
+            $tag = $m[1] !== '' ? $m[1] : '*';
+            $attr = $m[2];
+            $contains = $m[4] !== '' ? $m[4] : ($m[5] !== '' ? $m[5] : '');
+            if ($contains === '') {
+                return "descendant-or-self::{$tag}[@{$attr}]";
+            }
+
+            return "descendant-or-self::{$tag}[contains(@{$attr}, '{$contains}')]";
+        }
+
+        if (preg_match('/^[a-zA-Z0-9*-]+$/', $token)) {
+            return "descendant-or-self::{$token}";
+        }
+
+        return '';
     }
 
     /**

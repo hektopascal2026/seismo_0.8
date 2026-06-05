@@ -7,6 +7,7 @@ namespace Seismo\Service;
 use Seismo\Controller\SettingsController;
 use Seismo\Core\Mail\CleanupConfigVerifier;
 use Seismo\Core\Mail\DigestSplitConfigNormalizer;
+use Seismo\Core\Mail\DigestSplitSelectorProber;
 use Seismo\Core\Mail\DigestSplitStructureHint;
 use Seismo\Core\Mail\DigestSplitVerifier;
 use Seismo\Repository\SystemConfigRepository;
@@ -31,19 +32,21 @@ final class EmailGeminiConfigGenerator
     private const PROMPT_HTML_MAX_CHARS = 15000;
 
     private const SPLIT_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert email digest analyst configuring a deterministic HTML/text splitter.
+You are an expert email layout engineer configuring a deterministic HTML/text splitter.
 
-A "card" is one DOM story wrapper matched by story_selector — not every headline line in plain text.
-NOT a card: masthead, navigation, "view in browser", section labels ("TOP STORIES"),
-ads, unsubscribe footer, social icons, empty spacers, author bios.
+Find repeated DOM story wrappers in html_body (table rows, div.csc-frame-default, article blocks).
+Do NOT count plain-text headlines — only selectors that match real HTML wrappers.
 
-When samples include html_body you MUST use split_method "html_selector". Never regex_split on HTML emails.
-expected_card_count must equal the number of nodes story_selector would match in html_body — verify against the PHP structure scan.
-
-Your output is consumed by PHP EmailDigestSplitterService. Follow the schema exactly.
-CSS selectors must use only: tag, .class, #id, and space-separated descendants (no >, :nth-child, [attr]).
-Prefer stable class/id/table wrappers repeated across all samples, not dates or tracking IDs.
+When samples include html_body use split_method "html_selector". Never regex_split on HTML emails.
+Output is consumed by PHP EmailDigestSplitterService. Follow the schema exactly.
+CSS selectors: tag, .class, #id, space-separated descendants, and [attr*="value"] (no >, :nth-child).
+Prefer stable class/id/table wrappers repeated across samples, not dates or tracking IDs.
 regex_split is ONLY when html_body is empty and text_body has explicit delimiters.
+TEXT;
+
+    private const SPLIT_SIMPLE_SYSTEM_INSTRUCTION = <<<'TEXT'
+You are an expert email structure analyzer. Detect digest HTML structure and return runnable split_rules only.
+Prefer simple class-based selectors (.csc-frame-default, table wrappers) over fragile inline-style attribute selectors.
 TEXT;
 
     private const CLEANUP_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -65,6 +68,7 @@ TEXT;
         private readonly DigestSplitVerifier $splitVerifier = new DigestSplitVerifier(),
         private readonly CleanupConfigVerifier $cleanupVerifier = new CleanupConfigVerifier(),
         private readonly DigestSplitStructureHint $structureHint = new DigestSplitStructureHint(),
+        private readonly DigestSplitSelectorProber $selectorProber = new DigestSplitSelectorProber(),
     ) {
     }
 
@@ -105,7 +109,7 @@ TEXT;
                 $prompt,
                 'cleanup attempt ' . $attempts . '/' . (self::MAX_CLEANUP_RETRIES + 1)
             );
-            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+            $lastAnalysis = $this->extractSplitAnalysis($extracted);
 
             $config = $this->extractCleanupConfig($extracted);
             if ($config['strip_regexes'] === []) {
@@ -199,7 +203,7 @@ TEXT;
                 $prompt,
                 'cleanup refine attempt ' . $attempts . '/' . (self::MAX_CLEANUP_RETRIES + 1)
             );
-            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+            $lastAnalysis = $this->extractSplitAnalysis($extracted);
 
             $config = $this->extractCleanupConfig($extracted);
             if ($config['strip_regexes'] === []) {
@@ -257,6 +261,17 @@ TEXT;
      */
     public function generateSplitConfig(array $samples): array
     {
+        if ($this->structureHint->detectTypo3InSamples($samples)) {
+            $probed = $this->tryProbedSplitConfig($samples, 'TYPO3/punkt4 template');
+            if ($probed !== null) {
+                return [
+                    'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    'analysis' => null,
+                    'verification' => $probed['verification'],
+                ];
+            }
+        }
+
         $attempts = 0;
         $lastAnalysis = null;
         $lastConfig = null;
@@ -282,7 +297,7 @@ TEXT;
                 $prompt,
                 'split attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
             );
-            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+            $lastAnalysis = $this->extractSplitAnalysis($extracted);
 
             if (empty($extracted['is_digest'])) {
                 $verification = [
@@ -306,7 +321,6 @@ TEXT;
                     'analysis' => $lastAnalysis,
                     'config' => $extracted,
                     'verification' => [
-                        'expected_counts' => DigestSplitConfigNormalizer::expectedCountsFromAnalysis($extracted),
                         'actual_counts' => array_fill(0, count($samples), 0),
                         'message' => 'Gemini returned is_digest=true but split_rules were incomplete or invalid.',
                     ],
@@ -318,15 +332,13 @@ TEXT;
                 $this->structureHint->samplesHaveHtml($samples)
                 && ($normalized['split_rules']['split_method'] ?? '') === 'regex_split'
             ) {
-                $expected = DigestSplitConfigNormalizer::expectedCountsFromAnalysis($extracted);
                 $retryContext = [
                     'analysis' => $lastAnalysis,
                     'config' => $normalized,
                     'verification' => [
                         'message' => 'regex_split rejected: samples include html_body. Use html_selector.',
-                        'expected_counts' => $expected,
                         'actual_counts' => array_fill(0, count($samples), 0),
-                        'mismatches' => $this->buildZeroMatchMismatches($expected, count($samples)),
+                        'mismatches' => [],
                     ],
                     'force_html_selector' => true,
                 ];
@@ -362,12 +374,118 @@ TEXT;
             ];
         }
 
+        $simple = $this->trySimpleSplitFallback($samples);
+        if ($simple !== null) {
+            return [
+                'digest_split_config' => json_encode($simple['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'analysis' => $lastAnalysis,
+                'verification' => $simple['verification'],
+            ];
+        }
+
+        $probed = $this->tryProbedSplitConfig($samples, 'HTML template probe');
+        if ($probed !== null) {
+            return [
+                'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'analysis' => $lastAnalysis,
+                'verification' => $probed['verification'],
+            ];
+        }
+
         return [
             'digest_split_config' => $lastConfig !== null
                 ? json_encode($lastConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
                 : null,
             'analysis' => $lastAnalysis,
             'verification' => $verification,
+        ];
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @return ?array{config: array{is_digest: true, split_rules: array<string, string>}, verification: array<string, mixed>}
+     */
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @return ?array{config: array{is_digest: true, split_rules: array<string, string>}, verification: array<string, mixed>}
+     */
+    private function tryProbedSplitConfig(array $samples, string $labelPrefix): ?array
+    {
+        $html = trim((string)($samples[0]['html_body'] ?? ''));
+        if ($html === '') {
+            return null;
+        }
+
+        $probe = $this->selectorProber->probeBest($html);
+        if ($probe === null) {
+            return null;
+        }
+
+        $label = $labelPrefix . ' (' . (string)($probe['label'] ?? 'template') . ')';
+        unset($probe['score'], $probe['label']);
+        $check = $this->splitVerifier->verify($samples, $probe, []);
+        if (!$check['verified']) {
+            return null;
+        }
+
+        $actual = (int)($check['actual_counts'][0] ?? 0);
+
+        return [
+            'config' => $probe,
+            'verification' => [
+                'verified' => true,
+                'expected_counts' => [],
+                'actual_counts' => $check['actual_counts'],
+                'attempts' => 0,
+                'message' => 'Applied local ' . $label . ': ' . $actual . ' card(s) on sample 1.',
+            ],
+        ];
+    }
+
+    /**
+     * One-shot layout-analyzer fallback (pre-editor prompt style).
+     *
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @return ?array{config: array{is_digest: true, split_rules: array<string, string>}, verification: array<string, mixed>}
+     */
+    private function trySimpleSplitFallback(array $samples): ?array
+    {
+        $extracted = $this->callGeminiJson(
+            self::SPLIT_SIMPLE_SYSTEM_INSTRUCTION,
+            $this->buildSimpleSplitPrompt($samples),
+            'split simple fallback'
+        );
+
+        if (empty($extracted['is_digest'])) {
+            return null;
+        }
+
+        $normalized = DigestSplitConfigNormalizer::normalize($extracted);
+        if ($normalized === null) {
+            return null;
+        }
+
+        if (
+            $this->structureHint->samplesHaveHtml($samples)
+            && ($normalized['split_rules']['split_method'] ?? '') === 'regex_split'
+        ) {
+            return null;
+        }
+
+        $check = $this->splitVerifier->verify($samples, $normalized, []);
+        if (!$check['verified']) {
+            return null;
+        }
+
+        return [
+            'config' => $normalized,
+            'verification' => [
+                'verified' => true,
+                'expected_counts' => [],
+                'actual_counts' => $check['actual_counts'],
+                'attempts' => 0,
+                'message' => 'Simple layout-analyzer fallback: ' . ($check['actual_counts'][0] ?? 0) . ' card(s) on sample 1.',
+            ],
         ];
     }
 
@@ -422,7 +540,7 @@ TEXT;
                 $prompt,
                 'split refine attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
             );
-            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+            $lastAnalysis = $this->extractSplitAnalysis($extracted);
 
             $normalized = DigestSplitConfigNormalizer::normalize($extracted);
             if ($normalized === null) {
@@ -441,27 +559,20 @@ TEXT;
             }
 
             $lastConfig = $normalized;
-            $verifyPayload = $extracted;
-            if (!is_array($verifyPayload['analysis'] ?? null)) {
-                $verifyPayload['analysis'] = [
-                    'samples' => [
-                        ['sample_index' => 1, 'expected_card_count' => $keepCount],
-                    ],
-                ];
-            }
-
-            $check = $this->splitVerifier->verify($samples, $normalized, $verifyPayload);
+            $check = $this->splitVerifier->verify($samples, $normalized, []);
+            $actual = (int)($check['actual_counts'][0] ?? 0);
+            $refineOk = $check['verified'] && $actual === $keepCount;
             $verification = [
-                'verified' => $check['verified'],
-                'expected_counts' => $check['expected_counts'] !== [] ? $check['expected_counts'] : [$keepCount],
+                'verified' => $refineOk,
+                'expected_counts' => [$keepCount],
                 'actual_counts' => $check['actual_counts'],
                 'attempts' => $attempts,
-                'message' => $check['verified']
+                'message' => $refineOk
                     ? 'Refined: ' . $keepCount . ' card(s) kept, ' . $noiseCount . ' noise block(s) excluded.'
-                    : $check['message'],
+                    : ($actual === 0 ? $check['message'] : 'Refined split produced ' . $actual . ' cards, expected ' . $keepCount . ' kept.'),
             ];
 
-            if ($check['verified']) {
+            if ($refineOk) {
                 return [
                     'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     'analysis' => $lastAnalysis,
@@ -473,7 +584,11 @@ TEXT;
                 'analysis' => $lastAnalysis,
                 'config' => $normalized,
                 'feedback' => $feedback,
-                'verification' => $check,
+                'verification' => [
+                    'message' => $verification['message'],
+                    'actual_counts' => $check['actual_counts'],
+                    'mismatches' => $check['mismatches'],
+                ],
             ];
         }
 
@@ -711,25 +826,21 @@ TEXT;
     }
 
     /**
-     * @param list<int> $expected
-     * @return list<array{sample_index: int, expected: int, actual: int, titles: list<string>}>
+     * @param array<string, mixed> $extracted
+     * @return ?array<string, mixed>
      */
-    private function buildZeroMatchMismatches(array $expected, int $sampleCount): array
+    private function extractSplitAnalysis(array $extracted): ?array
     {
-        $mismatches = [];
-        for ($i = 0; $i < $sampleCount; ++$i) {
-            $exp = $expected[$i] ?? ($expected[0] ?? 0);
-            if ($exp > 0) {
-                $mismatches[] = [
-                    'sample_index' => $i + 1,
-                    'expected' => $exp,
-                    'actual' => 0,
-                    'titles' => [],
-                ];
-            }
+        if (is_array($extracted['analysis'] ?? null)) {
+            return $extracted['analysis'];
         }
 
-        return $mismatches;
+        $observation = trim((string)($extracted['structural_observation'] ?? ''));
+        if ($observation !== '') {
+            return ['structural_observation' => $observation];
+        }
+
+        return null;
     }
 
     /**
@@ -740,13 +851,11 @@ TEXT;
         $hasHtml = $this->structureHint->samplesHaveHtml($samples);
 
         $prompt = "Configure multi-story digest splitting for this newsletter sender.\n\n";
-        $prompt .= "PHASE 1 — For EACH sample, find repeated story wrappers in html_body (if present).\n";
-        $prompt .= "Count expected_card_count = nodes matched by your story_selector, NOT topic lines in plain text.\n";
-        $prompt .= "PHASE 2 — Propose split_rules that produce exactly those counts when run by our PHP splitter.\n\n";
+        $prompt .= "Inspect html_body for repeated story wrapper elements (tables, div.csc-frame-default, article blocks).\n";
+        $prompt .= "Return split_rules that our PHP splitter can run — focus on DOM structure, not editorial topic counts.\n\n";
 
         if ($hasHtml) {
-            $prompt .= "REQUIRED: samples include html_body → use split_method \"html_selector\" only.\n";
-            $prompt .= "Do NOT use regex_split on text_body for HTML newsletters.\n\n";
+            $prompt .= "REQUIRED: samples include html_body → use split_method \"html_selector\" only.\n\n";
             $hintBlock = $this->structureHint->formatForPrompt($samples);
             if ($hintBlock !== '') {
                 $prompt .= $hintBlock;
@@ -761,19 +870,28 @@ TEXT;
         $prompt .= "{\n";
         $prompt .= "  \"is_digest\": true|false,\n";
         $prompt .= "  \"confidence\": \"high\"|\"medium\"|\"low\",\n";
-        $prompt .= "  \"analysis\": {\n";
-        $prompt .= "    \"samples\": [\n";
-        $prompt .= "      {\n";
-        $prompt .= "        \"sample_index\": 1,\n";
-        $prompt .= "        \"expected_card_count\": <int>,\n";
-        $prompt .= "        \"cards\": [{\"title\": \"...\", \"link\": \"...\"}],\n";
-        $prompt .= "        \"noise\": [{\"description\": \"...\", \"reason\": \"...\"}],\n";
-        $prompt .= "        \"structural_observation\": \"stable wrapper pattern\"\n";
-        $prompt .= "      }\n";
-        $prompt .= "    ]\n";
-        $prompt .= "  },\n";
+        $prompt .= "  \"structural_observation\": \"one sentence: wrapper pattern you chose\",\n";
         $prompt .= "  \"split_rules\": { ... }  // omit or null when is_digest is false\n";
         $prompt .= "}\n\n";
+        $prompt .= $this->splitConfigSchemaDescription();
+        $prompt .= "\nReturn ONLY valid JSON. No markdown.";
+
+        return $prompt;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     */
+    private function buildSimpleSplitPrompt(array $samples): string
+    {
+        $prompt = "These sample emails may be a multi-story digest. Find repeated story wrappers in the HTML.\n\n";
+
+        foreach ($samples as $index => $sample) {
+            $prompt .= $this->formatSampleBlock($index, $sample);
+        }
+
+        $prompt .= "If NOT a digest, return {\"is_digest\": false}.\n";
+        $prompt .= "If a digest, return {\"is_digest\": true, \"split_rules\": { ... }} using our schema.\n";
         $prompt .= $this->splitConfigSchemaDescription();
         $prompt .= "\nReturn ONLY valid JSON. No markdown.";
 
@@ -789,21 +907,19 @@ TEXT;
         $prompt = "Your previous split_rules did NOT pass verification. Revise them.\n\n";
 
         if (!empty($retryContext['force_html_selector'])) {
-            $prompt .= "MANDATORY FIX: Use split_method \"html_selector\". regex_split on HTML emails returns zero cards.\n";
-            $prompt .= "Set expected_card_count to the story_selector match count from html_body, not plain-text topics.\n\n";
+            $prompt .= "MANDATORY FIX: Use split_method \"html_selector\". regex_split on HTML emails returns zero cards.\n\n";
             $hintBlock = $this->structureHint->formatForPrompt($samples);
             if ($hintBlock !== '') {
                 $prompt .= $hintBlock;
             }
         }
 
-        $prompt .= "Previous analysis:\n" . json_encode($retryContext['analysis'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Previous split_rules:\n" . json_encode($retryContext['config']['split_rules'] ?? $retryContext['config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Verification failure:\n" . ($retryContext['verification']['message'] ?? '') . "\n";
 
         $mismatches = $retryContext['verification']['mismatches'] ?? [];
         if ($mismatches !== []) {
-            $prompt .= "Mismatches:\n" . json_encode($mismatches, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+            $prompt .= "Issues:\n" . json_encode($mismatches, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         }
 
         $prompt .= "Sample emails for reference:\n";
@@ -811,10 +927,10 @@ TEXT;
             $prompt .= $this->formatSampleBlock($index, $sample);
         }
 
-        $prompt .= "Fix split_rules so actual_card_count equals expected_card_count on every sample.\n";
-        $prompt .= "If story_selector matches too many nodes, narrow it. If too few, broaden to the parent wrapper.\n";
+        $prompt .= "Fix split_rules so the PHP splitter extracts real story cards (title + link + body) from html_body.\n";
+        $prompt .= "Prefer stable class/table wrappers. If story_selector matches zero nodes, broaden; if noise, narrow or add exclude_selectors.\n";
         $prompt .= $this->splitConfigSchemaDescription();
-        $prompt .= "\nReturn the full JSON object again (is_digest, confidence, analysis, split_rules). No markdown.";
+        $prompt .= "\nReturn the full JSON object again (is_digest, confidence, structural_observation, split_rules). No markdown.";
 
         return $prompt;
     }
@@ -835,6 +951,15 @@ HTML (required when html_body has structure):
   "link_selector": "h2 a",
   "body_selector": "td.body",
   "exclude_selectors": [".masthead", "#footer"]
+}
+
+TYPO3/punkt4 digests (class csc-frame-default plus nested table stories):
+{
+  "split_method": "html_selector",
+  "story_selector": "div.csc-frame-default, table table table table td",
+  "title_selector": "h1.csc-firstHeader, a",
+  "link_selector": "a",
+  "body_selector": "p.bodytext, td"
 }
 
 exclude_selectors (optional): simple .class, #id, tag, or tag.class selectors.

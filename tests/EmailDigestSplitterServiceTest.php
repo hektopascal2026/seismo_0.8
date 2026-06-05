@@ -115,4 +115,57 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertSame('Story A', $stories[0]['title']);
         self::assertSame('Story B', $stories[1]['title']);
     }
+
+    public function testSplitAttributeSelector(): void
+    {
+        $html = '
+            <html><body>
+                <div class="item">
+                    <a style="font-size:14px;font-weight:bold;" href="https://example.com/one">First headline here</a>
+                    <p style="color:#262626;font-size:12px;">First body text with enough words to qualify.</p>
+                </div>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'div.item',
+                'title_selector' => 'a[style*="font-weight:bold"]',
+                'link_selector' => 'a[style*="font-weight:bold"]',
+                'body_selector' => 'p[style*="color:#262626"]',
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertSame('First headline here', $stories[0]['title']);
+        self::assertStringContainsString('First body text', $stories[0]['text_body']);
+    }
+
+    public function testSplitTypo3Punkt4Template(): void
+    {
+        $html = file_get_contents(__DIR__ . '/fixtures/zhk_digest_sample.html');
+        self::assertNotFalse($html);
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'div.csc-frame-default, table table table table td',
+                'title_selector' => 'h1.csc-firstHeader, a',
+                'link_selector' => 'a',
+                'body_selector' => 'p.bodytext, td',
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(3, $stories);
+        self::assertStringContainsString('AMAG Group', $stories[0]['title']);
+        self::assertStringContainsString('Zürich Tourismus', $stories[1]['title']);
+        self::assertStringContainsString('SMC Launch Event', $stories[2]['title']);
+    }
 }
