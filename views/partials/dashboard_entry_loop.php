@@ -370,6 +370,22 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                 $hasMore = false;
                             }
                             $webViewUrl = seismo_email_web_view_url($email);
+                            if ($renderNestedDigestStories && $digestChildCount > 0) {
+                                foreach ($digestChildren as $digestChildRow) {
+                                    $digestChildMeta = $digestChildRow['metadata'] ?? null;
+                                    if (is_string($digestChildMeta)) {
+                                        $digestChildMeta = json_decode($digestChildMeta, true);
+                                    }
+                                    if (!is_array($digestChildMeta)) {
+                                        continue;
+                                    }
+                                    $digestChildWebView = trim((string)($digestChildMeta['link'] ?? $digestChildMeta['web_view_url'] ?? ''));
+                                    if ($digestChildWebView !== '' && seismo_is_navigable_url($digestChildWebView)) {
+                                        $webViewUrl = $digestChildWebView;
+                                        break;
+                                    }
+                                }
+                            }
                             $isDigestChildEmail = !empty($email['parent_email_id']);
                             $entryCardClass = 'entry-card';
                             if ($isDigestChildEmail) {
@@ -444,23 +460,10 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                                 $childHasMore = mb_strlen($childPreviewFlat) > 200;
                                             }
                                             
-                                            $childLink = null;
-                                            if (!empty($child['metadata'])) {
-                                                $childMeta = is_string($child['metadata']) ? json_decode($child['metadata'], true) : $child['metadata'];
-                                                if (is_array($childMeta)) {
-                                                    $childLink = trim((string)($childMeta['link'] ?? $childMeta['web_view_url'] ?? '')) ?: null;
-                                                }
-                                            }
                                         ?>
                                         <div class="digest-child-item">
                                             <div class="digest-child-item__head">
-                                                <h4 class="digest-child-item__title">
-                                                    <?php if ($childLink): ?>
-                                                        <a href="<?= htmlspecialchars($childLink) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($childTitle) ?></a>
-                                                    <?php else: ?>
-                                                        <?= htmlspecialchars($childTitle) ?>
-                                                    <?php endif; ?>
-                                                </h4>
+                                                <h4 class="digest-child-item__title"><?= htmlspecialchars($childTitle) ?></h4>
                                                 <?php if ($childRelScore !== null): ?>
                                                     <span class="magnitu-badge <?= htmlspecialchars($childScoreBadgeClass) ?>"><?= number_format($childRelScore * 100, 0) ?></span>
                                                 <?php endif; ?>
@@ -479,16 +482,13 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                                     <div class="entry-full-content"><?= htmlspecialchars($childBodyDisplay) ?></div>
                                                 <?php endif; ?>
                                             <?php endif; ?>
+                                            <?php if ($childHasMore): ?>
                                             <div class="digest-child-item__actions entry-actions">
                                                 <div class="entry-actions-main">
-                                                    <?php if ($childHasMore): ?>
-                                                        <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
-                                                    <?php endif; ?>
-                                                    <?php if ($childLink): ?>
-                                                        <a href="<?= htmlspecialchars($childLink) ?>" target="_blank" rel="noopener" class="entry-link">Read story &rarr;</a>
-                                                    <?php endif; ?>
+                                                    <button type="button" class="btn btn-secondary entry-expand-btn">expand &#9662;</button>
                                                 </div>
                                             </div>
+                                            <?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
