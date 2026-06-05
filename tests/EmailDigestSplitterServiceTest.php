@@ -145,6 +145,39 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertStringContainsString('First body text', $stories[0]['text_body']);
     }
 
+    public function testMergesPunkt4HeadlineAndBodyCells(): void
+    {
+        $html = '
+            <html><body>
+            <table><tbody><tr><td>
+            <table><tbody>
+            <tr><td><a style="font-weight:bold" href="https://example.com/ai">Künstliche Intelligenz verändert den Welthandel grundlegend</a></td></tr>
+            <tr><td style="font-size:12px">Wallisellen ZH - Laut einer Studie von Allianz Trade verschiebt das globale Wachstum der Künstlichen Intelligenz die Machtverhältnisse im Welthandel. <a href="https://example.com/ai">Mehr</a></td></tr>
+            </tbody></table>
+            </td></tr></tbody></table>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'table table table table td',
+                'title_selector' => 'a',
+                'link_selector' => 'a',
+                'body_selector' => 'td',
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertStringContainsString('Künstliche Intelligenz', $stories[0]['title']);
+        self::assertStringContainsString('Allianz Trade', $stories[0]['text_body']);
+        self::assertSame('https://example.com/ai', $stories[0]['link']);
+        self::assertStringNotContainsString('Mehr', $stories[0]['title']);
+    }
+
     public function testSplitTypo3Punkt4Template(): void
     {
         $html = file_get_contents(__DIR__ . '/fixtures/zhk_digest_sample.html');

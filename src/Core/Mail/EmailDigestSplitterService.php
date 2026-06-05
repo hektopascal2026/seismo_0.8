@@ -86,7 +86,7 @@ final class EmailDigestSplitterService
             return [];
         }
 
-        $storyNodes = $this->innermostStoryNodes($nodes);
+        $storyNodes = $this->groupIntoStoryWrappers($this->innermostStoryNodes($nodes));
 
         $titleSelector = trim((string)($rules['title_selector'] ?? ''));
         $linkSelector = trim((string)($rules['link_selector'] ?? ''));
@@ -107,42 +107,8 @@ final class EmailDigestSplitterService
                 continue;
             }
 
-            // Extract Title
-            $title = '';
-            if ($titleSelector !== '') {
-                try {
-                    $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
-                } catch (\Throwable $e) {
-                    $titleNodes = false;
-                }
-                if ($titleNodes !== false && $titleNodes->length > 0) {
-                    $title = trim($titleNodes->item(0)->textContent);
-                }
-            }
-
-            // Extract Link
-            $link = null;
-            if ($linkSelector !== '') {
-                try {
-                    $linkNodes = @$xpath->query($this->cssToXPath($linkSelector), $node);
-                } catch (\Throwable $e) {
-                    $linkNodes = false;
-                }
-                if ($linkNodes !== false && $linkNodes->length > 0) {
-                    $item = $linkNodes->item(0);
-                    if ($item instanceof DOMElement) {
-                        $link = trim($item->getAttribute('href')) ?: null;
-                    }
-                }
-            } else {
-                $linkNodes = $node->getElementsByTagName('a');
-                if ($linkNodes->length > 0) {
-                    $item = $linkNodes->item(0);
-                    if ($item instanceof DOMElement) {
-                        $link = trim($item->getAttribute('href')) ?: null;
-                    }
-                }
-            }
+            $title = $this->extractBestTitle($xpath, $node, $titleSelector);
+            $link = $this->extractBestLink($xpath, $node, $linkSelector);
 
             // Extract Body text & HTML
             $storyHtml = $dom->saveHTML($node);
@@ -180,7 +146,343 @@ final class EmailDigestSplitterService
             }
         }
 
-        return $stories;
+        return $this->mergeAdjacentFragments($stories);
+    }
+
+    /**
+     * @param list<DOMElement> $nodes
+     * @return list<DOMElement>
+     */
+    private function groupIntoStoryWrappers(array $nodes): array
+    {
+        $wrappers = [];
+        $seen = [];
+
+        foreach ($nodes as $node) {
+            $wrapper = $this->resolveStoryWrapper($node);
+            $id = spl_object_id($wrapper);
+            if (!isset($seen[$id])) {
+                $seen[$id] = true;
+                $wrappers[] = $wrapper;
+            }
+        }
+
+        return $wrappers;
+    }
+
+    private function resolveStoryWrapper(DOMElement $node): DOMElement
+    {
+        $current = $node;
+
+        while ($current instanceof DOMElement) {
+            if ($this->elementHasClass($current, 'csc-frame-default')) {
+                return $current;
+            }
+
+            if ($this->tableContainsHeadlineAndBody($current)) {
+                return $current;
+            }
+
+            $parent = $current->parentNode;
+            $current = $parent instanceof DOMElement ? $parent : null;
+        }
+
+        return $node;
+    }
+
+    private function tableContainsHeadlineAndBody(DOMElement $table): bool
+    {
+        if (strtolower($table->tagName) !== 'table') {
+            return false;
+        }
+
+        $rows = $table->childNodes;
+        $directRows = [];
+        foreach ($rows as $child) {
+            if ($child instanceof DOMElement && strtolower($child->tagName) === 'tr') {
+                $directRows[] = $child;
+            }
+        }
+
+        if ($directRows === []) {
+            foreach ($table->getElementsByTagName('tbody') as $tbody) {
+                if (!$tbody instanceof DOMElement) {
+                    continue;
+                }
+                foreach ($tbody->childNodes as $child) {
+                    if ($child instanceof DOMElement && strtolower($child->tagName) === 'tr') {
+                        $directRows[] = $child;
+                    }
+                }
+                if ($directRows !== []) {
+                    break;
+                }
+            }
+        }
+
+        if (count($directRows) < 2 || count($directRows) > 4) {
+            return false;
+        }
+
+        $hasHeadline = false;
+        $hasBody = false;
+
+        foreach ($directRows as $row) {
+            $rowText = trim($row->textContent);
+            if ($rowText === '' || $this->isCtaLinkText($rowText)) {
+                continue;
+            }
+
+            foreach ($row->getElementsByTagName('a') as $link) {
+                if (!$link instanceof DOMElement) {
+                    continue;
+                }
+                $linkText = trim($link->textContent);
+                if ($linkText === '' || $this->isCtaLinkText($linkText)) {
+                    continue;
+                }
+
+                $style = strtolower($link->getAttribute('style'));
+                if (
+                    str_contains($style, 'font-weight:bold')
+                    || str_contains($style, 'font-weight: bold')
+                    || mb_strlen($linkText) >= 12
+                ) {
+                    $hasHeadline = true;
+                    break;
+                }
+            }
+
+            if (mb_strlen($rowText) >= 40) {
+                $hasBody = true;
+            }
+        }
+
+        return $hasHeadline && $hasBody;
+    }
+
+    private function extractBestTitle(DOMXPath $xpath, DOMElement $node, string $titleSelector): string
+    {
+        foreach (['h1', 'h2', 'h3', 'h4'] as $tag) {
+            $headings = $node->getElementsByTagName($tag);
+            if ($headings->length > 0) {
+                $text = trim((string)$headings->item(0)->textContent);
+                if ($text !== '' && !$this->isCtaLinkText($text)) {
+                    return $text;
+                }
+            }
+        }
+
+        if ($titleSelector === '') {
+            return '';
+        }
+
+        try {
+            $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
+        } catch (\Throwable $e) {
+            $titleNodes = false;
+        }
+
+        if ($titleNodes === false || $titleNodes->length === 0) {
+            return '';
+        }
+
+        $best = '';
+        foreach ($titleNodes as $candidate) {
+            $text = trim((string)$candidate->textContent);
+            if ($text === '' || $this->isCtaLinkText($text)) {
+                continue;
+            }
+
+            if ($candidate instanceof DOMElement && strtolower($candidate->tagName) === 'a') {
+                $style = strtolower($candidate->getAttribute('style'));
+                if (
+                    str_contains($style, 'font-weight:bold')
+                    || str_contains($style, 'font-weight: bold')
+                ) {
+                    return $text;
+                }
+            }
+
+            if (mb_strlen($text) > mb_strlen($best)) {
+                $best = $text;
+            }
+        }
+
+        return $best;
+    }
+
+    private function extractBestLink(DOMXPath $xpath, DOMElement $node, string $linkSelector): ?string
+    {
+        $candidates = [];
+
+        if ($linkSelector !== '') {
+            try {
+                $linkNodes = @$xpath->query($this->cssToXPath($linkSelector), $node);
+            } catch (\Throwable $e) {
+                $linkNodes = false;
+            }
+            if ($linkNodes !== false) {
+                foreach ($linkNodes as $item) {
+                    if ($item instanceof DOMElement) {
+                        $candidates[] = $item;
+                    }
+                }
+            }
+        } else {
+            foreach ($node->getElementsByTagName('a') as $item) {
+                if ($item instanceof DOMElement) {
+                    $candidates[] = $item;
+                }
+            }
+        }
+
+        $bestHref = null;
+        $bestScore = -1;
+        foreach ($candidates as $anchor) {
+            $href = trim($anchor->getAttribute('href'));
+            if ($href === '') {
+                continue;
+            }
+
+            $text = trim($anchor->textContent);
+            if ($this->isCtaLinkText($text)) {
+                continue;
+            }
+
+            $score = mb_strlen($text);
+            $style = strtolower($anchor->getAttribute('style'));
+            if (
+                str_contains($style, 'font-weight:bold')
+                || str_contains($style, 'font-weight: bold')
+            ) {
+                $score += 100;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestHref = $href;
+            }
+        }
+
+        if ($bestHref !== null) {
+            return $bestHref;
+        }
+
+        foreach ($candidates as $anchor) {
+            $href = trim($anchor->getAttribute('href'));
+            if ($href !== '') {
+                return $href;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
+     * @return list<array{title: string, html_body: string, text_body: string, link: ?string}>
+     */
+    private function mergeAdjacentFragments(array $stories): array
+    {
+        if (count($stories) < 2) {
+            return $stories;
+        }
+
+        $merged = [];
+        $index = 0;
+        while ($index < count($stories)) {
+            $current = $stories[$index];
+            $next = $stories[$index + 1] ?? null;
+
+            if ($next !== null && $this->shouldMergeFragments($current, $next)) {
+                $merged[] = $this->combineFragments($current, $next);
+                $index += 2;
+                continue;
+            }
+
+            $merged[] = $current;
+            ++$index;
+        }
+
+        return $merged;
+    }
+
+    /**
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $first
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $second
+     */
+    private function shouldMergeFragments(array $first, array $second): bool
+    {
+        return $this->isLikelyTitleFragment($first) && $this->isLikelyBodyFragment($second);
+    }
+
+    /**
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $story
+     */
+    private function isLikelyTitleFragment(array $story): bool
+    {
+        $title = trim($story['title']);
+        $body = trim($story['text_body']);
+        if ($title === '') {
+            return false;
+        }
+
+        if ($body === '' || $body === $title) {
+            return true;
+        }
+
+        return mb_strlen($body) <= mb_strlen($title) + 20;
+    }
+
+    /**
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $story
+     */
+    private function isLikelyBodyFragment(array $story): bool
+    {
+        $title = trim($story['title']);
+        $body = trim($story['text_body']);
+        if (mb_strlen($body) < 40) {
+            return false;
+        }
+
+        if ($this->isCtaLinkText($title)) {
+            return true;
+        }
+
+        if ($title === '' || mb_strlen($title) < 12) {
+            return true;
+        }
+
+        return mb_strlen($body) > mb_strlen($title) * 2 && mb_strlen($title) <= 8;
+    }
+
+    /**
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $first
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $second
+     * @return array{title: string, html_body: string, text_body: string, link: ?string}
+     */
+    private function combineFragments(array $first, array $second): array
+    {
+        $title = trim($first['title']);
+        $body = trim($second['text_body']);
+        if ($body === '' || $body === $title) {
+            $body = trim($first['text_body']);
+        }
+
+        return [
+            'title' => $title,
+            'html_body' => $first['html_body'] . $second['html_body'],
+            'text_body' => $body,
+            'link' => $first['link'] ?? $second['link'],
+        ];
+    }
+
+    private function isCtaLinkText(string $text): bool
+    {
+        $normalized = mb_strtolower(trim($text));
+
+        return in_array($normalized, ['mehr', 'more', 'read more', 'weiterlesen', 'read link →', 'read link ->'], true);
     }
 
     /**
