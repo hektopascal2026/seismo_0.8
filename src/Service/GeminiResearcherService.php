@@ -967,7 +967,9 @@ CONTRACT;
     }
 
     /**
-     * @param list<array{poolContext: string, selectionTarget: int, batchLocal: bool}> $jobs
+     * @param list<array{poolContext: string, selectionTarget: int, batchLocal: bool, entries: list<array<string, mixed>>}> $jobs
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
      * @return list<list<string>>
      * @throws GeminiResearcherException
      */
@@ -976,6 +978,9 @@ CONTRACT;
         array $jobs,
         int $itemCount,
         string $apiKey,
+        array $scoresByKey,
+        array $researcherMeta,
+        string $fallbackXml,
     ): array {
         $payloads = [];
         foreach ($jobs as $job) {
@@ -1002,24 +1007,53 @@ CONTRACT;
                 throw $this->exceptionFromFailedResponse($response);
             }
 
+            $keys = [];
+            $parseError = null;
             try {
-                $results[] = $this->resolveSelectionPassKeys(
+                $keys = $this->resolveSelectionPassKeys(
                     $response,
                     $payloads[$index],
                     $apiKey,
                     true,
                 );
             } catch (GeminiResearcherException $e) {
-                error_log(
-                    'GeminiResearcherService: tournament batch ' . ($index + 1)
-                    . ' selection failed: ' . $e->getMessage()
-                );
-                $batchErrors[] = [
-                    'batch'   => $index + 1,
-                    'message' => $e->getMessage(),
-                ];
-                $results[]     = [];
+                $parseError = $e;
             }
+
+            if ($keys === []) {
+                $reason = $parseError !== null
+                    ? $parseError->getMessage()
+                    : 'Selection batch returned no used_entry_keys.';
+                $keys = $this->retryTournamentBatchAfterFailure(
+                    $userSystemPrompt,
+                    $jobs[$index],
+                    $itemCount,
+                    $apiKey,
+                    $scoresByKey,
+                    $researcherMeta,
+                    $fallbackXml,
+                    $index + 1,
+                    $reason,
+                );
+                if ($keys === []) {
+                    error_log(
+                        'GeminiResearcherService: tournament batch ' . ($index + 1)
+                        . ' selection failed after retry: ' . $reason
+                    );
+                    $batchErrors[] = [
+                        'batch'   => $index + 1,
+                        'message' => $reason,
+                    ];
+                } else {
+                    $batchErrors[] = [
+                        'batch'     => $index + 1,
+                        'message'   => $reason,
+                        'recovered' => true,
+                    ];
+                }
+            }
+
+            $results[] = $keys;
         }
 
         if ($batchErrors !== []) {
@@ -1029,6 +1063,113 @@ CONTRACT;
         }
 
         return $results;
+    }
+
+    /**
+     * @param array{poolContext: string, selectionTarget: int, batchLocal: bool, entries: list<array<string, mixed>>} $job
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
+     * @return list<string>
+     */
+    private function retryTournamentBatchAfterFailure(
+        string $userSystemPrompt,
+        array $job,
+        int $itemCount,
+        string $apiKey,
+        array $scoresByKey,
+        array $researcherMeta,
+        string $fallbackXml,
+        int $batchNumber,
+        string $reason,
+    ): array {
+        $entries = $job['entries'];
+        if ($entries === []) {
+            return [];
+        }
+
+        error_log(
+            'GeminiResearcherService: tournament batch ' . $batchNumber
+            . ' retry after failure: ' . $reason
+        );
+
+        $retryCount = (int)($this->lastGenerationMeta['selection_batch_retries'] ?? 0);
+        $this->mergeGenerationMeta(['selection_batch_retries' => $retryCount + 1]);
+
+        try {
+            $keys = $this->runSelectionPass(
+                $userSystemPrompt,
+                $job['poolContext'],
+                $itemCount,
+                $job['selectionTarget'],
+                $apiKey,
+                $job['batchLocal'],
+                true,
+                true,
+                true,
+            );
+            if ($keys !== []) {
+                $this->noteSelectionBatchRetry($batchNumber, 'keys_only_minimal');
+
+                return $keys;
+            }
+        } catch (GeminiResearcherException) {
+            // fall through to split retry
+        }
+
+        if (count($entries) <= 1) {
+            return [];
+        }
+
+        $merged = [];
+        $seen   = [];
+        $halfSize = max(1, (int)ceil(count($entries) / 2));
+        foreach (ResearcherGeminiContext::chunkEntryList($entries, $halfSize) as $subBatch) {
+            $subContext = $this->buildEntryXmlContext($subBatch, $scoresByKey, $researcherMeta, $fallbackXml);
+            try {
+                $subKeys = $this->runSelectionPass(
+                    $userSystemPrompt,
+                    $subContext,
+                    $itemCount,
+                    self::tournamentSurvivorsForBatchSize(count($subBatch)),
+                    $apiKey,
+                    true,
+                    true,
+                    true,
+                    true,
+                );
+            } catch (GeminiResearcherException) {
+                continue;
+            }
+            foreach ($subKeys as $key) {
+                $normalized = strtolower(trim($key));
+                if ($normalized === '' || isset($seen[$normalized])) {
+                    continue;
+                }
+                $seen[$normalized] = true;
+                $merged[]          = $key;
+            }
+        }
+
+        if ($merged === []) {
+            return [];
+        }
+
+        $this->noteSelectionBatchRetry($batchNumber, 'split_halved');
+
+        return array_slice($merged, 0, $job['selectionTarget']);
+    }
+
+    private function noteSelectionBatchRetry(int $batchNumber, string $strategy): void
+    {
+        $retries = $this->lastGenerationMeta['selection_batch_retry_log'] ?? [];
+        if (!is_array($retries)) {
+            $retries = [];
+        }
+        $retries[] = [
+            'batch'    => $batchNumber,
+            'strategy' => $strategy,
+        ];
+        $this->mergeGenerationMeta(['selection_batch_retry_log' => $retries]);
     }
 
     /**
@@ -1560,6 +1701,7 @@ CONTRACT;
         $this->usageProOutputTokens   = 0;
         $this->usageApiCalls          = 0;
         $this->usageByPhase           = [];
+        $this->lastFinishReasonByPhase = [];
     }
 
     private function flushGeminiUsageToMeta(): void
@@ -1621,6 +1763,20 @@ CONTRACT;
         $this->usageByPhase[$phase]['prompt_tokens'] += $prompt;
         $this->usageByPhase[$phase]['output_tokens'] += $output;
         $this->usageByPhase[$phase]['api_calls']++;
+
+        $candidates = $json['candidates'] ?? null;
+        if (is_array($candidates) && isset($candidates[0]) && is_array($candidates[0])) {
+            $finishReason = trim((string)($candidates[0]['finishReason'] ?? ''));
+            if ($finishReason !== '') {
+                $this->lastFinishReasonByPhase[$phase] = $finishReason;
+                $this->usageByPhase[$phase]['finish_reason'] = $finishReason;
+            }
+        }
+    }
+
+    private function lastFinishReasonForPhase(string $phase): string
+    {
+        return $this->lastFinishReasonByPhase[$phase] ?? '';
     }
 
     private function effectiveSelectionThinkingLevel(): string
@@ -1777,6 +1933,8 @@ CONTRACT;
         int $effectiveCount,
         bool $useStructuredSchema,
         bool $batchLocal = false,
+        bool $forceKeysOnlySchema = false,
+        bool $forceMinimalThinking = false,
     ): array {
         $selectionModel = $this->selectionModel();
         $tokenBudget      = $batchLocal
@@ -1786,7 +1944,12 @@ CONTRACT;
             'maxOutputTokens' => $tokenBudget,
             'responseMimeType' => 'application/json',
         ], 'selection', $itemCount, $selectionModel);
-        if ($useStructuredSchema && self::usesGemini35Family($selectionModel)) {
+        if ($forceMinimalThinking && self::usesGemini35Family($selectionModel)) {
+            $config['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
+        }
+        if ($forceKeysOnlySchema && self::usesGemini35Family($selectionModel)) {
+            $config['responseSchema'] = $this->selectionResponseSchemaKeysOnly($effectiveCount);
+        } elseif ($useStructuredSchema && self::usesGemini35Family($selectionModel)) {
             $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount, $this->selectionProfile);
         }
 
@@ -1819,15 +1982,6 @@ CONTRACT;
         return is_array($config) && isset($config['responseSchema']);
     }
 
-    private function isSelectionSchemaRetryable(GeminiResearcherException $e): bool
-    {
-        $msg = strtolower($e->getMessage());
-
-        return str_contains($msg, 'used_entry_keys')
-            || str_contains($msg, 'json could not be parsed')
-            || str_contains($msg, 'unexpected response');
-    }
-
     /**
      * @param array<string, mixed> $payload
      * @return list<string>
@@ -1839,28 +1993,166 @@ CONTRACT;
         string $apiKey,
         bool $allowEmptyKeys,
     ): array {
+        $selectionTarget = $this->selectionTargetFromPayload($payload);
+
         try {
             $keys = $this->parseSelectionResponse($response, $allowEmptyKeys);
         } catch (GeminiResearcherException $e) {
-            if (!$this->selectionPayloadHasSchema($payload) || !$this->isSelectionSchemaRetryable($e)) {
-                throw $e;
+            $finishReason = $this->lastFinishReasonForPhase('selection');
+            if ($this->shouldRetrySelectionWithKeysOnly($e, $finishReason, $payload)) {
+                return $this->retrySelectionPassKeysOnly($payload, $apiKey, $allowEmptyKeys, $selectionTarget);
             }
-            $keys = [];
+
+            throw $e;
         }
 
-        if ($keys !== [] || !$this->selectionPayloadHasSchema($payload)) {
-            if (!$allowEmptyKeys && $keys === []) {
-                throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
-            }
-
+        if ($keys !== []) {
             return $keys;
         }
 
-        error_log('GeminiResearcherService: empty used_entry_keys with responseSchema; retrying selection without schema');
-        $retryPayload = $this->selectionPayloadWithoutSchema($payload);
-        $retryResponse  = $this->postPayloadWithSchemaFallback($retryPayload, $apiKey, 'selection');
+        $finishReason = $this->lastFinishReasonForPhase('selection');
 
-        return $this->parseSelectionResponse($retryResponse, $allowEmptyKeys);
+        if (!$this->selectionPayloadHasSchema($payload)) {
+            if (!$allowEmptyKeys) {
+                throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
+            }
+
+            return [];
+        }
+
+        if ($this->shouldRetrySelectionWithKeysOnly(null, $finishReason, $payload)) {
+            return $this->retrySelectionPassKeysOnly($payload, $apiKey, $allowEmptyKeys, $selectionTarget);
+        }
+
+        if (!$allowEmptyKeys) {
+            throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
+        }
+
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return list<string>
+     * @throws GeminiResearcherException
+     */
+    private function retrySelectionPassKeysOnly(
+        array $payload,
+        string $apiKey,
+        bool $allowEmptyKeys,
+        int $selectionTarget,
+    ): array {
+        error_log(
+            'GeminiResearcherService: selection truncation or empty keys; retrying with keys-only schema'
+        );
+        $this->mergeGenerationMeta(['selection_keys_only_retry' => true]);
+
+        $config = $payload['generationConfig'] ?? null;
+        if (!is_array($config)) {
+            $config = [];
+        }
+        $config['responseSchema'] = $this->selectionResponseSchemaKeysOnly($selectionTarget);
+        if (self::usesGemini35Family($this->selectionModel())) {
+            $config['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
+        }
+        $payload['generationConfig'] = $config;
+
+        $retryResponse = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
+
+        try {
+            return $this->parseSelectionResponse($retryResponse, $allowEmptyKeys);
+        } catch (GeminiResearcherException $e) {
+            if (!$allowEmptyKeys) {
+                throw $e;
+            }
+
+            return [];
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function shouldRetrySelectionWithKeysOnly(
+        ?GeminiResearcherException $exception,
+        string $finishReason,
+        array $payload,
+    ): bool {
+        if (!$this->selectionPayloadHasSchema($payload) || $this->selectionPayloadIsKeysOnlySchema($payload)) {
+            return false;
+        }
+
+        if ($exception !== null && $exception->isOutputTruncated()) {
+            return true;
+        }
+
+        if ($this->isOutputTruncatedFinishReason($finishReason)) {
+            return true;
+        }
+
+        if ($exception !== null) {
+            $msg = strtolower($exception->getMessage());
+            if (str_contains($msg, 'json could not be parsed') && $finishReason !== 'STOP') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function selectionTargetFromPayload(array $payload): int
+    {
+        $config = $payload['generationConfig'] ?? null;
+        if (!is_array($config)) {
+            return 1;
+        }
+
+        $schema = $config['responseSchema'] ?? null;
+        if (!is_array($schema)) {
+            return 1;
+        }
+
+        $properties = $schema['properties'] ?? null;
+        if (!is_array($properties)) {
+            return 1;
+        }
+
+        foreach (['used_entry_keys', 'used_entries'] as $field) {
+            $prop = $properties[$field] ?? null;
+            if (is_array($prop) && isset($prop['maxItems'])) {
+                return max(1, (int)$prop['maxItems']);
+            }
+        }
+
+        return 1;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function selectionPayloadIsKeysOnlySchema(array $payload): bool
+    {
+        $config = $payload['generationConfig'] ?? null;
+        if (!is_array($config)) {
+            return false;
+        }
+
+        $schema = $config['responseSchema'] ?? null;
+        if (!is_array($schema)) {
+            return false;
+        }
+
+        $properties = $schema['properties'] ?? null;
+        if (!is_array($properties)) {
+            return false;
+        }
+
+        return isset($properties['used_entry_keys'])
+            && !isset($properties['used_entries'])
+            && !isset($properties['selection_reasoning']);
     }
 
     /**
@@ -1962,14 +2254,37 @@ CONTRACT;
             'maxItems'    => $selectionTarget,
         ];
 
-        if ($profile->keysOnlyJson || !$profile->includeSelectionReasoning) {
+        if ($profile->id === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
             return [
                 'type'       => 'OBJECT',
                 'properties' => [
-                    'used_entry_keys' => $keysSchema,
+                    'used_entries' => [
+                        'type'        => 'ARRAY',
+                        'description' => 'Selected entries with inline verification rationale (max 15 words each).',
+                        'items'       => [
+                            'type'       => 'OBJECT',
+                            'properties' => [
+                                'key' => [
+                                    'type'        => 'STRING',
+                                    'description' => 'entry_type:entry_id from ENTRIES_DATA <id>.',
+                                ],
+                                'verification_rationale' => [
+                                    'type'        => 'STRING',
+                                    'description' => 'Max 15 words: why this entry passes USER PROMPT verification.',
+                                ],
+                            ],
+                            'required' => ['key'],
+                        ],
+                        'minItems' => 0,
+                        'maxItems' => $selectionTarget,
+                    ],
                 ],
-                'required' => ['used_entry_keys'],
+                'required' => ['used_entries'],
             ];
+        }
+
+        if ($profile->keysOnlyJson || !$profile->includeSelectionReasoning) {
+            return $this->selectionResponseSchemaKeysOnly($selectionTarget);
         }
 
         return [
@@ -1978,9 +2293,27 @@ CONTRACT;
                 'used_entry_keys'     => $keysSchema,
                 'selection_reasoning' => [
                     'type'        => 'STRING',
-                    'description' => $profile->capSelectionReasoning
-                        ? 'Optional; max 15 words per selected ID.'
-                        : 'Brief rationale after used_entry_keys.',
+                    'description' => 'Brief rationale after used_entry_keys.',
+                ],
+            ],
+            'required' => ['used_entry_keys'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectionResponseSchemaKeysOnly(int $selectionTarget): array
+    {
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'used_entry_keys' => [
+                    'type'        => 'ARRAY',
+                    'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id>, researcher order.',
+                    'items'       => ['type' => 'STRING'],
+                    'minItems'    => 0,
+                    'maxItems'    => $selectionTarget,
                 ],
             ],
             'required' => ['used_entry_keys'],
@@ -2033,6 +2366,11 @@ CONTRACT;
             $this->lastGenerationMeta['selection_reasoning'] = $reasoning;
         }
 
+        $verificationRationales = $this->extractVerificationRationalesFromDecoded($decoded);
+        if ($verificationRationales !== []) {
+            $this->lastGenerationMeta['selection_verification_rationales'] = $verificationRationales;
+        }
+
         $keys = $this->extractUsedEntryKeysFromDecoded($decoded);
         if ($keys === [] && !$allowEmptyKeys) {
             throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
@@ -2047,6 +2385,11 @@ CONTRACT;
      */
     private function extractUsedEntryKeysFromDecoded(array $decoded): array
     {
+        $fromInline = $this->extractKeysFromUsedEntries($decoded['used_entries'] ?? null);
+        if ($fromInline !== []) {
+            return $fromInline;
+        }
+
         foreach (['used_entry_keys', 'selected_entry_keys', 'entry_keys', 'keys'] as $field) {
             $keys = $this->normalizeUsedEntryKeys($decoded[$field] ?? null);
             if ($keys !== []) {
@@ -2059,6 +2402,54 @@ CONTRACT;
         }
 
         return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function extractKeysFromUsedEntries(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = trim((string)($row['key'] ?? ''));
+            if ($key !== '') {
+                $keys[] = $key;
+            }
+        }
+
+        return $this->normalizeUsedEntryKeys($keys);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function extractVerificationRationalesFromDecoded(array $decoded): array
+    {
+        $raw = $decoded['used_entries'] ?? null;
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $rationales = [];
+        foreach ($raw as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = trim((string)($row['key'] ?? ''));
+            $text = trim((string)($row['verification_rationale'] ?? ''));
+            if ($key !== '' && $text !== '') {
+                $rationales[$key] = $text;
+            }
+        }
+
+        return $rationales;
     }
 
     /**

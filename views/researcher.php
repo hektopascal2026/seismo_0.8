@@ -922,6 +922,22 @@ $moduleOptions = [
             if (meta.dual_model_selection && meta.selection_model) {
                 parts.push('sel model ' + meta.selection_model);
             }
+            if (meta.selection_keys_only_retry) {
+                parts.push('keys-only retry');
+            }
+            if (meta.selection_batch_retries) {
+                parts.push('batch retries ' + meta.selection_batch_retries);
+            }
+            if (meta.gemini_usage && meta.gemini_usage.by_phase) {
+                var selPhase = meta.gemini_usage.by_phase.selection;
+                if (selPhase && selPhase.finish_reason) {
+                    parts.push('sel finish ' + selPhase.finish_reason);
+                }
+                var sumPhase = meta.gemini_usage.by_phase.summary;
+                if (sumPhase && sumPhase.finish_reason) {
+                    parts.push('sum finish ' + sumPhase.finish_reason);
+                }
+            }
             if (meta.generation_failed) {
                 parts.push('failed');
             }

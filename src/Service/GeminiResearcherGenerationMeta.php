@@ -206,6 +206,9 @@ final class GeminiResearcherGenerationMeta
         if (!empty($meta['dual_model_selection']) && !empty($meta['selection_model'])) {
             $parts[] = 'sel model ' . (string)$meta['selection_model'];
         }
+        if (!empty($meta['selection_keys_only_retry'])) {
+            $parts[] = 'keys-only retry';
+        }
         if (!empty($meta['generation_failed'])) {
             $parts[] = 'failed';
         }
