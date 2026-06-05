@@ -415,7 +415,6 @@ final class MailModuleHandler
                     $previewStories = $splitter->split(
                         (string)($firstEmail['html_body'] ?? $firstEmail['body_html'] ?? ''),
                         (string)($firstEmail['text_body'] ?? $firstEmail['body_text'] ?? ''),
-                        (string)($firstEmail['subject'] ?? ''),
                         $proposedConfig
                     );
                 }
