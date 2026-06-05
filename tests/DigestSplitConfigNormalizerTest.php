@@ -71,6 +71,17 @@ final class DigestSplitConfigNormalizerTest extends TestCase
         ]));
     }
 
+    public function testRejectsFragileStorySelector(): void
+    {
+        self::assertNull(DigestSplitConfigNormalizer::normalize([
+            'is_digest' => true,
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'table[width="100%"] tbody tr td table tbody tr td table tbody tr td table tbody, div.mj-column-per-100 table',
+            ],
+        ]));
+    }
+
     public function testRejectsInvalidRegexPattern(): void
     {
         self::assertNull(DigestSplitConfigNormalizer::normalize([

@@ -46,7 +46,7 @@ final class DigestSplitConfigNormalizer
                 'link_selector' => trim((string)($rules['link_selector'] ?? $rules['selector_link'] ?? '')),
                 'body_selector' => trim((string)($rules['body_selector'] ?? $rules['selector_body'] ?? '')),
             ];
-            if ($normalized['story_selector'] === '') {
+            if ($normalized['story_selector'] === '' || self::isFragileStorySelector($normalized['story_selector'])) {
                 return null;
             }
 
@@ -106,6 +106,28 @@ final class DigestSplitConfigNormalizer
         }
 
         return $counts;
+    }
+
+    private static function isFragileStorySelector(string $selector): bool
+    {
+        if (mb_strlen($selector) > 100) {
+            return true;
+        }
+
+        foreach (explode(',', $selector) as $branch) {
+            $branch = trim($branch);
+            if ($branch === '') {
+                continue;
+            }
+            if (count(preg_split('/\s+/', $branch) ?: []) > 6) {
+                return true;
+            }
+            if (substr_count(strtolower($branch), 'tbody') >= 3) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function isValidRegexPattern(string $pattern): bool

@@ -71,6 +71,11 @@ final class DigestSplitStructureHint
             return $typo3;
         }
 
+        $mjml = $this->mjmlCandidatesFromHtml($html);
+        if ($mjml !== []) {
+            return $mjml;
+        }
+
         $dom = $this->loadDom($html);
         if ($dom === null) {
             return [];
@@ -154,8 +159,14 @@ final class DigestSplitStructureHint
                 $block .= "title_selector: \"h1.csc-firstHeader, a\"\n";
                 $block .= "link_selector: \"a\"\n";
                 $block .= "body_selector: \"p.bodytext, td\"\n";
+            } elseif ($this->looksLikeMjmlNewsletter($candidates)) {
+                $block .= "MJML digest detected. Prefer:\n";
+                $block .= "story_selector: \"div.mj-column-per-100 table\"\n";
+                $block .= "title_selector: \"a\"\n";
+                $block .= "link_selector: \"a\"\n";
+                $block .= "body_selector: \"td, p\"\n";
             } else {
-                $block .= "Pick a selector whose match count equals expected_card_count. Do NOT count plain-text topics.\n";
+                $block .= "Pick a selector matching repeated story wrappers in html_body.\n";
             }
             $block .= "\n";
 
@@ -191,6 +202,56 @@ final class DigestSplitStructureHint
     {
         foreach ($candidates as $row) {
             if ($row['selector'] === 'div.csc-frame-default' && $row['count'] > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<array{selector: string, count: int, sample_text: string}>
+     */
+    public function mjmlCandidatesFromHtml(string $html): array
+    {
+        $dom = $this->loadDom($html);
+        if ($dom === null) {
+            return [];
+        }
+
+        $xpath = new DOMXPath($dom);
+        $candidates = [];
+        foreach ([
+            'div.mj-column-per-100' => './/div[contains(concat(" ", normalize-space(@class), " "), " mj-column-per-100 ")]',
+            'div.mj-outlook-group-fix' => './/div[contains(@class, "mj-outlook-group-fix")]',
+            'table.mj-full-width-mobile' => './/table[contains(@class, "mj-full-width-mobile")]',
+        ] as $selector => $query) {
+            $nodes = $xpath->query($query);
+            $count = $nodes !== false ? $nodes->length : 0;
+            if ($count === 0) {
+                continue;
+            }
+            $sampleText = '';
+            if ($nodes !== false && $nodes->item(0) !== null) {
+                $sampleText = trim(mb_substr($nodes->item(0)->textContent, 0, 120));
+            }
+            $candidates[] = [
+                'selector' => $selector,
+                'count' => $count,
+                'sample_text' => $sampleText,
+            ];
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @param list<array{selector: string, count: int, sample_text: string}> $candidates
+     */
+    private function looksLikeMjmlNewsletter(array $candidates): bool
+    {
+        foreach ($candidates as $row) {
+            if (str_starts_with($row['selector'], 'div.mj-') && $row['count'] > 0) {
                 return true;
             }
         }

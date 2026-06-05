@@ -39,8 +39,8 @@ Do NOT count plain-text headlines — only selectors that match real HTML wrappe
 
 When samples include html_body use split_method "html_selector". Never regex_split on HTML emails.
 Output is consumed by PHP EmailDigestSplitterService. Follow the schema exactly.
-CSS selectors: tag, .class, #id, space-separated descendants, and [attr*="value"] (no >, :nth-child).
-Prefer stable class/id/table wrappers repeated across samples, not dates or tracking IDs.
+CSS selectors: tag, .class, #id, space-separated descendants (max 6 tokens per branch). No tbody chains.
+Prefer stable class wrappers (div.mj-column-per-100 table, div.csc-frame-default) over inline-style attribute selectors.
 regex_split is ONLY when html_body is empty and text_body has explicit delimiters.
 TEXT;
 
@@ -261,8 +261,8 @@ TEXT;
      */
     public function generateSplitConfig(array $samples): array
     {
-        if ($this->structureHint->detectTypo3InSamples($samples)) {
-            $probed = $this->tryProbedSplitConfig($samples, 'TYPO3/punkt4 template');
+        if ($this->structureHint->samplesHaveHtml($samples)) {
+            $probed = $this->tryProbedSplitConfig($samples, 'HTML template');
             if ($probed !== null) {
                 return [
                     'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -345,7 +345,6 @@ TEXT;
                 continue;
             }
 
-            $lastConfig = $normalized;
             $check = $this->splitVerifier->verify($samples, $normalized, $extracted);
             $verification = [
                 'verified' => $check['verified'],
@@ -363,6 +362,7 @@ TEXT;
                 ];
             }
 
+            $lastConfig = $normalized;
             $forceHtml = $this->structureHint->samplesHaveHtml($samples)
                 && (($check['actual_counts'][0] ?? 0) === 0);
 
@@ -393,11 +393,15 @@ TEXT;
         }
 
         return [
-            'digest_split_config' => $lastConfig !== null
-                ? json_encode($lastConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                : null,
+            'digest_split_config' => null,
             'analysis' => $lastAnalysis,
-            'verification' => $verification,
+            'verification' => [
+                'verified' => false,
+                'expected_counts' => $verification['expected_counts'],
+                'actual_counts' => $verification['actual_counts'],
+                'attempts' => $attempts,
+                'message' => 'Could not produce a verified split config — try manual selectors or mark noise blocks and refine.',
+            ],
         ];
     }
 
@@ -960,6 +964,15 @@ TYPO3/punkt4 digests (class csc-frame-default plus nested table stories):
   "title_selector": "h1.csc-firstHeader, a",
   "link_selector": "a",
   "body_selector": "p.bodytext, td"
+}
+
+MJML digests (class mj-column-per-100):
+{
+  "split_method": "html_selector",
+  "story_selector": "div.mj-column-per-100 table",
+  "title_selector": "a",
+  "link_selector": "a",
+  "body_selector": "td, p"
 }
 
 exclude_selectors (optional): simple .class, #id, tag, or tag.class selectors.
