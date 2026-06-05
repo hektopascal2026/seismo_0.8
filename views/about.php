@@ -572,7 +572,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <ul>
                                 <li><strong>v0.8.3 &mdash; Newsletter admin tab:</strong> New <code>?action=newsletter</code> module (nav after Media) with Items and Sources, mirroring the Media/Feeds partition pattern via <code>email_subscriptions.module_scope</code> (migration 027).</li>
                                 <li><strong>v0.8.3 &mdash; Move to Newsletter:</strong> One-click promotion from Mail → Sources; reverse <strong>Move to Mail</strong> on Newsletter → Sources. Pending Gmail senders stay on Mail only.</li>
-                                <li><strong>v0.8.3 &mdash; Timeline &amp; filters:</strong> Newsletter cards use <code>#ab8786</code> source pills; separate Mail and Newsletter rows on the filter page; newsletter items remain visible on the main timeline.</li>
+                                <li><strong>v0.8.3 &mdash; Timeline &amp; filters:</strong> Newsletter cards use <code>#d3716d</code> source pills; separate Mail and Newsletter rows on the filter page; newsletter items remain visible on the main timeline.</li>
                                 <li><strong>v0.8.3 &mdash; AI Researcher:</strong> Replaced the single Email source toggle with separate <strong>Mail</strong> and <strong>Newsletter</strong> module picks.</li>
                             </ul>
                         </div>

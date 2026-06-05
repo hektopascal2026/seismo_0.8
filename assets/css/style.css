@@ -83,7 +83,7 @@ body {
     --seismo-pill-lex: #f5f562;
     --seismo-pill-leg: #d4edda;
     --seismo-pill-mail: #ffdbbb;
-    --seismo-pill-newsletter: #ab8786;
+    --seismo-pill-newsletter: #d3716d;
     
     /* Label Button Color Themes */
     --label-investigation: #FF6B6B;
@@ -1083,7 +1083,7 @@ textarea.search-input.setup-code-preview {
 }
 
 .tag-filter-pill-active.tag-filter-pill--newsletter {
-    background-color: var(--seismo-pill-newsletter, #ab8786);
+    background-color: var(--seismo-pill-newsletter, #d3716d);
 }
 
 .entry-tag--email-sender {
