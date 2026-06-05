@@ -18,18 +18,30 @@ final class EmailDigestSplitterService
      */
     public function split(string $htmlBody, string $textBody, array $config): array
     {
-        $splitRules = $config['split_rules'] ?? [];
+        $splitRules = $config['split_rules'] ?? $config;
         if ($splitRules === []) {
             return [];
         }
 
-        $method = trim((string)($splitRules['split_method'] ?? 'html_selector'));
-        if ($method === 'html_selector') {
-            return $this->splitByHtmlSelector($htmlBody, $splitRules);
+        $method = trim((string)($splitRules['split_method'] ?? $splitRules['type'] ?? 'html_selector'));
+        if ($method === 'html_css' || $method === 'html_selector') {
+            $normalizedRules = [
+                'story_selector' => $splitRules['story_selector'] ?? $splitRules['selector_story'] ?? '',
+                'title_selector' => $splitRules['title_selector'] ?? $splitRules['selector_title'] ?? '',
+                'link_selector' => $splitRules['link_selector'] ?? $splitRules['selector_link'] ?? '',
+                'body_selector' => $splitRules['body_selector'] ?? $splitRules['selector_body'] ?? '',
+            ];
+            return $this->splitByHtmlSelector($htmlBody, $normalizedRules);
         }
 
-        if ($method === 'regex_split') {
-            return $this->splitByRegex($textBody, $htmlBody, $splitRules);
+        if ($method === 'regex' || $method === 'regex_split') {
+            $normalizedRules = [
+                'split_pattern' => $splitRules['split_pattern'] ?? $splitRules['pattern_split'] ?? '',
+                'title_pattern' => $splitRules['title_pattern'] ?? $splitRules['pattern_title'] ?? '',
+                'body_pattern' => $splitRules['body_pattern'] ?? $splitRules['pattern_body'] ?? '',
+                'link_pattern' => $splitRules['link_pattern'] ?? $splitRules['pattern_link'] ?? '',
+            ];
+            return $this->splitByRegex($textBody, $htmlBody, $normalizedRules);
         }
 
         return [];
@@ -62,7 +74,11 @@ final class EmailDigestSplitterService
 
         $xpath = new DOMXPath($dom);
         $xQuery = $this->cssToXPath($storySelector);
-        $nodes = $xpath->query($xQuery);
+        try {
+            $nodes = @$xpath->query($xQuery);
+        } catch (\Throwable $e) {
+            $nodes = false;
+        }
         if ($nodes === false || $nodes->length === 0) {
             return [];
         }
@@ -80,7 +96,11 @@ final class EmailDigestSplitterService
             // Extract Title
             $title = '';
             if ($titleSelector !== '') {
-                $titleNodes = $xpath->query($this->cssToXPath($titleSelector), $node);
+                try {
+                    $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
+                } catch (\Throwable $e) {
+                    $titleNodes = false;
+                }
                 if ($titleNodes !== false && $titleNodes->length > 0) {
                     $title = trim($titleNodes->item(0)->textContent);
                 }
@@ -89,7 +109,11 @@ final class EmailDigestSplitterService
             // Extract Link
             $link = null;
             if ($linkSelector !== '') {
-                $linkNodes = $xpath->query($this->cssToXPath($linkSelector), $node);
+                try {
+                    $linkNodes = @$xpath->query($this->cssToXPath($linkSelector), $node);
+                } catch (\Throwable $e) {
+                    $linkNodes = false;
+                }
                 if ($linkNodes !== false && $linkNodes->length > 0) {
                     $item = $linkNodes->item(0);
                     if ($item instanceof DOMElement) {
@@ -110,7 +134,11 @@ final class EmailDigestSplitterService
             $storyHtml = $dom->saveHTML($node);
             $storyText = '';
             if ($bodySelector !== '') {
-                $bodyNodes = $xpath->query($this->cssToXPath($bodySelector), $node);
+                try {
+                    $bodyNodes = @$xpath->query($this->cssToXPath($bodySelector), $node);
+                } catch (\Throwable $e) {
+                    $bodyNodes = false;
+                }
                 if ($bodyNodes !== false && $bodyNodes->length > 0) {
                     $storyText = trim($bodyNodes->item(0)->textContent);
                 }
