@@ -7,6 +7,7 @@ namespace Seismo\Service;
 use Seismo\Controller\SettingsController;
 use Seismo\Core\Mail\CleanupConfigVerifier;
 use Seismo\Core\Mail\DigestSplitConfigNormalizer;
+use Seismo\Core\Mail\DigestSplitStructureHint;
 use Seismo\Core\Mail\DigestSplitVerifier;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\Http\BaseClient;
@@ -32,14 +33,17 @@ final class EmailGeminiConfigGenerator
     private const SPLIT_SYSTEM_INSTRUCTION = <<<'TEXT'
 You are an expert email digest analyst configuring a deterministic HTML/text splitter.
 
-A "card" is one distinct news item a reader would scan, open, or score independently.
+A "card" is one DOM story wrapper matched by story_selector — not every headline line in plain text.
 NOT a card: masthead, navigation, "view in browser", section labels ("TOP STORIES"),
 ads, unsubscribe footer, social icons, empty spacers, author bios.
+
+When samples include html_body you MUST use split_method "html_selector". Never regex_split on HTML emails.
+expected_card_count must equal the number of nodes story_selector would match in html_body — verify against the PHP structure scan.
 
 Your output is consumed by PHP EmailDigestSplitterService. Follow the schema exactly.
 CSS selectors must use only: tag, .class, #id, and space-separated descendants (no >, :nth-child, [attr]).
 Prefer stable class/id/table wrappers repeated across all samples, not dates or tracking IDs.
-HTML emails: use html_selector. Plain-text delimiters: use regex_split on text_body.
+regex_split is ONLY when html_body is empty and text_body has explicit delimiters.
 TEXT;
 
     private const CLEANUP_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -60,6 +64,7 @@ TEXT;
         private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
         private readonly DigestSplitVerifier $splitVerifier = new DigestSplitVerifier(),
         private readonly CleanupConfigVerifier $cleanupVerifier = new CleanupConfigVerifier(),
+        private readonly DigestSplitStructureHint $structureHint = new DigestSplitStructureHint(),
     ) {
     }
 
@@ -309,6 +314,25 @@ TEXT;
                 continue;
             }
 
+            if (
+                $this->structureHint->samplesHaveHtml($samples)
+                && ($normalized['split_rules']['split_method'] ?? '') === 'regex_split'
+            ) {
+                $expected = DigestSplitConfigNormalizer::expectedCountsFromAnalysis($extracted);
+                $retryContext = [
+                    'analysis' => $lastAnalysis,
+                    'config' => $normalized,
+                    'verification' => [
+                        'message' => 'regex_split rejected: samples include html_body. Use html_selector.',
+                        'expected_counts' => $expected,
+                        'actual_counts' => array_fill(0, count($samples), 0),
+                        'mismatches' => $this->buildZeroMatchMismatches($expected, count($samples)),
+                    ],
+                    'force_html_selector' => true,
+                ];
+                continue;
+            }
+
             $lastConfig = $normalized;
             $check = $this->splitVerifier->verify($samples, $normalized, $extracted);
             $verification = [
@@ -327,10 +351,14 @@ TEXT;
                 ];
             }
 
+            $forceHtml = $this->structureHint->samplesHaveHtml($samples)
+                && (($check['actual_counts'][0] ?? 0) === 0);
+
             $retryContext = [
                 'analysis' => $lastAnalysis,
                 'config' => $normalized,
                 'verification' => $check,
+                'force_html_selector' => $forceHtml,
             ];
         }
 
@@ -683,13 +711,47 @@ TEXT;
     }
 
     /**
+     * @param list<int> $expected
+     * @return list<array{sample_index: int, expected: int, actual: int, titles: list<string>}>
+     */
+    private function buildZeroMatchMismatches(array $expected, int $sampleCount): array
+    {
+        $mismatches = [];
+        for ($i = 0; $i < $sampleCount; ++$i) {
+            $exp = $expected[$i] ?? ($expected[0] ?? 0);
+            if ($exp > 0) {
+                $mismatches[] = [
+                    'sample_index' => $i + 1,
+                    'expected' => $exp,
+                    'actual' => 0,
+                    'titles' => [],
+                ];
+            }
+        }
+
+        return $mismatches;
+    }
+
+    /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
      */
     private function buildSplitPrompt(array $samples): string
     {
+        $hasHtml = $this->structureHint->samplesHaveHtml($samples);
+
         $prompt = "Configure multi-story digest splitting for this newsletter sender.\n\n";
-        $prompt .= "PHASE 1 — For EACH sample, identify cards vs noise and count expected_card_count.\n";
+        $prompt .= "PHASE 1 — For EACH sample, find repeated story wrappers in html_body (if present).\n";
+        $prompt .= "Count expected_card_count = nodes matched by your story_selector, NOT topic lines in plain text.\n";
         $prompt .= "PHASE 2 — Propose split_rules that produce exactly those counts when run by our PHP splitter.\n\n";
+
+        if ($hasHtml) {
+            $prompt .= "REQUIRED: samples include html_body → use split_method \"html_selector\" only.\n";
+            $prompt .= "Do NOT use regex_split on text_body for HTML newsletters.\n\n";
+            $hintBlock = $this->structureHint->formatForPrompt($samples);
+            if ($hintBlock !== '') {
+                $prompt .= $hintBlock;
+            }
+        }
 
         foreach ($samples as $index => $sample) {
             $prompt .= $this->formatSampleBlock($index, $sample);
@@ -725,6 +787,16 @@ TEXT;
     private function buildSplitRetryPrompt(array $samples, array $retryContext): string
     {
         $prompt = "Your previous split_rules did NOT pass verification. Revise them.\n\n";
+
+        if (!empty($retryContext['force_html_selector'])) {
+            $prompt .= "MANDATORY FIX: Use split_method \"html_selector\". regex_split on HTML emails returns zero cards.\n";
+            $prompt .= "Set expected_card_count to the story_selector match count from html_body, not plain-text topics.\n\n";
+            $hintBlock = $this->structureHint->formatForPrompt($samples);
+            if ($hintBlock !== '') {
+                $prompt .= $hintBlock;
+            }
+        }
+
         $prompt .= "Previous analysis:\n" . json_encode($retryContext['analysis'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Previous split_rules:\n" . json_encode($retryContext['config']['split_rules'] ?? $retryContext['config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Verification failure:\n" . ($retryContext['verification']['message'] ?? '') . "\n";
@@ -752,7 +824,10 @@ TEXT;
         return <<<'TEXT'
 split_rules schema (EmailDigestSplitterService):
 
-HTML (preferred when html_body has structure):
+When html_body is non-empty in samples: REQUIRED split_method = html_selector.
+regex_split runs on text_body only and ignores HTML — it will fail on HTML digests.
+
+HTML (required when html_body has structure):
 {
   "split_method": "html_selector",
   "story_selector": "tr.story-row",
@@ -765,7 +840,7 @@ HTML (preferred when html_body has structure):
 exclude_selectors (optional): simple .class, #id, tag, or tag.class selectors.
 When a matched story node itself matches an exclude selector, that match is skipped.
 
-Plain text (regex runs on text_body):
+Plain text ONLY (no html_body — regex runs on text_body):
 {
   "split_method": "regex_split",
   "split_pattern": "/---\s*STORY\s+\d+\s*---/i",

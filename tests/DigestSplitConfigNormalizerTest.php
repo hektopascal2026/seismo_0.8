@@ -71,6 +71,17 @@ final class DigestSplitConfigNormalizerTest extends TestCase
         ]));
     }
 
+    public function testRejectsInvalidRegexPattern(): void
+    {
+        self::assertNull(DigestSplitConfigNormalizer::normalize([
+            'is_digest' => true,
+            'split_rules' => [
+                'split_method' => 'regex_split',
+                'split_pattern' => '/(?=[unclosed',
+            ],
+        ]));
+    }
+
     public function testExpectedCountsFromAnalysis(): void
     {
         $counts = DigestSplitConfigNormalizer::expectedCountsFromAnalysis([

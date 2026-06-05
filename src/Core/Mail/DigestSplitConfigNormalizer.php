@@ -66,7 +66,7 @@ final class DigestSplitConfigNormalizer
                 'link_pattern' => trim((string)($rules['link_pattern'] ?? $rules['pattern_link'] ?? '')),
                 'body_pattern' => trim((string)($rules['body_pattern'] ?? $rules['pattern_body'] ?? '')),
             ];
-            if ($normalized['split_pattern'] === '') {
+            if ($normalized['split_pattern'] === '' || !self::isValidRegexPattern($normalized['split_pattern'])) {
                 return null;
             }
 
@@ -106,6 +106,15 @@ final class DigestSplitConfigNormalizer
         }
 
         return $counts;
+    }
+
+    private static function isValidRegexPattern(string $pattern): bool
+    {
+        set_error_handler(static fn (): bool => true);
+        $ok = @preg_match($pattern, '') !== false;
+        restore_error_handler();
+
+        return $ok;
     }
 
     /**
