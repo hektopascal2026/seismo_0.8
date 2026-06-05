@@ -31,6 +31,7 @@ use PDOException;
 use Seismo\Service\ResearcherLookback;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
+use Seismo\Core\Mail\EmailDigestExportPolicy;
 
 final class MagnituExportRepository
 {
@@ -197,11 +198,14 @@ final class MagnituExportRepository
                    AND st.disabled = 0";
         $params = [];
         $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0' : '1=1';
+        $exportableClause = in_array('parent_email_id', $cols, true)
+            ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
+            : '';
         if ($since !== null && $since !== '') {
-            $sql .= " WHERE {$hiddenClause} AND e.`{$dateCol}` >= ?";
+            $sql .= " WHERE {$hiddenClause}{$exportableClause} AND e.`{$dateCol}` >= ?";
             $params[] = $since;
         } else {
-            $sql .= " WHERE {$hiddenClause}";
+            $sql .= " WHERE {$hiddenClause}{$exportableClause}";
         }
         $sql .= " ORDER BY e.`{$dateCol}` DESC LIMIT {$limit}";
 
@@ -354,7 +358,10 @@ final class MagnituExportRepository
                  WHERE e.id IN ({$placeholders})";
         $params = $ids;
         $hiddenClause = in_array('hidden', $cols, true) ? ' AND e.hidden = 0' : '';
-        $sql .= $hiddenClause;
+        $exportableClause = in_array('parent_email_id', $cols, true)
+            ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
+            : '';
+        $sql .= $hiddenClause . $exportableClause;
         if ($since !== null && $since !== '') {
             $sql .= " AND e.`{$dateCol}` >= ?";
             $params[] = $since;
@@ -541,7 +548,14 @@ final class MagnituExportRepository
             return [];
         }
 
-        $hiddenClause = in_array('hidden', $cols, true) ? 'WHERE e.hidden = 0' : '';
+        $exportableClause = in_array('parent_email_id', $cols, true)
+            ? EmailDigestExportPolicy::sqlExportableEmail('e')
+            : '1=1';
+        if (in_array('hidden', $cols, true)) {
+            $whereClause = 'WHERE e.hidden = 0 AND ' . $exportableClause;
+        } else {
+            $whereClause = 'WHERE ' . $exportableClause;
+        }
         $sql = "SELECT e.id,
                        e.subject,
                        e.`{$fromEmailCol}`                          AS from_email,
@@ -555,7 +569,7 @@ final class MagnituExportRepository
                     ON st.from_email = e.`{$fromEmailCol}`
                    AND st.removed_at IS NULL
                    AND st.disabled = 0
-                 {$hiddenClause}
+                 {$whereClause}
                  ORDER BY e.`{$dateCol}` DESC
                  LIMIT {$limit} OFFSET {$offset}";
 

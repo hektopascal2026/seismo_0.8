@@ -107,7 +107,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                         <strong>Feeds:</strong> RSS/Atom, Substack, and Parliament press (general desk).<br>
                                         <strong>Media:</strong> News monitoring — Google News or outlet RSS with optional <strong>Extract full text</strong> (publisher fetch + JSON-LD / Readability / meta); listing pages via Scraper with <code>category = media</code>.<br>
                                         <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; transactional and list mail.<br>
-                                        <strong>Newsletter:</strong> Same Gmail/IMAP ingest, separate admin module for digest senders (<code>module_scope = newsletter</code>); dusty-rose timeline pills; optional body processors and <strong>View in browser →</strong> when a webview link is present.<br>
+                                        <strong>Newsletter:</strong> Same Gmail/IMAP ingest, separate admin module for digest senders (<code>module_scope = newsletter</code>); dusty-rose timeline pills; optional body processors and <strong>View in browser →</strong> when a webview link is present. <strong>AI Split Configurator</strong> (0.8.4) fans multi-story digests into child <code>emails</code> rows at ingest/reprocess; admin shows the parent card with nested stories; Highlights, Magnitu, and Researcher see per-story rows only.<br>
                                         <strong>Scraper:</strong> Scheduled fetches of complex web pages.
                                     </td>
                                 </tr>
@@ -207,7 +207,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, optional tournament selection for large pools, post-run Flash cost estimate, and source-card attribution (mothership and path satellites).</li>
+                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, <strong>Deep selection</strong> (Standard / Tournament / Blind spot cross-module), optional Pro selection (<code>gemini-3.1-pro-preview</code> pass 1), post-run Flash cost estimate, and source-card attribution (mothership and path satellites). Split newsletter child stories are cited individually, not as parent digest blobs.</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
@@ -556,10 +556,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <!-- Era IX -->
-                    <div class="timeline-era-card current-version-card">
+                    <div class="timeline-era-card">
                         <div class="era-meta-row">
                             <span class="era-badge era-badge-intelligence">Era IX: Newsletter Desk Split</span>
-                            <span class="era-date">June 2026 (Current)</span>
+                            <span class="era-date">June 2026</span>
                         </div>
                         <h3>v0.8.3 &mdash; Newsletter Module</h3>
 
@@ -580,6 +580,35 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
                             <p>Partitioning is application-layer only: <code>entry_type</code> stays <code>email</code> for scoring, favourites, and Magnitu. One <code>refresh_mail_ingest</code> cron path still fetches all Gmail/IMAP mail; module scope affects admin lists, timeline pill colour, and filter semantics — not storage or ingest volume.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era X -->
+                    <div class="timeline-era-card current-version-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-ai">Era X: Story-Level Intelligence</span>
+                            <span class="era-date">June 2026 (Current)</span>
+                        </div>
+                        <h3>v0.8.4 &mdash; Digest Child Stories &amp; Researcher Pipeline</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> A single IMAP message carrying ten headlines was still one timeline row, one Magnitu label, and one Researcher citation — burying per-story signals. At the same time, large Researcher pools and cross-module prompts (Lex primary sources with little Media echo) needed a selection pipeline that survives truncation and respects verification-heavy desk prompts. v0.8.4 ships both: deterministic HTML digest splitting into child rows, and a hardened Gemini two-pass researcher.</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.8.4 &mdash; AI Split Configurator:</strong> Newsletter → Sources runs offline Gemini analysis on recent samples, dry-runs <code>digest_split_config</code>, and previews story cards before save. <strong>Apply Split Config</strong> triggers <code>EmailSubscriptionReprocessService</code> so stored digests re-split without waiting for new mail.</li>
+                                <li><strong>v0.8.4 &mdash; Child <code>emails</code> rows:</strong> <code>EmailDigestSplitterService</code> + <code>splitAndIngestStories()</code> insert per-story children with <code>parent_email_id</code> (migration 028). Handles TYPO3/punkt4 table cells, MJML layouts, merged title/body rows, and deduplicated MSO/compat HTML repeats.</li>
+                                <li><strong>v0.8.4 &mdash; Export policy:</strong> <code>EmailDigestExportPolicy</code> hides parent digest scores/rows on Highlights, Magnitu export, Researcher gather, and recipe rescoring when visible children exist. Mail/Newsletter admin keeps the parent card with nested <code>child_stories</code> and per-child scores.</li>
+                                <li><strong>v0.8.4 &mdash; Deep selection modes:</strong> Replaced the tournament checkbox with <strong>Standard</strong>, <strong>Tournament</strong>, and <strong>Blind spot / cross-module</strong> (relational). Pass 1 can use a global title fingerprint, keys-only JSON, and optional <strong>Pro selection</strong> on <code>gemini-3.1-pro-preview</code>.</li>
+                                <li><strong>v0.8.4 &mdash; Selection hardening:</strong> Truncation retries, failed tournament-batch recovery (halved sub-batches / minimal-thinking retry), verification-heavy prompt auto-detection, stricter selection-failure reporting, and improved pass 2 batching for long briefings.</li>
+                            </ul>
+                        </div>
+
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Child rows reuse the existing <code>email</code> entry type — no Magnitu contract change — but require export/read paths to exclude parents when children exist. Split config is stored on <code>email_subscriptions.digest_split_config</code> and applied only at ingest/reprocess (zero runtime Gemini during cron). Researcher pass 1 trades richer JSON (<code>selection_reasoning</code>) for compact keys in tournament/relational modes to stay inside output token limits on 200-item pools.</p>
                         </div>
                     </div>
                 </div>
@@ -665,7 +694,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.8.3</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
+                                Currently, Seismo is on version <strong>0.8.4</strong>, signifying it is in active pre-1.0.0 bootstrapping. Digest child-story export and the hardened Researcher selection pipeline are the latest feature tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

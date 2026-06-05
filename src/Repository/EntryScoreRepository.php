@@ -20,6 +20,8 @@ namespace Seismo\Repository;
 
 use PDO;
 use PDOException;
+use Seismo\Core\Mail\EmailDigestExportPolicy;
+use Seismo\Util\PdoMysqlDiagnostics;
 
 final class EntryScoreRepository
 {
@@ -357,13 +359,16 @@ final class EntryScoreRepository
         $derivedSel = $derivedCol !== null ? ', e.`' . $derivedCol . '` AS derived_title' : '';
 
         $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0 AND ' : '';
+        $exportableClause = in_array('parent_email_id', $cols, true)
+            ? EmailDigestExportPolicy::sqlExportableEmail('e') . ' AND '
+            : '';
 
         $bodyChars = self::UNSCORED_BODY_CHARS;
         $sql = "SELECT e.id, e.subject,
                        SUBSTRING(e.`{$textBody}`, 1, {$bodyChars}) AS text_body,
                        SUBSTRING(e.`{$htmlBody}`, 1, {$bodyChars}) AS html_body{$derivedSel}
                   FROM {$table} e
-                 WHERE {$hiddenClause}NOT EXISTS (
+                 WHERE {$hiddenClause}{$exportableClause}NOT EXISTS (
                        SELECT 1 FROM entry_scores es
                         WHERE es.entry_type = 'email'
                           AND es.entry_id  = e.id
@@ -403,6 +408,50 @@ final class EntryScoreRepository
                  LIMIT ' . $limit;
 
         return $this->runOrEmptyWithVersion($sql, $recipeVersion, 'getUnscoredCalendarEvents');
+    }
+
+    public function deleteForEntry(string $entryType, int $entryId): void
+    {
+        if ($entryId <= 0) {
+            return;
+        }
+        try {
+            $stmt = $this->pdo->prepare(
+                'DELETE FROM entry_scores WHERE entry_type = ? AND entry_id = ?'
+            );
+            $stmt->execute([$entryType, $entryId]);
+        } catch (PDOException $e) {
+            if (!PdoMysqlDiagnostics::isMissingTable($e)) {
+                error_log('EntryScoreRepository deleteForEntry failed: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * @param list<int> $entryIds
+     */
+    public function deleteForEntries(string $entryType, array $entryIds): void
+    {
+        $entryIds = array_values(array_unique(array_filter(
+            array_map('intval', $entryIds),
+            static fn (int $id): bool => $id > 0,
+        )));
+        if ($entryIds === []) {
+            return;
+        }
+        foreach (array_chunk($entryIds, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            try {
+                $stmt = $this->pdo->prepare(
+                    "DELETE FROM entry_scores WHERE entry_type = ? AND entry_id IN ({$ph})"
+                );
+                $stmt->execute(array_merge([$entryType], $chunk));
+            } catch (PDOException $e) {
+                if (!PdoMysqlDiagnostics::isMissingTable($e)) {
+                    error_log('EntryScoreRepository deleteForEntries failed: ' . $e->getMessage());
+                }
+            }
+        }
     }
 
     /**

@@ -40,6 +40,7 @@ use PDOException;
 use Seismo\Core\Fetcher\ArticleLinkNormalizer;
 use Seismo\Core\Fetcher\ScraperListingUrl;
 use Seismo\Core\Lex\LexCardPreview;
+use Seismo\Core\Mail\EmailDigestExportPolicy;
 
 final class EntryRepository
 {
@@ -254,8 +255,9 @@ final class EntryRepository
                      FROM entry_scores es
                      WHERE es.score_source IN (\'magnitu\', \'recipe\')
                        AND es.relevance_score >= ?
-                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                     ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
+                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')'
+                     . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                     . ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                      LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
                 );
                 $stmt->execute([$alertThreshold]);
@@ -266,8 +268,9 @@ final class EntryRepository
                      FROM entry_scores es
                      WHERE es.score_source IN (\'magnitu\', \'recipe\')
                        AND es.relevance_score >= ?
-                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')
-                     ORDER BY es.id DESC
+                       AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')'
+                     . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                     . ' ORDER BY es.id DESC
                      LIMIT ' . (int)$fetchCap
                 );
                 $stmt->execute([$alertThreshold]);
@@ -333,6 +336,7 @@ final class EntryRepository
             $params = [$alertThreshold];
         }
 
+        $sql .= EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents();
         $sql .= ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                   LIMIT ' . (int)$limit;
 
@@ -428,7 +432,7 @@ final class EntryRepository
                 $items[]  = $w;
             }
         }
-        foreach ($this->fetchEmailRowsByIds($idsByType['email']) as $row) {
+        foreach ($this->fetchEmailRowsByIds($idsByType['email'], true) as $row) {
             $w = $this->wrapEmail($row);
             $k = 'email:' . $w['entry_id'];
             if (isset($best[$k])) {
@@ -833,8 +837,9 @@ final class EntryRepository
                         es.explanation, es.score_source
                  FROM entry_scores es
                  WHERE es.score_source IN (\'magnitu\', \'recipe\')
-                   AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')
-                 ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
+                   AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')'
+                 . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                 . ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                  LIMIT ' . (int)$cap
             );
             $stmt->execute();
@@ -1654,12 +1659,15 @@ final class EntryRepository
      * @param array<int, int> $ids
      * @return array<int, array<string, mixed>>
      */
-    private function fetchEmailRowsByIds(array $ids): array
+    private function fetchEmailRowsByIds(array $ids, bool $digestExportableOnly = false): array
     {
         if ($ids === []) {
             return [];
         }
         $out = [];
+        $exportableClause = $digestExportableOnly
+            ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
+            : '';
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
             $st  = entryTable('sender_tags');
@@ -1671,7 +1679,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_VISIBLE . $exportableClause . '
                   AND e.id IN (' . $ph . ')';
             foreach ($this->selectPreparedOrEmpty($sql, array_map('intval', $chunk)) as $row) {
                 $out[] = $row;

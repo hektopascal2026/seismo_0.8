@@ -244,10 +244,25 @@ final class MailModuleHandler
                     throw new \InvalidArgumentException('Subscription not found in this module.');
                 }
                 $wasPending = EmailSubscriptionRepository::isPendingRow($existing);
+                $oldDigest = trim((string)($existing['digest_split_config'] ?? ''));
+                $canonicalDigest = \Seismo\Core\Mail\DigestSplitConfigNormalizer::canonicalJson(
+                    $payload['digest_split_config']
+                );
+                if ($canonicalDigest !== null) {
+                    $payload['digest_split_config'] = $canonicalDigest;
+                } elseif (trim((string)$payload['digest_split_config']) === '') {
+                    $payload['digest_split_config'] = '';
+                }
                 $repo->update($id, $payload);
                 $_SESSION['success'] = $wasPending
                     ? 'Sender reviewed — subscription is now active.'
                     : 'Subscription updated.';
+                $newDigest = trim((string)($payload['digest_split_config'] ?? ''));
+                if ($newDigest !== '' && $newDigest !== $oldDigest) {
+                    $reprocessed = (new EmailSubscriptionReprocessService(getDbConnection()))
+                        ->reprocessSubscription($id);
+                    $_SESSION['success'] .= ' Reprocessed ' . $reprocessed . ' stored message(s) with split config.';
+                }
             } else {
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Subscription added (#' . $newId . ').';

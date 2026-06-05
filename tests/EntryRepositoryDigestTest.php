@@ -98,6 +98,7 @@ namespace Seismo\Tests {
                     entry_id INTEGER,
                     relevance_score FLOAT,
                     predicted_label VARCHAR(50),
+                    explanation TEXT,
                     score_source VARCHAR(50),
                     scored_at DATETIME
                 )
@@ -197,6 +198,37 @@ namespace Seismo\Tests {
             self::assertSame(12, (int)$data['child_stories'][1]['id']);
             self::assertNotNull($data['child_stories'][1]['score']);
             self::assertSame(0.42, (float)$data['child_stories'][1]['score']['relevance_score']);
+        }
+
+        public function testHighlightsShowsChildStoriesNotParentDigest(): void
+        {
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (20, NULL, 'Digest parent', 'Digest parent', 'news@example.com', 'Parent body', '<html>Parent</html>', 0, '2026-06-05 10:00:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (21, 20, 'Child A', 'Child A', 'news@example.com', 'Story A', '<html>A</html>', 0, '2026-06-05 10:01:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO entry_scores (entry_type, entry_id, relevance_score, score_source)
+                VALUES ('email', 20, 0.95, 'recipe')
+            ");
+            $this->pdo->exec("
+                INSERT INTO entry_scores (entry_type, entry_id, relevance_score, score_source)
+                VALUES ('email', 21, 0.80, 'recipe')
+            ");
+
+            $repo = new EntryRepository($this->pdo);
+            $scoreRows = $repo->listResearcherScoreCandidates(0.5, false, 20);
+
+            $emailIds = array_map(
+                static fn (array $row): int => (int)$row['entry_id'],
+                array_values(array_filter($scoreRows, static fn (array $row): bool => $row['entry_type'] === 'email')),
+            );
+
+            self::assertContains(21, $emailIds);
+            self::assertNotContains(20, $emailIds);
         }
 
         public function testSaveAndUpdateDigestSubscription(): void

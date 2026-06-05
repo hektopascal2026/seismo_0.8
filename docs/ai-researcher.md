@@ -2,7 +2,7 @@
 
 Plan for an in-app page that filters recent Seismo entries and generates a narrative summary via the Gemini API. Vanilla PHP 8.2+, existing MVC/routing — no Laravel/Symfony.
 
-**Status:** complete (slices 1–5). Slice 6 = manual smoke on deploy.
+**Status:** complete (slices 1–5). **0.8.4** adds Deep selection modes and digest child-story gather policy. Slice 6 = manual smoke on deploy.
 
 ---
 
@@ -11,7 +11,9 @@ Plan for an in-app page that filters recent Seismo entries and generates a narra
 | Topic | Decision |
 |--------|----------|
 | Deploy scope | **Mothership + path satellites** — routes in `routes_mothership.inc.php` and `routes_satellite.inc.php`; satellites use local `entry_scores` / `system_config` |
-| Source toggles | **Six nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, Lex, Leg |
+| Source toggles | **Seven nav-aligned modules**, all on by default: Feeds, Media, Scraper, Mail, **Newsletter**, Lex, Leg (0.8.3 split Mail vs Newsletter; both use `entry_type = email`) |
+| Deep selection (0.8.4) | **Standard** — single pass with full bodies + optional `selection_reasoning`. **Tournament** — batch prelims (~35) + championship; global title fingerprint. **Relational (Blind spot)** — tournament + negative-space / cross-module contract; **keys-only** pass 1 JSON. **Pro selection** — optional `gemini-3.1-pro-preview` for pass 1 only. Resolved by `GeminiResearcherSelectionProfileResolver`; verification-heavy prompts auto-append stricter pass-1 rules. |
+| Digest children (0.8.4) | Score-first gather and `MagnituExportRepository` email lists exclude parent digests when visible child rows exist (`EmailDigestExportPolicy`). Researcher cites individual story `email` ids, not parent blobs. |
 | Nav placement | Top-level drawer link **after Highlights**, before Label |
 | Entry cap | **`MagnituExportRepository::BRIEFING_MAX_LIMIT` (200)** per enabled module query (export API stays at 50) |
 | Relevance | **Highlights tier** — `relevance_score ≥ alert_threshold` (Settings → Magnitu); optional **“Also include important band below threshold”** (`score > 50%` and `< threshold`). Optional **“Disregard Magnitu (experimental)”** (`disregard_magnitu`) skips score filter and relevance sort (modules + lookback only; newest first). Score-based, not `predicted_label`. |
@@ -42,7 +44,8 @@ Media (and Scraper) are not separate `entry_type` values. They are **`feed_item`
 | Feeds | `feed_item` | RSS / Substack / Parl. press — excludes `category = media` and scraper paths (same rules as Feeds module in `EntryRepository`) |
 | Media | `feed_item` | `feeds.category = 'media'` |
 | Scraper | `feed_item` | Scraper sources (same rules as Scraper module) |
-| Mail | `email` | — |
+| Mail | `email` | `email_subscriptions.module_scope = mail` (or legacy null) |
+| Newsletter | `email` | `module_scope = newsletter`; split child stories are separate `emails` rows |
 | Lex | `lex_item` | — |
 | Leg | `calendar_event` | — |
 

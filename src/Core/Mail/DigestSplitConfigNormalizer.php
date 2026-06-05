@@ -80,6 +80,53 @@ final class DigestSplitConfigNormalizer
     }
 
     /**
+     * Accept canonical or legacy split JSON for ingest/reprocess (not only explicit is_digest).
+     *
+     * @return ?array{is_digest: true, split_rules: array<string, mixed>}
+     */
+    public static function resolveForIngest(mixed $raw): ?array
+    {
+        if (is_string($raw)) {
+            $trimmed = trim($raw);
+            if ($trimmed === '' || $trimmed === 'null') {
+                return null;
+            }
+            $decoded = json_decode($trimmed, true);
+            if (!is_array($decoded)) {
+                return null;
+            }
+            $raw = $decoded;
+        }
+
+        if (!is_array($raw) || $raw === []) {
+            return null;
+        }
+
+        if (isset($raw['is_digest']) && empty($raw['is_digest'])) {
+            return null;
+        }
+
+        return self::normalize($raw, rejectFragileSelectors: false);
+    }
+
+    /**
+     * Normalize digest_split_config for DB storage, or null when empty/invalid.
+     */
+    public static function canonicalJson(mixed $raw): ?string
+    {
+        $resolved = self::resolveForIngest($raw);
+        if ($resolved === null) {
+            if (is_string($raw) && trim($raw) === '') {
+                return null;
+            }
+
+            return null;
+        }
+
+        return json_encode($resolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
      * @param array<string, mixed> $config
      * @return list<int>
      */

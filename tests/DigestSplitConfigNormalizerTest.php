@@ -104,6 +104,35 @@ final class DigestSplitConfigNormalizerTest extends TestCase
         ]));
     }
 
+    public function testResolveForIngestAcceptsLegacyFlatConfig(): void
+    {
+        $resolved = DigestSplitConfigNormalizer::resolveForIngest([
+            'type' => 'html_css',
+            'selector_story' => 'div.csc-frame-default',
+            'selector_title' => 'h1',
+            'selector_link' => 'a',
+            'selector_body' => 'p.bodytext',
+        ]);
+
+        self::assertNotNull($resolved);
+        self::assertTrue($resolved['is_digest']);
+        self::assertSame('div.csc-frame-default', $resolved['split_rules']['story_selector']);
+    }
+
+    public function testCanonicalJsonWrapsLegacyConfig(): void
+    {
+        $json = DigestSplitConfigNormalizer::canonicalJson([
+            'type' => 'html_css',
+            'selector_story' => 'table td',
+        ]);
+
+        self::assertNotNull($json);
+        $decoded = json_decode((string)$json, true);
+        self::assertIsArray($decoded);
+        self::assertTrue($decoded['is_digest']);
+        self::assertArrayHasKey('split_rules', $decoded);
+    }
+
     public function testExpectedCountsFromAnalysis(): void
     {
         $counts = DigestSplitConfigNormalizer::expectedCountsFromAnalysis([

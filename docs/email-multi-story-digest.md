@@ -1,6 +1,8 @@
-# Multi-story email digests — design note (for future implementation)
+# Multi-story email digests
 
-**Status:** Not implemented. Captured after architecture review (May 2026). Implement when digest senders (EP TODAY, Bund, etc.) need separate timeline cards per story.
+**Status:** Implemented in **Seismo 0.8.4**. See README release notes and About → History (Era X). Operator path: Newsletter → Sources → **AI Split Configurator** → **Apply Split Config** (reprocesses stored mail).
+
+Original design note (May 2026) below — approach **B** (fan-out child `emails` rows) was chosen.
 
 ## Problem
 

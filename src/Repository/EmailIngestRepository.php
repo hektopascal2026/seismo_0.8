@@ -239,8 +239,10 @@ final class EmailIngestRepository
                             $subs
                         );
                         if ($sub !== null && !empty($sub['digest_split_config'])) {
-                            $cfg = json_decode((string)$sub['digest_split_config'], true);
-                            if (is_array($cfg) && !empty($cfg['is_digest'])) {
+                            $cfg = \Seismo\Core\Mail\DigestSplitConfigNormalizer::resolveForIngest(
+                                (string)$sub['digest_split_config']
+                            );
+                            if ($cfg !== null) {
                                 $this->splitAndIngestStories($parentId, $row, $cfg);
                             }
                         }
@@ -688,6 +690,15 @@ final class EmailIngestRepository
     public function splitAndIngestStories(int $parentId, array $parentRow, array $cfg): void
     {
         $t = entryTable('emails');
+        $scoreRepo = new EntryScoreRepository($this->pdo);
+
+        $stmtChildIds = $this->pdo->prepare("SELECT id FROM {$t} WHERE parent_email_id = ?");
+        $stmtChildIds->execute([$parentId]);
+        $oldChildIds = $stmtChildIds->fetchAll(PDO::FETCH_COLUMN);
+        if (is_array($oldChildIds) && $oldChildIds !== []) {
+            $scoreRepo->deleteForEntries('email', array_map('intval', $oldChildIds));
+        }
+
         // Delete existing child entries to ensure clean idempotency
         $stmtDel = $this->pdo->prepare("DELETE FROM {$t} WHERE parent_email_id = ?");
         $stmtDel->execute([$parentId]);
@@ -721,7 +732,10 @@ final class EmailIngestRepository
 
             $meta = null;
             if ($story['link'] !== null) {
-                $meta = json_encode(['web_view_url' => $story['link']]);
+                $meta = json_encode([
+                    'link' => $story['link'],
+                    'web_view_url' => $story['link'],
+                ]);
             }
 
             $stmtIns->execute([
@@ -744,5 +758,7 @@ final class EmailIngestRepository
                 $meta
             ]);
         }
+
+        $scoreRepo->deleteForEntry('email', $parentId);
     }
 }

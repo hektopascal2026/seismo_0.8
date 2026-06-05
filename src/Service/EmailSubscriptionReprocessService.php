@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 use PDO;
+use Seismo\Core\Mail\DigestSplitConfigNormalizer;
 use Seismo\Core\Mail\EmailIngestNormalizer;
 use Seismo\Core\Mail\EmailListingBoilerplatePolicy;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
@@ -96,8 +97,8 @@ final class EmailSubscriptionReprocessService
                 );
 
                 if (!empty($sub['digest_split_config'])) {
-                    $cfg = json_decode((string)$sub['digest_split_config'], true);
-                    if (is_array($cfg) && !empty($cfg['is_digest'])) {
+                    $cfg = DigestSplitConfigNormalizer::resolveForIngest((string)$sub['digest_split_config']);
+                    if ($cfg !== null) {
                         $ingest->splitAndIngestStories((int)$row['id'], $row, $cfg);
                     }
                 }

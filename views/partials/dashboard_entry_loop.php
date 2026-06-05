@@ -359,6 +359,15 @@ $entryLoopIndex                 = 0;
                                 }
                             }
                             $hasMore = $bodyDisplay !== '' && mb_strlen(trim(preg_replace('/\s+/', ' ', $bodyDisplay) ?? '')) > 200;
+                            $digestChildren = is_array($email['child_stories'] ?? null) ? $email['child_stories'] : [];
+                            $digestChildCount = count($digestChildren);
+                            if ($digestChildCount > 0) {
+                                $bodyPreview = $digestChildCount . ' '
+                                    . ($digestChildCount === 1 ? 'story' : 'stories')
+                                    . ' in this digest — see below.';
+                                $bodyDisplay = '';
+                                $hasMore = false;
+                            }
                             $webViewUrl = seismo_email_web_view_url($email);
                         ?>
                         <div class="entry-card">
@@ -426,8 +435,8 @@ $entryLoopIndex                 = 0;
                                             $childLink = null;
                                             if (!empty($child['metadata'])) {
                                                 $childMeta = is_string($child['metadata']) ? json_decode($child['metadata'], true) : $child['metadata'];
-                                                if (!empty($childMeta['link'])) {
-                                                    $childLink = $childMeta['link'];
+                                                if (is_array($childMeta)) {
+                                                    $childLink = trim((string)($childMeta['link'] ?? $childMeta['web_view_url'] ?? '')) ?: null;
                                                 }
                                             }
                                         ?>
@@ -456,7 +465,9 @@ $entryLoopIndex                 = 0;
                                     <?php endforeach; ?>
                                 </div>
                             <?php endif; ?>
+                            <?php if ($digestChildCount === 0): ?>
                             <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
+                            <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">
                                     <?php if ($hasMore): ?>

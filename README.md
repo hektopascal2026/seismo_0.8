@@ -1,4 +1,4 @@
-# Seismo 0.8.3
+# Seismo 0.8.4
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,8 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.8.4** | **Multi-story digest split + Researcher pipeline** — **Newsletter digests** can fan out into per-story child `emails` rows (`parent_email_id`, migration 028). **AI Split Configurator** on Newsletter → Sources analyzes samples, previews story cards, and saves `digest_split_config`; **Apply Split Config** reprocesses stored mail. **Export policy:** Highlights, Magnitu, Researcher, and recipe rescoring surface **child story rows only** — parent digest blobs are hidden when visible children exist; Mail/Newsletter admin still shows the parent card with nested `child_stories`. Splitter handles TYPO3/punkt4 table layouts, MJML newsletters, adjacent title/body row merge, and MSO duplicate-block dedupe. **AI Researcher:** **Deep selection** modes — Standard, Tournament, and **Blind spot / cross-module** (relational tournament + global title index + keys-only pass 1); **Pro selection** (`gemini-3.1-pro-preview` for pass 1); verification-heavy prompts auto-detected; hardened pass 1 against truncation (keys-only retry, failed-batch recovery); improved pass 2 batching and selection-failure reporting. |
+| **0.8.3** | **Newsletter module** — separate `?action=newsletter` admin (`module_scope = newsletter`), dusty-rose timeline pills, Mail ↔ Newsletter promotion, separate Mail/Newsletter toggles on Researcher. |
 | **0.8.2** | **AI Researcher — tournament selection & cost estimate** — optional **Tournament selection** (parallel batch prelims + championship pass for large pools). After generation, a **rough USD estimate** under the summary uses Gemini `usageMetadata` and **Gemini 3.5 Flash Standard** list prices, with a link to [Google AI Studio spend](https://aistudio.google.com/spend?project=gen-lang-client-0854484393). |
 | **0.8.1** | **Compact settings & prompt safeguards** — redesigned AI Researcher layout: collapsed advanced options inside a sleek "More settings" panel, added range sliders with dynamic context-capacity scaling, hardened tab controls to protect the Default system prompt, and raised `TIMELINE_BODY_CHARS` to 10000 to prevent Substack card truncations. |
 | **0.8.0** | **Premium typography & visual polish** — loaded the beautiful geometric **Outfit** font stack globally across all dashboard pages, updated sidebar navigation tabs, and styled zero border-radius tactile inputs for a professional Brutalist identity. |
@@ -31,6 +33,35 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 | **0.6.2** | **Path satellites** — one VPS codebase; desks at `/<slug>/` (e.g. `/security/`, `/digital/`) share the `seismo` entries DB and keep scores/labels in `seismo_<slug>`. Settings → Satellites registry + `bin/seismo-satellite-provision.sh`; removed pruned satellite bundles and `seismo-generator`. Scores migrations via `php migrate.php --scores-db=…`. |
 | **0.6.1** | **Gmail + QoL** — unknown Gmail sender domains queue in **Mail → Subscriptions → New senders** with a proposed display name and **Review** flow before they become active subscriptions; fixes for large Gmail HTML bodies and EUR-Lex refresh. |
 | **0.6.0** | **VPS-ready baseline** — production layout on Hetzner (Nginx, PHP-FPM, MariaDB via socket), unified `emails` table, Gmail API ingest with OAuth, numbered migrations, source-config JSON export/import. |
+
+### 0.8.4 — digest split (operator notes)
+
+Multi-story newsletters (EP TODAY, punkt4/TYPO3, MJML digests) are configured on **Newsletter → Sources → edit subscription**:
+
+1. **AI Split Configurator** — analyzes up to five recent samples, proposes `digest_split_config` (`is_digest` + `split_rules`), and shows a live card preview.
+2. **Apply Split Config** — saves rules and **reprocesses stored mail** for that sender (refresh alone does not re-split).
+3. **Ingest** — new mail matching the subscription runs `EmailDigestSplitterService` and inserts child rows linked by `parent_email_id`.
+
+**Where stories appear**
+
+| Surface | Behaviour |
+|---------|-----------|
+| Mail / Newsletter timeline | Parent digest card with nested `child_stories` (scores attached per child) |
+| Highlights, Magnitu export, Researcher, recipe rescoring | Individual child story rows only |
+
+Stored config shape: `{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "…", …}}`. See `src/Core/Mail/EmailDigestSplitterService.php` and `EmailDigestExportPolicy.php`.
+
+### 0.8.4 — AI Researcher pipeline (operator notes)
+
+On `?action=researcher`, **More settings → Deep selection** chooses how pass 1 picks entries before the Markdown briefing:
+
+| Mode | Use when |
+|------|----------|
+| **Standard** | Prompts that verify facts in full article bodies (e.g. company names must appear in text) |
+| **Tournament** | Large pools (100+ items) — batch prelims, then a championship shortlist |
+| **Blind spot / cross-module** | Primary sources in Lex/Leg with little echo in Media/Feeds — tournament plus global title index and keys-only JSON to avoid truncation |
+
+Optional **Pro selection** runs pass 1 on `gemini-3.1-pro-preview`; pass 2 stays on `gemini-3.5-flash`. Verification-style system prompts trigger stricter pass-1 contracts automatically. Implementation detail: `docs/ai-researcher.md`.
 
 ---
 
