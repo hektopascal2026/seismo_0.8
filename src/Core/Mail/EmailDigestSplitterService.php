@@ -134,12 +134,12 @@ final class EmailDigestSplitterService
                 $storyText = trim($node->textContent);
             }
 
-            $storyText = preg_replace('/\s+/', ' ', $storyText);
-            $storyText = trim($storyText);
+            $storyText = EmailBodyDisplay::collapseForStorage($storyText);
 
             if ($title === '') {
-                $title = mb_substr($storyText, 0, 80);
-                if (mb_strlen($storyText) > 80) {
+                $collapsedTitle = preg_replace('/\s+/', ' ', $storyText) ?? '';
+                $title = mb_substr(trim($collapsedTitle), 0, 80);
+                if (mb_strlen(trim($collapsedTitle)) > 80) {
                     $title .= '...';
                 }
             }
@@ -632,19 +632,39 @@ final class EmailDigestSplitterService
 
     private function longestNodeText(\DOMNodeList $nodes, string $title): string
     {
-        $best = '';
-        foreach ($nodes as $bodyNode) {
+        $elements = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $elements[] = $node;
+            }
+        }
+
+        // Keep only elements that do not contain any other matched elements (innermost matching nodes)
+        $filtered = [];
+        foreach ($elements as $node) {
+            $hasMatchingDescendant = false;
+            foreach ($elements as $other) {
+                if ($other !== $node && $this->isDescendantOf($other, $node)) {
+                    $hasMatchingDescendant = true;
+                    break;
+                }
+            }
+            if (!$hasMatchingDescendant) {
+                $filtered[] = $node;
+            }
+        }
+
+        $parts = [];
+        foreach ($filtered as $bodyNode) {
             $text = trim((string)$bodyNode->textContent);
             if ($text === '' || $text === $title) {
                 continue;
             }
-            if (mb_strlen($text) > mb_strlen($best)) {
-                $best = $text;
-            }
+            $parts[] = $text;
         }
 
-        if ($best !== '') {
-            return $best;
+        if ($parts !== []) {
+            return implode("\n\n", $parts);
         }
 
         $first = $nodes->item(0);

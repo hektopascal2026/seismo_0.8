@@ -73,6 +73,7 @@ REGEX SAFETY CONTRACT:
 2. Match whole noise blocks by anchoring or using line boundaries (e.g., /^View in browser.*$/imu) rather than matching partial text.
 3. Use wildcard characters for variable URL parameters, tokens, or dates (e.g., do not hardcode a specific date or token).
 4. Never generate overly broad patterns that could match article paragraphs or sentences.
+5. Use \s+ or \s* instead of literal spaces to match variable whitespace (including double spaces and line breaks) and prevent failure due to spacing variations.
 TEXT;
 
     public function __construct(
