@@ -536,7 +536,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     <?php
                     $sid = (int)$row['id'];
                     $peek = $subscriptionLatest[$sid] ?? null;
-                    $latestQs = 'action=mail&view=items&subscription=' . $sid;
+                    $latestQs = 'action=' . $mailModule->action . '&view=items&subscription=' . $sid;
                     ?>
                     <tr>
                         <td><?= $sid ?></td>
