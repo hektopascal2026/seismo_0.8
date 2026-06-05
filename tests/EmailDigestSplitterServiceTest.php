@@ -178,6 +178,37 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertStringNotContainsString('Mehr', $stories[0]['title']);
     }
 
+    public function testDeduplicatesRepeatedStoryBlocksWithSameLink(): void
+    {
+        $block = <<<'HTML'
+            <table width="100%"><tbody><tr><td>
+            <table width="100%"><tbody><tr><td style="vertical-align:baseline;">
+            <table width="100%"><tbody>
+            <tr><td style="vertical-align:baseline;"><a style="font-weight:bold" href="https://example.com/amag">AMAG Group reduziert CO2-Emissionen erneut deutlich</a></td></tr>
+            <tr><td style="color:#262626;font-size:12px;">Cham ZG - Die AMAG Group hat ihre CO2-Emissionen im Jahr 2025 reduziert.</td></tr>
+            </tbody></table>
+            </td></tr></tbody></table>
+            </td></tr></tbody></table>
+        HTML;
+
+        $html = '<html><body>' . $block . $block . $block . '</body></html>';
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'table table table table td[style*="vertical-align:baseline"]',
+                'title_selector' => 'a[style*="font-weight:bold"]',
+                'link_selector' => 'a[style*="font-weight:bold"]',
+                'body_selector' => 'td[style*="color:#262626"]',
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertSame('https://example.com/amag', $stories[0]['link']);
+    }
+
     public function testSplitTypo3Punkt4Template(): void
     {
         $html = file_get_contents(__DIR__ . '/fixtures/zhk_digest_sample.html');

@@ -146,7 +146,7 @@ final class EmailDigestSplitterService
             }
         }
 
-        return $this->mergeAdjacentFragments($stories);
+        return $this->deduplicateStories($this->mergeAdjacentFragments($stories));
     }
 
     /**
@@ -483,6 +483,55 @@ final class EmailDigestSplitterService
         $normalized = mb_strtolower(trim($text));
 
         return in_array($normalized, ['mehr', 'more', 'read more', 'weiterlesen', 'read link →', 'read link ->'], true);
+    }
+
+    /**
+     * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
+     * @return list<array{title: string, html_body: string, text_body: string, link: ?string}>
+     */
+    private function deduplicateStories(array $stories): array
+    {
+        $unique = [];
+        $seen = [];
+
+        foreach ($stories as $story) {
+            $key = $this->storyFingerprint($story);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unique[] = $story;
+        }
+
+        return $unique;
+    }
+
+    /**
+     * @param array{title: string, html_body: string, text_body: string, link: ?string} $story
+     */
+    private function storyFingerprint(array $story): string
+    {
+        $link = $this->normalizeStoryLink((string)($story['link'] ?? ''));
+        if ($link !== '') {
+            return 'link:' . $link;
+        }
+
+        $title = $this->normalizeStoryText((string)($story['title'] ?? ''));
+        $body = $this->normalizeStoryText((string)($story['text_body'] ?? ''));
+
+        return 'text:' . $title . '|' . mb_substr($body, 0, 160);
+    }
+
+    private function normalizeStoryLink(string $link): string
+    {
+        return rtrim(trim(mb_strtolower($link)), '/');
+    }
+
+    private function normalizeStoryText(string $text): string
+    {
+        $text = preg_replace('/\s+/u', ' ', trim($text)) ?? '';
+
+        return mb_strtolower($text);
     }
 
     /**
