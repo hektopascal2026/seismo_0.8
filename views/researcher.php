@@ -47,9 +47,9 @@ $alertThresholdPct = (int)round(max(0.0, min(1.0, (float)($alertThreshold ?? 0.6
 $moduleOptions = [
     ['key' => 'feeds', 'label' => 'Feeds'],
     ['key' => 'media', 'label' => 'Media'],
-    ['key' => 'scraper', 'label' => 'Scraper'],
     ['key' => 'email', 'label' => 'Mail'],
     ['key' => 'newsletter', 'label' => 'Newsletter'],
+    ['key' => 'scraper', 'label' => 'Scraper'],
     ['key' => 'lex', 'label' => 'Lex'],
     ['key' => 'leg', 'label' => 'Leg'],
     ['key' => 'mem', 'label' => 'Mem'],

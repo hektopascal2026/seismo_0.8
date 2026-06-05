@@ -166,7 +166,7 @@ PROMPT;
     private const CONTEXT_HEAVY_CHARS = 400_000;
 
     /** @var list<string> */
-    private const MODULE_KEYS = ['feeds', 'media', 'scraper', 'email', 'newsletter', 'lex', 'lex_ch', 'leg', 'mem'];
+    private const MODULE_KEYS = ['feeds', 'media', 'email', 'newsletter', 'scraper', 'lex', 'lex_ch', 'leg', 'mem'];
 
     public function show(): void
     {

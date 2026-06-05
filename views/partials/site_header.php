@@ -175,9 +175,9 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
             <a href="<?= e($basePath) ?>/index.php?action=media" class="nav-link<?= $activeNav === 'media' ? ' active' : '' ?>">Media</a>
+            <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
             <a href="<?= e($basePath) ?>/index.php?action=newsletter" class="nav-link<?= $activeNav === 'newsletter' ? ' active' : '' ?>">Newsletter</a>
             <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
-            <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
             <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
             <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
             <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>

@@ -1594,8 +1594,8 @@ CONTRACT;
 
         if ($batchCount > 1 && !$includeFullResearcherIntro) {
             $userText = 'Setze das Briefing fort (Teil ' . $batchIndex . ' von ' . $batchCount . '). '
-                . 'KEINE Hauptüberschrift (# …), KEINE Zusammenfassung, KEIN Radar/Ausblick. '
-                . 'Nur die Entwicklungs-Bullets unter ### 📌 für genau diese ' . $effectiveCount
+                . 'KEINE Hauptüberschrift (# …), KEINE Zwischenüberschriften (### …), KEINE Zusammenfassung, KEIN Radar/Ausblick. '
+                . 'Schreibe AUSSCHLIESSLICH die reinen Entwicklungs-Bullets (`* **...**`) ohne umschliessende Überschrift für genau diese ' . $effectiveCount
                 . ' SELECTED_ENTRY_KEYS in dieser Reihenfolge: '
                 . implode(', ', $selectedKeys) . '. '
                 . 'Zitiere jedes Item mit entry_type:entry_id in Klammern.';
