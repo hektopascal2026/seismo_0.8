@@ -491,6 +491,25 @@ TEXT;
             throw new \InvalidArgumentException('Mark at least one preview block as noise before refining.');
         }
 
+        $currentConfig = DigestSplitConfigNormalizer::mergeNoiseFeedback($currentConfig, $feedback);
+        $localCount = $this->countSplitStoriesOnSample($samples, $currentConfig);
+        if ($localCount === $keepCount && $localCount > 0) {
+            return [
+                'digest_split_config' => json_encode($currentConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'analysis' => [
+                    'refinement' => 'exclude_titles',
+                    'noise_blocks_excluded' => $noiseCount,
+                ],
+                'verification' => [
+                    'verified' => true,
+                    'expected_counts' => [$keepCount],
+                    'actual_counts' => [$localCount],
+                    'attempts' => 0,
+                    'message' => 'Refined locally: excluded ' . $noiseCount . ' noise block(s) by title.',
+                ],
+            ];
+        }
+
         $attempts = 0;
         $lastAnalysis = null;
         $lastConfig = $currentConfig;
@@ -549,6 +568,8 @@ TEXT;
             ];
 
             if ($refineOk) {
+                $normalized = DigestSplitConfigNormalizer::mergeNoiseFeedback($normalized, $feedback);
+
                 return [
                     'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     'analysis' => $lastAnalysis,
@@ -568,11 +589,39 @@ TEXT;
             ];
         }
 
+        $lastConfig = DigestSplitConfigNormalizer::mergeNoiseFeedback($lastConfig, $feedback);
+        $finalCount = $this->countSplitStoriesOnSample($samples, $lastConfig);
+        if ($finalCount === $keepCount && $finalCount > 0) {
+            $verification['verified'] = true;
+            $verification['actual_counts'] = [$finalCount];
+            $verification['message'] = 'Refined: ' . $keepCount . ' card(s) kept after excluding '
+                . $noiseCount . ' noise block(s).';
+        }
+
         return [
             'digest_split_config' => json_encode($lastConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'analysis' => $lastAnalysis,
             'verification' => $verification,
         ];
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param array{is_digest: true, split_rules: array<string, mixed>} $config
+     */
+    private function countSplitStoriesOnSample(array $samples, array $config): int
+    {
+        if ($samples === []) {
+            return 0;
+        }
+        $sample = $samples[0];
+        $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
+
+        return count($splitter->split(
+            (string)($sample['html_body'] ?? ''),
+            (string)($sample['text_body'] ?? $sample['body'] ?? ''),
+            $config,
+        ));
     }
 
     /**

@@ -57,6 +57,10 @@ final class DigestSplitConfigNormalizer
             if ($excludes !== []) {
                 $normalized['exclude_selectors'] = $excludes;
             }
+            $excludeTitles = self::normalizeStringList($rules['exclude_titles'] ?? []);
+            if ($excludeTitles !== []) {
+                $normalized['exclude_titles'] = $excludeTitles;
+            }
 
             return ['is_digest' => true, 'split_rules' => $normalized];
         }
@@ -124,6 +128,38 @@ final class DigestSplitConfigNormalizer
         }
 
         return json_encode($resolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Merge user noise feedback into split_rules.exclude_titles (deterministic refine).
+     *
+     * @param array{is_digest: true, split_rules: array<string, mixed>} $config
+     * @param array{blocks?: list<array<string, mixed>>} $feedback
+     * @return array{is_digest: true, split_rules: array<string, mixed>}
+     */
+    public static function mergeNoiseFeedback(array $config, array $feedback): array
+    {
+        $rules = $config['split_rules'] ?? [];
+        if (!is_array($rules)) {
+            $rules = [];
+        }
+
+        $excludeTitles = self::normalizeStringList($rules['exclude_titles'] ?? []);
+        foreach ($feedback['blocks'] ?? [] as $block) {
+            if (!is_array($block) || trim((string)($block['verdict'] ?? '')) !== 'noise') {
+                continue;
+            }
+            $title = trim((string)($block['title'] ?? ''));
+            if ($title !== '' && $title !== '(No Title)') {
+                $excludeTitles[] = $title;
+            }
+        }
+
+        if ($excludeTitles !== []) {
+            $rules['exclude_titles'] = array_values(array_unique($excludeTitles));
+        }
+
+        return ['is_digest' => true, 'split_rules' => $rules];
     }
 
     /**

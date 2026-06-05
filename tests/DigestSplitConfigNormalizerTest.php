@@ -146,4 +146,25 @@ final class DigestSplitConfigNormalizerTest extends TestCase
 
         self::assertSame([7, 6], $counts);
     }
+
+    public function testMergeNoiseFeedbackAddsExcludeTitles(): void
+    {
+        $config = [
+            'is_digest' => true,
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => '.article',
+            ],
+        ];
+        $feedback = [
+            'blocks' => [
+                ['index' => 0, 'verdict' => 'noise', 'title' => '02. Juni 2026'],
+                ['index' => 1, 'verdict' => 'keep', 'title' => 'Real Story'],
+            ],
+        ];
+
+        $merged = DigestSplitConfigNormalizer::mergeNoiseFeedback($config, $feedback);
+
+        self::assertSame(['02. Juni 2026'], $merged['split_rules']['exclude_titles']);
+    }
 }

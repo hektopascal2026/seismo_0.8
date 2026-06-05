@@ -88,6 +88,33 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertSame('https://example.com/2', $stories[1]['link']);
     }
 
+    public function testExcludeTitlesSkipMarkedNoiseBlocks(): void
+    {
+        $html = '
+            <html><body>
+                <div class="article"><h2>02. Juni 2026</h2><a href="https://example.com/date">Read</a><p>02. Juni 2026</p></div>
+                <div class="article"><h2>Real Story</h2><a href="https://example.com/story">Read</a><div class="content">Story body with enough text here.</div></div>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => '.article',
+                'title_selector' => 'h2',
+                'link_selector' => 'a',
+                'body_selector' => '.content, p',
+                'exclude_titles' => ['02. Juni 2026'],
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertSame('Real Story', $stories[0]['title']);
+    }
+
     public function testExcludeSelectorsSkipNoiseNodes(): void
     {
         $html = '

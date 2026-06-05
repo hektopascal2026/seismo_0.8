@@ -34,6 +34,10 @@ final class EmailDigestSplitterService
             if (!empty($splitRules['exclude_selectors']) && is_array($splitRules['exclude_selectors'])) {
                 $normalizedRules['exclude_selectors'] = $splitRules['exclude_selectors'];
             }
+            if (!empty($splitRules['exclude_titles']) && is_array($splitRules['exclude_titles'])) {
+                $normalizedRules['exclude_titles'] = $splitRules['exclude_titles'];
+            }
+
             return $this->splitByHtmlSelector($htmlBody, $normalizedRules);
         }
 
@@ -44,7 +48,11 @@ final class EmailDigestSplitterService
                 'body_pattern' => $splitRules['body_pattern'] ?? $splitRules['pattern_body'] ?? '',
                 'link_pattern' => $splitRules['link_pattern'] ?? $splitRules['pattern_link'] ?? '',
             ];
-            return $this->splitByRegex($textBody, $htmlBody, $normalizedRules);
+            if (!empty($splitRules['exclude_titles']) && is_array($splitRules['exclude_titles'])) {
+                $normalizedRules['exclude_titles'] = $splitRules['exclude_titles'];
+            }
+
+            return $this->applyExcludeTitles($this->splitByRegex($textBody, $htmlBody, $normalizedRules), $normalizedRules);
         }
 
         return [];
@@ -146,7 +154,52 @@ final class EmailDigestSplitterService
             }
         }
 
-        return $this->deduplicateStories($this->mergeAdjacentFragments($stories));
+        return $this->applyExcludeTitles(
+            $this->deduplicateStories($this->mergeAdjacentFragments($stories)),
+            $rules,
+        );
+    }
+
+    /**
+     * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
+     * @param array<string, mixed> $rules
+     * @return list<array{title: string, html_body: string, text_body: string, link: ?string}>
+     */
+    private function applyExcludeTitles(array $stories, array $rules): array
+    {
+        $excludeTitles = $rules['exclude_titles'] ?? [];
+        if (!is_array($excludeTitles) || $excludeTitles === []) {
+            return $stories;
+        }
+
+        $normalizedExcludes = [];
+        foreach ($excludeTitles as $title) {
+            $norm = $this->normalizeTitleToken((string)$title);
+            if ($norm !== '') {
+                $normalizedExcludes[] = $norm;
+            }
+        }
+        if ($normalizedExcludes === []) {
+            return $stories;
+        }
+
+        $out = [];
+        foreach ($stories as $story) {
+            $norm = $this->normalizeTitleToken((string)($story['title'] ?? ''));
+            if ($norm !== '' && in_array($norm, $normalizedExcludes, true)) {
+                continue;
+            }
+            $out[] = $story;
+        }
+
+        return $out;
+    }
+
+    private function normalizeTitleToken(string $title): string
+    {
+        $title = preg_replace('/\s+/u', ' ', trim($title)) ?? trim($title);
+
+        return mb_strtolower($title);
     }
 
     /**
