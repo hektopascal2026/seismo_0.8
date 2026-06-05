@@ -71,7 +71,7 @@ final class DigestSplitConfigNormalizerTest extends TestCase
         ]));
     }
 
-    public function testRejectsFragileStorySelector(): void
+    public function testRejectsFragileStorySelectorByDefault(): void
     {
         self::assertNull(DigestSplitConfigNormalizer::normalize([
             'is_digest' => true,
@@ -80,6 +80,17 @@ final class DigestSplitConfigNormalizerTest extends TestCase
                 'story_selector' => 'table[width="100%"] tbody tr td table tbody tr td table tbody tr td table tbody, div.mj-column-per-100 table',
             ],
         ]));
+    }
+
+    public function testAcceptsFragileStorySelectorWhenLenient(): void
+    {
+        $normalized = DigestSplitConfigNormalizer::normalize([
+            'type' => 'html_css',
+            'selector_story' => 'div.csc-frame-default',
+        ], rejectFragileSelectors: false);
+
+        self::assertNotNull($normalized);
+        self::assertSame('div.csc-frame-default', $normalized['split_rules']['story_selector']);
     }
 
     public function testRejectsInvalidRegexPattern(): void

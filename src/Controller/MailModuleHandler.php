@@ -400,7 +400,7 @@ final class MailModuleHandler
             $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
                 (string)$sub['match_type'],
                 (string)$sub['match_value'],
-                \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SAMPLE_COUNT
+                \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SPLIT_SAMPLE_COUNT
             );
 
             if ($emails === []) {

@@ -992,13 +992,25 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var textarea = document.getElementById('split_config_json');
         var verificationBox = document.getElementById('ai-split-verification');
         var verified = data.verification && data.verification.verified;
+        var previewCount = (data.preview_stories && data.preview_stories.length) ? data.preview_stories.length : 0;
+        var hasConfig = !!data.digest_split_config;
 
         if (status) {
             status.style.display = 'inline';
-            status.style.color = verified || !data.digest_split_config ? 'green' : '#b45309';
-            status.textContent = data.verification && data.verification.message
-                ? data.verification.message
-                : (data.refined ? 'Refinement complete!' : 'Analysis complete!');
+            if (hasConfig && previewCount > 0) {
+                status.style.color = 'green';
+                status.textContent = data.refined ? 'Refinement complete!' : 'Analysis complete!';
+            } else if (!hasConfig && verified) {
+                status.style.color = 'green';
+                status.textContent = data.verification && data.verification.message
+                    ? data.verification.message
+                    : 'Not a digest — no split config needed.';
+            } else {
+                status.style.color = '#b45309';
+                status.textContent = data.verification && data.verification.message
+                    ? data.verification.message
+                    : (data.refined ? 'Refinement did not produce cards.' : 'Analysis did not produce preview cards.');
+            }
         }
 
         if (verificationBox && data.verification) {
@@ -1186,7 +1198,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         btn.disabled = true;
         status.style.display = 'inline';
         status.style.color = '#333';
-        status.textContent = 'Analyzing splitting structure with Gemini (count → config → verify)...';
+        status.textContent = 'Analyzing splitting structure with Gemini...';
         if (previewSection) previewSection.style.display = 'none';
         if (verificationBox) {
             verificationBox.style.display = 'none';

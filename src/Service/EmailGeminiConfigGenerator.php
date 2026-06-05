@@ -27,21 +27,17 @@ final class EmailGeminiConfigGenerator
     private const MAX_CLEANUP_RETRIES = 1;
     private const MAX_SPLIT_RETRIES = 1;
     public const GEMINI_SAMPLE_COUNT = 3;
+    public const GEMINI_SPLIT_SAMPLE_COUNT = 5;
     private const HTTP_TIMEOUT_SECONDS = 120;
     private const PROMPT_BODY_MAX_CHARS = 8000;
     private const PROMPT_HTML_MAX_CHARS = 15000;
 
-    private const SPLIT_SYSTEM_INSTRUCTION = <<<'TEXT'
-You are an expert email layout engineer configuring a deterministic HTML/text splitter.
+    private const SPLIT_V1_SYSTEM_INSTRUCTION = <<<'TEXT'
+You are an expert email structure analyzer. Your goal is to detect digest structures and generate CSS selector or Regex split configurations for them.
+TEXT;
 
-Find repeated DOM story wrappers in html_body (table rows, div.csc-frame-default, article blocks).
-Do NOT count plain-text headlines — only selectors that match real HTML wrappers.
-
-When samples include html_body use split_method "html_selector". Never regex_split on HTML emails.
-Output is consumed by PHP EmailDigestSplitterService. Follow the schema exactly.
-CSS selectors: tag, .class, #id, space-separated descendants (max 6 tokens per branch). No tbody chains.
-Prefer stable class wrappers (div.mj-column-per-100 table, div.csc-frame-default) over inline-style attribute selectors.
-regex_split is ONLY when html_body is empty and text_body has explicit delimiters.
+    private const SPLIT_REFINE_SYSTEM_INSTRUCTION = <<<'TEXT'
+You are an expert email structure analyzer. Refine digest split_rules to exclude noise blocks while keeping story cards.
 TEXT;
 
     private const SPLIT_SIMPLE_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -261,154 +257,132 @@ TEXT;
      */
     public function generateSplitConfig(array $samples): array
     {
-        if ($this->structureHint->samplesHaveHtml($samples)) {
-            $probed = $this->tryProbedSplitConfig($samples, 'HTML template');
-            if ($probed !== null) {
-                return [
-                    'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                    'analysis' => null,
-                    'verification' => $probed['verification'],
-                ];
-            }
-        }
-
-        $attempts = 0;
-        $lastAnalysis = null;
-        $lastConfig = null;
-        $verification = [
-            'verified' => false,
-            'expected_counts' => [],
-            'actual_counts' => [],
-            'attempts' => 0,
-            'message' => 'No digest structure detected.',
-        ];
-
-        $retryContext = null;
-
-        while ($attempts <= self::MAX_SPLIT_RETRIES) {
-            ++$attempts;
-
-            $prompt = $retryContext === null
-                ? $this->buildSplitPrompt($samples)
-                : $this->buildSplitRetryPrompt($samples, $retryContext);
-
-            $extracted = $this->callGeminiJson(
-                self::SPLIT_SYSTEM_INSTRUCTION,
-                $prompt,
-                'split attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
-            );
-            $lastAnalysis = $this->extractSplitAnalysis($extracted);
-
-            if (empty($extracted['is_digest'])) {
-                $verification = [
+        $extracted = $this->callGeminiSplitV1($samples);
+        if ($extracted === null) {
+            return [
+                'digest_split_config' => null,
+                'analysis' => null,
+                'verification' => [
                     'verified' => true,
                     'expected_counts' => [],
                     'actual_counts' => [],
-                    'attempts' => $attempts,
+                    'attempts' => 1,
                     'message' => 'Not a multi-story digest — no split config needed.',
-                ];
-
-                return [
-                    'digest_split_config' => null,
-                    'analysis' => $lastAnalysis,
-                    'verification' => $verification,
-                ];
-            }
-
-            $normalized = DigestSplitConfigNormalizer::normalize($extracted);
-            if ($normalized === null) {
-                $retryContext = [
-                    'analysis' => $lastAnalysis,
-                    'config' => $extracted,
-                    'verification' => [
-                        'actual_counts' => array_fill(0, count($samples), 0),
-                        'message' => 'Gemini returned is_digest=true but split_rules were incomplete or invalid.',
-                    ],
-                ];
-                continue;
-            }
-
-            if (
-                $this->structureHint->samplesHaveHtml($samples)
-                && ($normalized['split_rules']['split_method'] ?? '') === 'regex_split'
-            ) {
-                $retryContext = [
-                    'analysis' => $lastAnalysis,
-                    'config' => $normalized,
-                    'verification' => [
-                        'message' => 'regex_split rejected: samples include html_body. Use html_selector.',
-                        'actual_counts' => array_fill(0, count($samples), 0),
-                        'mismatches' => [],
-                    ],
-                    'force_html_selector' => true,
-                ];
-                continue;
-            }
-
-            $check = $this->splitVerifier->verify($samples, $normalized, $extracted);
-            $verification = [
-                'verified' => $check['verified'],
-                'expected_counts' => $check['expected_counts'],
-                'actual_counts' => $check['actual_counts'],
-                'attempts' => $attempts,
-                'message' => $check['message'],
-            ];
-
-            if ($check['verified']) {
-                return [
-                    'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                    'analysis' => $lastAnalysis,
-                    'verification' => $verification,
-                ];
-            }
-
-            $lastConfig = $normalized;
-            $forceHtml = $this->structureHint->samplesHaveHtml($samples)
-                && (($check['actual_counts'][0] ?? 0) === 0);
-
-            $retryContext = [
-                'analysis' => $lastAnalysis,
-                'config' => $normalized,
-                'verification' => $check,
-                'force_html_selector' => $forceHtml,
+                ],
             ];
         }
 
-        $simple = $this->trySimpleSplitFallback($samples);
-        if ($simple !== null) {
-            return [
-                'digest_split_config' => json_encode($simple['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                'analysis' => $lastAnalysis,
-                'verification' => $simple['verification'],
-            ];
+        $normalized = DigestSplitConfigNormalizer::normalize($extracted, rejectFragileSelectors: false);
+        if ($normalized !== null) {
+            $previewCount = $this->countPreviewCards($samples, $normalized);
+            if ($previewCount > 0) {
+                return [
+                    'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    'analysis' => null,
+                    'verification' => [
+                        'verified' => true,
+                        'expected_counts' => [],
+                        'actual_counts' => [$previewCount],
+                        'attempts' => 1,
+                        'message' => 'Analysis complete — ' . $previewCount . ' card(s) in preview.',
+                    ],
+                ];
+            }
         }
 
         $probed = $this->tryProbedSplitConfig($samples, 'HTML template probe');
         if ($probed !== null) {
             return [
                 'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                'analysis' => $lastAnalysis,
+                'analysis' => null,
                 'verification' => $probed['verification'],
             ];
         }
 
         return [
             'digest_split_config' => null,
-            'analysis' => $lastAnalysis,
+            'analysis' => null,
             'verification' => [
                 'verified' => false,
-                'expected_counts' => $verification['expected_counts'],
-                'actual_counts' => $verification['actual_counts'],
-                'attempts' => $attempts,
-                'message' => 'Could not produce a verified split config — try manual selectors or mark noise blocks and refine.',
+                'expected_counts' => [],
+                'actual_counts' => [0],
+                'attempts' => 1,
+                'message' => 'Gemini config did not produce preview cards — try manual selectors or mark noise blocks and refine.',
             ],
         ];
     }
 
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
-     * @return ?array{config: array{is_digest: true, split_rules: array<string, string>}, verification: array<string, mixed>}
+     * @return ?array<string, mixed>
      */
+    private function callGeminiSplitV1(array $samples): ?array
+    {
+        $extracted = $this->callGeminiJsonOrNull(
+            self::SPLIT_V1_SYSTEM_INSTRUCTION,
+            $this->buildSplitV1Prompt($samples),
+            'split v1'
+        );
+
+        if ($extracted === null || $extracted === []) {
+            return null;
+        }
+
+        if (isset($extracted['is_digest']) && empty($extracted['is_digest'])) {
+            return null;
+        }
+
+        if (isset($extracted['split_rules']) && !is_array($extracted['split_rules'])) {
+            return null;
+        }
+
+        return $extracted;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     */
+    private function buildSplitV1Prompt(array $samples): string
+    {
+        $prompt = "We want to configure multi-story digest splitting for a newsletter. Below are "
+            . count($samples) . " sample emails from this newsletter.\n\n";
+
+        foreach ($samples as $index => $sample) {
+            $body = $this->truncateForPrompt(
+                (string)($sample['body'] ?? $sample['text_body'] ?? ''),
+                self::PROMPT_BODY_MAX_CHARS
+            );
+            $prompt .= '--- SAMPLE EMAIL #' . ($index + 1) . " ---\n";
+            $prompt .= 'Subject: ' . $sample['subject'] . "\n";
+            $prompt .= "Body:\n" . $body . "\n\n";
+        }
+
+        $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
+        $prompt .= "If they do, suggest a JSON split configuration matching our split schema:\n";
+        $prompt .= "- For HTML emails: {\"type\": \"html_css\", \"selector_story\": \"CSS selector for story wrapper\", \"selector_title\": \"CSS selector for title\", \"selector_body\": \"CSS selector for body content\", \"selector_link\": \"CSS selector for story URL\"}\n";
+        $prompt .= "- For plain text or regex-delimited emails: {\"type\": \"regex\", \"pattern_split\": \"PHP regex delimiter\", \"pattern_title\": \"regex pattern\", \"pattern_body\": \"regex pattern\", \"pattern_link\": \"regex pattern\"}\n\n";
+        $prompt .= 'Return ONLY the JSON split config object (or null). Do not include markdown wraps like ```json.';
+
+        return $prompt;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param array{is_digest: true, split_rules: array<string, mixed>} $config
+     */
+    private function countPreviewCards(array $samples, array $config): int
+    {
+        if ($samples === []) {
+            return 0;
+        }
+
+        $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
+        $html = (string)($samples[0]['html_body'] ?? '');
+        $text = (string)($samples[0]['text_body'] ?? $samples[0]['body'] ?? '');
+
+        return count($splitter->split($html, $text, $config));
+    }
+
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
      * @return ?array{config: array{is_digest: true, split_rules: array<string, string>}, verification: array<string, mixed>}
@@ -427,21 +401,19 @@ TEXT;
 
         $label = $labelPrefix . ' (' . (string)($probe['label'] ?? 'template') . ')';
         unset($probe['score'], $probe['label']);
-        $check = $this->splitVerifier->verify($samples, $probe, []);
-        if (!$check['verified']) {
+        $previewCount = $this->countPreviewCards($samples, $probe);
+        if ($previewCount === 0) {
             return null;
         }
-
-        $actual = (int)($check['actual_counts'][0] ?? 0);
 
         return [
             'config' => $probe,
             'verification' => [
                 'verified' => true,
                 'expected_counts' => [],
-                'actual_counts' => $check['actual_counts'],
+                'actual_counts' => [$previewCount],
                 'attempts' => 0,
-                'message' => 'Applied local ' . $label . ': ' . $actual . ' card(s) on sample 1.',
+                'message' => 'Applied local ' . $label . ': ' . $previewCount . ' card(s) on sample 1.',
             ],
         ];
     }
@@ -540,7 +512,7 @@ TEXT;
                 : $this->buildRefineRetryPrompt($samples, $retryContext);
 
             $extracted = $this->callGeminiJson(
-                self::SPLIT_SYSTEM_INSTRUCTION,
+                self::SPLIT_REFINE_SYSTEM_INSTRUCTION,
                 $prompt,
                 'split refine attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
             );
@@ -1023,6 +995,25 @@ TEXT;
         }
 
         return mb_substr($text, 0, $maxChars) . "\n[... truncated ...]";
+    }
+
+    /**
+     * @return ?array<string, mixed>
+     */
+    private function callGeminiJsonOrNull(string $systemInstruction, string $prompt, string $callLabel = 'email-config'): ?array
+    {
+        try {
+            return $this->callGeminiJson($systemInstruction, $prompt, $callLabel);
+        } catch (\RuntimeException $e) {
+            if (
+                str_contains($e->getMessage(), 'empty response')
+                || str_contains($e->getMessage(), 'Failed to parse Gemini output')
+            ) {
+                return null;
+            }
+
+            throw $e;
+        }
     }
 
     /**

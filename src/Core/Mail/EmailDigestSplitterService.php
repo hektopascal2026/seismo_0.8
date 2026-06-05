@@ -250,7 +250,7 @@ final class EmailDigestSplitterService
 
     private function nodeLooksLikeStory(DOMXPath $xpath, DOMElement $node): bool
     {
-        foreach (['h1', 'h2', 'h3'] as $headingTag) {
+        foreach (['h1', 'h2', 'h3', 'h4'] as $headingTag) {
             $headings = @$xpath->query('.//' . $headingTag, $node);
             if ($headings !== false && $headings->length > 0) {
                 return true;
@@ -258,27 +258,21 @@ final class EmailDigestSplitterService
         }
 
         $anchors = @$xpath->query('.//a', $node);
-        if ($anchors === false) {
-            return false;
+        if ($anchors !== false) {
+            foreach ($anchors as $anchor) {
+                if (!$anchor instanceof DOMElement) {
+                    continue;
+                }
+                $text = trim($anchor->textContent);
+                if ($text === '' || strcasecmp($text, 'Mehr') === 0 || mb_strlen($text) < 8) {
+                    continue;
+                }
+
+                return true;
+            }
         }
 
-        foreach ($anchors as $anchor) {
-            if (!$anchor instanceof DOMElement) {
-                continue;
-            }
-            $style = strtolower($anchor->getAttribute('style'));
-            if (!str_contains($style, 'font-weight:bold') && !str_contains($style, 'font-weight: bold')) {
-                continue;
-            }
-            $text = trim($anchor->textContent);
-            if ($text === '' || strcasecmp($text, 'Mehr') === 0 || mb_strlen($text) < 12) {
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
+        return mb_strlen(trim($node->textContent)) >= 40;
     }
 
     /**

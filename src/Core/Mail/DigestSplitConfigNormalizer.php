@@ -13,7 +13,7 @@ final class DigestSplitConfigNormalizer
      * @param array<string, mixed> $raw
      * @return ?array{is_digest: true, split_rules: array<string, mixed>}
      */
-    public static function normalize(array $raw): ?array
+    public static function normalize(array $raw, bool $rejectFragileSelectors = true): ?array
     {
         if ($raw === []) {
             return null;
@@ -46,7 +46,10 @@ final class DigestSplitConfigNormalizer
                 'link_selector' => trim((string)($rules['link_selector'] ?? $rules['selector_link'] ?? '')),
                 'body_selector' => trim((string)($rules['body_selector'] ?? $rules['selector_body'] ?? '')),
             ];
-            if ($normalized['story_selector'] === '' || self::isFragileStorySelector($normalized['story_selector'])) {
+            if ($normalized['story_selector'] === '') {
+                return null;
+            }
+            if ($rejectFragileSelectors && self::isFragileStorySelector($normalized['story_selector'])) {
                 return null;
             }
 
