@@ -17,23 +17,28 @@
  * @var bool $satellite
  * @var ?string $dashboardError
  * @var list<string> $categorySuggestions
+ * @var \Seismo\Mail\MailModule $mailModule
  */
 
 declare(strict_types=1);
 
 use Seismo\Core\Mail\EmailBodyProcessorRegistry;
 use Seismo\Http\CsrfToken;
+use Seismo\Mail\MailModule;
 
 $basePath = getBasePath();
 $processorChoices = EmailBodyProcessorRegistry::choicesForAdmin();
 $accent     = seismoBrandAccent();
 
-$headerTitle    = 'Mail';
-$headerSubtitle = 'IMAP / newsletter';
-$activeNav      = 'mail';
+$mailModule = $mailModule ?? MailModule::mail();
 
-$itemsQs   = 'action=mail';
-$sourcesQs = 'action=mail&view=sources';
+$headerTitle    = $mailModule->pageTitle;
+$headerSubtitle = $mailModule->subtitle;
+$activeNav      = $mailModule->navKey;
+
+$itemsQs   = 'action=' . $mailModule->action;
+$sourcesQs = 'action=' . $mailModule->action . '&view=sources';
+$subscriptionReprocessAction = $mailModule->reprocessAction;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -84,9 +89,9 @@ $sourcesQs = 'action=mail&view=sources';
                 }
                 ?>
                 <p class="message message-info" style="margin-bottom:1rem;">
-                    Mail items filtered to subscription #<?= (int)$subscriptionFilter['id'] ?> (<?= e($sfLabel) ?>).
-                    <a href="<?= e($basePath) ?>/index.php?action=mail">Show all mail</a>
-                    · <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= (int)$subscriptionFilter['id'] ?>">Edit source</a>
+                    <?= e($mailModule->pageTitle) ?> items filtered to subscription #<?= (int)$subscriptionFilter['id'] ?> (<?= e($sfLabel) ?>).
+                    <a href="<?= e($basePath) ?>/index.php?<?= e($itemsQs) ?>">Show all</a>
+                    · <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>&amp;edit=<?= (int)$subscriptionFilter['id'] ?>">Edit source</a>
                 </p>
                 <?php if (!$satellite): ?>
                     <?php $subscriptionReprocessId = (int)$subscriptionFilter['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
@@ -103,16 +108,17 @@ $sourcesQs = 'action=mail&view=sources';
                 <?php include __DIR__ . '/partials/dashboard_entry_loop.php'; ?>
             <?php else: ?>
                 <div class="empty-state">
-                    <p>No email rows yet. Configure IMAP fetch separately; subscription rules live under <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>">Sources</a>.</p>
+                    <?php $sourcesHref = $basePath . '/index.php?' . $sourcesQs; ?>
+                    <p><?= str_replace('{sources_href}', e($sourcesHref), $mailModule->emptyItemsHtml) ?></p>
                 </div>
             <?php endif; ?>
         </div>
         <?php else: ?>
         <div class="latest-entries-section">
-            <h2 class="section-title">Mail sources</h2>
-            <p class="admin-intro">Domain-first matching (e.g. <code>example.com</code> covers <code>alice@example.com</code>). Per-address overrides use match type <em>email</em>. When Gmail ingests mail from an unknown domain, it is queued under <strong>New senders</strong> for review before it appears in the table below.</p>
+            <h2 class="section-title"><?= e($mailModule->sourcesHeading) ?></h2>
+            <?= $mailModule->sourcesIntroHtml ?>
 
-            <?php if ($pendingSenders !== []): ?>
+            <?php if ($mailModule->showsPendingSenders && $pendingSenders !== []): ?>
             <section class="admin-new-senders-section" aria-labelledby="new-senders-heading">
                 <h3 id="new-senders-heading" class="section-title section-title--compact">New senders <span class="admin-new-senders-badge"><?= count($pendingSenders) ?></span></h3>
                 <p class="admin-hint">Detected from Gmail ingest — confirm display name and options, then save to activate.</p>
@@ -130,7 +136,7 @@ $sourcesQs = 'action=mail&view=sources';
                         <?php
                         $sid = (int)$row['id'];
                         $peek = $pendingLatest[$sid] ?? null;
-                        $latestQs = 'action=mail&view=items&subscription=' . $sid;
+                        $latestQs = 'action=' . $mailModule->action . '&view=items&subscription=' . $sid;
                         ?>
                         <tr>
                             <td><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
@@ -163,8 +169,8 @@ $sourcesQs = 'action=mail&view=sources';
                             <td>
                                 <?php if (!$satellite): ?>
                                 <div class="admin-table-actions">
-                                    <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= $sid ?>" class="btn btn-primary btn-sm">Review</a>
-                                    <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_delete" class="admin-inline-form" onsubmit="return confirm('Dismiss this proposed sender?');">
+                                    <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>&amp;edit=<?= $sid ?>" class="btn btn-primary btn-sm">Review</a>
+                                    <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->deleteAction) ?>" class="admin-inline-form" onsubmit="return confirm('Dismiss this proposed sender?');">
                                         <?= $csrfField ?>
                                         <input type="hidden" name="id" value="<?= $sid ?>">
                                         <button type="submit" class="btn btn-danger btn-sm">Dismiss</button>
@@ -182,7 +188,7 @@ $sourcesQs = 'action=mail&view=sources';
             <?php endif; ?>
 
             <?php if (!$satellite && ($editRow === null || !$reviewingPending)): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save" class="admin-form-card">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>" class="admin-form-card">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
                 <h3><?= $editRow ? 'Edit subscription' : 'Add subscription' ?></h3>
@@ -291,7 +297,7 @@ $sourcesQs = 'action=mail&view=sources';
 
                     <div class="admin-form-field">
                         <p class="admin-hint">Make adjustments to the JSON above if needed, then save to apply locally.</p>
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save">
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
                             <?= $csrfField ?>
                             <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
                             <input type="hidden" name="match_type" value="<?= e((string)$editRow['match_type']) ?>">
@@ -323,7 +329,7 @@ $sourcesQs = 'action=mail&view=sources';
             <?php endif; ?>
 
             <?php if (!$satellite && $reviewingPending && $editRow !== null): ?>
-            <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_save" class="admin-form-card admin-form-card--review">
+            <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>" class="admin-form-card admin-form-card--review">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
                 <h3>Review sender</h3>
@@ -450,13 +456,20 @@ $sourcesQs = 'action=mail&view=sources';
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
-                                <a href="<?= e($basePath) ?>/index.php?action=mail&amp;view=sources&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_disable" class="admin-inline-form">
+                                <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>&amp;edit=<?= (int)$row['id'] ?>" class="btn btn-secondary btn-sm">Edit</a>
+                                <?php if ($mailModule->moveAction !== null): ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->moveAction) ?>" class="admin-inline-form">
+                                    <?= $csrfField ?>
+                                    <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                    <button type="submit" class="btn btn-secondary btn-sm"><?= e($mailModule->moveTargetLabel) ?></button>
+                                </form>
+                                <?php endif; ?>
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->disableAction) ?>" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
                                     <button type="submit" class="btn btn-warning btn-sm" title="Disable">Unsubscribe</button>
                                 </form>
-                                <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_subscription_delete" class="admin-inline-form" onsubmit="return confirm('Remove this subscription row?');">
+                                <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->deleteAction) ?>" class="admin-inline-form" onsubmit="return confirm('Remove this subscription row?');">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
                                     <button type="submit" class="btn btn-danger btn-sm">Remove</button>
@@ -655,7 +668,7 @@ $sourcesQs = 'action=mail&view=sources';
         formData.append('id', id);
         formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
 
-        fetch('<?= e($basePath) ?>/index.php?action=mail_subscription_analyze', {
+        fetch('<?= e($basePath) ?>/index.php?action=<?= e($mailModule->analyzeAction) ?>', {
             method: 'POST',
             body: formData
         })

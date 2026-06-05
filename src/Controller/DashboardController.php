@@ -42,7 +42,7 @@ final class DashboardController
 
         $dashboardError = null;
         $allItems        = [];
-        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => [], 'newsletter_tags' => []];
         $timelineFilter = TimelineFilter::fromQueryArray($_GET);
         $alertThreshold    = $this->resolveAlertThreshold();
         $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();
@@ -53,7 +53,7 @@ final class DashboardController
             $pdo  = getDbConnection();
             $repo = new EntryRepository($pdo);
             $pillOpts        = $repo->getFilterPillOptions();
-            $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts);
+            $timelineFilter = TimelineFilter::fromHttpGet($_GET, $pillOpts)->withPinNewsletterEmails(true);
             if ($timelineFilter->filterMem) {
                 $excludeMediaCategory = false;
             }
@@ -122,7 +122,7 @@ final class DashboardController
 
         $dashboardError = null;
         $allItems        = [];
-        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => []];
+        $pillOpts       = ['feed_categories' => [], 'lex_sources' => [], 'email_tags' => [], 'newsletter_tags' => []];
         $timelineFilter = TimelineFilter::fromQueryArray($_GET);
         $alertThreshold    = $this->resolveAlertThreshold();
         $sortByRelevance   = $currentView !== 'favourites' && $this->resolveSortByRelevance();

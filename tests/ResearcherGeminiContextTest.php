@@ -31,7 +31,7 @@ final class ResearcherGeminiContextTest extends TestCase
 
     public function testStratifiedCapReservesLexRowsWhenFeedsDominateRelevance(): void
     {
-        $selection = ResearcherSourceSelection::forModules(true, false, false, false, true, true);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, true, true);
         $gatherer  = new ResearcherEntryGatherer();
 
         $feeds = [];

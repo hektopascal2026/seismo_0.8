@@ -47,10 +47,14 @@ final class TimelineFilter
      * @param list<string> $emailTags            Legacy: sender tag IN (…).
      * @param list<string> $excludedFeedCategories Dashboard: these feed categories are OFF.
      * @param list<string> $excludedLexSources     Dashboard: these Lex sources are OFF.
-     * @param list<string> $excludedEmailTags      Dashboard: these sender tags are OFF.
+     * @param list<string> $excludedEmailTags      Dashboard: these mail-module sender tags are OFF.
+     * @param list<string> $newsletterTags         Native: include only these newsletter `em:<id>` tokens.
+     * @param list<string> $excludedNewsletterTags Dashboard: these newsletter tags are OFF.
      * @param bool         $excludeAllFeedItems    Native/none: no feed rows (fixes NULL-category leak).
-     * @param bool         $excludeAllEmails       Native/none: no email rows (fixes untagged leak).
+     * @param bool         $excludeAllEmails       Native/none: no mail-module email rows.
+     * @param bool         $excludeAllNewsletterEmails Native/none: no newsletter-module email rows.
      * @param bool         $excludeAllLexItems     Native/none: no lex rows (fixes unknown-source leak).
+     * @param bool         $pinNewsletterEmails    Main timeline: newsletter rows ignore newsletter filters.
      */
     public function __construct(
         public readonly array $feedCategories = [],
@@ -60,13 +64,40 @@ final class TimelineFilter
         public readonly array $excludedFeedCategories = [],
         public readonly array $excludedLexSources = [],
         public readonly array $excludedEmailTags = [],
+        public readonly array $newsletterTags = [],
+        public readonly array $excludedNewsletterTags = [],
         public readonly bool $excludeCalendar = false,
         public readonly bool $excludeJusLex = false,
         public readonly bool $excludeAllFeedItems = false,
         public readonly bool $excludeAllEmails = false,
+        public readonly bool $excludeAllNewsletterEmails = false,
         public readonly bool $excludeAllLexItems = false,
         public readonly bool $filterMem = false,
+        public readonly bool $pinNewsletterEmails = false,
     ) {
+    }
+
+    public function withPinNewsletterEmails(bool $pin): self
+    {
+        return new self(
+            feedCategories: $this->feedCategories,
+            feedSourceKinds: $this->feedSourceKinds,
+            lexSources: $this->lexSources,
+            emailTags: $this->emailTags,
+            excludedFeedCategories: $this->excludedFeedCategories,
+            excludedLexSources: $this->excludedLexSources,
+            excludedEmailTags: $this->excludedEmailTags,
+            newsletterTags: $this->newsletterTags,
+            excludedNewsletterTags: $this->excludedNewsletterTags,
+            excludeCalendar: $this->excludeCalendar,
+            excludeJusLex: $this->excludeJusLex,
+            excludeAllFeedItems: $this->excludeAllFeedItems,
+            excludeAllEmails: $this->excludeAllEmails,
+            excludeAllNewsletterEmails: $this->excludeAllNewsletterEmails,
+            excludeAllLexItems: $this->excludeAllLexItems,
+            filterMem: $this->filterMem,
+            pinNewsletterEmails: $pin,
+        );
     }
 
     /**
@@ -81,10 +112,13 @@ final class TimelineFilter
             || $this->excludedFeedCategories !== []
             || $this->excludedLexSources !== []
             || $this->excludedEmailTags !== []
+            || $this->newsletterTags !== []
+            || $this->excludedNewsletterTags !== []
             || $this->excludeCalendar
             || $this->excludeJusLex
             || $this->excludeAllFeedItems
             || $this->excludeAllEmails
+            || $this->excludeAllNewsletterEmails
             || $this->excludeAllLexItems
             || $this->filterMem;
     }
@@ -97,10 +131,13 @@ final class TimelineFilter
         return $this->excludedFeedCategories === []
             && $this->excludedLexSources === []
             && $this->excludedEmailTags === []
+            && $this->newsletterTags === []
+            && $this->excludedNewsletterTags === []
             && !$this->excludeCalendar
             && !$this->excludeJusLex
             && !$this->excludeAllFeedItems
             && !$this->excludeAllEmails
+            && !$this->excludeAllNewsletterEmails
             && !$this->excludeAllLexItems
             && !$this->filterMem
             && $this->feedCategories === []
@@ -112,7 +149,7 @@ final class TimelineFilter
     /**
      * True when exclusions match “everything off” for the current pill option sets.
      *
-     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>, newsletter_tags?: list<string>} $pillOpts
      */
     public function dashboardPillsAllOff(array $pillOpts): bool
     {
@@ -125,10 +162,12 @@ final class TimelineFilter
         $feeds = $pillOpts['feed_categories'] ?? [];
         $lex   = $pillOpts['lex_sources'] ?? [];
         $em    = $pillOpts['email_tags'] ?? [];
+        $nl    = $pillOpts['newsletter_tags'] ?? [];
 
         return self::sameStringSet($feeds, $this->excludedFeedCategories)
             && self::sameStringSet($lex, $this->excludedLexSources)
-            && self::sameStringSet($em, $this->excludedEmailTags);
+            && self::sameStringSet($em, $this->excludedEmailTags)
+            && self::sameStringSet($nl, $this->excludedNewsletterTags);
     }
 
     private function legacyFiltersEmpty(): bool
@@ -219,12 +258,13 @@ final class TimelineFilter
         return array_key_exists('feed', $filters)
             || array_key_exists('lex', $filters)
             || array_key_exists('email', $filters)
+            || array_key_exists('newsletter', $filters)
             || array_key_exists('calendar', $filters)
             || array_key_exists('jus', $filters);
     }
 
     /**
-     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>} $pillOpts
+     * @param array{feed_categories: list<string>, lex_sources: list<string>, email_tags: list<string>, newsletter_tags?: list<string>} $pillOpts
      */
     private static function fromNoneFlag(array $pillOpts): self
     {
@@ -232,10 +272,12 @@ final class TimelineFilter
             excludedFeedCategories: array_values($pillOpts['feed_categories'] ?? []),
             excludedLexSources: array_values($pillOpts['lex_sources'] ?? []),
             excludedEmailTags: array_values($pillOpts['email_tags'] ?? []),
+            excludedNewsletterTags: array_values($pillOpts['newsletter_tags'] ?? []),
             excludeCalendar: true,
             excludeJusLex: true,
             excludeAllFeedItems: true,
             excludeAllEmails: true,
+            excludeAllNewsletterEmails: true,
             excludeAllLexItems: true,
             filterMem: false,
         );
@@ -255,10 +297,12 @@ final class TimelineFilter
         $feedAll = array_values($pillOpts['feed_categories'] ?? []);
         $lexAll  = array_values($pillOpts['lex_sources'] ?? []);
         $emAll   = array_values($pillOpts['email_tags'] ?? []);
+        $nlAll   = array_values($pillOpts['newsletter_tags'] ?? []);
 
         $inFeeds = array_values(array_intersect($feedAll, self::stringListFromFilterBranch($filters['feed'] ?? null)));
         $inLex   = array_values(array_intersect($lexAll, self::stringListFromFilterBranch($filters['lex'] ?? null)));
         $inEm    = array_values(array_intersect($emAll, self::stringListFromFilterBranch($filters['email'] ?? null)));
+        $inNl    = array_values(array_intersect($nlAll, self::stringListFromFilterBranch($filters['newsletter'] ?? null)));
 
         // Older filter URLs used a single `filters[jus]=1` instead of three `filters[lex][]` keys.
         $jusLegacy = $filters['jus'] ?? null;
@@ -279,6 +323,7 @@ final class TimelineFilter
 
         $excludeAllFeedItems = $feedAll !== [] && $inFeeds === [];
         $excludeAllEmails    = $emAll !== [] && $inEm === [];
+        $excludeAllNewsletterEmails = $nlAll !== [] && $inNl === [];
         $excludeAllLexItems  = $lexAll !== [] && $inLex === [];
 
         // Partial selection must be inclusion (“show only checked”), not exclusion
@@ -288,6 +333,7 @@ final class TimelineFilter
         $useFeedInclusion = $inFeeds !== [] && count($inFeeds) < count($feedAll);
         $useLexInclusion  = $inLex !== [] && count($inLex) < count($lexAll);
         $useEmInclusion   = $inEm !== [] && count($inEm) < count($emAll);
+        $useNlInclusion   = $inNl !== [] && count($inNl) < count($nlAll);
 
         return new self(
             feedCategories: $useFeedInclusion ? $inFeeds : [],
@@ -296,10 +342,13 @@ final class TimelineFilter
             excludedLexSources: $useLexInclusion ? [] : array_values(array_diff($lexAll, $inLex)),
             emailTags: $useEmInclusion ? $inEm : [],
             excludedEmailTags: $useEmInclusion ? [] : array_values(array_diff($emAll, $inEm)),
+            newsletterTags: $useNlInclusion ? $inNl : [],
+            excludedNewsletterTags: $useNlInclusion ? [] : array_values(array_diff($nlAll, $inNl)),
             excludeCalendar: !$calOn,
             excludeJusLex: false,
             excludeAllFeedItems: $excludeAllFeedItems,
             excludeAllEmails: $excludeAllEmails,
+            excludeAllNewsletterEmails: $excludeAllNewsletterEmails,
             excludeAllLexItems: $excludeAllLexItems,
             filterMem: $memOn,
         );

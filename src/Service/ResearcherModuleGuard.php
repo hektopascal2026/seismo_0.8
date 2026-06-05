@@ -60,7 +60,7 @@ final class ResearcherModuleGuard
             $id   = (string)($row['entry_id'] ?? '?');
             $bucket = $this->gatherer->moduleBucketForEntry(
                 $row,
-                ResearcherSourceSelection::forModules(true, true, true, true, true, true),
+                ResearcherSourceSelection::forModules(true, true, true, true, true, true, true),
             );
             $samples[] = $type . ':' . $id . ' (full bucket=' . ($bucket ?? 'none') . ')';
         }

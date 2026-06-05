@@ -12,7 +12,7 @@ final class ResearcherModuleSelectionTest extends TestCase
 {
     public function testFilterByModuleSelectionExcludesMediaWhenMediaDisabled(): void
     {
-        $selection = ResearcherSourceSelection::forModules(true, false, false, false, true, false);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, true, false);
         $gatherer  = new ResearcherEntryGatherer();
 
         $entries = [
@@ -45,7 +45,7 @@ final class ResearcherModuleSelectionTest extends TestCase
 
     public function testStratifiedCapNeverIncludesDeselectedMediaBucket(): void
     {
-        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false, false);
         $gatherer  = new ResearcherEntryGatherer();
 
         $feeds = [];
@@ -98,7 +98,7 @@ final class ResearcherModuleSelectionTest extends TestCase
 
     public function testStratifiedCapSingleBucketFallbackStillExcludesDeselectedRows(): void
     {
-        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, false, true, false);
         $gatherer  = new ResearcherEntryGatherer();
 
         $lex = [];
@@ -147,7 +147,7 @@ final class ResearcherModuleSelectionTest extends TestCase
 
     public function testOnlyLexEnabledExcludesAllNonLexTypes(): void
     {
-        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, false, true, false);
         $gatherer  = new ResearcherEntryGatherer();
         $guard     = new ResearcherModuleGuard($gatherer);
 

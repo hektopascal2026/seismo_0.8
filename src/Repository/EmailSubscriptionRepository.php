@@ -6,6 +6,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use Seismo\Core\Mail\EmailBodyProcessorRegistry;
+use Seismo\Mail\MailModule;
 
 /**
  * `email_subscriptions` — domain-first newsletter registry (Slice 8).
@@ -18,6 +19,10 @@ use Seismo\Core\Mail\EmailBodyProcessorRegistry;
 final class EmailSubscriptionRepository
 {
     public const MAX_LIMIT = 200;
+
+    public const MODULE_MAIL = MailModule::SCOPE_MAIL;
+
+    public const MODULE_NEWSLETTER = MailModule::SCOPE_NEWSLETTER;
 
     public function __construct(private PDO $pdo)
     {
@@ -94,11 +99,16 @@ final class EmailSubscriptionRepository
     {
         $from = trim($fromEmail);
         if ($from === '') {
-            return ['display_name' => null, 'strip_listing_boilerplate' => false];
+            return [
+                'display_name'              => null,
+                'strip_listing_boilerplate' => false,
+                'module_scope'              => self::MODULE_MAIL,
+            ];
         }
         $bestRank  = 0;
         $bestName  = null;
         $bestStrip = false;
+        $bestScope = self::MODULE_MAIL;
         foreach ($subscriptionRows as $row) {
             if (!empty($row['disabled']) || !empty($row['auto_detected'])) {
                 continue;
@@ -114,6 +124,7 @@ final class EmailSubscriptionRepository
                 $bestRank  = $rank;
                 $bestName  = $name !== '' ? $name : null;
                 $bestStrip = !empty($row['strip_listing_boilerplate']);
+                $bestScope = self::rowModuleScope($row);
 
                 continue;
             }
@@ -125,7 +136,20 @@ final class EmailSubscriptionRepository
         return [
             'display_name'              => $bestName,
             'strip_listing_boilerplate' => $bestStrip,
+            'module_scope'              => $bestScope,
         ];
+    }
+
+    public static function rowModuleScope(array $row): string
+    {
+        return self::normalizeModuleScope($row['module_scope'] ?? self::MODULE_MAIL);
+    }
+
+    public static function normalizeModuleScope(mixed $value): string
+    {
+        $scope = strtolower(trim((string)($value ?? '')));
+
+        return $scope === self::MODULE_NEWSLETTER ? self::MODULE_NEWSLETTER : self::MODULE_MAIL;
     }
 
     /**
@@ -190,6 +214,29 @@ final class EmailSubscriptionRepository
     public function listActive(int $limit, int $offset): array
     {
         return $this->listByAutoDetected(false, $limit, $offset);
+    }
+
+    /**
+     * Confirmed subscriptions for a Mail or Newsletter admin module.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listActiveForModule(string $moduleScope, int $limit, int $offset): array
+    {
+        $scope = self::normalizeModuleScope($moduleScope);
+        $limit  = max(1, min($limit, self::MAX_LIMIT));
+        $offset = max(0, $offset);
+        $t      = entryTable('email_subscriptions');
+        $sql    = "SELECT * FROM {$t}
+            WHERE removed_at IS NULL
+              AND auto_detected = 0
+              AND module_scope = ?
+            ORDER BY id DESC
+            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$scope]);
+
+        return $stmt->fetchAll();
     }
 
     /**
@@ -337,17 +384,20 @@ final class EmailSubscriptionRepository
         $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
 
         $t   = entryTable('email_subscriptions');
+        $moduleScope = self::normalizeModuleScope($data['module_scope'] ?? self::MODULE_MAIL);
+
         $sql = "INSERT INTO {$t} (
-            match_type, match_value, display_name, category, disabled, show_in_magnitu, strip_listing_boilerplate,
+            match_type, match_value, display_name, category, module_scope, disabled, show_in_magnitu, strip_listing_boilerplate,
             body_processor, cleanup_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
             $matchValue,
             $displayName,
             $data['category'] ?? null,
+            $moduleScope,
             !empty($data['disabled']) ? 1 : 0,
             $showMagnitu,
             $stripListing,
@@ -420,11 +470,16 @@ final class EmailSubscriptionRepository
             : ($existing['cleanup_config'] ?? null);
 
         $t   = entryTable('email_subscriptions');
+        $moduleScope = array_key_exists('module_scope', $data)
+            ? self::normalizeModuleScope($data['module_scope'])
+            : self::rowModuleScope($existing);
+
         $sql = "UPDATE {$t} SET
             match_type = ?,
             match_value = ?,
             display_name = ?,
             category = ?,
+            module_scope = ?,
             disabled = ?,
             show_in_magnitu = ?,
             strip_listing_boilerplate = ?,
@@ -441,6 +496,7 @@ final class EmailSubscriptionRepository
             $matchValue,
             $displayName,
             $data['category'] ?? $existing['category'],
+            $moduleScope,
             $disabled,
             $showMagnitu,
             $stripListing,
@@ -453,6 +509,22 @@ final class EmailSubscriptionRepository
                 : (int)($existing['unsubscribe_one_click'] ?? 0),
             $id,
         ]);
+    }
+
+    public function setModuleScope(int $id, string $moduleScope): void
+    {
+        $this->assertNotSatellite();
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('Invalid subscription id.');
+        }
+        $scope = self::normalizeModuleScope($moduleScope);
+        $t   = entryTable('email_subscriptions');
+        $sql = "UPDATE {$t} SET module_scope = ? WHERE id = ? AND removed_at IS NULL AND auto_detected = 0 LIMIT 1";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$scope, $id]);
+        if ($stmt->rowCount() === 0) {
+            throw new \InvalidArgumentException('Subscription not found.');
+        }
     }
 
     public static function normalizeBodyProcessor(mixed $value): ?string

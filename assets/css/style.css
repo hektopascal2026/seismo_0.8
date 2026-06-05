@@ -83,6 +83,7 @@ body {
     --seismo-pill-lex: #f5f562;
     --seismo-pill-leg: #d4edda;
     --seismo-pill-mail: #ffdbbb;
+    --seismo-pill-newsletter: #ab8786;
     
     /* Label Button Color Themes */
     --label-investigation: #FF6B6B;
@@ -1073,8 +1074,25 @@ textarea.search-input.setup-code-preview {
     border-color: #000000;
 }
 
+.filter-pill--newsletter.filter-pill--active {
+    background-color: var(--seismo-pill-newsletter);
+}
+
+.filter-pill-input:checked + .filter-pill-text--newsletter {
+    background-color: var(--seismo-pill-newsletter);
+}
+
+.tag-filter-pill-active.tag-filter-pill--newsletter {
+    background-color: var(--seismo-pill-newsletter, #ab8786);
+}
+
 .entry-tag--email-sender {
     background-color: var(--seismo-pill-mail);
+    border-color: #000000;
+}
+
+.entry-tag--newsletter-sender {
+    background-color: var(--seismo-pill-newsletter);
     border-color: #000000;
 }
 
@@ -3621,6 +3639,7 @@ pre,
 .entry-tag--leg-type,
 .entry-tag--leg-council,
 .entry-tag--email-sender,
+.entry-tag--newsletter-sender,
 .entry-tag--leg-signal,
 .entry-tag--status-completed,
 .entry-tag--status-cancelled,

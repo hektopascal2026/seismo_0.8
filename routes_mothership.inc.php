@@ -408,6 +408,46 @@ $router->register(
     false
 );
 $router->register(
+    'mail_subscription_move_newsletter',
+    \Seismo\Controller\MailController::class . '::moveToNewsletter',
+    false
+);
+$router->register(
+    'newsletter',
+    \Seismo\Controller\NewsletterController::class . '::show',
+    true
+);
+$router->register(
+    'newsletter_subscription_save',
+    \Seismo\Controller\NewsletterController::class . '::saveSubscription',
+    false
+);
+$router->register(
+    'newsletter_subscription_analyze',
+    \Seismo\Controller\NewsletterController::class . '::analyzeBoilerplate',
+    false
+);
+$router->register(
+    'newsletter_subscription_delete',
+    \Seismo\Controller\NewsletterController::class . '::deleteSubscription',
+    false
+);
+$router->register(
+    'newsletter_subscription_disable',
+    \Seismo\Controller\NewsletterController::class . '::disableSubscription',
+    false
+);
+$router->register(
+    'newsletter_subscription_reprocess',
+    \Seismo\Controller\NewsletterController::class . '::reprocessSubscription',
+    false
+);
+$router->register(
+    'newsletter_subscription_move_mail',
+    \Seismo\Controller\NewsletterController::class . '::moveToMail',
+    false
+);
+$router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
     true

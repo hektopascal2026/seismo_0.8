@@ -12,6 +12,8 @@
  *   lex_source_labels?: array<string, string>,
  *   email_tags: list<string>,
  *   email_tag_labels?: array<string, string>,
+ *   newsletter_tags?: list<string>,
+ *   newsletter_tag_labels?: array<string, string>,
  * } $filterPillOptions
  * @var \Seismo\Repository\TimelineFilter $timelineFilter
  * @var array<int, array<string, mixed>> $allItems
@@ -97,11 +99,19 @@ $mailOn = static function (string $tg) use ($timelineFilter): bool {
 
     return !in_array($tg, $timelineFilter->excludedEmailTags, true);
 };
+$newsletterOn = static function (string $tg) use ($timelineFilter): bool {
+    if ($timelineFilter->newsletterTags !== []) {
+        return in_array($tg, $timelineFilter->newsletterTags, true);
+    }
+
+    return !in_array($tg, $timelineFilter->excludedNewsletterTags, true);
+};
 $legOn = !$timelineFilter->excludeCalendar;
 
 $feedCategoryLabels = $filterPillOptions['feed_category_labels'] ?? [];
 $feedPillKinds      = $filterPillOptions['feed_pill_kinds'] ?? [];
-$emailTagLabels     = $filterPillOptions['email_tag_labels'] ?? [];
+$emailTagLabels        = $filterPillOptions['email_tag_labels'] ?? [];
+$newsletterTagLabels   = $filterPillOptions['newsletter_tag_labels'] ?? [];
 
 $formAction = $basePath . '/index.php';
 ?>
@@ -215,6 +225,24 @@ $formAction = $basePath . '/index.php';
                                    name="filters[email][]" value="<?= e($tg) ?>"
                                 <?= $mailOn($tg) ? ' checked' : '' ?>>
                             <span class="filter-pill-text filter-pill-text--mail"><?= e($mailLabel) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+
+                <?php if (($filterPillOptions['newsletter_tags'] ?? []) !== []): ?>
+                <div class="filter-toolbar__row">
+                    <span class="filter-toolbar__hint">Newsletter</span>
+                    <?php foreach ($filterPillOptions['newsletter_tags'] as $tg): ?>
+                        <?php
+                        $cid       = 'df-newsletter-' . preg_replace('/[^a-zA-Z0-9_-]+/', '-', $tg);
+                        $nlLabel   = $newsletterTagLabels[$tg] ?? $tg;
+                        ?>
+                        <label class="filter-pill-label" for="<?= e($cid) ?>">
+                            <input type="checkbox" class="filter-pill-input" id="<?= e($cid) ?>"
+                                   name="filters[newsletter][]" value="<?= e($tg) ?>"
+                                <?= $newsletterOn($tg) ? ' checked' : '' ?>>
+                            <span class="filter-pill-text filter-pill-text--newsletter"><?= e($nlLabel) ?></span>
                         </label>
                     <?php endforeach; ?>
                 </div>

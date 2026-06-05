@@ -1146,7 +1146,7 @@ final class EntryRepository
      */
     private function fetchEmails(int $limit, ?TimelineFilter $filter = null): array
     {
-        if ($filter !== null && $filter->excludeAllEmails && !$filter->filterMem) {
+        if ($filter !== null && $filter->excludeAllEmails && $filter->excludeAllNewsletterEmails && !$filter->filterMem) {
             return [];
         }
         $emailTags = $filter !== null && $filter->emailTags !== []
@@ -1866,6 +1866,7 @@ final class EntryRepository
             if ($ui['display_name'] !== null && $ui['display_name'] !== '') {
                 $it['data']['subscription_display_name'] = $ui['display_name'];
             }
+            $it['data']['subscription_module_scope'] = $ui['module_scope'];
             if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui, $globalStripBoilerplate)) {
                 $it['data']['subscription_strip_listing_boilerplate'] = true;
             }
@@ -1912,11 +1913,11 @@ final class EntryRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function getEmailModuleTimeline(int $limit, int $offset): array
+    public function getEmailModuleTimeline(int $limit, int $offset, string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL): array
     {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
-        $rows   = $this->fetchEmailsPaged($limit, $offset);
+        $rows   = $this->fetchEmailsPaged($limit, $offset, $moduleScope);
         $items  = [];
         foreach ($rows as $row) {
             $items[] = $this->wrapEmail($row);
@@ -2037,8 +2038,13 @@ final class EntryRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchEmailsPaged(int $limit, int $offset): array
+    private function fetchEmailsPaged(int $limit, int $offset, string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL): array
     {
+        $scopeFrag = $this->emailSqlModuleScopeMatchFragment($moduleScope);
+        if ($scopeFrag === null) {
+            return [];
+        }
+
         $table = getEmailTableName();
         $emailT = entryTable($table);
         $dateCols = $this->resolveEmailDateColumns($table);
@@ -2059,10 +2065,31 @@ final class EntryRepository
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
                 WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                  AND ' . $scopeFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
 
-        return $this->selectOrEmpty($sql);
+        return $this->selectPreparedOrEmpty($sql, $scopeFrag['params']);
+    }
+
+    /**
+     * @return ?array{sql: string, params: list<mixed>}
+     */
+    private function emailSqlModuleScopeMatchFragment(string $moduleScope): ?array
+    {
+        try {
+            $subs = (new EmailSubscriptionRepository($this->pdo))
+                ->listActiveForModule($moduleScope, EmailSubscriptionRepository::MAX_LIMIT, 0);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $frag = $this->emailSqlSubscriptionMatchOrClause($subs);
+        if ($frag['sql'] === '') {
+            return null;
+        }
+
+        return $frag;
     }
 
     /**
@@ -2542,9 +2569,6 @@ final class EntryRepository
         if ($filter->excludeAllFeedItems && $et === 'feed_item') {
             return false;
         }
-        if ($filter->excludeAllEmails && $et === 'email') {
-            return false;
-        }
         if ($filter->excludeAllLexItems && $et === 'lex_item') {
             return false;
         }
@@ -2579,18 +2603,82 @@ final class EntryRepository
                 }
             }
         }
-        if ($filter->emailTags !== [] && $et === 'email') {
-            if (!$this->emailItemMatchesFilterTokens($data, $filter->emailTags)) {
-                return false;
-            }
-        }
-        if ($filter->emailTags === [] && $filter->excludedEmailTags !== [] && $et === 'email') {
-            if ($this->emailItemMatchesFilterTokens($data, $filter->excludedEmailTags)) {
-                return false;
-            }
+        if ($et === 'email' && !$this->emailItemPassesScopeFilters($data, $filter)) {
+            return false;
         }
 
         return true;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function emailItemPassesScopeFilters(array $data, TimelineFilter $filter): bool
+    {
+        $scope = $this->emailItemModuleScope($data);
+
+        if ($filter->pinNewsletterEmails && $scope === EmailSubscriptionRepository::MODULE_NEWSLETTER) {
+            return true;
+        }
+
+        if ($scope === EmailSubscriptionRepository::MODULE_MAIL) {
+            if ($filter->excludeAllEmails) {
+                return false;
+            }
+            if ($filter->emailTags !== []) {
+                return $this->emailItemMatchesFilterTokens($data, $filter->emailTags);
+            }
+            if ($filter->excludedEmailTags !== []) {
+                return !$this->emailItemMatchesFilterTokens($data, $filter->excludedEmailTags);
+            }
+
+            return true;
+        }
+
+        if ($filter->excludeAllNewsletterEmails) {
+            return false;
+        }
+        if ($filter->newsletterTags !== []) {
+            return $this->emailItemMatchesFilterTokens($data, $filter->newsletterTags);
+        }
+        if ($filter->excludedNewsletterTags !== []) {
+            return !$this->emailItemMatchesFilterTokens($data, $filter->excludedNewsletterTags);
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function emailItemModuleScope(array $data): string
+    {
+        $cached = $data['subscription_module_scope'] ?? null;
+        if (is_string($cached) && $cached !== '') {
+            return EmailSubscriptionRepository::normalizeModuleScope($cached);
+        }
+
+        return $this->resolveEmailModuleScopeCached((string)($data['from_email'] ?? ''));
+    }
+
+    /** @var ?list<array<string, mixed>> */
+    private ?array $activeSubscriptionRowsCache = null;
+
+    private function resolveEmailModuleScopeCached(string $from): string
+    {
+        if ($this->activeSubscriptionRowsCache === null) {
+            try {
+                $this->activeSubscriptionRowsCache = (new EmailSubscriptionRepository($this->pdo))
+                    ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+            } catch (\Throwable) {
+                $this->activeSubscriptionRowsCache = [];
+            }
+        }
+
+        return EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
+            $from,
+            $this->activeSubscriptionRowsCache,
+        )['module_scope'];
     }
 
     /**
@@ -2683,7 +2771,7 @@ final class EntryRepository
         }
 
         $emailLabels = [];
-        foreach ($this->selectEmailSubscriptionFilterEntries() as $row) {
+        foreach ($this->selectEmailSubscriptionFilterEntries(EmailSubscriptionRepository::MODULE_MAIL) as $row) {
             $emailLabels[$row['token']] = $row['label'];
         }
         if ($emailLabels !== []) {
@@ -2691,14 +2779,25 @@ final class EntryRepository
         }
         $emailTokens = array_keys($emailLabels);
 
+        $newsletterLabels = [];
+        foreach ($this->selectEmailSubscriptionFilterEntries(EmailSubscriptionRepository::MODULE_NEWSLETTER) as $row) {
+            $newsletterLabels[$row['token']] = $row['label'];
+        }
+        if ($newsletterLabels !== []) {
+            uasort($newsletterLabels, static fn (string $a, string $b): int => strcasecmp($a, $b));
+        }
+        $newsletterTokens = array_keys($newsletterLabels);
+
         return [
-            'feed_categories'       => $tokens,
-            'feed_category_labels'  => $labels,
-            'feed_pill_kinds'       => $sortedKinds,
-            'lex_sources'           => $lex,
-            'lex_source_labels'     => $lexLabels,
-            'email_tags'            => $emailTokens,
-            'email_tag_labels'      => $emailLabels,
+            'feed_categories'          => $tokens,
+            'feed_category_labels'     => $labels,
+            'feed_pill_kinds'          => $sortedKinds,
+            'lex_sources'              => $lex,
+            'lex_source_labels'        => $lexLabels,
+            'email_tags'               => $emailTokens,
+            'email_tag_labels'         => $emailLabels,
+            'newsletter_tags'          => $newsletterTokens,
+            'newsletter_tag_labels'    => $newsletterLabels,
         ];
     }
 
@@ -2873,8 +2972,9 @@ final class EntryRepository
      *
      * @return list<array{token: string, label: string}>
      */
-    private function selectEmailSubscriptionFilterEntries(): array
+    private function selectEmailSubscriptionFilterEntries(string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL): array
     {
+        $scope = EmailSubscriptionRepository::normalizeModuleScope($moduleScope);
         $t   = entryTable('email_subscriptions');
         $sql = 'SELECT id,
                        TRIM(COALESCE(NULLIF(display_name, \'\'), CONCAT(\'Subscription \', id))) AS display_label
@@ -2882,9 +2982,10 @@ final class EntryRepository
                 WHERE removed_at IS NULL
                   AND IFNULL(disabled, 0) = 0
                   AND IFNULL(auto_detected, 0) = 0
+                  AND module_scope = ?
                 ORDER BY display_label ASC';
+        $rows = $this->selectPreparedOrEmpty($sql, [$scope]);
 
-        $rows = $this->selectOrEmpty($sql);
         $out  = [];
         foreach ($rows as $r) {
             $id = (int)($r['id'] ?? 0);

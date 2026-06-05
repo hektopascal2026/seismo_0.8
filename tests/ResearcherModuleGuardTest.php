@@ -16,7 +16,7 @@ final class ResearcherModuleGuardTest extends TestCase
     {
         return [
             'media off' => [
-                ResearcherSourceSelection::forModules(true, false, false, false, false, false),
+                ResearcherSourceSelection::forModules(true, false, false, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 1,
@@ -26,7 +26,7 @@ final class ResearcherModuleGuardTest extends TestCase
                 'media',
             ],
             'feeds off' => [
-                ResearcherSourceSelection::forModules(false, true, false, false, false, false),
+                ResearcherSourceSelection::forModules(false, true, false, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 2,
@@ -36,7 +36,7 @@ final class ResearcherModuleGuardTest extends TestCase
                 'feeds',
             ],
             'scraper off' => [
-                ResearcherSourceSelection::forModules(true, false, false, false, false, false),
+                ResearcherSourceSelection::forModules(true, false, false, false, false, false, false),
                 [
                     'entry_type'      => 'feed_item',
                     'entry_id'        => 3,
@@ -46,7 +46,7 @@ final class ResearcherModuleGuardTest extends TestCase
                 'scraper',
             ],
             'mail off' => [
-                ResearcherSourceSelection::forModules(false, false, false, false, true, false),
+                ResearcherSourceSelection::forModules(false, false, false, false, false, true, false),
                 [
                     'entry_type' => 'email',
                     'entry_id'   => 4,
@@ -55,7 +55,7 @@ final class ResearcherModuleGuardTest extends TestCase
                 'email',
             ],
             'lex off' => [
-                ResearcherSourceSelection::forModules(false, false, false, false, false, true),
+                ResearcherSourceSelection::forModules(false, false, false, false, false, false, true),
                 [
                     'entry_type'  => 'lex_item',
                     'entry_id'    => 5,
@@ -64,7 +64,7 @@ final class ResearcherModuleGuardTest extends TestCase
                 'lex',
             ],
             'leg off' => [
-                ResearcherSourceSelection::forModules(false, false, false, false, true, false),
+                ResearcherSourceSelection::forModules(false, false, false, false, false, true, false),
                 [
                     'entry_type'  => 'calendar_event',
                     'entry_id'    => 6,
@@ -137,10 +137,20 @@ final class ResearcherModuleGuardTest extends TestCase
         }
         if ($selection->moduleEmail()) {
             return [
-                'entry_type'  => 'email',
-                'entry_id'    => 99,
-                'source_type' => 'email',
-                'title'       => 'Allowed mail',
+                'entry_type'   => 'email',
+                'entry_id'     => 99,
+                'source_type'  => 'email',
+                'module_scope' => 'mail',
+                'title'        => 'Allowed mail',
+            ];
+        }
+        if ($selection->moduleNewsletter()) {
+            return [
+                'entry_type'   => 'email',
+                'entry_id'     => 99,
+                'source_type'  => 'email',
+                'module_scope' => 'newsletter',
+                'title'        => 'Allowed newsletter',
             ];
         }
         if ($selection->moduleLex()) {
@@ -162,7 +172,7 @@ final class ResearcherModuleGuardTest extends TestCase
 
     public function testAssertNoLeaksThrowsWhenDeselectedRowPresent(): void
     {
-        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false, false);
         $guard     = new ResearcherModuleGuard();
 
         $this->expectException(\RuntimeException::class);
@@ -178,7 +188,7 @@ final class ResearcherModuleGuardTest extends TestCase
 
     public function testAssertXmlMatchesEntriesRejectsTamperedMarkdown(): void
     {
-        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false);
+        $selection = ResearcherSourceSelection::forModules(true, false, false, false, false, false, false);
         $entries   = [[
             'entry_type'      => 'feed_item',
             'entry_id'        => 8,
@@ -210,7 +220,7 @@ final class ResearcherModuleGuardTest extends TestCase
 
     public function testSealGeminiContextXmlIdsMatchFilteredEntriesExactly(): void
     {
-        $selection = ResearcherSourceSelection::forModules(false, false, false, false, true, false);
+        $selection = ResearcherSourceSelection::forModules(false, false, false, false, false, true, false);
         $entries   = [
             ['entry_type' => 'lex_item', 'entry_id' => 10, 'source_type' => 'lex_de', 'title' => 'A'],
             ['entry_type' => 'lex_item', 'entry_id' => 11, 'source_type' => 'lex_fr', 'title' => 'B'],

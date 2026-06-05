@@ -6,22 +6,17 @@ namespace Seismo\Controller;
 
 use Seismo\Mail\MailModule;
 
-/** Mail admin — {@see MailModuleHandler} with {@see MailModule::mail()}. */
-final class MailController
+/** Newsletter admin — {@see MailModuleHandler} with {@see MailModule::newsletter()}. */
+final class NewsletterController
 {
     private function handler(): MailModuleHandler
     {
-        return new MailModuleHandler(MailModule::mail());
+        return new MailModuleHandler(MailModule::newsletter());
     }
 
     public function show(): void
     {
         $this->handler()->show();
-    }
-
-    public function refreshMailIngest(): void
-    {
-        $this->handler()->refreshMailIngest();
     }
 
     public function saveSubscription(): void
@@ -49,7 +44,7 @@ final class MailController
         $this->handler()->reprocessSubscription();
     }
 
-    public function moveToNewsletter(): void
+    public function moveToMail(): void
     {
         $this->handler()->moveToOtherModule();
     }

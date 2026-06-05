@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS email_subscriptions (
     match_value           VARCHAR(255) NOT NULL,
     display_name          VARCHAR(255) NOT NULL,
     category              VARCHAR(100) DEFAULT NULL,
+    module_scope          ENUM('mail','newsletter') NOT NULL DEFAULT 'mail',
     disabled              TINYINT(1)   NOT NULL DEFAULT 0,
     show_in_magnitu       TINYINT(1)   NOT NULL DEFAULT 1,
     strip_listing_boilerplate TINYINT(1) NOT NULL DEFAULT 0,
@@ -166,7 +167,8 @@ CREATE TABLE IF NOT EXISTS email_subscriptions (
     UNIQUE KEY uniq_match (match_type, match_value),
     INDEX idx_disabled   (disabled),
     INDEX idx_removed_at (removed_at),
-    INDEX idx_category   (category)
+    INDEX idx_category   (category),
+    INDEX idx_email_subscriptions_module_scope (module_scope)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

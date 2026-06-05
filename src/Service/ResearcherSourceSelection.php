@@ -22,6 +22,7 @@ final class ResearcherSourceSelection
         private readonly bool $moduleMedia,
         private readonly bool $moduleScraper,
         private readonly bool $moduleEmail,
+        private readonly bool $moduleNewsletter,
         private readonly bool $moduleLex,
         private readonly bool $moduleLeg,
         private readonly bool $moduleLexCh = false,
@@ -35,7 +36,7 @@ final class ResearcherSourceSelection
             $type = 'all';
         }
 
-        return new self($type, false, false, false, false, false, false, false, false);
+        return new self($type, false, false, false, false, false, false, false, false, false);
     }
 
     public static function forModules(
@@ -43,12 +44,13 @@ final class ResearcherSourceSelection
         bool $media,
         bool $scraper,
         bool $email,
+        bool $newsletter,
         bool $lex,
         bool $leg,
         bool $lexCh = false,
         bool $mem = false,
     ): self {
-        return new self(null, $feeds, $media, $scraper, $email, $lex, $leg, $lexCh, $mem);
+        return new self(null, $feeds, $media, $scraper, $email, $newsletter, $lex, $leg, $lexCh, $mem);
     }
 
     public function isExportMode(): bool
@@ -81,6 +83,11 @@ final class ResearcherSourceSelection
         return $this->moduleEmail;
     }
 
+    public function moduleNewsletter(): bool
+    {
+        return $this->moduleNewsletter;
+    }
+
     public function moduleLex(): bool
     {
         return $this->moduleLex;
@@ -107,6 +114,7 @@ final class ResearcherSourceSelection
             || $this->moduleMedia
             || $this->moduleScraper
             || $this->moduleEmail
+            || $this->moduleNewsletter
             || $this->moduleLex
             || $this->moduleLeg
             || $this->moduleLexCh

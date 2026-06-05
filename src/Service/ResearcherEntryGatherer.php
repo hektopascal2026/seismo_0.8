@@ -522,12 +522,28 @@ final class ResearcherEntryGatherer
             return null;
         }
 
+        if ($type === 'email') {
+            return $this->emailModuleBucketForEntry($entry, $selection);
+        }
+
         return match ($type) {
-            'email' => $selection->moduleEmail() ? 'email' : null,
             'lex_item' => (($selection->moduleLex() || $selection->moduleLexCh()) && (!$selection->moduleLexCh() || ($entry['source_type'] ?? '') === 'lex_ch')) ? 'lex' : null,
             'calendar_event' => $selection->moduleLeg() ? 'leg' : null,
             default => null,
         };
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function emailModuleBucketForEntry(array $entry, ResearcherSourceSelection $selection): ?string
+    {
+        $scope = \Seismo\Repository\EmailSubscriptionRepository::normalizeModuleScope($entry['module_scope'] ?? 'mail');
+        if ($scope === \Seismo\Repository\EmailSubscriptionRepository::MODULE_NEWSLETTER) {
+            return $selection->moduleNewsletter() ? 'newsletter' : null;
+        }
+
+        return $selection->moduleEmail() ? 'email' : null;
     }
 
     /**
@@ -540,7 +556,7 @@ final class ResearcherEntryGatherer
         }
 
         return match ($entryType) {
-            'email' => $selection->moduleEmail(),
+            'email' => $selection->moduleEmail() || $selection->moduleNewsletter(),
             'lex_item' => $selection->moduleLex() || $selection->moduleLexCh(),
             'calendar_event' => $selection->moduleLeg(),
             'feed_item' => $selection->moduleFeeds()
@@ -626,9 +642,12 @@ final class ResearcherEntryGatherer
                 $entries[] = MagnituController::shapeFeedItem($row);
             }
         }
-        if ($selection->moduleEmail()) {
+        if ($selection->moduleEmail() || $selection->moduleNewsletter()) {
             foreach ($repo->listEmailsSince($since, $limit, $limitCap) as $row) {
-                $entries[] = MagnituController::shapeEmail($row);
+                $shaped = MagnituController::shapeEmail($row);
+                if ($this->entryMatchesModuleSelection($shaped, $selection)) {
+                    $entries[] = $shaped;
+                }
             }
         }
         if ($selection->moduleLex() || $selection->moduleLexCh()) {

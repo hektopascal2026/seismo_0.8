@@ -389,24 +389,22 @@ final class MagnituController
             $body = strip_tags((string)($row['html_body'] ?? ''));
         }
         $subject = (string)($row['subject'] ?? '');
-        if ($body !== '') {
-            if (self::$emailSubscriptionListCache === null) {
-                self::$emailSubscriptionListCache = (new EmailSubscriptionRepository(getDbConnection()))
-                    ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
-            }
-            $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
-                (string)($row['from_email'] ?? ''),
-                self::$emailSubscriptionListCache
-            );
-            if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui)) {
-                $body = EmailListingBoilerplateStripper::strip(
-                    $body,
-                    $subject !== '' ? $subject : null
-                );
-            }
-        }
         $fromName = (string)($row['from_name'] ?? '');
         $fromAddr = (string)($row['from_email'] ?? '');
+        if (self::$emailSubscriptionListCache === null) {
+            self::$emailSubscriptionListCache = (new EmailSubscriptionRepository(getDbConnection()))
+                ->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+        }
+        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
+            $fromAddr,
+            self::$emailSubscriptionListCache
+        );
+        if ($body !== '' && \Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui)) {
+            $body = EmailListingBoilerplateStripper::strip(
+                $body,
+                $subject !== '' ? $subject : null
+            );
+        }
         $display  = $fromName !== '' ? $fromName : $fromAddr;
         $description = mb_substr(trim((string)preg_replace('/\s+/', ' ', $body)), 0, 500);
         $derived = trim((string)($row['derived_title'] ?? ''));
@@ -427,6 +425,7 @@ final class MagnituController
             'source_name'     => $display,
             'source_category' => (string)($row['sender_tag'] ?? 'unclassified'),
             'source_type'     => 'email',
+            'module_scope'    => $ui['module_scope'],
         ];
     }
 

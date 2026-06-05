@@ -49,6 +49,7 @@ $moduleOptions = [
     ['key' => 'media', 'label' => 'Media'],
     ['key' => 'scraper', 'label' => 'Scraper'],
     ['key' => 'email', 'label' => 'Mail'],
+    ['key' => 'newsletter', 'label' => 'Newsletter'],
     ['key' => 'lex', 'label' => 'Lex'],
     ['key' => 'leg', 'label' => 'Leg'],
     ['key' => 'mem', 'label' => 'Mem'],

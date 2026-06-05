@@ -367,10 +367,15 @@ $entryLoopIndex                 = 0;
                                     $subLabel = trim((string)($email['subscription_display_name'] ?? ''));
                                     $legacySenderTag = !empty($email['sender_tag']) && $email['sender_tag'] !== 'unclassified';
                                 ?>
+                                <?php
+                                    $emailTagClass = (($email['subscription_module_scope'] ?? '') === 'newsletter')
+                                        ? 'entry-tag--newsletter-sender'
+                                        : 'entry-tag--email-sender';
+                                ?>
                                 <?php if ($subLabel !== ''): ?>
-                                    <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($subLabel) ?></span>
+                                    <span class="entry-tag <?= e($emailTagClass) ?>"><?= htmlspecialchars($subLabel) ?></span>
                                 <?php elseif ($legacySenderTag): ?>
-                                    <span class="entry-tag entry-tag--email-sender"><?= htmlspecialchars($email['sender_tag']) ?></span>
+                                    <span class="entry-tag <?= e($emailTagClass) ?>"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>

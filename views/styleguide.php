@@ -72,6 +72,7 @@ $activeNav = 'styleguide';
             --pill-lex-ch: #ffffb3;          /* CH Lex lighter yellow */
             --pill-leg: #d4edda;             /* Leg green */
             --pill-mail: #ffdbbb;            /* Mail orange */
+            --pill-newsletter: #ab8786;      /* Newsletter dusty rose */
             
             /* Spacing Tokens */
             --space-xxs: 0.125rem;  /* 2px */
@@ -897,9 +898,14 @@ $activeNav = 'styleguide';
                             <span>--seismo-pill-leg<br>Swiss deliberative events</span>
                         </div>
                         <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-mail);">
-                            <span class="pill-source" style="background-color: var(--pill-mail); margin-bottom: var(--space-sm);">EMAIL INGEST</span>
+                            <span class="pill-source" style="background-color: var(--pill-mail); margin-bottom: var(--space-sm);">MAIL</span>
                             <label>#FFDBBB</label>
-                            <span>--seismo-pill-mail<br>Email newsletter parsing</span>
+                            <span>--seismo-pill-mail<br>IMAP / transactional mail</span>
+                        </div>
+                        <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-newsletter);">
+                            <span class="pill-source" style="background-color: var(--pill-newsletter); margin-bottom: var(--space-sm);">NEWSLETTER</span>
+                            <label>#AB8786</label>
+                            <span>--seismo-pill-newsletter<br>IMAP / digest newsletters</span>
                         </div>
                         <div class="visual-spacing-card" style="border-top: 0.375rem solid #e0e0e0;">
                             <span class="pill-source" style="background-color: #e0e0e0; margin-bottom: var(--space-sm);">SWISSMEM</span>
