@@ -106,7 +106,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                     <td>
                                         <strong>Feeds:</strong> RSS/Atom, Substack, and Parliament press (general desk).<br>
                                         <strong>Media:</strong> News monitoring — Google News or outlet RSS with optional <strong>Extract full text</strong> (publisher fetch + JSON-LD / Readability / meta); listing pages via Scraper with <code>category = media</code>.<br>
-                                        <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; optional body processors for digest senders; <strong>View in browser →</strong> when a webview link is present.<br>
+                                        <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; transactional and list mail.<br>
+                                        <strong>Newsletter:</strong> Same Gmail/IMAP ingest, separate admin module for digest senders (<code>module_scope = newsletter</code>); dusty-rose timeline pills; optional body processors and <strong>View in browser →</strong> when a webview link is present.<br>
                                         <strong>Scraper:</strong> Scheduled fetches of complex web pages.
                                     </td>
                                 </tr>
@@ -527,10 +528,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <!-- Era VIII -->
-                    <div class="timeline-era-card current-version-card">
+                    <div class="timeline-era-card">
                         <div class="era-meta-row">
                             <span class="era-badge era-badge-intelligence">Era VIII: Advanced Selection &amp; UX</span>
-                            <span class="era-date">June 2026 (Current)</span>
+                            <span class="era-date">June 2026</span>
                         </div>
                         <h3>v0.8.1 – v0.8.2 &mdash; Tournament Selection &amp; Cost Estimation</h3>
                         
@@ -551,6 +552,34 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
                             <p>Managing large batches in the tournament mode meant running serial HTTP API calls. To maintain browser responsiveness, we optimized the chunk size and raised the default output token limit to 65k to prevent selection truncations during the championship pass.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era IX -->
+                    <div class="timeline-era-card current-version-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-intelligence">Era IX: Newsletter Desk Split</span>
+                            <span class="era-date">June 2026 (Current)</span>
+                        </div>
+                        <h3>v0.8.3 &mdash; Newsletter Module</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> Digest newsletters and transactional mail shared one Mail admin surface and the same peach timeline pills, making it hard to operate EP TODAY-style digests separately from alerts and press-office traffic. The team split IMAP/Gmail subscriptions into Mail and Newsletter modules without duplicating ingest or the <code>emails</code> table.</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.8.3 &mdash; Newsletter admin tab:</strong> New <code>?action=newsletter</code> module (nav after Media) with Items and Sources, mirroring the Media/Feeds partition pattern via <code>email_subscriptions.module_scope</code> (migration 027).</li>
+                                <li><strong>v0.8.3 &mdash; Move to Newsletter:</strong> One-click promotion from Mail → Sources; reverse <strong>Move to Mail</strong> on Newsletter → Sources. Pending Gmail senders stay on Mail only.</li>
+                                <li><strong>v0.8.3 &mdash; Timeline &amp; filters:</strong> Newsletter cards use <code>#ab8786</code> source pills; separate Mail and Newsletter rows on the filter page; newsletter items remain visible on the main timeline.</li>
+                                <li><strong>v0.8.3 &mdash; AI Researcher:</strong> Replaced the single Email source toggle with separate <strong>Mail</strong> and <strong>Newsletter</strong> module picks.</li>
+                            </ul>
+                        </div>
+
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Partitioning is application-layer only: <code>entry_type</code> stays <code>email</code> for scoring, favourites, and Magnitu. One <code>refresh_mail_ingest</code> cron path still fetches all Gmail/IMAP mail; module scope affects admin lists, timeline pill colour, and filter semantics — not storage or ingest volume.</p>
                         </div>
                     </div>
                 </div>
@@ -636,7 +665,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.8.2</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
+                                Currently, Seismo is on version <strong>0.8.3</strong>, signifying it is in active pre-1.0.0 bootstrapping. We recommend freezing the 0.x line once the Gemini researcher builder and path satellite systems undergo an additional 30-day stability trial.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

@@ -1,4 +1,4 @@
-# Seismo 0.8.2
+# Seismo 0.8.3
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -58,7 +58,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
 | `?action=researcher` | AI Researcher — Gemini executive researcher, per-desk prompt library + default prompt (mothership + satellites; local Magnitu scores on satellites) |
-| `?action=feeds` / `media` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Feeds** = general RSS/Substack/Parl. press |
+| `?action=feeds` / `media` / `newsletter` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Newsletter** = IMAP/Gmail digests (split from Mail); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
 | `?action=settings&tab=general` | UI prefs, **source config export** (JSON bundle) |
