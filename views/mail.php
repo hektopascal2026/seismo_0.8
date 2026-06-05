@@ -274,6 +274,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         Analyze sample emails with Gemini
                     </button>
                     <span id="ai-analysis-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
+                    <div id="ai-cleanup-verification" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4;"></div>
                 </div>
 
                 <div id="ai-results-panel" style="display: <?= $cleanupConfigRaw !== '' ? 'block' : 'none' ?>;">
@@ -314,6 +315,21 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         </div>
                         <div id="tab-content-after" style="display: none;">
                             <pre id="preview-after" style="background: #fff; border: 2px solid black; padding: 0.75rem; height: 18rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #000;"></pre>
+                        </div>
+
+                        <div id="cleanup-refine-panel" style="display: none; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed #ccc;">
+                            <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Still see noise in <strong>After</strong>? Paste phrases (one per line). Optionally list content wrongly removed from <strong>Before</strong>.</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                <label style="font-size: 0.85rem; font-weight: bold;">Still visible noise
+                                    <textarea id="cleanup-still-noise" class="search-input" style="width: 100%; height: 5rem; font-family: monospace; font-size: 0.8rem;" placeholder="View in browser&#10;Unsubscribe from this list"></textarea>
+                                </label>
+                                <label style="font-size: 0.85rem; font-weight: bold;">Wrongly removed content
+                                    <textarea id="cleanup-wrongly-removed" class="search-input" style="width: 100%; height: 5rem; font-family: monospace; font-size: 0.8rem;" placeholder="(optional) paste article text that disappeared"></textarea>
+                                </label>
+                            </div>
+                            <button type="button" id="btn-ai-cleanup-refine" class="btn btn-secondary" style="margin-top: 0.5rem;" disabled onclick="runAiCleanupRefine()">
+                                Refine cleanup rules
+                            </button>
                         </div>
                     </div>
 
@@ -752,6 +768,17 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (textarea) {
             textarea.addEventListener('input', updatePreview);
         }
+        ['cleanup-still-noise', 'cleanup-wrongly-removed'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', updateCleanupRefineButton);
+            }
+        });
+        var refinePanel = document.getElementById('cleanup-refine-panel');
+        if (refinePanel && document.getElementById('cleanup_config_json') && document.getElementById('cleanup_config_json').value.trim() !== '') {
+            refinePanel.style.display = 'block';
+        }
+        updateCleanupRefineButton();
     });
 
     function parseJsonFetchResponse(res) {
@@ -773,16 +800,105 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         });
     }
 
+    var cleanupSubscriptionId = 0;
+
+    function parseCleanupFeedbackLines(textareaId) {
+        var el = document.getElementById(textareaId);
+        if (!el) return [];
+        return el.value.split('\n').map(function(line) {
+            return line.trim();
+        }).filter(function(line) {
+            return line !== '';
+        }).map(function(snippet) {
+            return { snippet: snippet };
+        });
+    }
+
+    function updateCleanupRefineButton() {
+        var btn = document.getElementById('btn-ai-cleanup-refine');
+        if (!btn) return;
+        var stillNoise = parseCleanupFeedbackLines('cleanup-still-noise');
+        var wronglyRemoved = parseCleanupFeedbackLines('cleanup-wrongly-removed');
+        btn.disabled = stillNoise.length === 0 && wronglyRemoved.length === 0;
+    }
+
+    function applyCleanupAnalysisResponse(data) {
+        var status = document.getElementById('ai-analysis-status');
+        var verificationBox = document.getElementById('ai-cleanup-verification');
+        var textarea = document.getElementById('cleanup_config_json');
+        var resultsPanel = document.getElementById('ai-results-panel');
+        var refinePanel = document.getElementById('cleanup-refine-panel');
+        var verified = data.verification && data.verification.verified;
+
+        if (status) {
+            status.style.display = 'inline';
+            status.style.color = verified ? 'green' : '#b45309';
+            status.textContent = data.verification && data.verification.message
+                ? data.verification.message
+                : (data.refined ? 'Refinement complete!' : 'Analysis complete!');
+        }
+
+        if (verificationBox && data.verification) {
+            var lines = [];
+            if (data.verification.attempts) {
+                lines.push('Gemini attempts: ' + data.verification.attempts);
+            }
+            if (data.verification.issues && data.verification.issues.length > 0) {
+                data.verification.issues.slice(0, 3).forEach(function(issue) {
+                    lines.push('Sample ' + issue.sample_index + ': ' + issue.type + ' — ' + (issue.snippet || '').substring(0, 60));
+                });
+            }
+            if (lines.length > 0) {
+                verificationBox.textContent = lines.join(' · ');
+                verificationBox.style.display = 'block';
+                verificationBox.style.color = verified ? '#166534' : '#b45309';
+            } else {
+                verificationBox.style.display = 'none';
+                verificationBox.textContent = '';
+            }
+        }
+
+        if (textarea && data.config) {
+            textarea.value = JSON.stringify(data.config, null, 2);
+        }
+
+        var dscTextarea = document.getElementById('digest_split_config_json');
+        if (dscTextarea) {
+            if (data.digest_split_config) {
+                try {
+                    var parsed = typeof data.digest_split_config === 'string'
+                        ? JSON.parse(data.digest_split_config)
+                        : data.digest_split_config;
+                    dscTextarea.value = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    dscTextarea.value = data.digest_split_config;
+                }
+            } else {
+                dscTextarea.value = '';
+            }
+        }
+
+        activeSamples = data.samples || [];
+        initPreviewSelect();
+        if (resultsPanel) resultsPanel.style.display = 'block';
+        if (refinePanel) refinePanel.style.display = 'block';
+        updateCleanupRefineButton();
+    }
+
     function runAiAnalysis(id) {
         var btn = document.getElementById('btn-ai-analyze');
         var status = document.getElementById('ai-analysis-status');
-        var resultsPanel = document.getElementById('ai-results-panel');
-        var textarea = document.getElementById('cleanup_config_json');
+        var verificationBox = document.getElementById('ai-cleanup-verification');
 
+        cleanupSubscriptionId = id;
         btn.disabled = true;
         status.style.display = 'inline';
         status.style.color = '#333';
-        status.textContent = 'Contacting Gemini...';
+        status.textContent = 'Analyzing with Gemini (editor pass → regex → verify)...';
+        if (verificationBox) {
+            verificationBox.style.display = 'none';
+            verificationBox.textContent = '';
+        }
 
         var formData = new FormData();
         formData.append('id', id);
@@ -794,35 +910,63 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         })
         .then(parseJsonFetchResponse)
         .then(function(data) {
-            status.style.color = 'green';
-            status.textContent = 'Analysis complete!';
-            textarea.value = JSON.stringify(data.config, null, 2);
-            
-            var dscTextarea = document.getElementById('digest_split_config_json');
-            if (dscTextarea) {
-                if (data.digest_split_config) {
-                    try {
-                        var parsed = typeof data.digest_split_config === 'string' 
-                            ? JSON.parse(data.digest_split_config) 
-                            : data.digest_split_config;
-                        dscTextarea.value = JSON.stringify(parsed, null, 2);
-                    } catch (e) {
-                        dscTextarea.value = data.digest_split_config;
-                    }
-                } else {
-                    dscTextarea.value = '';
-                }
-            }
-
-            activeSamples = data.samples || [];
-            initPreviewSelect();
-            resultsPanel.style.display = 'block';
+            applyCleanupAnalysisResponse(data);
             btn.disabled = false;
         })
         .catch(function(err) {
             status.style.color = 'red';
             status.textContent = 'Error: ' + err.message;
             btn.disabled = false;
+        });
+    }
+
+    function runAiCleanupRefine() {
+        if (!cleanupSubscriptionId) return;
+
+        var refineBtn = document.getElementById('btn-ai-cleanup-refine');
+        var analyzeBtn = document.getElementById('btn-ai-analyze');
+        var status = document.getElementById('ai-analysis-status');
+        var textarea = document.getElementById('cleanup_config_json');
+        var feedback = {
+            still_noise: parseCleanupFeedbackLines('cleanup-still-noise'),
+            wrongly_removed: parseCleanupFeedbackLines('cleanup-wrongly-removed')
+        };
+
+        if (feedback.still_noise.length === 0 && feedback.wrongly_removed.length === 0) {
+            status.style.color = '#b45309';
+            status.textContent = 'Add still-visible noise or wrongly removed content first.';
+            return;
+        }
+
+        refineBtn.disabled = true;
+        if (analyzeBtn) analyzeBtn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Refining cleanup rules with Gemini...';
+
+        var formData = new FormData();
+        formData.append('id', cleanupSubscriptionId);
+        formData.append('refine', '1');
+        formData.append('cleanup_config', textarea.value);
+        formData.append('feedback', JSON.stringify(feedback));
+        formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
+
+        fetch('<?= e($basePath) ?>/index.php?action=<?= e($mailModule->analyzeAction) ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(parseJsonFetchResponse)
+        .then(function(data) {
+            applyCleanupAnalysisResponse(data);
+            refineBtn.disabled = false;
+            if (analyzeBtn) analyzeBtn.disabled = false;
+        })
+        .catch(function(err) {
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
+            refineBtn.disabled = false;
+            if (analyzeBtn) analyzeBtn.disabled = false;
+            updateCleanupRefineButton();
         });
     }
 

@@ -309,19 +309,26 @@ final class MailModuleHandler
                 exit;
             }
 
-            $samples = [];
-            foreach ($emails as $email) {
-                $samples[] = [
-                    'subject' => (string)($email['subject'] ?? ''),
-                    'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
-                    'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
-                    'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
-                ];
-            }
-
+            $samples = $this->buildSplitAnalysisSamples($emails);
             $configRepo = new SystemConfigRepository($pdo);
             $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
-            $res = $generator->generateConfig($samples);
+
+            $isRefine = !empty($_POST['refine']);
+            if ($isRefine) {
+                $feedbackRaw = (string)($_POST['feedback'] ?? '');
+                $configRaw = (string)($_POST['cleanup_config'] ?? '');
+                $feedback = json_decode($feedbackRaw, true);
+                $currentConfig = json_decode($configRaw, true);
+                if (!is_array($feedback) || !is_array($currentConfig)) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Invalid refine payload — feedback and cleanup_config must be JSON.']);
+                    exit;
+                }
+
+                $res = $generator->refineCleanupConfig($samples, $currentConfig, $feedback);
+            } else {
+                $res = $generator->generateConfig($samples);
+            }
 
             $cleanupConfig = [
                 'strip_regexes' => $res['strip_regexes'],
@@ -331,10 +338,17 @@ final class MailModuleHandler
 
             echo json_encode([
                 'success' => true,
+                'refined' => $isRefine,
                 'config' => $cleanupConfig,
+                'analysis' => $res['analysis'],
+                'verification' => $res['verification'],
                 'digest_split_config' => $res['digest_split_config'],
-                'samples' => $samples
+                'samples' => $samples,
             ]);
+            exit;
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
             exit;
         } catch (\Throwable $e) {
             error_log('Seismo analyzeBoilerplate failed: ' . $e->getMessage());

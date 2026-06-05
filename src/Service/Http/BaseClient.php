@@ -263,6 +263,7 @@ final class BaseClient
                 'follow_location' => 1,
                 'max_redirects' => 5,
             ],
+            'ssl' => self::streamSslOptions(),
         ];
         if ($body !== null) {
             $options['http']['content'] = $body;
@@ -272,7 +273,9 @@ final class BaseClient
         $responseBody = @file_get_contents($url, false, $ctx);
         if ($responseBody === false) {
             $err = error_get_last();
-            throw new HttpClientException('HTTP transport failure: ' . ($err['message'] ?? 'unknown'));
+            throw new HttpClientException(
+                'HTTP transport failure: ' . self::sanitizeTransportErrorMessage($err['message'] ?? 'unknown')
+            );
         }
 
         $status = 0;
@@ -353,5 +356,38 @@ final class BaseClient
         self::$curlShare = $share;
 
         return self::$curlShare;
+    }
+
+    /**
+     * @return array<string, bool|string>
+     */
+    private static function streamSslOptions(): array
+    {
+        $opts = [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ];
+
+        $caCandidates = [
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/etc/pki/tls/certs/ca-bundle.crt',
+            '/usr/local/etc/openssl@3/cert.pem',
+        ];
+        foreach ($caCandidates as $path) {
+            if (is_readable($path)) {
+                $opts['cafile'] = $path;
+                break;
+            }
+        }
+
+        return $opts;
+    }
+
+    private static function sanitizeTransportErrorMessage(string $message): string
+    {
+        $message = preg_replace('/([?&]key=)[^&\s)]+/i', '$1[REDACTED]', $message) ?? $message;
+        $message = preg_replace('/(x-goog-api-key:\s*)[^\s]+/i', '$1[REDACTED]', $message) ?? $message;
+
+        return $message;
     }
 }

@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Seismo\Service;
 
 use Seismo\Controller\SettingsController;
+use Seismo\Core\Mail\CleanupConfigVerifier;
 use Seismo\Core\Mail\DigestSplitConfigNormalizer;
 use Seismo\Core\Mail\DigestSplitVerifier;
 use Seismo\Repository\SystemConfigRepository;
 use Seismo\Service\Http\BaseClient;
+use Seismo\Service\Http\HttpClientException;
+use Seismo\Service\Http\Response;
 
 /**
  * Service to generate static regex email cleanup configurations using Google Gemini.
@@ -35,36 +38,190 @@ Prefer stable class/id/table wrappers repeated across all samples, not dates or 
 HTML emails: use html_selector. Plain-text delimiters: use regex_split on text_body.
 TEXT;
 
+    private const CLEANUP_SYSTEM_INSTRUCTION = <<<'TEXT'
+You are an expert newsletter editor preparing emails for a clean reading timeline.
+
+CONTENT the reader wants: headlines, article paragraphs, bylines, story links, quotes, datelines.
+NOISE to strip: mastheads, logos-as-text, navigation, "view in browser" / webversion lines, ads,
+social follow blocks, section dividers with no article text, legal footers, unsubscribe/preferences,
+tracking boilerplate, empty spacer lines, repeated subject-line banners.
+
+Your strip_regexes run as PHP preg_replace on plain text_body (after HTML→text conversion).
+Use robust patterns with /iu or /is delimiters. Match whole noise blocks; never match core article text.
+Include text_snippet (8+ chars, copied verbatim from plain text) for every content and noise item in analysis.
+TEXT;
+
     public function __construct(
         private readonly SystemConfigRepository $configRepo,
         private readonly BaseClient $http = new BaseClient(60),
         private readonly DigestSplitVerifier $splitVerifier = new DigestSplitVerifier(),
+        private readonly CleanupConfigVerifier $cleanupVerifier = new CleanupConfigVerifier(),
     ) {
     }
 
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
-     * @return array{strip_regexes: list<string>, webview_keywords: list<string>, title_extractor: ?string, digest_split_config: ?string}
+     * @return array{
+     *     strip_regexes: list<string>,
+     *     webview_keywords: list<string>,
+     *     title_extractor: ?string,
+     *     digest_split_config: ?string,
+     *     analysis: ?array<string, mixed>,
+     *     verification: array{verified: bool, message: string, attempts: int, issues: list<array<string, mixed>>}
+     * }
      */
     public function generateConfig(array $samples): array
     {
-        $prompt = $this->buildBoilerplatePrompt($samples);
-
-        $extracted = $this->callGeminiJson(
-            "You are an expert email layout analyzer and regular expression engineer.\n"
-            . "Generate regex cleanup rules, webview keywords, optional title extraction, "
-            . "and digest split rules when the sender publishes multi-story digests.",
-            $prompt
-        );
-
-        $dscString = $this->encodeDigestSplitConfig($extracted['digest_split_config'] ?? null);
-
-        return [
-            'strip_regexes' => $this->normalizeStringArray($extracted['strip_regexes'] ?? []),
-            'webview_keywords' => $this->normalizeStringArray($extracted['webview_keywords'] ?? []),
-            'title_extractor' => $this->normalizeString($extracted['title_extractor'] ?? null),
-            'digest_split_config' => $dscString,
+        $attempts = 0;
+        $lastAnalysis = null;
+        $lastConfig = null;
+        $verification = [
+            'verified' => false,
+            'message' => 'Cleanup analysis did not produce a valid config.',
+            'attempts' => 0,
+            'issues' => [],
         ];
+
+        $retryContext = null;
+
+        while ($attempts <= self::MAX_SPLIT_RETRIES) {
+            ++$attempts;
+
+            $prompt = $retryContext === null
+                ? $this->buildBoilerplatePrompt($samples)
+                : $this->buildCleanupRetryPrompt($samples, $retryContext);
+
+            $extracted = $this->callGeminiJson(self::CLEANUP_SYSTEM_INSTRUCTION, $prompt);
+            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+
+            $config = $this->extractCleanupConfig($extracted);
+            if ($config['strip_regexes'] === []) {
+                $retryContext = [
+                    'analysis' => $lastAnalysis,
+                    'config' => $config,
+                    'verification' => [
+                        'message' => 'Gemini returned no strip_regexes.',
+                        'issues' => [],
+                    ],
+                ];
+                continue;
+            }
+
+            $lastConfig = $config;
+            $check = $this->cleanupVerifier->verify($samples, $config, $extracted);
+            $verification = [
+                'verified' => $check['verified'],
+                'message' => $check['message'],
+                'attempts' => $attempts,
+                'issues' => $check['issues'],
+            ];
+
+            if ($check['verified']) {
+                return $this->buildCleanupResult($config, $extracted, $lastAnalysis, $verification);
+            }
+
+            $retryContext = [
+                'analysis' => $lastAnalysis,
+                'config' => $config,
+                'verification' => $check,
+            ];
+        }
+
+        return $this->buildCleanupResult(
+            $lastConfig ?? ['strip_regexes' => [], 'webview_keywords' => [], 'title_extractor' => null],
+            [],
+            $lastAnalysis,
+            $verification
+        );
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param array{strip_regexes: list<string>, webview_keywords?: list<string>, title_extractor?: ?string} $currentConfig
+     * @param array{still_noise?: list<array<string, mixed>>, wrongly_removed?: list<array<string, mixed>>} $feedback
+     * @return array{
+     *     strip_regexes: list<string>,
+     *     webview_keywords: list<string>,
+     *     title_extractor: ?string,
+     *     digest_split_config: ?string,
+     *     analysis: ?array<string, mixed>,
+     *     verification: array{verified: bool, message: string, attempts: int, issues: list<array<string, mixed>>}
+     * }
+     */
+    public function refineCleanupConfig(array $samples, array $currentConfig, array $feedback): array
+    {
+        $stillNoise = $feedback['still_noise'] ?? [];
+        $wronglyRemoved = $feedback['wrongly_removed'] ?? [];
+        if (!is_array($stillNoise)) {
+            $stillNoise = [];
+        }
+        if (!is_array($wronglyRemoved)) {
+            $wronglyRemoved = [];
+        }
+        if ($stillNoise === [] && $wronglyRemoved === []) {
+            throw new \InvalidArgumentException('Provide still-visible noise or wrongly removed content before refining.');
+        }
+
+        $attempts = 0;
+        $lastAnalysis = null;
+        $lastConfig = $currentConfig;
+        $verification = [
+            'verified' => false,
+            'message' => 'Refinement did not fix cleanup issues.',
+            'attempts' => 0,
+            'issues' => [],
+        ];
+
+        $retryContext = null;
+
+        while ($attempts <= self::MAX_SPLIT_RETRIES) {
+            ++$attempts;
+
+            $prompt = $retryContext === null
+                ? $this->buildCleanupRefinePrompt($samples, $currentConfig, $feedback)
+                : $this->buildCleanupRetryPrompt($samples, $retryContext);
+
+            $extracted = $this->callGeminiJson(self::CLEANUP_SYSTEM_INSTRUCTION, $prompt);
+            $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
+
+            $config = $this->extractCleanupConfig($extracted);
+            if ($config['strip_regexes'] === []) {
+                $retryContext = [
+                    'analysis' => $lastAnalysis,
+                    'config' => $currentConfig,
+                    'feedback' => $feedback,
+                    'verification' => [
+                        'message' => 'Gemini returned no strip_regexes during refinement.',
+                        'issues' => [],
+                    ],
+                ];
+                continue;
+            }
+
+            $lastConfig = $config;
+            $check = $this->cleanupVerifier->verify($samples, $config, $extracted);
+            $verification = [
+                'verified' => $check['verified'],
+                'message' => $check['verified']
+                    ? 'Refined cleanup verified on samples.'
+                    : $check['message'],
+                'attempts' => $attempts,
+                'issues' => $check['issues'],
+            ];
+
+            if ($check['verified']) {
+                return $this->buildCleanupResult($config, $extracted, $lastAnalysis, $verification);
+            }
+
+            $retryContext = [
+                'analysis' => $lastAnalysis,
+                'config' => $config,
+                'feedback' => $feedback,
+                'verification' => $check,
+            ];
+        }
+
+        return $this->buildCleanupResult($lastConfig, [], $lastAnalysis, $verification);
     }
 
     /**
@@ -361,26 +518,148 @@ TEXT;
      */
     private function buildBoilerplatePrompt(array $samples): string
     {
-        $prompt = "We want to clean up emails from a newsletter sender. Below are sample emails from this sender.\n";
-        $prompt .= "Analyze structure, headers, footers, 'view in browser' lines, disclaimers, and tracking noise.\n\n";
+        $prompt = "Configure boilerplate cleanup for this newsletter sender.\n\n";
+        $prompt .= "PHASE 1 — Editor analysis: for EACH sample, list content vs noise with verbatim text_snippet (8+ chars).\n";
+        $prompt .= "PHASE 2 — Generate strip_regexes that remove ALL noise snippets but preserve ALL content snippets.\n\n";
 
         foreach ($samples as $index => $sample) {
             $prompt .= $this->formatSampleBlock($index, $sample);
         }
 
-        $prompt .= "Identify repeating structural boilerplate sections that appear in multiple samples.\n";
-        $prompt .= "Generate robust PHP-compatible regular expressions. For HTML blocks, match opening to closing with .*? using /is or /iu.\n";
-        $prompt .= "Avoid fragile values (email addresses, tracking IDs, timestamps); use wildcards.\n";
-        $prompt .= "If bodies contain HTML entities (&amp;lt; etc.), include patterns for both escaped and normal forms.\n\n";
-        $prompt .= "Return JSON with these keys:\n";
-        $prompt .= "1. \"strip_regexes\": array of PHP regex strings with delimiters.\n";
-        $prompt .= "2. \"webview_keywords\": array of web-version link phrases.\n";
-        $prompt .= "3. \"title_extractor\": optional regex with capture group, or null.\n";
-        $prompt .= "4. \"digest_split_config\": null if single-article, OR an object when multi-story digest:\n";
+        $prompt .= "Return JSON:\n";
+        $prompt .= "{\n";
+        $prompt .= "  \"confidence\": \"high\"|\"medium\"|\"low\",\n";
+        $prompt .= "  \"analysis\": {\n";
+        $prompt .= "    \"samples\": [\n";
+        $prompt .= "      {\n";
+        $prompt .= "        \"sample_index\": 1,\n";
+        $prompt .= "        \"content\": [{\"description\": \"...\", \"text_snippet\": \"verbatim from plain text\", \"must_keep\": true}],\n";
+        $prompt .= "        \"noise\": [{\"description\": \"...\", \"text_snippet\": \"verbatim from plain text\", \"must_remove\": true}]\n";
+        $prompt .= "      }\n";
+        $prompt .= "    ]\n";
+        $prompt .= "  },\n";
+        $prompt .= "  \"strip_regexes\": [\"/pattern/ui\", ...],\n";
+        $prompt .= "  \"webview_keywords\": [\"view online\", ...],\n";
+        $prompt .= "  \"title_extractor\": null,\n";
+        $prompt .= "  \"digest_split_config\": null\n";
+        $prompt .= "}\n\n";
+        $prompt .= $this->cleanupConfigSchemaDescription();
+        $prompt .= "\nIf multi-story digest, set digest_split_config instead of null:\n";
         $prompt .= $this->splitConfigSchemaDescription();
         $prompt .= "\nReturn ONLY valid JSON. No markdown.";
 
         return $prompt;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param array{strip_regexes: list<string>, webview_keywords?: list<string>, title_extractor?: ?string} $currentConfig
+     * @param array{still_noise?: list<array<string, mixed>>, wrongly_removed?: list<array<string, mixed>>} $feedback
+     */
+    private function buildCleanupRefinePrompt(array $samples, array $currentConfig, array $feedback): string
+    {
+        $prompt = "REFINEMENT PASS — user reviewed cleanup preview and reported problems.\n\n";
+        $prompt .= "Current config:\n" . json_encode($currentConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        $prompt .= "User feedback:\n" . json_encode($feedback, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        $prompt .= "Revise strip_regexes:\n";
+        $prompt .= "- still_noise: add/tighten patterns to remove these phrases (do NOT remove article text).\n";
+        $prompt .= "- wrongly_removed: loosen or remove patterns that deleted this content.\n\n";
+
+        foreach ($samples as $index => $sample) {
+            $prompt .= $this->formatSampleBlock($index, $sample);
+        }
+
+        $prompt .= "Return full JSON (confidence, analysis with updated snippets, strip_regexes, webview_keywords, title_extractor).\n";
+        $prompt .= $this->cleanupConfigSchemaDescription();
+        $prompt .= "\nReturn ONLY valid JSON. No markdown.";
+
+        return $prompt;
+    }
+
+    /**
+     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param array{analysis: ?array, config: array, verification: array, feedback?: array} $retryContext
+     */
+    private function buildCleanupRetryPrompt(array $samples, array $retryContext): string
+    {
+        $prompt = "Cleanup config FAILED verification. Revise strip_regexes.\n\n";
+        $prompt .= "Previous analysis:\n" . json_encode($retryContext['analysis'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        $prompt .= "Previous config:\n" . json_encode($retryContext['config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        $prompt .= "Verification failure:\n" . ($retryContext['verification']['message'] ?? '') . "\n";
+
+        $issues = $retryContext['verification']['issues'] ?? [];
+        if ($issues !== []) {
+            $prompt .= "Issues:\n" . json_encode($issues, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        }
+
+        if (!empty($retryContext['feedback'])) {
+            $prompt .= "User feedback:\n" . json_encode($retryContext['feedback'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+        }
+
+        foreach ($samples as $index => $sample) {
+            $prompt .= $this->formatSampleBlock($index, $sample);
+        }
+
+        $prompt .= "Fix strip_regexes so noise snippets are gone and content snippets remain.\n";
+        $prompt .= $this->cleanupConfigSchemaDescription();
+        $prompt .= "\nReturn the full JSON object again. No markdown.";
+
+        return $prompt;
+    }
+
+    private function cleanupConfigSchemaDescription(): string
+    {
+        return <<<'TEXT'
+cleanup_config schema (DynamicRegexEmailProcessor):
+
+strip_regexes: PHP preg_replace patterns applied in order to plain text_body.
+- Prefer line/block patterns: /^View in browser.*$/imu
+- For multi-line blocks: /View in browser.*?Unsubscribe/ims
+- Use wildcards for variable URLs/IDs; never hardcode one-off timestamps.
+- If HTML entities appear in text, include patterns for escaped and normal forms.
+
+webview_keywords: phrases linking to the web version (for URL extraction).
+title_extractor: optional regex with capture group for headline, or null.
+TEXT;
+    }
+
+    /**
+     * @param array<string, mixed> $extracted
+     * @return array{strip_regexes: list<string>, webview_keywords: list<string>, title_extractor: ?string}
+     */
+    private function extractCleanupConfig(array $extracted): array
+    {
+        return [
+            'strip_regexes' => $this->normalizeStringArray($extracted['strip_regexes'] ?? []),
+            'webview_keywords' => $this->normalizeStringArray($extracted['webview_keywords'] ?? []),
+            'title_extractor' => $this->normalizeString($extracted['title_extractor'] ?? null),
+        ];
+    }
+
+    /**
+     * @param array{strip_regexes: list<string>, webview_keywords: list<string>, title_extractor: ?string} $config
+     * @param array<string, mixed> $extracted
+     * @param ?array<string, mixed> $analysis
+     * @param array{verified: bool, message: string, attempts: int, issues: list<array<string, mixed>>} $verification
+     * @return array{
+     *     strip_regexes: list<string>,
+     *     webview_keywords: list<string>,
+     *     title_extractor: ?string,
+     *     digest_split_config: ?string,
+     *     analysis: ?array<string, mixed>,
+     *     verification: array{verified: bool, message: string, attempts: int, issues: list<array<string, mixed>>}
+     * }
+     */
+    private function buildCleanupResult(array $config, array $extracted, ?array $analysis, array $verification): array
+    {
+        return [
+            'strip_regexes' => $config['strip_regexes'],
+            'webview_keywords' => $config['webview_keywords'],
+            'title_extractor' => $config['title_extractor'],
+            'digest_split_config' => $this->encodeDigestSplitConfig($extracted['digest_split_config'] ?? null),
+            'analysis' => $analysis,
+            'verification' => $verification,
+        ];
     }
 
     /**
@@ -542,12 +821,12 @@ TEXT;
             ],
         ];
 
-        $url = self::API_BASE . rawurlencode($model) . ':generateContent?key=' . rawurlencode($apiKey);
+        $url = self::API_BASE . rawurlencode($model) . ':generateContent';
 
         try {
-            $response = $this->http->postJson($url, $payload);
+            $response = $this->http->postJson($url, $payload, ['x-goog-api-key' => $apiKey]);
             if ($response->status !== 200) {
-                throw new \RuntimeException('Gemini API call failed with status ' . $response->status . ': ' . $response->body);
+                throw new \RuntimeException($this->formatGeminiApiError($response, $model));
             }
 
             $data = json_decode($response->body, true);
@@ -562,12 +841,39 @@ TEXT;
             }
 
             return $extracted;
+        } catch (HttpClientException $e) {
+            error_log('Seismo EmailGeminiConfigGenerator transport: ' . $e->getMessage());
+            throw new \RuntimeException(
+                'Could not reach Google Gemini (network/TLS). Check outbound HTTPS from the server, '
+                . 'PHP curl/openssl, and that the API key in Settings → General is valid. '
+                . 'Model: ' . $model . '.',
+                0,
+                $e
+            );
         } catch (\RuntimeException $e) {
             throw $e;
         } catch (\Throwable $e) {
             error_log('Seismo EmailGeminiConfigGenerator error: ' . $e->getMessage());
             throw new \RuntimeException('AI Analysis failed: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    private function formatGeminiApiError(Response $response, string $model): string
+    {
+        $data = json_decode($response->body, true);
+        $apiMessage = '';
+        if (is_array($data)) {
+            $apiMessage = trim((string)($data['error']['message'] ?? ''));
+        }
+
+        if ($apiMessage !== '') {
+            return 'Gemini API error (HTTP ' . $response->status . ', model ' . $model . '): ' . $apiMessage;
+        }
+
+        $snippet = trim(mb_substr($response->body, 0, 240));
+
+        return 'Gemini API call failed (HTTP ' . $response->status . ', model ' . $model . ')'
+            . ($snippet !== '' ? ': ' . $snippet : '.');
     }
 
     private function cleanGeminiJsonText(string $text): string
