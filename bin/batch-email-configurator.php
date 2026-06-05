@@ -113,9 +113,8 @@ foreach ($subscriptions as $sub) {
     echo "=> Processing #{$id}: {$name} ...\n";
 
     // 1. Fetch recent samples
-    $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
-        (string)$sub['match_type'],
-        (string)$sub['match_value'],
+    $emails = $ingestRepo->fetchRowsForSubscription(
+        $sub,
         \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SAMPLE_COUNT
     );
 

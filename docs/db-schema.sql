@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS emails (
     imap_uid          BIGINT UNSIGNED DEFAULT NULL,
     gmail_message_id  VARCHAR(32) DEFAULT NULL,
     message_id        VARCHAR(512) DEFAULT NULL,
+    parent_email_id   BIGINT UNSIGNED DEFAULT NULL,
+    email_subscription_id INT DEFAULT NULL,
     from_addr     TEXT NULL,
     to_addr       TEXT NULL,
     cc_addr       TEXT NULL,
@@ -117,7 +119,9 @@ CREATE TABLE IF NOT EXISTS emails (
     INDEX idx_created_at    (created_at),
     INDEX idx_from_email    (from_email),
     INDEX idx_date_received (date_received),
-    INDEX idx_hidden        (hidden)
+    INDEX idx_hidden        (hidden),
+    INDEX idx_emails_parent_email_id (parent_email_id),
+    INDEX idx_emails_email_subscription_id (email_subscription_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- fetched_emails: legacy table removed at schema v19 — merged into `emails` above.
@@ -148,8 +152,11 @@ CREATE TABLE IF NOT EXISTS email_subscriptions (
     match_type            ENUM('domain','email') NOT NULL,
     match_value           VARCHAR(255) NOT NULL,
     display_name          VARCHAR(255) NOT NULL,
+    subject_filter        VARCHAR(255) NOT NULL DEFAULT '',
     category              VARCHAR(100) DEFAULT NULL,
     module_scope          ENUM('mail','newsletter') NOT NULL DEFAULT 'mail',
+    cleanup_config        JSON DEFAULT NULL,
+    digest_split_config   JSON DEFAULT NULL,
     disabled              TINYINT(1)   NOT NULL DEFAULT 0,
     show_in_magnitu       TINYINT(1)   NOT NULL DEFAULT 1,
     strip_listing_boilerplate TINYINT(1) NOT NULL DEFAULT 0,
@@ -164,7 +171,7 @@ CREATE TABLE IF NOT EXISTS email_subscriptions (
     removed_at            DATETIME     DEFAULT NULL,
     created_at            TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     updated_at            TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uniq_match (match_type, match_value),
+    UNIQUE KEY uniq_match (match_type, match_value, subject_filter, module_scope),
     INDEX idx_disabled   (disabled),
     INDEX idx_removed_at (removed_at),
     INDEX idx_category   (category),

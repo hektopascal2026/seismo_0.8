@@ -26,6 +26,31 @@ final class EntryHiddenRepository
      *
      * @throws PDOException
      */
+    /**
+     * SQL fragment for {@see entry_scores} timelines: skip rows whose source
+     * feed_item / email row is soft-hidden.
+     */
+    public static function sqlScoreRowExcludesHiddenEntries(string $esAlias = 'es'): string
+    {
+        $emails = entryTable('emails');
+        $feedItems = entryTable('feed_items');
+
+        return " AND NOT (
+            ({$esAlias}.entry_type = 'email'
+                AND EXISTS (
+                    SELECT 1 FROM {$emails} e
+                     WHERE e.id = {$esAlias}.entry_id
+                       AND e.hidden = 1
+                ))
+            OR ({$esAlias}.entry_type = 'feed_item'
+                AND EXISTS (
+                    SELECT 1 FROM {$feedItems} fi
+                     WHERE fi.id = {$esAlias}.entry_id
+                       AND fi.hidden = 1
+                ))
+        )";
+    }
+
     public function hide(string $entryType, int $entryId): bool
     {
         if (!in_array($entryType, self::ALLOWED_ENTRY_TYPES, true) || $entryId <= 0) {

@@ -61,8 +61,7 @@ final class MailModuleHandler
                 if ($subForFilter !== null && EmailSubscriptionRepository::rowModuleScope($subForFilter) === $this->module->scope) {
                     $subscriptionFilter = $subForFilter;
                     $allItems = $entryRepo->getEmailModuleTimelineForSubscription(
-                        (string)$subForFilter['match_type'],
-                        (string)$subForFilter['match_value'],
+                        $subscriptionId,
                         self::LIST_LIMIT,
                         0,
                         $this->module->scope,
@@ -76,7 +75,7 @@ final class MailModuleHandler
 
             $subscriptions = $subRepo->listActiveForModule($this->module->scope, EmailSubscriptionRepository::MAX_LIMIT, 0);
             if ($this->module->showsPendingSenders) {
-                $pendingSenders = $subRepo->listPending(EmailSubscriptionRepository::MAX_LIMIT, 0);
+                $pendingSenders = $subRepo->listPendingForModule($this->module->scope, EmailSubscriptionRepository::MAX_LIMIT, 0);
             }
             if (!$satellite) {
                 $categorySuggestions = $subRepo->listUsedCategories();
@@ -85,16 +84,14 @@ final class MailModuleHandler
                 foreach ($subscriptions as $row) {
                     $sid = (int)$row['id'];
                     $subscriptionLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
-                        (string)$row['match_type'],
-                        (string)$row['match_value'],
+                        $sid,
                         $this->module->scope,
                     );
                 }
                 foreach ($pendingSenders as $row) {
                     $sid = (int)$row['id'];
                     $pendingLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
-                        (string)$row['match_type'],
-                        (string)$row['match_value'],
+                        $sid,
                         $this->module->scope,
                     );
                 }
@@ -110,11 +107,7 @@ final class MailModuleHandler
                         $reviewingPending = true;
                     }
                     $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
-                    $editRowEmails = $ingestRepo->fetchRowsForSubscriptionMatch(
-                        (string)$editRow['match_type'],
-                        (string)$editRow['match_value'],
-                        5
-                    );
+                    $editRowEmails = $ingestRepo->fetchRowsForSubscription($editRow, 5);
                     foreach ($editRowEmails as $email) {
                         $editRowSamples[] = [
                             'subject' => (string)($email['subject'] ?? ''),
@@ -262,8 +255,14 @@ final class MailModuleHandler
                 }
                 $repo->update($id, $payload);
                 $_SESSION['success'] = $wasPending
-                    ? 'Sender reviewed — subscription is now active.'
+                    ? $this->module->pendingConfirmSuccessMessage
                     : 'Subscription updated.';
+                if ($wasPending) {
+                    $backfilled = $repo->backfillEmailSubscriptionIds();
+                    if ($backfilled > 0) {
+                        $_SESSION['success'] .= ' Linked ' . $backfilled . ' stored message(s) to this subscription.';
+                    }
+                }
                 $newDigest = trim((string)($payload['digest_split_config'] ?? ''));
                 if ($newDigest !== '' && $newDigest !== $oldDigest) {
                     $reprocessed = (new EmailSubscriptionReprocessService(getDbConnection()))
@@ -320,9 +319,8 @@ final class MailModuleHandler
             }
 
             $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
-            $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
-                (string)$sub['match_type'],
-                (string)$sub['match_value'],
+            $emails = $ingestRepo->fetchRowsForSubscription(
+                $sub,
                 \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SAMPLE_COUNT
             );
 
@@ -419,9 +417,8 @@ final class MailModuleHandler
             }
 
             $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
-            $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
-                (string)$sub['match_type'],
-                (string)$sub['match_value'],
+            $emails = $ingestRepo->fetchRowsForSubscription(
+                $sub,
                 \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SPLIT_SAMPLE_COUNT
             );
 

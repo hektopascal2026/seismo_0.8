@@ -107,7 +107,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                         <strong>Feeds:</strong> RSS/Atom, Substack, and Parliament press (general desk).<br>
                                         <strong>Media:</strong> News monitoring — Google News or outlet RSS with optional <strong>Extract full text</strong> (publisher fetch + JSON-LD / Readability / meta); listing pages via Scraper with <code>category = media</code>.<br>
                                         <strong>Mail:</strong> IMAP/Gmail ingest with domain-first subscriptions; transactional and list mail.<br>
-                                        <strong>Newsletter:</strong> Same Gmail/IMAP ingest, separate admin module for digest senders (<code>module_scope = newsletter</code>); dusty-rose timeline pills; optional body processors and <strong>View in browser →</strong> when a webview link is present. <strong>AI Split Configurator</strong> (0.8.4) fans multi-story digests into child <code>emails</code> rows at ingest/reprocess; admin shows the parent card with nested stories; Highlights, Magnitu, and Researcher see per-story rows only.<br>
+                                        <strong>Newsletter:</strong> Same Gmail/IMAP ingest, separate admin module for digest senders (<code>module_scope = newsletter</code>); dusty-rose timeline pills; optional body processors and <strong>View in browser →</strong> when a webview link is present. <strong>AI Split Configurator</strong> (0.8.4) fans multi-story digests into child <code>emails</code> rows; <strong>subject_filter</strong> + <strong>New newsletter types</strong> (0.8.5) split several products from one sender (e.g. Politpuls vs Stimme der Wirtschaft). Admin shows digest parents with nested stories; Highlights, Magnitu, and Researcher see per-story rows only.<br>
                                         <strong>Scraper:</strong> Scheduled fetches of complex web pages.
                                     </td>
                                 </tr>
@@ -571,7 +571,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
                                 <li><strong>v0.8.3 &mdash; Newsletter admin tab:</strong> New <code>?action=newsletter</code> module (nav after Media) with Items and Sources, mirroring the Media/Feeds partition pattern via <code>email_subscriptions.module_scope</code> (migration 027).</li>
-                                <li><strong>v0.8.3 &mdash; Move to Newsletter:</strong> One-click promotion from Mail → Sources; reverse <strong>Move to Mail</strong> on Newsletter → Sources. Pending Gmail senders stay on Mail only.</li>
+                                <li><strong>v0.8.3 &mdash; Move to Newsletter:</strong> One-click promotion from Mail → Sources; reverse <strong>Move to Mail</strong> on Newsletter → Sources. Unknown-domain Gmail proposals stay on Mail only (0.8.5 adds newsletter <em>type</em> detection on Newsletter).</li>
                                 <li><strong>v0.8.3 &mdash; Timeline &amp; filters:</strong> Newsletter cards use <code>#d3716d</code> source pills; separate Mail and Newsletter rows on the filter page; newsletter items remain visible on the main timeline.</li>
                                 <li><strong>v0.8.3 &mdash; AI Researcher:</strong> Replaced the single Email source toggle with separate <strong>Mail</strong> and <strong>Newsletter</strong> module picks.</li>
                             </ul>
@@ -589,15 +589,18 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era X: Story-Level Intelligence</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
-                        <h3>v0.8.4 &mdash; Digest Child Stories &amp; Researcher Pipeline</h3>
+                        <h3>v0.8.4 &ndash; v0.8.5 &mdash; Digest Stories &amp; Multi-Newsletter Routing</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> A single IMAP message carrying ten headlines was still one timeline row, one Magnitu label, and one Researcher citation — burying per-story signals. At the same time, large Researcher pools and cross-module prompts (Lex primary sources with little Media echo) needed a selection pipeline that survives truncation and respects verification-heavy desk prompts. v0.8.4 ships both: deterministic HTML digest splitting into child rows, and a hardened Gemini two-pass researcher.</p>
+                            <p><strong>Rationale:</strong> v0.8.4 split multi-headline digests into scorable child rows and hardened the Researcher selection pipeline. v0.8.5 addresses the next newsletter ops gap: one operational sender (e.g. <code>news@zhdk.ch</code>) shipping several branded products with different subjects and HTML layouts. Subscriptions are no longer limited to one row per address — <code>subject_filter</code> disambiguates products, and Newsletter Sources can auto-queue additional types after the sender is already on the digest desk.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
+                                <li><strong>v0.8.5 &mdash; Subject-based subscriptions:</strong> Migration 029 relaxes the sender unique key to <code>(match_type, match_value, subject_filter, module_scope)</code> and stores <code>emails.email_subscription_id</code> at ingest. Timeline filters, reprocess, and AI sample fetch are subscription-scoped.</li>
+                                <li><strong>v0.8.5 &mdash; New newsletter types:</strong> After a sender is confirmed on Mail and moved to Newsletter, Gmail ingest proposes extra rows when an inbox subject does not match any configured filter — same review table pattern as Mail&rsquo;s <strong>New senders</strong>, with proposed subject filter and display name (e.g. Politpuls vs Stimme der Wirtschaft).</li>
+                                <li><strong>v0.8.5 &mdash; Two-step desk model:</strong> Mail = sender/domain discovery; Newsletter = product/type configuration (subject filter + per-layout split config).</li>
                                 <li><strong>v0.8.4 &mdash; AI Split Configurator:</strong> Newsletter → Sources runs offline Gemini analysis on recent samples, dry-runs <code>digest_split_config</code>, and previews story cards before save. <strong>Apply Split Config</strong> triggers <code>EmailSubscriptionReprocessService</code> so stored digests re-split without waiting for new mail.</li>
                                 <li><strong>v0.8.4 &mdash; Child <code>emails</code> rows:</strong> <code>EmailDigestSplitterService</code> + <code>splitAndIngestStories()</code> insert per-story children with <code>parent_email_id</code> (migration 028). Handles TYPO3/punkt4 table cells, MJML layouts, merged title/body rows, and deduplicated MSO/compat HTML repeats.</li>
                                 <li><strong>v0.8.4 &mdash; Export policy:</strong> <code>EmailDigestExportPolicy</code> hides parent digest scores/rows on Highlights, Magnitu export, Researcher gather, and recipe rescoring when visible children exist. Mail/Newsletter admin keeps the parent card with nested <code>child_stories</code> and per-child scores.</li>
@@ -608,7 +611,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Child rows reuse the existing <code>email</code> entry type — no Magnitu contract change — but require export/read paths to exclude parents when children exist. Split config is stored on <code>email_subscriptions.digest_split_config</code> and applied only at ingest/reprocess (zero runtime Gemini during cron). Researcher pass 1 trades richer JSON (<code>selection_reasoning</code>) for compact keys in tournament/relational modes to stay inside output token limits on 200-item pools.</p>
+                            <p>Child digest rows still reuse <code>entry_type = email</code>; export paths hide parents when children exist. Product routing is deterministic: <code>findBestMatchingSubscription()</code> at ingest/display, with <code>email_subscription_id</code> as the fast path for admin filters. Newsletter-type auto-detect intentionally does <em>not</em> replace Mail domain discovery — it only runs when at least one confirmed <code>module_scope = newsletter</code> row already matches the sender. Subject-prefix proposals use inbox subject structure (text before <code>:</code>, em dash, etc.), not runtime Gemini.</p>
                         </div>
                     </div>
                 </div>
@@ -694,7 +697,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.8.4</strong>, signifying it is in active pre-1.0.0 bootstrapping. Digest child-story export and the hardened Researcher selection pipeline are the latest feature tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.8.5</strong>, signifying it is in active pre-1.0.0 bootstrapping. Multi-newsletter subject routing and digest child-story export are the latest newsletter-desk tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

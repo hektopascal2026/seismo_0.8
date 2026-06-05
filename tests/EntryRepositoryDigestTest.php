@@ -70,6 +70,7 @@ namespace Seismo\Tests {
                 CREATE TABLE emails (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     parent_email_id INTEGER DEFAULT NULL,
+                    email_subscription_id INTEGER DEFAULT NULL,
                     subject VARCHAR(255),
                     derived_title VARCHAR(255),
                     from_email VARCHAR(255),
@@ -87,6 +88,13 @@ namespace Seismo\Tests {
                     date_received DATETIME,
                     date_sent DATETIME,
                     created_at DATETIME
+                )
+            ");
+
+            $this->pdo->exec("
+                CREATE TABLE feed_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hidden INTEGER DEFAULT 0
                 )
             ");
 

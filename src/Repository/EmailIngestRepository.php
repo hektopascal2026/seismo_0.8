@@ -50,15 +50,16 @@ final class EmailIngestRepository
 
         $t = entryTable('emails');
         $sql = 'INSERT INTO ' . $t . ' (
-            imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
+            imap_uid, gmail_message_id, message_id, email_subscription_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, raw_headers, metadata, text_body, html_body, hidden
         ) VALUES (
-            ?, NULL, ?, ?, ?, ?,
+            ?, NULL, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, NULL, ?, ?, 0
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
+            email_subscription_id = VALUES(email_subscription_id),
             from_addr = VALUES(from_addr),
             to_addr = VALUES(to_addr),
             cc_addr = VALUES(cc_addr),
@@ -84,6 +85,7 @@ final class EmailIngestRepository
             return [
                 (int)$row['imap_uid'],
                 $row['message_id'],
+                self::subscriptionIdBindValue($row),
                 $row['from_addr'],
                 $row['to_addr'],
                 $row['cc_addr'],
@@ -119,15 +121,16 @@ final class EmailIngestRepository
 
         $t = entryTable('emails');
         $sql = 'INSERT INTO ' . $t . ' (
-            imap_uid, gmail_message_id, message_id, from_addr, to_addr, cc_addr,
+            imap_uid, gmail_message_id, message_id, email_subscription_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, raw_headers, metadata, text_body, html_body, hidden
         ) VALUES (
-            NULL, ?, ?, ?, ?, ?,
+            NULL, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, 0
         ) ON DUPLICATE KEY UPDATE
             message_id = VALUES(message_id),
+            email_subscription_id = VALUES(email_subscription_id),
             from_addr = VALUES(from_addr),
             to_addr = VALUES(to_addr),
             cc_addr = VALUES(cc_addr),
@@ -154,6 +157,7 @@ final class EmailIngestRepository
             return [
                 $row['gmail_message_id'],
                 $row['message_id'],
+                self::subscriptionIdBindValue($row),
                 $row['from_addr'],
                 $row['to_addr'],
                 $row['cc_addr'],
@@ -174,10 +178,16 @@ final class EmailIngestRepository
         }, $existingGmail, 'gmail_message_id');
 
         if ($n > 0) {
+            $subRepo = new EmailSubscriptionRepository($this->pdo);
             try {
-                (new EmailSubscriptionRepository($this->pdo))->ensurePendingFromGmailIngest($rows);
+                $subRepo->ensurePendingFromGmailIngest($rows);
             } catch (\Throwable $e) {
                 error_log('Seismo Gmail pending senders: ' . $e->getMessage());
+            }
+            try {
+                $subRepo->ensurePendingNewsletterTypesFromIngest($rows);
+            } catch (\Throwable $e) {
+                error_log('Seismo Gmail pending newsletter types: ' . $e->getMessage());
             }
         }
 
@@ -333,6 +343,21 @@ final class EmailIngestRepository
             $row[$k] = $this->nullStr($row[$k] ?? null);
         }
 
+        $from = trim((string)($row['from_email'] ?? ''));
+        if ($from !== '') {
+            $best = EmailSubscriptionRepository::findBestMatchingSubscription(
+                $from,
+                isset($row['subject']) ? (string)$row['subject'] : null,
+                $subs,
+            );
+            $row['email_subscription_id'] = $best !== null ? (int)($best['id'] ?? 0) : null;
+            if ((int)($row['email_subscription_id'] ?? 0) <= 0) {
+                $row['email_subscription_id'] = null;
+            }
+        } else {
+            $row['email_subscription_id'] = null;
+        }
+
         return $row;
     }
 
@@ -343,7 +368,11 @@ final class EmailIngestRepository
      */
     private function maybeStripListingBoilerplate(array $row, array $subs): array
     {
-        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
+        $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
+            (string)($row['from_email'] ?? ''),
+            $subs,
+            isset($row['subject']) ? (string)$row['subject'] : null,
+        );
         if (!EmailListingBoilerplatePolicy::shouldStrip($ui)) {
             return $row;
         }
@@ -587,6 +616,49 @@ final class EmailIngestRepository
     }
 
     /**
+     * Stored parent emails for a subscription (address + optional subject filter).
+     *
+     * @param array<string, mixed> $subscription
+     * @return list<array<string, mixed>>
+     */
+    public function fetchRowsForSubscription(
+        array $subscription,
+        int $limit,
+        int $offset = 0,
+    ): array {
+        if (isSatellite()) {
+            throw new \RuntimeException('EmailIngestRepository::fetchRowsForSubscription must not run on a satellite.');
+        }
+        $limit  = max(1, min(500, $limit));
+        $offset = max(0, $offset);
+        $subId  = (int)($subscription['id'] ?? 0);
+        $t      = entryTable('emails');
+        $select = 'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
+                          message_id, text_body, body_text, html_body, body_html, metadata,
+                          date_utc, date_received, date_sent, email_subscription_id';
+
+        if ($subId > 0) {
+            $stmt = $this->pdo->prepare(
+                $select . '
+                 FROM ' . $t . '
+                 WHERE email_subscription_id = ?
+                   AND parent_email_id IS NULL
+                 ORDER BY id DESC
+                 LIMIT ' . $limit . ' OFFSET ' . $offset
+            );
+            $stmt->execute([$subId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if ($rows !== []) {
+                return $rows;
+            }
+        }
+
+        return $this->fetchRowsForSubscriptionAddressFallback($subscription, $limit, $offset, $select, $t);
+    }
+
+    /**
+     * @deprecated Prefer {@see fetchRowsForSubscription()} with the full subscription row.
+     *
      * @return list<array<string, mixed>>
      */
     public function fetchRowsForSubscriptionMatch(
@@ -595,44 +667,107 @@ final class EmailIngestRepository
         int $limit,
         int $offset = 0,
     ): array {
-        if (isSatellite()) {
-            throw new \RuntimeException('EmailIngestRepository::fetchRowsForSubscriptionMatch must not run on a satellite.');
-        }
-        $matchType = strtolower(trim($matchType));
-        $limit     = max(1, min(500, $limit));
-        $offset    = max(0, $offset);
-        $t         = entryTable('emails');
+        return $this->fetchRowsForSubscriptionAddressFallback(
+            [
+                'match_type'     => $matchType,
+                'match_value'    => $matchValue,
+                'subject_filter' => '',
+            ],
+            $limit,
+            $offset,
+            'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
+                    message_id, text_body, body_text, html_body, body_html, metadata,
+                    date_utc, date_received, date_sent, email_subscription_id',
+            entryTable('emails'),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $subscription
+     * @return list<array<string, mixed>>
+     */
+    private function fetchRowsForSubscriptionAddressFallback(
+        array $subscription,
+        int $limit,
+        int $offset,
+        string $select,
+        string $table,
+    ): array {
+        $matchType = strtolower(trim((string)($subscription['match_type'] ?? '')));
+        $overfetch = max($limit + $offset, $limit * 3, 50);
+        $rows      = [];
+
         if ($matchType === 'email') {
-            $param = strtolower(trim($matchValue));
+            $param = strtolower(trim((string)($subscription['match_value'] ?? '')));
             if ($param === '') {
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
-                        message_id, text_body, body_text, html_body, body_html, metadata,
-                        date_utc, date_received, date_sent
-                 FROM ' . $t . ' WHERE LOWER(from_email) = ? AND parent_email_id IS NULL ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
+                $select . '
+                 FROM ' . $table . '
+                 WHERE LOWER(from_email) = ?
+                   AND parent_email_id IS NULL
+                 ORDER BY id DESC
+                 LIMIT ' . (int)$overfetch
             );
             $stmt->execute([$param]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } elseif ($matchType === 'domain') {
-            $domain = strtolower(ltrim(trim($matchValue), '@'));
+            $domain = strtolower(ltrim(trim((string)($subscription['match_value'] ?? '')), '@'));
             if ($domain === '') {
                 return [];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT id, subject, derived_title, from_email, from_name, from_addr, to_addr, cc_addr,
-                        message_id, text_body, body_text, html_body, body_html, metadata,
-                        date_utc, date_received, date_sent
-                 FROM ' . $t . '
-                 WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . ' AND parent_email_id IS NULL
-                 ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
+                $select . '
+                 FROM ' . $table . '
+                 WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . '
+                   AND parent_email_id IS NULL
+                 ORDER BY id DESC
+                 LIMIT ' . (int)$overfetch
             );
             $stmt->execute([$domain, $domain]);
-        } else {
-            return [];
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         }
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $filtered = [];
+        foreach ($rows as $row) {
+            if (!EmailSubscriptionRepository::subscriptionMatchesEmail(
+                $subscription,
+                (string)($row['from_email'] ?? ''),
+                isset($row['subject']) ? (string)$row['subject'] : null,
+            )) {
+                continue;
+            }
+            $filtered[] = $row;
+        }
+
+        return array_slice($filtered, $offset, $limit);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private static function subscriptionIdBindValue(array $row): ?int
+    {
+        $id = (int)($row['email_subscription_id'] ?? 0);
+
+        return $id > 0 ? $id : null;
+    }
+
+    public function updateEmailSubscriptionId(int $emailId, ?int $subscriptionId): void
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('EmailIngestRepository::updateEmailSubscriptionId must not run on a satellite.');
+        }
+        if ($emailId <= 0) {
+            return;
+        }
+        $bind = ($subscriptionId !== null && $subscriptionId > 0) ? $subscriptionId : null;
+        $t    = entryTable('emails');
+        $stmt = $this->pdo->prepare(
+            'UPDATE ' . $t . ' SET email_subscription_id = ? WHERE id = ?'
+        );
+        $stmt->execute([$bind, $emailId]);
     }
 
     public function updateProcessedContent(int $emailId, string $textBody, ?string $derivedTitle, ?string $metadataJson = null): void
@@ -717,12 +852,15 @@ final class EmailIngestRepository
             return;
         }
 
+        $parentSubId = (int)($parentRow['email_subscription_id'] ?? 0);
+        $parentSubBind = $parentSubId > 0 ? $parentSubId : null;
+
         $sql = "INSERT INTO {$t} (
-            imap_uid, gmail_message_id, message_id, parent_email_id, from_addr, to_addr, cc_addr,
+            imap_uid, gmail_message_id, message_id, parent_email_id, email_subscription_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, text_body, html_body, metadata, hidden
         ) VALUES (
-            NULL, NULL, ?, ?, ?, ?, ?,
+            NULL, NULL, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, 0
         )";
@@ -755,6 +893,7 @@ final class EmailIngestRepository
             $stmtIns->execute([
                 $childMsgId,
                 $parentId,
+                $parentSubBind,
                 $parentRow['from_addr'] ?? null,
                 $parentRow['to_addr'] ?? null,
                 $parentRow['cc_addr'] ?? null,
@@ -790,7 +929,7 @@ final class EmailIngestRepository
 
         $t = entryTable('emails');
         $stmt = $this->pdo->prepare(
-            "SELECT message_id, from_addr, to_addr, cc_addr, from_email, from_name,
+            "SELECT message_id, email_subscription_id, from_addr, to_addr, cc_addr, from_email, from_name,
                     date_utc, date_received, date_sent
                FROM {$t} WHERE id = ? LIMIT 1"
         );
@@ -801,7 +940,7 @@ final class EmailIngestRepository
         }
 
         $merged = array_merge($dbRow, $parentRow);
-        foreach (['message_id', 'from_addr', 'to_addr', 'cc_addr', 'from_email', 'from_name', 'date_utc', 'date_received', 'date_sent'] as $col) {
+        foreach (['message_id', 'email_subscription_id', 'from_addr', 'to_addr', 'cc_addr', 'from_email', 'from_name', 'date_utc', 'date_received', 'date_sent'] as $col) {
             $fromDb = $dbRow[$col] ?? null;
             $fromRow = $parentRow[$col] ?? null;
             if (($merged[$col] === null || $merged[$col] === '') && $fromDb !== null && $fromDb !== '') {

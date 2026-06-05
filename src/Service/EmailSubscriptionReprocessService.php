@@ -35,17 +35,14 @@ final class EmailSubscriptionReprocessService
             throw new \InvalidArgumentException('Subscription not found.');
         }
 
-        $matchType  = (string)($sub['match_type'] ?? '');
-        $matchValue = (string)($sub['match_value'] ?? '');
         $ingest     = new EmailIngestRepository($this->pdo);
         $subs       = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
         $total      = 0;
         $offset     = 0;
 
         while (true) {
-            $rows = $ingest->fetchRowsForSubscriptionMatch(
-                $matchType,
-                $matchValue,
+            $rows = $ingest->fetchRowsForSubscription(
+                $sub,
                 self::BATCH_LIMIT,
                 $offset,
             );
@@ -78,7 +75,11 @@ final class EmailSubscriptionReprocessService
 
                 $remaining = null;
                 $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true, $remaining, $customKeywords);
-                $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail((string)($row['from_email'] ?? ''), $subs);
+                $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
+                    (string)($row['from_email'] ?? ''),
+                    $subs,
+                    isset($row['subject']) ? (string)$row['subject'] : null,
+                );
                 if (EmailListingBoilerplatePolicy::shouldStrip($ui)) {
                     $subj = trim((string)($row['subject'] ?? ''));
                     foreach (['text_body', 'body_text'] as $key) {
@@ -89,6 +90,7 @@ final class EmailSubscriptionReprocessService
                     }
                 }
                 $row = EmailSubscriptionProcessor::apply($row, $subs);
+                $ingest->updateEmailSubscriptionId((int)$row['id'], $subscriptionId);
                 $ingest->updateProcessedContent(
                     (int)$row['id'],
                     trim((string)($row['text_body'] ?? $row['body_text'] ?? '')),

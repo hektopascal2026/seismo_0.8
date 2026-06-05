@@ -16,7 +16,7 @@ final class HideEntryController
      * @var list<string>
      */
     private const RETURN_QUERY_ALLOW = [
-        'q', 'view', 'limit', 'offset',
+        'q', 'view', 'show_media', 'sort', 'limit', 'offset',
         'fc', 'fk', 'lx', 'etag',
         'efc', 'elx', 'eet', 'ecal', 'ejus',
         'none', 'filter_form',
@@ -32,6 +32,7 @@ final class HideEntryController
         'feeds',
         'scraper',
         'mail',
+        'newsletter',
     ];
 
     public function hide(): void

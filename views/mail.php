@@ -123,12 +123,15 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
             <?php if ($mailModule->showsPendingSenders && $pendingSenders !== []): ?>
             <section class="admin-new-senders-section" aria-labelledby="new-senders-heading">
-                <h3 id="new-senders-heading" class="section-title section-title--compact">New senders <span class="admin-new-senders-badge"><?= count($pendingSenders) ?></span></h3>
-                <p class="admin-hint">Detected from Gmail ingest — confirm display name and options, then save to activate.</p>
+                <h3 id="new-senders-heading" class="section-title section-title--compact"><?= e($mailModule->pendingSectionTitle) ?> <span class="admin-new-senders-badge"><?= count($pendingSenders) ?></span></h3>
+                <p class="admin-hint"><?= e($mailModule->pendingSectionHint) ?></p>
                 <table class="data-table data-table--new-senders">
                     <thead>
                         <tr>
                             <th>Match</th>
+                            <?php if ($mailModule->isNewsletter()): ?>
+                            <th>Subject filter</th>
+                            <?php endif; ?>
                             <th>Proposed name</th>
                             <th>Latest</th>
                             <th></th>
@@ -143,6 +146,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         ?>
                         <tr>
                             <td><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
+                            <?php if ($mailModule->isNewsletter()): ?>
+                            <td><?= e((string)($row['subject_filter'] ?? '')) !== '' ? e((string)$row['subject_filter']) : '—' ?></td>
+                            <?php endif; ?>
                             <td><?= e((string)$row['display_name']) ?></td>
                             <td>
                                 <?php if ($peek !== null): ?>
@@ -212,7 +218,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 </div>
                 <?php if ($mailModule->isNewsletter()): ?>
                 <div class="admin-form-field">
-                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
+                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="e.g. Politpuls — required when several newsletters share the same sender address"></label>
                 </div>
                 <div class="admin-form-field">
                     <label>Digest Split Config (JSON)
@@ -440,8 +446,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>" class="admin-form-card admin-form-card--review">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
-                <h3>Review sender</h3>
-                <p class="admin-hint">From Gmail: <?= e((string)$editRow['match_type']) ?>: <?= e((string)$editRow['match_value']) ?></p>
+                <h3><?= e($mailModule->pendingReviewTitle) ?></h3>
+                <p class="admin-hint">From Gmail: <?= e((string)$editRow['match_type']) ?>: <?= e((string)$editRow['match_value']) ?><?php if ($mailModule->isNewsletter() && trim((string)($editRow['subject_filter'] ?? '')) !== ''): ?> · subject filter <code><?= e((string)$editRow['subject_filter']) ?></code><?php endif; ?></p>
                 <div class="admin-form-field">
                     <label>Match type
                         <?php $mt = (string)($editRow['match_type'] ?? 'domain'); ?>
@@ -459,7 +465,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 </div>
                 <?php if ($mailModule->isNewsletter()): ?>
                 <div class="admin-form-field">
-                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
+                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="e.g. Politpuls — required when several newsletters share the same sender address"></label>
                 </div>
                 <div class="admin-form-field">
                     <label>Digest Split Config (JSON)

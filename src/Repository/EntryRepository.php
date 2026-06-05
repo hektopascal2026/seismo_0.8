@@ -276,6 +276,7 @@ final class EntryRepository
                        AND es.relevance_score >= ?
                        AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')'
                      . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                     . EntryHiddenRepository::sqlScoreRowExcludesHiddenEntries()
                      . ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                      LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
                 );
@@ -289,6 +290,7 @@ final class EntryRepository
                        AND es.relevance_score >= ?
                        AND es.entry_type IN (\'feed_item\',\'email\',\'lex_item\',\'calendar_event\')'
                      . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                     . EntryHiddenRepository::sqlScoreRowExcludesHiddenEntries()
                      . ' ORDER BY es.id DESC
                      LIMIT ' . (int)$fetchCap
                 );
@@ -343,6 +345,9 @@ final class EntryRepository
                  WHERE es.score_source IN (\'magnitu\', \'recipe\')
                    AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')';
 
+        $sql .= EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents();
+        $sql .= EntryHiddenRepository::sqlScoreRowExcludesHiddenEntries();
+
         $params = [];
         if ($includeImportantBelowThreshold) {
             $sql .= ' AND (
@@ -355,7 +360,6 @@ final class EntryRepository
             $params = [$alertThreshold];
         }
 
-        $sql .= EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents();
         $sql .= ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                   LIMIT ' . (int)$limit;
 
@@ -857,6 +861,7 @@ final class EntryRepository
                  WHERE es.score_source IN (\'magnitu\', \'recipe\')
                    AND es.entry_type IN (\'feed_item\', \'email\', \'lex_item\', \'calendar_event\')'
                  . EmailDigestExportPolicy::sqlScoreRowExcludesDigestParents()
+                 . EntryHiddenRepository::sqlScoreRowExcludesHiddenEntries()
                  . ' ORDER BY es.relevance_score DESC, es.scored_at DESC, es.id DESC
                  LIMIT ' . (int)$cap
             );
@@ -2170,15 +2175,14 @@ final class EntryRepository
      * @return array<int, array<string, mixed>>
      */
     public function getEmailModuleTimelineForSubscription(
-        string $matchType,
-        string $matchValue,
+        int $subscriptionId,
         int $limit,
         int $offset,
         string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
     ): array {
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
-        $rows   = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, $limit, $offset, $moduleScope);
+        $rows   = $this->fetchEmailsMatchingSubscription($subscriptionId, $limit, $offset, $moduleScope);
         $items  = [];
         foreach ($rows as $row) {
             $items[] = $this->wrapEmail($row);
@@ -2200,12 +2204,11 @@ final class EntryRepository
      * @return ?array{email_id: int, subject: ?string}
      */
     public function peekLatestEmailForSubscription(
-        string $matchType,
-        string $matchValue,
+        int $subscriptionId,
         string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
     ): ?array
     {
-        $rows = $this->fetchEmailsMatchingSubscription($matchType, $matchValue, 1, 0, $moduleScope);
+        $rows = $this->fetchEmailsMatchingSubscription($subscriptionId, 1, 0, $moduleScope);
         if ($rows === []) {
             return null;
         }
@@ -2343,33 +2346,24 @@ final class EntryRepository
      * @return array<int, array<string, mixed>>
      */
     private function fetchEmailsMatchingSubscription(
-        string $matchType,
-        string $matchValue,
+        int $subscriptionId,
         int $limit,
         int $offset,
         string $moduleScope = EmailSubscriptionRepository::MODULE_MAIL,
     ): array
     {
-        $matchType = strtolower(trim($matchType));
-        if ($matchType !== 'domain' && $matchType !== 'email') {
+        if ($subscriptionId <= 0) {
             return [];
         }
         $limit  = $this->clampLimit($limit);
         $offset = max(0, $offset);
 
-        if ($matchType === 'email') {
-            $param = strtolower(trim($matchValue));
-            if ($param === '') {
-                return [];
-            }
-            $whereSql = 'LOWER(TRIM(COALESCE(e.from_email, \'\'))) = ?';
-        } else {
-            $param = strtolower(ltrim(trim($matchValue), '@'));
-            if ($param === '') {
-                return [];
-            }
-            $hostExpr = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1)))';
-            $whereSql  = '(' . $hostExpr . ' = ? OR ' . $hostExpr . ' LIKE CONCAT(\'%.\', ?))';
+        $subRepo = new EmailSubscriptionRepository($this->pdo);
+        $subscription = $subRepo->findById($subscriptionId);
+        if ($subscription === null
+            || EmailSubscriptionRepository::rowModuleScope($subscription) !== EmailSubscriptionRepository::normalizeModuleScope($moduleScope)
+        ) {
+            return [];
         }
 
         $table    = getEmailTableName();
@@ -2387,19 +2381,81 @@ final class EntryRepository
             $orderBy = 'ORDER BY COALESCE(' . $coalesce . ') DESC';
         }
         $st  = entryTable('sender_tags');
-        $sql = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', st.tag AS sender_tag
+        $visibility = $this->sqlEmailVisibilityForModuleScope($moduleScope, 'e');
+        $select = 'SELECT ' . $this->sqlEmailTimelineSelect() . ', st.tag AS sender_tag
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . $this->sqlEmailVisibilityForModuleScope($moduleScope, 'e') . '
-                  AND ' . $whereSql . '
-                ' . $orderBy . '
-                LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
+                WHERE ' . $visibility;
 
         try {
-            $stmt = $this->pdo->prepare($sql);
-            $bind = $matchType === 'email' ? [$param] : [$param, $param];
+            $stmt = $this->pdo->prepare(
+                $select . '
+                  AND e.email_subscription_id = ?
+                ' . $orderBy . '
+                LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset
+            );
+            $stmt->execute([$subscriptionId]);
+            $rows = $stmt->fetchAll();
+            if ($rows !== []) {
+                return $rows;
+            }
+        } catch (PDOException $e) {
+            if (PdoMysqlDiagnostics::isMissingTable($e)) {
+                return [];
+            }
+            if (!PdoMysqlDiagnostics::isMissingColumn($e, 'email_subscription_id')) {
+                throw $e;
+            }
+        }
+
+        return $this->fetchEmailsMatchingSubscriptionFallback($subscription, $limit, $offset, $moduleScope, $select, $orderBy);
+    }
+
+    /**
+     * @param array<string, mixed> $subscription
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchEmailsMatchingSubscriptionFallback(
+        array $subscription,
+        int $limit,
+        int $offset,
+        string $moduleScope,
+        string $select,
+        string $orderBy,
+    ): array {
+        $matchType = strtolower(trim((string)($subscription['match_type'] ?? '')));
+        if ($matchType !== 'domain' && $matchType !== 'email') {
+            return [];
+        }
+
+        $overfetch = max($limit + $offset, $limit * 3, 50);
+        if ($matchType === 'email') {
+            $param = strtolower(trim((string)($subscription['match_value'] ?? '')));
+            if ($param === '') {
+                return [];
+            }
+            $whereSql = 'LOWER(TRIM(COALESCE(e.from_email, \'\'))) = ?';
+            $bind     = [$param];
+        } else {
+            $param = strtolower(ltrim(trim((string)($subscription['match_value'] ?? '')), '@'));
+            if ($param === '') {
+                return [];
+            }
+            $hostExpr = 'LOWER(TRIM(SUBSTRING_INDEX(COALESCE(e.from_email, \'\'), \'@\', -1)))';
+            $whereSql  = '(' . $hostExpr . ' = ? OR ' . $hostExpr . ' LIKE CONCAT(\'%.\', ?))';
+            $bind      = [$param, $param];
+        }
+
+        try {
+            $stmt = $this->pdo->prepare(
+                $select . '
+                  AND ' . $whereSql . '
+                ' . $orderBy . '
+                LIMIT ' . (int)$overfetch
+            );
             $stmt->execute($bind);
+            $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
             if (PdoMysqlDiagnostics::isMissingTable($e)) {
                 return [];
@@ -2407,7 +2463,19 @@ final class EntryRepository
             throw $e;
         }
 
-        return $stmt->fetchAll();
+        $filtered = [];
+        foreach ($rows as $row) {
+            if (!EmailSubscriptionRepository::subscriptionMatchesEmail(
+                $subscription,
+                (string)($row['from_email'] ?? ''),
+                isset($row['subject']) ? (string)$row['subject'] : null,
+            )) {
+                continue;
+            }
+            $filtered[] = $row;
+        }
+
+        return array_slice($filtered, $offset, $limit);
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Seismo\Repository;
 
 use PDO;
 use Seismo\Core\Mail\EmailBodyProcessorRegistry;
+use Seismo\Core\Mail\EmailNewsletterSubjectPrefix;
 use Seismo\Mail\MailModule;
 
 /**
@@ -89,9 +90,56 @@ final class EmailSubscriptionRepository
         return false;
     }
 
+    public static function normalizeSubjectFilter(mixed $value): string
+    {
+        return trim((string)($value ?? ''));
+    }
+
     /**
-     * Inbox card flags from the best matching non-disabled, confirmed row.
+     * Plain substring (case-insensitive) or regex when wrapped in {@code /.../}.
+     */
+    public static function matchesSubjectFilter(string $subject, ?string $subjectFilter): bool
+    {
+        $subjFilter = self::normalizeSubjectFilter($subjectFilter);
+        if ($subjFilter === '') {
+            return true;
+        }
+        $subject = trim($subject);
+        if ($subject === '') {
+            return false;
+        }
+        if (str_starts_with($subjFilter, '/')
+            && (str_ends_with($subjFilter, '/') || preg_match('/\/[imsuy]*$/', $subjFilter))
+        ) {
+            try {
+                return (bool)preg_match($subjFilter, $subject);
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return mb_stripos($subject, $subjFilter) !== false;
+    }
+
+    /**
+     * Whether a stored subscription row owns an email (address + optional subject filter).
      *
+     * @param array<string, mixed> $subscription
+     */
+    public static function subscriptionMatchesEmail(array $subscription, string $fromEmail, ?string $subject): bool
+    {
+        if (!empty($subscription['disabled']) || !empty($subscription['auto_detected'])) {
+            return false;
+        }
+        $mt = (string)($subscription['match_type'] ?? '');
+        $mv = (string)($subscription['match_value'] ?? '');
+        if (!self::matchesAddress($fromEmail, $mt, $mv)) {
+            return false;
+        }
+
+        return self::matchesSubjectFilter($subject !== null ? trim($subject) : '', $subscription['subject_filter'] ?? null);
+    }
+
     /**
      * Find the best matching non-disabled, active subscription row.
      * Evaluates subject_filter to disambiguate multiple matches.
@@ -112,40 +160,14 @@ final class EmailSubscriptionRepository
         $subject = $subject !== null ? trim($subject) : '';
 
         foreach ($subscriptionRows as $sub) {
-            if (!empty($sub['disabled']) || !empty($sub['auto_detected'])) {
+            if (!self::subscriptionMatchesEmail($sub, $from, $subject)) {
                 continue;
             }
+
             $mt = (string)($sub['match_type'] ?? '');
-            $mv = (string)($sub['match_value'] ?? '');
-            if (!self::matchesAddress($from, $mt, $mv)) {
-                continue;
-            }
-
-            $score = 0;
-            if ($mt === 'email') {
-                $score += 20;
-            } else {
-                $score += 10;
-            }
-
-            $subjFilter = trim((string)($sub['subject_filter'] ?? ''));
-            if ($subjFilter !== '') {
-                $matched = false;
-                if (str_starts_with($subjFilter, '/') && (str_ends_with($subjFilter, '/') || preg_match('/\/[imsuy]*$/', $subjFilter))) {
-                    try {
-                        $matched = (bool)preg_match($subjFilter, $subject);
-                    } catch (\Throwable) {
-                        $matched = false;
-                    }
-                } else {
-                    $matched = ($subject !== '' && mb_stripos($subject, $subjFilter) !== false);
-                }
-
-                if ($matched) {
-                    $score += 5;
-                } else {
-                    continue; // Disqualified
-                }
+            $score = $mt === 'email' ? 20 : 10;
+            if (self::normalizeSubjectFilter($sub['subject_filter'] ?? null) !== '') {
+                $score += 5;
             }
 
             if ($score > $bestScore) {
@@ -155,6 +177,73 @@ final class EmailSubscriptionRepository
         }
 
         return $bestRow;
+    }
+
+    /**
+     * Assign {@see emails.email_subscription_id} on stored parent rows from routing rules.
+     */
+    public function backfillEmailSubscriptionIds(int $batchSize = 500): int
+    {
+        $this->assertNotSatellite();
+        $batchSize = max(50, min(2000, $batchSize));
+        $subs      = $this->listActive(self::MAX_LIMIT, 0);
+        if ($subs === []) {
+            return 0;
+        }
+
+        $t     = entryTable('emails');
+        $total = 0;
+        $lastId = 0;
+
+        $select = $this->pdo->prepare(
+            "SELECT id, from_email, subject
+             FROM {$t}
+             WHERE parent_email_id IS NULL
+               AND (email_subscription_id IS NULL OR email_subscription_id = 0)
+               AND id > ?
+             ORDER BY id ASC
+             LIMIT " . (int)$batchSize
+        );
+        $update = $this->pdo->prepare(
+            "UPDATE {$t} SET email_subscription_id = ? WHERE id = ?"
+        );
+
+        while (true) {
+            $select->execute([$lastId]);
+            $rows = $select->fetchAll(\PDO::FETCH_ASSOC);
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $emailId = (int)($row['id'] ?? 0);
+                if ($emailId <= 0) {
+                    continue;
+                }
+                $lastId = $emailId;
+
+                $best = self::findBestMatchingSubscription(
+                    (string)($row['from_email'] ?? ''),
+                    isset($row['subject']) ? (string)$row['subject'] : null,
+                    $subs,
+                );
+                if ($best === null) {
+                    continue;
+                }
+                $subId = (int)($best['id'] ?? 0);
+                if ($subId <= 0) {
+                    continue;
+                }
+                $update->execute([$subId, $emailId]);
+                ++$total;
+            }
+
+            if (count($rows) < $batchSize) {
+                break;
+            }
+        }
+
+        return $total;
     }
 
     /**
@@ -281,13 +370,36 @@ final class EmailSubscriptionRepository
     }
 
     /**
-     * Gmail-ingest proposals awaiting review.
+     * Gmail-ingest proposals awaiting review for a Mail or Newsletter module.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listPendingForModule(string $moduleScope, int $limit, int $offset): array
+    {
+        $scope  = self::normalizeModuleScope($moduleScope);
+        $limit  = max(1, min($limit, self::MAX_LIMIT));
+        $offset = max(0, $offset);
+        $t      = entryTable('email_subscriptions');
+        $sql    = "SELECT * FROM {$t}
+            WHERE removed_at IS NULL
+              AND auto_detected = 1
+              AND module_scope = ?
+            ORDER BY id DESC
+            LIMIT " . (int)$limit . ' OFFSET ' . (int)$offset;
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$scope]);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * @deprecated Use {@see listPendingForModule()}.
      *
      * @return list<array<string, mixed>>
      */
     public function listPending(int $limit, int $offset): array
     {
-        return $this->listByAutoDetected(true, $limit, $offset);
+        return $this->listPendingForModule(self::MODULE_MAIL, $limit, $offset);
     }
 
     /**
@@ -398,6 +510,193 @@ final class EmailSubscriptionRepository
     }
 
     /**
+     * Queue additional newsletter subscriptions when a sender already on Newsletter
+     * mails a subject pattern that matches none of the confirmed rows.
+     *
+     * @param list<array<string, mixed>> $ingestRows normalised Gmail rows
+     */
+    public function ensurePendingNewsletterTypesFromIngest(array $ingestRows): int
+    {
+        if (isSatellite() || $ingestRows === []) {
+            return 0;
+        }
+
+        $known = $this->listAllIncludingPending(self::MAX_LIMIT, 0);
+        $confirmedNewsletter = self::filterConfirmedForModule($known, self::MODULE_NEWSLETTER);
+        if ($confirmedNewsletter === []) {
+            return 0;
+        }
+
+        $created  = 0;
+        $seenKeys = [];
+
+        foreach ($ingestRows as $row) {
+            $from = strtolower(trim((string)($row['from_email'] ?? '')));
+            if ($from === '') {
+                continue;
+            }
+            $subject = isset($row['subject']) ? trim((string)$row['subject']) : '';
+            if ($subject === '') {
+                continue;
+            }
+
+            if (!self::matchesAnyRow($from, $confirmedNewsletter)) {
+                continue;
+            }
+
+            if (self::findBestMatchingSubscription($from, $subject, $confirmedNewsletter) !== null) {
+                continue;
+            }
+
+            $prefix = EmailNewsletterSubjectPrefix::propose($subject);
+            if ($prefix === null) {
+                continue;
+            }
+
+            $anchor = self::findAnchorNewsletterSubscription($from, $confirmedNewsletter);
+            if ($anchor === null) {
+                continue;
+            }
+
+            $matchType  = (string)($anchor['match_type'] ?? '');
+            $matchValue = (string)($anchor['match_value'] ?? '');
+            $subjectFilter = self::normalizeSubjectFilter($prefix);
+            $batchKey = $matchType . '|' . $matchValue . '|' . $subjectFilter . '|' . self::MODULE_NEWSLETTER;
+            if (isset($seenKeys[$batchKey])) {
+                continue;
+            }
+            $seenKeys[$batchKey] = true;
+
+            if (self::subscriptionProposalExists($known, $matchType, $matchValue, $subjectFilter, self::MODULE_NEWSLETTER)) {
+                continue;
+            }
+
+            try {
+                $id = $this->insert([
+                    'match_type'     => $matchType,
+                    'match_value'    => $matchValue,
+                    'display_name'   => $prefix,
+                    'subject_filter' => $subjectFilter,
+                    'module_scope'   => self::MODULE_NEWSLETTER,
+                    'auto_detected'  => 1,
+                    'disabled'       => 0,
+                ]);
+            } catch (\Throwable $e) {
+                if (strpos($e->getMessage(), 'Duplicate') === false && strpos($e->getMessage(), '1062') === false) {
+                    error_log('Seismo newsletter type pending insert: ' . $e->getMessage());
+                }
+                continue;
+            }
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            ++$created;
+            $known[] = [
+                'match_type'     => $matchType,
+                'match_value'    => $matchValue,
+                'subject_filter' => $subjectFilter,
+                'module_scope'   => self::MODULE_NEWSLETTER,
+                'auto_detected'  => 1,
+                'disabled'       => 0,
+            ];
+        }
+
+        return $created;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private static function filterConfirmedForModule(array $rows, string $moduleScope): array
+    {
+        $scope = self::normalizeModuleScope($moduleScope);
+        $out   = [];
+        foreach ($rows as $row) {
+            if (!empty($row['disabled']) || !empty($row['auto_detected'])) {
+                continue;
+            }
+            if (self::rowModuleScope($row) !== $scope) {
+                continue;
+            }
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Best confirmed newsletter row for copying match_type / match_value onto a proposal.
+     *
+     * @param list<array<string, mixed>> $newsletterRows confirmed newsletter subscriptions only
+     * @return array<string, mixed>|null
+     */
+    public static function findAnchorNewsletterSubscription(string $fromEmail, array $newsletterRows): ?array
+    {
+        $from = trim($fromEmail);
+        if ($from === '') {
+            return null;
+        }
+
+        $bestScore = -1;
+        $bestRow   = null;
+        foreach ($newsletterRows as $row) {
+            $mt = (string)($row['match_type'] ?? '');
+            $mv = (string)($row['match_value'] ?? '');
+            if (!self::matchesAddress($from, $mt, $mv)) {
+                continue;
+            }
+            $score = $mt === 'email' ? 20 : 10;
+            if (self::normalizeSubjectFilter($row['subject_filter'] ?? null) !== '') {
+                $score += 2;
+            }
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestRow   = $row;
+            }
+        }
+
+        return $bestRow;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     */
+    private static function subscriptionProposalExists(
+        array $rows,
+        string $matchType,
+        string $matchValue,
+        string $subjectFilter,
+        string $moduleScope,
+    ): bool {
+        $subjectFilter = self::normalizeSubjectFilter($subjectFilter);
+        $moduleScope   = self::normalizeModuleScope($moduleScope);
+        $matchType     = strtolower(trim($matchType));
+        $matchValue    = $matchType === 'email'
+            ? strtolower(trim($matchValue))
+            : strtolower(ltrim(trim($matchValue), '@'));
+
+        foreach ($rows as $row) {
+            if (self::rowModuleScope($row) !== $moduleScope) {
+                continue;
+            }
+            if ((string)($row['match_type'] ?? '') !== $matchType) {
+                continue;
+            }
+            if (strtolower(trim((string)($row['match_value'] ?? ''))) !== $matchValue) {
+                continue;
+            }
+            if (self::normalizeSubjectFilter($row['subject_filter'] ?? null) === $subjectFilter) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param array{
      *   match_type: string,
      *   match_value: string,
@@ -423,7 +722,7 @@ final class EmailSubscriptionRepository
         $autoDetected = !empty($data['auto_detected']) ? 1 : 0;
         $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
         $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
-        $subjectFilter = !empty($data['subject_filter']) ? trim((string)$data['subject_filter']) : null;
+        $subjectFilter = self::normalizeSubjectFilter($data['subject_filter'] ?? null);
         $digestSplitConfig = !empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null;
 
         $t   = entryTable('email_subscriptions');
@@ -471,6 +770,7 @@ final class EmailSubscriptionRepository
                 'match_type'    => 'domain',
                 'match_value'   => $domain,
                 'display_name'  => self::proposeDisplayName($fromName !== '' ? $fromName : null, $domain),
+                'module_scope'  => self::MODULE_MAIL,
                 'auto_detected' => 1,
                 'disabled'      => 0,
             ]);
@@ -514,8 +814,8 @@ final class EmailSubscriptionRepository
             ? (!empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null)
             : ($existing['cleanup_config'] ?? null);
         $subjectFilter = array_key_exists('subject_filter', $data)
-            ? (!empty($data['subject_filter']) ? trim((string)$data['subject_filter']) : null)
-            : ($existing['subject_filter'] ?? null);
+            ? self::normalizeSubjectFilter($data['subject_filter'])
+            : self::normalizeSubjectFilter($existing['subject_filter'] ?? null);
         $digestSplitConfig = array_key_exists('digest_split_config', $data)
             ? (!empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null)
             : ($existing['digest_split_config'] ?? null);

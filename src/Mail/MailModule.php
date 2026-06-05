@@ -35,6 +35,10 @@ final class MailModule
         public readonly string $sourcesIntroHtml,
         public readonly string $emptyItemsHtml,
         public readonly bool $showsPendingSenders,
+        public readonly string $pendingSectionTitle,
+        public readonly string $pendingSectionHint,
+        public readonly string $pendingReviewTitle,
+        public readonly string $pendingConfirmSuccessMessage,
     ) {
     }
 
@@ -66,6 +70,10 @@ final class MailModule
                 . '<a href="' . htmlspecialchars($base . '/index.php?action=newsletter', ENT_QUOTES, 'UTF-8') . '">Newsletter</a>.</p>',
             emptyItemsHtml: 'No mail rows yet. Configure IMAP fetch separately; subscription rules live under <a href="{sources_href}">Sources</a>.',
             showsPendingSenders: true,
+            pendingSectionTitle: 'New senders',
+            pendingSectionHint: 'Detected from Gmail ingest — confirm display name and options, then save to activate.',
+            pendingReviewTitle: 'Review sender',
+            pendingConfirmSuccessMessage: 'Sender reviewed — subscription is now active.',
         );
     }
 
@@ -92,9 +100,15 @@ final class MailModule
             sourcesHeading: 'Newsletter sources',
             sourcesIntroHtml: '<p class="admin-intro">Newsletter subscriptions use the same Gmail/IMAP ingest as '
                 . '<a href="' . htmlspecialchars($base . '/index.php?action=mail', ENT_QUOTES, 'UTF-8') . '">Mail</a>. '
-                . 'Move sources here from Mail → Sources when you want digest-style cards on the timeline.</p>',
+                . 'Confirm the sender on <strong>Mail → Sources</strong> first, then move it here. When that sender '
+                . 'starts delivering a <em>different</em> newsletter product (new subject pattern), it is queued under '
+                . '<strong>New newsletter types</strong> for an additional subscription row (subject filter + split config).</p>',
             emptyItemsHtml: 'No newsletter items yet. Move a source from <a href="' . htmlspecialchars($base . '/index.php?action=mail&view=sources', ENT_QUOTES, 'UTF-8') . '">Mail → Sources</a> or add one under <a href="{sources_href}">Sources</a>.',
-            showsPendingSenders: false,
+            showsPendingSenders: true,
+            pendingSectionTitle: 'New newsletter types',
+            pendingSectionHint: 'Detected from Gmail ingest — a known newsletter sender mailed a subject pattern that does not match any configured subscription. Review the proposed subject filter, then save to activate.',
+            pendingReviewTitle: 'Review newsletter type',
+            pendingConfirmSuccessMessage: 'Newsletter type reviewed — subscription is now active.',
         );
     }
 

@@ -169,6 +169,39 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         self::assertTrue($ui['strip_listing_boilerplate']);
     }
 
+    public function testMatchesSubjectFilterSupportsRegex(): void
+    {
+        self::assertTrue(EmailSubscriptionRepository::matchesSubjectFilter(
+            'NZZ Pro: Industry updates',
+            '/\bpro\b/i'
+        ));
+        self::assertFalse(EmailSubscriptionRepository::matchesSubjectFilter(
+            'NZZ am Morgen',
+            '/\bpro\b/i'
+        ));
+    }
+
+    public function testSubscriptionMatchesEmailRequiresSubjectWhenFilterSet(): void
+    {
+        $sub = [
+            'match_type'     => 'email',
+            'match_value'    => 'news@zhdk.ch',
+            'subject_filter' => 'Politpuls',
+            'disabled'       => 0,
+            'auto_detected'  => 0,
+        ];
+        self::assertTrue(EmailSubscriptionRepository::subscriptionMatchesEmail(
+            $sub,
+            'news@zhdk.ch',
+            'Politpuls: weekly'
+        ));
+        self::assertFalse(EmailSubscriptionRepository::subscriptionMatchesEmail(
+            $sub,
+            'news@zhdk.ch',
+            'Stimme der Wirtschaft'
+        ));
+    }
+
     public function testSubjectBasedRouting(): void
     {
         $rows = [

@@ -1,4 +1,4 @@
-# Seismo 0.8.4
+# Seismo 0.8.5
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.8.5** | **Multi-newsletter routing + type detection** — several digest products from one sender (e.g. Politpuls and Stimme der Wirtschaft via `news@zhdk.ch`) get separate `email_subscriptions` rows keyed by **`subject_filter`** (migration 029: unique `(match_type, match_value, subject_filter, module_scope)`, **`emails.email_subscription_id`** persisted at ingest with backfill). Subscription-scoped timeline, reprocess, and AI Split/Cleanup samples respect subject filters. **Newsletter → Sources → New newsletter types:** when a sender already on Newsletter mails an unmatched subject pattern, Gmail ingest queues a review row (Mail keeps **New senders** for unknown domains). Confirming a pending type backfills stored mail to the new subscription. |
 | **0.8.4** | **Multi-story digest split + Researcher pipeline** — **Newsletter digests** can fan out into per-story child `emails` rows (`parent_email_id`, migration 028). **AI Split Configurator** on Newsletter → Sources analyzes samples, previews story cards, and saves `digest_split_config`; **Apply Split Config** reprocesses stored mail. **Export policy:** Highlights, Magnitu, Researcher, and recipe rescoring surface **child story rows only** — parent digest blobs are hidden when visible children exist; Mail/Newsletter admin still shows the parent card with nested `child_stories`. Splitter handles TYPO3/punkt4 table layouts, MJML newsletters, adjacent title/body row merge, and MSO duplicate-block dedupe. **AI Researcher:** **Deep selection** modes — Standard, Tournament, and **Blind spot / cross-module** (relational tournament + global title index + keys-only pass 1); **Pro selection** (`gemini-3.1-pro-preview` for pass 1); verification-heavy prompts auto-detected; hardened pass 1 against truncation (keys-only retry, failed-batch recovery); improved pass 2 batching and selection-failure reporting. |
 | **0.8.3** | **Newsletter module** — separate `?action=newsletter` admin (`module_scope = newsletter`), dusty-rose timeline pills, Mail ↔ Newsletter promotion, separate Mail/Newsletter toggles on Researcher. |
 | **0.8.2** | **AI Researcher — tournament selection & cost estimate** — optional **Tournament selection** (parallel batch prelims + championship pass for large pools). After generation, a **rough USD estimate** under the summary uses Gemini `usageMetadata` and **Gemini 3.5 Flash Standard** list prices, with a link to [Google AI Studio spend](https://aistudio.google.com/spend?project=gen-lang-client-0854484393). |
@@ -33,6 +34,17 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 | **0.6.2** | **Path satellites** — one VPS codebase; desks at `/<slug>/` (e.g. `/security/`, `/digital/`) share the `seismo` entries DB and keep scores/labels in `seismo_<slug>`. Settings → Satellites registry + `bin/seismo-satellite-provision.sh`; removed pruned satellite bundles and `seismo-generator`. Scores migrations via `php migrate.php --scores-db=…`. |
 | **0.6.1** | **Gmail + QoL** — unknown Gmail sender domains queue in **Mail → Subscriptions → New senders** with a proposed display name and **Review** flow before they become active subscriptions; fixes for large Gmail HTML bodies and EUR-Lex refresh. |
 | **0.6.0** | **VPS-ready baseline** — production layout on Hetzner (Nginx, PHP-FPM, MariaDB via socket), unified `emails` table, Gmail API ingest with OAuth, numbered migrations, source-config JSON export/import. |
+
+### 0.8.5 — multi-newsletter routing (operator notes)
+
+Some senders deliver **multiple branded digests** from one address. Configure them as separate Newsletter subscriptions:
+
+1. Confirm the sender on **Mail → Sources**, then **Move to Newsletter**.
+2. Add the first product (e.g. Stimme der Wirtschaft) with a **Subject filter** matching its inbox subject line.
+3. When a **different** product arrives (e.g. Politpuls), **Newsletter → Sources → New newsletter types** lists a proposed row — review subject filter and display name, save, then run **AI Split Config** for that layout.
+4. Run **`php migrate.php`** on deploy (schema v45 / migration 029) so duplicate sender rows and `email_subscription_id` linking work.
+
+Mail and Newsletter each have their own pending queue (`module_scope`); unknown domains still surface only under Mail.
 
 ### 0.8.4 — digest split (operator notes)
 
