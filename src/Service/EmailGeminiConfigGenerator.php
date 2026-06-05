@@ -22,8 +22,9 @@ final class EmailGeminiConfigGenerator
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
     private const DEFAULT_MODEL = 'gemini-3.5-flash';
     private const MAX_SPLIT_RETRIES = 2;
-    private const PROMPT_BODY_MAX_CHARS = 12000;
-    private const PROMPT_HTML_MAX_CHARS = 50000;
+    private const HTTP_TIMEOUT_SECONDS = 120;
+    private const PROMPT_BODY_MAX_CHARS = 8000;
+    private const PROMPT_HTML_MAX_CHARS = 15000;
 
     private const SPLIT_SYSTEM_INSTRUCTION = <<<'TEXT'
 You are an expert email digest analyst configuring a deterministic HTML/text splitter.
@@ -53,7 +54,7 @@ TEXT;
 
     public function __construct(
         private readonly SystemConfigRepository $configRepo,
-        private readonly BaseClient $http = new BaseClient(60),
+        private readonly BaseClient $http = new BaseClient(self::HTTP_TIMEOUT_SECONDS),
         private readonly DigestSplitVerifier $splitVerifier = new DigestSplitVerifier(),
         private readonly CleanupConfigVerifier $cleanupVerifier = new CleanupConfigVerifier(),
     ) {
@@ -797,6 +798,8 @@ TEXT;
      */
     private function callGeminiJson(string $systemInstruction, string $prompt): array
     {
+        set_time_limit(300);
+
         $apiKey = trim((string)($this->configRepo->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
         if ($apiKey === '') {
             throw new \RuntimeException('Google Gemini API key is not configured. Please add it under Settings → General.');
@@ -844,9 +847,9 @@ TEXT;
         } catch (HttpClientException $e) {
             error_log('Seismo EmailGeminiConfigGenerator transport: ' . $e->getMessage());
             throw new \RuntimeException(
-                'Could not reach Google Gemini (network/TLS). Check outbound HTTPS from the server, '
-                . 'PHP curl/openssl, and that the API key in Settings → General is valid. '
-                . 'Model: ' . $model . '.',
+                'Could not reach Google Gemini (' . $this->sanitizeTransportDetail($e->getMessage()) . '). '
+                . 'Model: ' . $model . '. '
+                . 'If shell curl works, check PHP-FPM has the curl extension (www-data) and retry after deploy.',
                 0,
                 $e
             );
@@ -856,6 +859,14 @@ TEXT;
             error_log('Seismo EmailGeminiConfigGenerator error: ' . $e->getMessage());
             throw new \RuntimeException('AI Analysis failed: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    private function sanitizeTransportDetail(string $message): string
+    {
+        $message = preg_replace('/([?&]key=)[^&\s)]+/i', '$1[REDACTED]', $message) ?? $message;
+        $message = preg_replace('/(x-goog-api-key:\s*)[^\s]+/i', '$1[REDACTED]', $message) ?? $message;
+
+        return trim($message) !== '' ? trim($message) : 'network/TLS';
     }
 
     private function formatGeminiApiError(Response $response, string $model): string

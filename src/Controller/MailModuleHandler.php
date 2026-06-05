@@ -262,6 +262,7 @@ final class MailModuleHandler
 
     public function analyzeBoilerplate(): void
     {
+        set_time_limit(300);
         header('Content-Type: application/json');
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             http_response_code(405);
@@ -360,6 +361,7 @@ final class MailModuleHandler
 
     public function analyzeSplitting(): void
     {
+        set_time_limit(300);
         header('Content-Type: application/json');
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
             http_response_code(405);

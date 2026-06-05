@@ -135,8 +135,19 @@ final class BaseClient
             try {
                 return $this->executeCurl($method, $url, $headers, $body, $sessionCookies);
             } catch (HttpClientException $e) {
-                // If cURL encounters an SSL/unexpected EOF transport failure, transparently fall back to native PHP streams.
-                return $this->executeStream($method, $url, $headers, $body);
+                // POST/PUT bodies: streams are unreliable (SSL, large payloads) — surface the cURL error.
+                if ($body !== null && $body !== '') {
+                    throw $e;
+                }
+
+                try {
+                    return $this->executeStream($method, $url, $headers, $body);
+                } catch (HttpClientException $streamEx) {
+                    throw new HttpClientException(
+                        'cURL failed: ' . self::sanitizeTransportErrorMessage($e->getMessage())
+                        . '; stream fallback failed: ' . self::sanitizeTransportErrorMessage($streamEx->getMessage())
+                    );
+                }
             }
         }
 
