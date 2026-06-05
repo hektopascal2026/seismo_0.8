@@ -140,6 +140,8 @@ foreach ($subscriptions as $sub) {
         $samples[] = [
             'subject' => (string)($email['subject'] ?? ''),
             'body' => $bodyText,
+            'text_body' => $bodyText,
+            'html_body' => $html,
         ];
     }
 

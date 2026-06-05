@@ -213,7 +213,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 </div>
                 <div class="admin-form-field">
                     <label>Digest Split Config (JSON)
-                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "body_selector": "p", "link_selector": "a"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
                     </label>
                 </div>
                 <?php else: ?>
@@ -356,18 +356,24 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         Analyze sample emails for splitting
                     </button>
                     <span id="ai-split-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
+                    <div id="ai-split-verification" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4;"></div>
                 </div>
 
                 <div id="ai-split-results-panel" style="display: <?= !empty($editRow['digest_split_config']) ? 'block' : 'none' ?>;">
                     <div class="admin-form-field">
                         <label>Proposed Split Config (JSON):
-                            <textarea id="split_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"split_rules": {"split_method": "html_selector", "story_selector": "div.story"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                            <textarea id="split_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "link_selector": "a", "body_selector": "p"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
                         </label>
                     </div>
 
                     <div class="admin-form-field" id="ai-split-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Split Preview (Generated Cards)</h4>
-                        
+                        <div id="split-preview-toolbar" style="display: none; margin-bottom: 0.75rem;">
+                            <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Check <strong>Noise</strong> on blocks that are not real stories (headers, ads, footers). Then refine — Gemini adjusts selectors to exclude them.</p>
+                            <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" disabled onclick="runAiSplitRefine()">
+                                Refine rules (exclude marked noise)
+                            </button>
+                        </div>
                         <div id="split-preview-cards-container" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1rem; max-height: 25rem; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; background-color: #fafafa;">
                             <!-- Dynamically generated story cards will go here -->
                         </div>
@@ -437,7 +443,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 </div>
                 <div class="admin-form-field">
                     <label>Digest Split Config (JSON)
-                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "body_selector": "p", "link_selector": "a"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
                     </label>
                 </div>
                 <?php else: ?>
@@ -820,20 +826,228 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         });
     }
 
-    function runAiSplitAnalysis(id) {
-        var btn = document.getElementById('btn-ai-split-analyze');
+    var splitSubscriptionId = 0;
+
+    function truncatePreviewText(text, maxLen) {
+        if (!text) return '';
+        if (text.length <= maxLen) return text;
+        return text.substring(0, maxLen) + '…';
+    }
+
+    function updateSplitRefineButton() {
+        var refineBtn = document.getElementById('btn-ai-split-refine');
+        if (!refineBtn) return;
+        var noiseCount = document.querySelectorAll('.split-noise-toggle:checked').length;
+        refineBtn.disabled = noiseCount === 0;
+    }
+
+    function applySplitAnalysisResponse(data, options) {
+        options = options || {};
         var status = document.getElementById('ai-split-status');
         var resultsPanel = document.getElementById('ai-split-results-panel');
         var textarea = document.getElementById('split_config_json');
+        var verificationBox = document.getElementById('ai-split-verification');
+        var verified = data.verification && data.verification.verified;
+
+        if (status) {
+            status.style.display = 'inline';
+            status.style.color = verified || !data.digest_split_config ? 'green' : '#b45309';
+            status.textContent = data.verification && data.verification.message
+                ? data.verification.message
+                : (data.refined ? 'Refinement complete!' : 'Analysis complete!');
+        }
+
+        if (verificationBox && data.verification) {
+            var lines = [];
+            if (data.verification.expected_counts && data.verification.expected_counts.length > 0) {
+                data.verification.expected_counts.forEach(function(expected, idx) {
+                    var actual = (data.verification.actual_counts && data.verification.actual_counts[idx] !== undefined)
+                        ? data.verification.actual_counts[idx]
+                        : '?';
+                    lines.push('Sample ' + (idx + 1) + ': expected ' + expected + ' cards, got ' + actual);
+                });
+            } else if (data.verification.actual_counts && data.verification.actual_counts.length > 0) {
+                lines.push('Sample 1: got ' + data.verification.actual_counts[0] + ' card(s)');
+            }
+            if (data.verification.attempts) {
+                lines.push('Gemini attempts: ' + data.verification.attempts);
+            }
+            if (lines.length > 0) {
+                verificationBox.textContent = lines.join(' · ');
+                verificationBox.style.display = 'block';
+                verificationBox.style.color = verified ? '#166534' : '#b45309';
+            }
+        }
+
+        if (textarea) {
+            if (data.digest_split_config) {
+                try {
+                    var parsed = typeof data.digest_split_config === 'string'
+                        ? JSON.parse(data.digest_split_config)
+                        : data.digest_split_config;
+                    textarea.value = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    textarea.value = data.digest_split_config;
+                }
+            } else if (!options.keepConfigOnEmpty) {
+                textarea.value = '';
+            }
+        }
+
+        renderSplitPreviewCards(data.preview_stories || []);
+        if (resultsPanel) {
+            resultsPanel.style.display = 'block';
+        }
+    }
+
+    function renderSplitPreviewCards(stories) {
         var previewSection = document.getElementById('ai-split-preview-section');
         var container = document.getElementById('split-preview-cards-container');
+        var toolbar = document.getElementById('split-preview-toolbar');
+        if (!container || !previewSection) return;
 
+        container.innerHTML = '';
+        if (toolbar) {
+            toolbar.style.display = stories.length > 0 ? 'block' : 'none';
+        }
+
+        if (stories.length === 0) {
+            var empty = document.createElement('div');
+            empty.textContent = 'No split stories generated by the config rules.';
+            empty.style.padding = '1rem';
+            empty.style.color = '#888';
+            empty.style.fontStyle = 'italic';
+            container.appendChild(empty);
+            previewSection.style.display = 'block';
+            updateSplitRefineButton();
+            return;
+        }
+
+        stories.forEach(function(story, index) {
+            var card = document.createElement('div');
+            card.dataset.storyIndex = String(index);
+            card.dataset.title = story.title || '';
+            card.dataset.textPreview = truncatePreviewText(story.text_body || '', 400);
+            card.dataset.htmlPreview = truncatePreviewText(story.html_body || '', 800);
+            card.style.background = '#ffffff';
+            card.style.border = '2px solid black';
+            card.style.padding = '1rem';
+            card.style.boxShadow = '3px 3px 0px rgba(0,0,0,1)';
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+            card.style.gap = '0.5rem';
+
+            var header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.borderBottom = '1px solid #eee';
+            header.style.paddingBottom = '0.25rem';
+            header.style.flexWrap = 'wrap';
+            header.style.gap = '0.5rem';
+
+            var badge = document.createElement('span');
+            badge.textContent = 'Block #' + (index + 1);
+            badge.style.fontSize = '0.75rem';
+            badge.style.fontWeight = 'bold';
+            badge.style.background = 'var(--seismo-accent, #FFFFC5)';
+            badge.style.border = '1px solid black';
+            badge.style.padding = '1px 6px';
+            header.appendChild(badge);
+
+            var noiseLabel = document.createElement('label');
+            noiseLabel.style.display = 'flex';
+            noiseLabel.style.alignItems = 'center';
+            noiseLabel.style.gap = '0.35rem';
+            noiseLabel.style.fontSize = '0.8rem';
+            noiseLabel.style.fontWeight = 'bold';
+            noiseLabel.style.cursor = 'pointer';
+
+            var noiseToggle = document.createElement('input');
+            noiseToggle.type = 'checkbox';
+            noiseToggle.className = 'split-noise-toggle';
+            noiseToggle.addEventListener('change', function() {
+                if (noiseToggle.checked) {
+                    card.style.opacity = '0.55';
+                    card.style.borderColor = '#b91c1c';
+                    card.style.background = '#fef2f2';
+                } else {
+                    card.style.opacity = '1';
+                    card.style.borderColor = 'black';
+                    card.style.background = '#ffffff';
+                }
+                updateSplitRefineButton();
+            });
+            noiseLabel.appendChild(noiseToggle);
+            noiseLabel.appendChild(document.createTextNode('Noise (exclude)'));
+            header.appendChild(noiseLabel);
+            card.appendChild(header);
+
+            var title = document.createElement('h4');
+            title.textContent = story.title || '(No Title)';
+            title.style.margin = '0';
+            title.style.fontSize = '1rem';
+            title.style.fontWeight = 'bold';
+            card.appendChild(title);
+
+            var body = document.createElement('div');
+            body.textContent = story.text_body || '';
+            body.style.fontSize = '0.85rem';
+            body.style.color = '#333';
+            body.style.lineHeight = '1.4';
+            card.appendChild(body);
+
+            if (story.link) {
+                var link = document.createElement('a');
+                link.href = story.link;
+                link.target = '_blank';
+                link.textContent = 'Read Link →';
+                link.style.fontSize = '0.8rem';
+                link.style.fontWeight = 'bold';
+                link.style.color = 'black';
+                link.style.textDecoration = 'underline';
+                link.style.alignSelf = 'flex-start';
+                card.appendChild(link);
+            }
+
+            container.appendChild(card);
+        });
+
+        previewSection.style.display = 'block';
+        updateSplitRefineButton();
+    }
+
+    function collectSplitFeedback() {
+        var blocks = [];
+        document.querySelectorAll('#split-preview-cards-container [data-story-index]').forEach(function(card) {
+            var toggle = card.querySelector('.split-noise-toggle');
+            blocks.push({
+                index: parseInt(card.dataset.storyIndex, 10),
+                verdict: toggle && toggle.checked ? 'noise' : 'keep',
+                title: card.dataset.title || '',
+                text_preview: card.dataset.textPreview || '',
+                html_preview: card.dataset.htmlPreview || ''
+            });
+        });
+        return { blocks: blocks };
+    }
+
+    function runAiSplitAnalysis(id) {
+        var btn = document.getElementById('btn-ai-split-analyze');
+        var status = document.getElementById('ai-split-status');
+        var previewSection = document.getElementById('ai-split-preview-section');
+        var verificationBox = document.getElementById('ai-split-verification');
+
+        splitSubscriptionId = id;
         btn.disabled = true;
         status.style.display = 'inline';
         status.style.color = '#333';
-        status.textContent = 'Analyzing splitting structure with Gemini...';
-        container.innerHTML = '';
-        previewSection.style.display = 'none';
+        status.textContent = 'Analyzing splitting structure with Gemini (count → config → verify)...';
+        if (previewSection) previewSection.style.display = 'none';
+        if (verificationBox) {
+            verificationBox.style.display = 'none';
+            verificationBox.textContent = '';
+        }
 
         var formData = new FormData();
         formData.append('id', id);
@@ -845,99 +1059,61 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         })
         .then(parseJsonFetchResponse)
         .then(function(data) {
-            status.style.color = 'green';
-            status.textContent = 'Analysis complete!';
-            
-            if (data.digest_split_config) {
-                try {
-                    var parsed = typeof data.digest_split_config === 'string' 
-                        ? JSON.parse(data.digest_split_config) 
-                        : data.digest_split_config;
-                    textarea.value = JSON.stringify(parsed, null, 2);
-                } catch (e) {
-                    textarea.value = data.digest_split_config;
-                }
-            } else {
-                textarea.value = '';
-            }
-
-            if (data.preview_stories && data.preview_stories.length > 0) {
-                data.preview_stories.forEach(function(story) {
-                    var card = document.createElement('div');
-                    card.style.background = '#ffffff';
-                    card.style.border = '2px solid black';
-                    card.style.padding = '1rem';
-                    card.style.position = 'relative';
-                    card.style.boxShadow = '3px 3px 0px rgba(0,0,0,1)';
-                    card.style.display = 'flex';
-                    card.style.flexDirection = 'column';
-                    card.style.gap = '0.5rem';
-
-                    var header = document.createElement('div');
-                    header.style.display = 'flex';
-                    header.style.justifyContent = 'space-between';
-                    header.style.alignItems = 'center';
-                    header.style.borderBottom = '1px solid #eee';
-                    header.style.paddingBottom = '0.25rem';
-
-                    var badge = document.createElement('span');
-                    badge.textContent = 'Split Section Preview';
-                    badge.style.fontSize = '0.75rem';
-                    badge.style.fontWeight = 'bold';
-                    badge.style.background = 'var(--seismo-accent, #FFFFC5)';
-                    badge.style.border = '1px solid black';
-                    badge.style.padding = '1px 6px';
-                    header.appendChild(badge);
-
-                    card.appendChild(header);
-
-                    var title = document.createElement('h4');
-                    title.textContent = story.title || '(No Title)';
-                    title.style.margin = '0';
-                    title.style.fontSize = '1rem';
-                    title.style.fontWeight = 'bold';
-                    card.appendChild(title);
-
-                    var body = document.createElement('div');
-                    body.textContent = story.text_body || '';
-                    body.style.fontSize = '0.85rem';
-                    body.style.color = '#333';
-                    body.style.lineHeight = '1.4';
-                    card.appendChild(body);
-
-                    if (story.link) {
-                        var link = document.createElement('a');
-                        link.href = story.link;
-                        link.target = '_blank';
-                        link.textContent = 'Read Link →';
-                        link.style.fontSize = '0.8rem';
-                        link.style.fontWeight = 'bold';
-                        link.style.color = 'black';
-                        link.style.textDecoration = 'underline';
-                        link.style.alignSelf = 'flex-start';
-                        card.appendChild(link);
-                    }
-
-                    container.appendChild(card);
-                });
-                previewSection.style.display = 'block';
-            } else {
-                var empty = document.createElement('div');
-                empty.textContent = 'No split stories generated by the config rules.';
-                empty.style.padding = '1rem';
-                empty.style.color = '#888';
-                empty.style.fontStyle = 'italic';
-                container.appendChild(empty);
-                previewSection.style.display = 'block';
-            }
-
-            resultsPanel.style.display = 'block';
+            applySplitAnalysisResponse(data);
             btn.disabled = false;
         })
         .catch(function(err) {
             status.style.color = 'red';
             status.textContent = 'Error: ' + err.message;
             btn.disabled = false;
+        });
+    }
+
+    function runAiSplitRefine() {
+        if (!splitSubscriptionId) return;
+
+        var refineBtn = document.getElementById('btn-ai-split-refine');
+        var analyzeBtn = document.getElementById('btn-ai-split-analyze');
+        var status = document.getElementById('ai-split-status');
+        var textarea = document.getElementById('split_config_json');
+        var feedback = collectSplitFeedback();
+        var noiseMarked = feedback.blocks.filter(function(b) { return b.verdict === 'noise'; }).length;
+
+        if (noiseMarked === 0) {
+            status.style.color = '#b45309';
+            status.textContent = 'Mark at least one block as noise first.';
+            return;
+        }
+
+        refineBtn.disabled = true;
+        if (analyzeBtn) analyzeBtn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Refining rules with Gemini (excluding ' + noiseMarked + ' noise block(s))...';
+
+        var formData = new FormData();
+        formData.append('id', splitSubscriptionId);
+        formData.append('refine', '1');
+        formData.append('digest_split_config', textarea.value);
+        formData.append('feedback', JSON.stringify(feedback));
+        formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
+
+        fetch('<?= e($basePath) ?>/index.php?action=<?= e($mailModule->analyzeSplittingAction) ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(parseJsonFetchResponse)
+        .then(function(data) {
+            applySplitAnalysisResponse(data);
+            refineBtn.disabled = false;
+            if (analyzeBtn) analyzeBtn.disabled = false;
+        })
+        .catch(function(err) {
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
+            refineBtn.disabled = false;
+            if (analyzeBtn) analyzeBtn.disabled = false;
+            updateSplitRefineButton();
         });
     }
     </script>

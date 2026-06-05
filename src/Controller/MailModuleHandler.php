@@ -314,6 +314,8 @@ final class MailModuleHandler
                 $samples[] = [
                     'subject' => (string)($email['subject'] ?? ''),
                     'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                    'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                    'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
                 ];
             }
 
@@ -391,41 +393,39 @@ final class MailModuleHandler
                 exit;
             }
 
-            $samples = [];
-            foreach ($emails as $email) {
-                $samples[] = [
-                    'subject' => (string)($email['subject'] ?? ''),
-                    'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
-                    'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
-                    'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
-                ];
-            }
-
+            $samples = $this->buildSplitAnalysisSamples($emails);
             $configRepo = new SystemConfigRepository($pdo);
             $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
-            $digestSplitConfig = $generator->generateSplitConfig($samples);
 
-            $previewStories = [];
-            if ($digestSplitConfig !== null) {
-                $proposedConfig = json_decode($digestSplitConfig, true);
-                if (is_array($proposedConfig)) {
-                    $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
-                    // Split the first email for previewing
-                    $firstEmail = $emails[0];
-                    $previewStories = $splitter->split(
-                        (string)($firstEmail['html_body'] ?? $firstEmail['body_html'] ?? ''),
-                        (string)($firstEmail['text_body'] ?? $firstEmail['body_text'] ?? ''),
-                        $proposedConfig
-                    );
+            $isRefine = !empty($_POST['refine']);
+            if ($isRefine) {
+                $feedbackRaw = (string)($_POST['feedback'] ?? '');
+                $configRaw = (string)($_POST['digest_split_config'] ?? '');
+                $feedback = json_decode($feedbackRaw, true);
+                $currentConfig = json_decode($configRaw, true);
+                if (!is_array($feedback) || !is_array($currentConfig)) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Invalid refine payload — feedback and digest_split_config must be JSON.']);
+                    exit;
                 }
+
+                $normalized = \Seismo\Core\Mail\DigestSplitConfigNormalizer::normalize($currentConfig);
+                if ($normalized === null) {
+                    http_response_code(400);
+                    echo json_encode(['error' => 'Current digest_split_config is invalid. Run initial analysis first.']);
+                    exit;
+                }
+
+                $result = $generator->refineSplitConfig($samples, $normalized, $feedback);
+            } else {
+                $result = $generator->generateSplitConfig($samples);
             }
 
-            echo json_encode([
-                'success' => true,
-                'digest_split_config' => $digestSplitConfig,
-                'preview_stories' => $previewStories,
-                'samples' => $samples
-            ]);
+            echo json_encode($this->buildSplitAnalysisResponse($result, $emails, $samples, $isRefine));
+            exit;
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['error' => $e->getMessage()]);
             exit;
         } catch (\Throwable $e) {
             error_log('Seismo analyzeSplitting failed: ' . $e->getMessage());
@@ -433,6 +433,64 @@ final class MailModuleHandler
             echo json_encode(['error' => $e->getMessage()]);
             exit;
         }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $emails
+     * @return list<array{subject: string, body: string, text_body: string, html_body: string}>
+     */
+    private function buildSplitAnalysisSamples(array $emails): array
+    {
+        $samples = [];
+        foreach ($emails as $email) {
+            $samples[] = [
+                'subject' => (string)($email['subject'] ?? ''),
+                'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
+            ];
+        }
+
+        return $samples;
+    }
+
+    /**
+     * @param array{
+     *     digest_split_config: ?string,
+     *     analysis: ?array<string, mixed>,
+     *     verification: array<string, mixed>
+     * } $result
+     * @param list<array<string, mixed>> $emails
+     * @param list<array{subject: string, body: string, text_body: string, html_body: string}> $samples
+     * @return array<string, mixed>
+     */
+    private function buildSplitAnalysisResponse(array $result, array $emails, array $samples, bool $refined): array
+    {
+        $digestSplitConfig = $result['digest_split_config'];
+        $previewStories = [];
+
+        if ($digestSplitConfig !== null) {
+            $proposedConfig = json_decode($digestSplitConfig, true);
+            if (is_array($proposedConfig)) {
+                $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
+                $firstEmail = $emails[0];
+                $previewStories = $splitter->split(
+                    (string)($firstEmail['html_body'] ?? $firstEmail['body_html'] ?? ''),
+                    (string)($firstEmail['text_body'] ?? $firstEmail['body_text'] ?? ''),
+                    $proposedConfig
+                );
+            }
+        }
+
+        return [
+            'success' => true,
+            'refined' => $refined,
+            'digest_split_config' => $digestSplitConfig,
+            'analysis' => $result['analysis'],
+            'verification' => $result['verification'],
+            'preview_stories' => $previewStories,
+            'samples' => $samples,
+        ];
     }
 
     public function deleteSubscription(): void

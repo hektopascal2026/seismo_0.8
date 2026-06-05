@@ -87,4 +87,32 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertSame('Second Article', $stories[1]['title']);
         self::assertSame('https://example.com/2', $stories[1]['link']);
     }
+
+    public function testExcludeSelectorsSkipNoiseNodes(): void
+    {
+        $html = '
+            <html><body>
+                <div class="article"><h2>Story A</h2><div class="content">A</div></div>
+                <div class="article masthead"><h2>Newsletter Header</h2></div>
+                <div class="article"><h2>Story B</h2><div class="content">B</div></div>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => '.article',
+                'title_selector' => 'h2',
+                'body_selector' => '.content',
+                'exclude_selectors' => ['.masthead'],
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(2, $stories);
+        self::assertSame('Story A', $stories[0]['title']);
+        self::assertSame('Story B', $stories[1]['title']);
+    }
 }

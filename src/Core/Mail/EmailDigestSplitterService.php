@@ -31,6 +31,9 @@ final class EmailDigestSplitterService
                 'link_selector' => $splitRules['link_selector'] ?? $splitRules['selector_link'] ?? '',
                 'body_selector' => $splitRules['body_selector'] ?? $splitRules['selector_body'] ?? '',
             ];
+            if (!empty($splitRules['exclude_selectors']) && is_array($splitRules['exclude_selectors'])) {
+                $normalizedRules['exclude_selectors'] = $splitRules['exclude_selectors'];
+            }
             return $this->splitByHtmlSelector($htmlBody, $normalizedRules);
         }
 
@@ -88,8 +91,17 @@ final class EmailDigestSplitterService
         $bodySelector = trim((string)($rules['body_selector'] ?? ''));
 
         $stories = [];
+        $excludeSelectors = $rules['exclude_selectors'] ?? [];
+        if (!is_array($excludeSelectors)) {
+            $excludeSelectors = [];
+        }
+
         foreach ($nodes as $node) {
             if (!$node instanceof DOMElement) {
+                continue;
+            }
+
+            if ($this->nodeMatchesExcludeSelector($node, $excludeSelectors)) {
                 continue;
             }
 
@@ -167,6 +179,64 @@ final class EmailDigestSplitterService
         }
 
         return $stories;
+    }
+
+    /**
+     * @param list<string> $excludeSelectors
+     */
+    private function nodeMatchesExcludeSelector(DOMElement $node, array $excludeSelectors): bool
+    {
+        foreach ($excludeSelectors as $selector) {
+            if ($this->elementMatchesSimpleSelector($node, trim((string)$selector))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function elementMatchesSimpleSelector(DOMElement $el, string $css): bool
+    {
+        if ($css === '') {
+            return false;
+        }
+
+        if (preg_match('/^([a-zA-Z0-9*-]*)\.([a-zA-Z0-9_-]+)$/', $css, $m)) {
+            $tag = $m[1];
+            $class = $m[2];
+            if ($tag !== '' && $tag !== '*' && strtolower($el->tagName) !== strtolower($tag)) {
+                return false;
+            }
+
+            return $this->elementHasClass($el, $class);
+        }
+
+        if (preg_match('/^([a-zA-Z0-9*-]*)#([a-zA-Z0-9_-]+)$/', $css, $m)) {
+            $tag = $m[1];
+            $id = $m[2];
+            if ($tag !== '' && $tag !== '*' && strtolower($el->tagName) !== strtolower($tag)) {
+                return false;
+            }
+
+            return $el->getAttribute('id') === $id;
+        }
+
+        if ($css[0] === '.') {
+            return $this->elementHasClass($el, substr($css, 1));
+        }
+
+        if ($css[0] === '#') {
+            return $el->getAttribute('id') === substr($css, 1);
+        }
+
+        return strtolower($el->tagName) === strtolower($css);
+    }
+
+    private function elementHasClass(DOMElement $el, string $class): bool
+    {
+        $classAttr = ' ' . preg_replace('/\s+/', ' ', trim($el->getAttribute('class'))) . ' ';
+
+        return str_contains($classAttr, ' ' . $class . ' ');
     }
 
     /**
