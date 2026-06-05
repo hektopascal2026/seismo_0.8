@@ -11,18 +11,29 @@ final class GeminiResearcherGenerationOptionsTest extends TestCase
     public function testFromPostDefaultsOff(): void
     {
         $options = GeminiResearcherGenerationOptions::fromPost([]);
-        self::assertFalse($options->tournamentMode);
+        self::assertSame(GeminiResearcherGenerationOptions::MODE_STANDARD, $options->selectionMode());
+        self::assertFalse($options->tournamentMode());
         self::assertFalse($options->proSelectionMode);
     }
 
-    public function testFromPostReadsCheckboxes(): void
+    public function testFromPostReadsSelectionModeAndProCheckbox(): void
     {
         $options = GeminiResearcherGenerationOptions::fromPost([
-            'tournament_mode'      => '1',
+            'selection_mode'     => 'relational',
             'pro_selection_mode' => '1',
         ]);
-        self::assertTrue($options->tournamentMode);
+        self::assertSame(GeminiResearcherGenerationOptions::MODE_RELATIONAL, $options->selectionMode());
+        self::assertTrue($options->tournamentMode());
         self::assertTrue($options->proSelectionMode);
+    }
+
+    public function testFromPostLegacyTournamentCheckbox(): void
+    {
+        $options = GeminiResearcherGenerationOptions::fromPost([
+            'tournament_mode' => '1',
+        ]);
+        self::assertSame(GeminiResearcherGenerationOptions::MODE_TOURNAMENT, $options->selectionMode());
+        self::assertTrue($options->tournamentMode());
     }
 
     public function testTournamentSurvivorsForBatchSize(): void

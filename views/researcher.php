@@ -309,22 +309,46 @@ $moduleOptions = [
  
                 <fieldset style="border: none; padding: 0; margin: 0 0 2rem 0;">
                     <legend style="font-weight: 700; font-size: 1rem; border-bottom: 0.125rem dashed #000000; width: 100%; padding-bottom: 0.25rem; margin-bottom: 1.25rem; color: #000000; text-transform: uppercase; letter-spacing: 0.02em;">Deep selection</legend>
- 
-                    <div class="admin-form-field" style="margin-bottom: 1.25rem;">
-                        <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
-                            <input type="checkbox" id="researcher_tournament_mode" name="tournament_mode" value="1">
-                            Tournament selection
-                        </label>
-                        <p class="admin-intro" style="margin:0 0 1rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Splits the list of items into smaller batches of about 35 items. The AI pre-screens each batch in parallel, then compiles a final shortlist for your summary. Highly recommended for large collections where a single pass might skip important details.
+
+                    <div class="admin-form-field" style="margin-bottom: 1rem;">
+                        <p class="admin-intro" style="margin:0 0 0.75rem; font-size:0.8125rem; opacity:0.85;">
+                            How pass 1 chooses entries before the briefing is written. Pro selection is independent (model choice).
                         </p>
- 
+
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none;">
+                            <input type="radio" name="selection_mode" value="standard" checked>
+                            <strong>Standard</strong> — one global selection pass (best for Swissmem-style body verification prompts).
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            Sends the full capped pool in a single pass. Keeps full entry text visible together — recommended for prompts that must verify company names in the article body.
+                        </p>
+
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none;">
+                            <input type="radio" name="selection_mode" value="tournament">
+                            <strong>Tournament</strong> — parallel batch prelims + final shortlist.
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            Splits the pool into batches of about 35 items, picks the top 3 per batch in parallel, then a championship pass. Includes a lightweight global title index. Recommended for large pools (100+).
+                        </p>
+
+                        <label style="display:block; margin-bottom:0.5rem; user-select:none;">
+                            <input type="radio" name="selection_mode" value="relational">
+                            <strong>Blind spot / cross-module</strong> — tournament + global index + asymmetry rules.
+                        </label>
+                        <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
+                            For prompts that find primary sources (Lex/Leg) with little or no echo in Media/Feeds. Every batch sees all titles/modules; pass 1 returns keys only to avoid truncation.
+                        </p>
+
+                        <p class="admin-intro" id="researcher-verification-hint" style="margin:0 0 0.75rem; font-size:0.8125rem; opacity:0.9; display:none; line-height:1.4;" hidden>
+                            Verification-style prompt detected — the pipeline will use <strong>verification-heavy</strong> selection (standard global pass, capped reasoning) even if Tournament or Blind spot is selected.
+                        </p>
+
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
                             <input type="checkbox" id="researcher_pro_selection_mode" name="pro_selection_mode" value="1">
                             Pro selection (Gemini 3.1)
                         </label>
                         <p class="admin-intro" style="margin:0 0 0 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Uses Google's most powerful reasoning model (Gemini Pro) to carefully choose the entries, while using the fast standard model (Gemini Flash) to write the summary. Excellent for complex legal filtering or finding subtle, hidden connections.
+                            Uses <code>gemini-3.1-pro-preview</code> for entry selection; briefing text still uses fast <code>gemini-3.5-flash</code>. Combines with any mode above.
                         </p>
                     </div>
                 </fieldset>
@@ -593,6 +617,48 @@ $moduleOptions = [
         initResearcherModuleToggles();
         initDisregardMagnituToggle();
 
+        function detectVerificationHeavyPrompt(text) {
+            var t = String(text || '').toLowerCase();
+            if (t === '') {
+                return false;
+            }
+            if (t.indexOf('verifikationskriterium') !== -1
+                || t.indexOf('zwingende verifikation') !== -1
+                || t.indexOf('zwei-stufiger filter') !== -1) {
+                return true;
+            }
+            if (t.indexOf('unter keinen umständen') !== -1
+                && (t.indexOf('im text erwähnt') !== -1 || t.indexOf('im eintrag') !== -1)) {
+                return true;
+            }
+            if (t.indexOf('swissmem monitor') !== -1 && t.indexOf('unternehmen') !== -1) {
+                return true;
+            }
+            return t.indexOf('verification') !== -1
+                && (t.indexOf('must mention') !== -1 || t.indexOf('in the text') !== -1);
+        }
+
+        function syncVerificationProfileHint() {
+            var hint = document.getElementById('researcher-verification-hint');
+            if (!hint || !promptTextarea) {
+                return;
+            }
+            var show = detectVerificationHeavyPrompt(promptTextarea.value);
+            hint.hidden = !show;
+            hint.style.display = show ? '' : 'none';
+        }
+
+        function initVerificationProfileHint() {
+            if (!promptTextarea) {
+                return;
+            }
+            promptTextarea.addEventListener('input', syncVerificationProfileHint);
+            promptTextarea.addEventListener('change', syncVerificationProfileHint);
+            syncVerificationProfileHint();
+        }
+
+        initVerificationProfileHint();
+
         var statusTimerIds = [];
         var STATUS_STEPS = [
             { id: 'send', label: 'Sending request to the server' },
@@ -836,8 +902,19 @@ $moduleOptions = [
             if (meta.summary_strategy) {
                 parts.push('sum: ' + String(meta.summary_strategy).replace(/_/g, ' '));
             }
-            if (meta.tournament_mode) {
+            if (meta.selection_profile) {
+                parts.push('profile ' + meta.selection_profile.replace(/_/g, ' '));
+            } else if (meta.tournament_mode) {
                 parts.push('tournament');
+            }
+            if (meta.selection_mode && meta.selection_mode !== 'standard') {
+                parts.push('mode ' + meta.selection_mode.replace(/_/g, ' '));
+            }
+            if (meta.verification_auto_detected) {
+                parts.push('verification auto');
+            }
+            if (meta.global_fingerprint) {
+                parts.push('fingerprint');
             }
             if (meta.pro_selection_mode) {
                 parts.push('Pro sel');
@@ -940,7 +1017,13 @@ $moduleOptions = [
                 return isNaN(v) ? '0' : v.toLocaleString();
             }
 
-            var pipelineLabel = est.pipeline === 'tournament' ? 'Tournament' : 'Standard';
+            var pipelineLabels = {
+                standard: 'Standard',
+                tournament: 'Tournament',
+                relational: 'Relational',
+                verification: 'Verification'
+            };
+            var pipelineLabel = pipelineLabels[est.pipeline] || (est.pipeline === 'tournament' ? 'Tournament' : 'Standard');
             var amount = document.createElement('p');
             amount.className = 'researcher-cost-estimate__amount';
             amount.textContent = 'Estimated cost: ' + String(est.estimated_usd_display) + ' USD';
@@ -1090,6 +1173,7 @@ $moduleOptions = [
             if (promptTextarea) {
                 promptTextarea.value = content;
             }
+            syncVerificationProfileHint();
             var def = savedPrompts.find(function(p) { return p.name === PROMPT_TAB_DEFAULT_NAME; });
             if (def) {
                 def.content = content;
@@ -1306,6 +1390,7 @@ $moduleOptions = [
             if (defaultPromptNoteEl) {
                 defaultPromptNoteEl.hidden = !onDefault;
             }
+            syncVerificationProfileHint();
         }
 
         function selectInstanceDefaultPrompt() {
@@ -1321,6 +1406,7 @@ $moduleOptions = [
             }
             syncPromptTextareaEditability();
             syncPromptSaveButtons();
+            syncVerificationProfileHint();
         }
 
         function selectLibraryPrompt(row) {
@@ -1331,6 +1417,7 @@ $moduleOptions = [
             setPromptLibraryIdForRow(row);
             syncPromptTextareaEditability();
             syncPromptSaveButtons();
+            syncVerificationProfileHint();
         }
 
         function setActivePromptTab(id) {

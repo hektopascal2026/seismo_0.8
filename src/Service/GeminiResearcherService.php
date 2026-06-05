@@ -55,6 +55,15 @@ ENTRIES_DATA:
 {markdownContext}
 CONTRACT;
 
+    private const RELATIONAL_NEGATIVE_SPACE_PROTOCOL = <<<'PROTOCOL'
+CRITICAL TRIAGE — BLIND SPOT / CROSS-MODULE (use GLOBAL POOL INDEX above):
+1. Build a "media footprint" from all items where module is media, feeds, or scraper (titles only in the fingerprint).
+2. Review primary regulatory sources (module lex or leg).
+3. Exclude legal/calendar rows whose topics clearly appear in the media footprint titles.
+4. Prioritize primary sources with high strategic impact and ZERO topic overlap with the media footprint.
+5. Put these hidden signals first in used_entry_keys when they match the USER PROMPT.
+PROTOCOL;
+
     private const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
 Entries are already chosen. Output plain Markdown only (no JSON wrapper).
@@ -171,10 +180,19 @@ CONTRACT;
 
     private int $usageApiCalls = 0;
 
-    /** @var array<string, array{prompt_tokens: int, output_tokens: int, api_calls: int}> */
+    /** @var array<string, array{prompt_tokens: int, output_tokens: int, api_calls: int, finish_reason?: string}> */
     private array $usageByPhase = [];
 
+    /** @var array<string, string> */
+    private array $lastFinishReasonByPhase = [];
+
     private GeminiResearcherGenerationOptions $generationOptions;
+
+    private GeminiResearcherSelectionProfile $selectionProfile;
+
+    private string $globalFingerprintXml = '';
+
+    private readonly GeminiResearcherSelectionProfileResolver $profileResolver;
 
     public function __construct(
         private readonly SystemConfigRepository $config,
@@ -182,6 +200,11 @@ CONTRACT;
         ?ResearcherGeminiContext $researcherContext = null,
     ) {
         $this->generationOptions = GeminiResearcherGenerationOptions::defaults();
+        $this->profileResolver   = new GeminiResearcherSelectionProfileResolver();
+        $this->selectionProfile  = new GeminiResearcherSelectionProfile(
+            id: GeminiResearcherSelectionProfile::STANDARD,
+            requestedMode: GeminiResearcherGenerationOptions::MODE_STANDARD,
+        );
         $this->researcherContext = $researcherContext ?? new ResearcherGeminiContext($config);
         $configured = trim((string)($config->get(self::CONFIG_KEY_MODEL) ?? ''));
         $model      = $configured !== '' ? $configured : self::DEFAULT_MODEL;
@@ -428,11 +451,26 @@ CONTRACT;
         ];
 
         $selectionModel = $this->selectionModel();
+        $this->selectionProfile = $this->profileResolver->resolve($this->generationOptions, $userSystemPrompt);
+        $this->globalFingerprintXml = '';
+        if ($this->selectionProfile->useGlobalFingerprint) {
+            $this->globalFingerprintXml = ResearcherGlobalFingerprint::buildXml(
+                $contextEntries,
+                new ResearcherEntryGatherer(),
+                $moduleSelection,
+            );
+        }
+
         $this->lastGenerationMeta = array_merge($this->lastGenerationMeta, [
             'model'                       => $this->model,
             'summary_model'               => $this->model,
             'selection_model'             => $selectionModel,
-            'tournament_mode'             => $this->generationOptions->tournamentMode,
+            'selection_mode'              => $this->generationOptions->selectionMode(),
+            'selection_profile'           => $this->selectionProfile->id,
+            'selection_profile_requested' => $this->selectionProfile->requestedMode,
+            'verification_auto_detected'  => $this->selectionProfile->verificationAutoDetected,
+            'global_fingerprint'          => $this->globalFingerprintXml !== '',
+            'tournament_mode'             => $this->generationOptions->tournamentMode(),
             'pro_selection_mode'          => $this->generationOptions->proSelectionMode,
             'pool_entry_count'            => $contextEntryCount,
             'item_count'                  => $itemCount,
@@ -569,7 +607,7 @@ CONTRACT;
             'selection_target'   => $selectionTarget,
         ]);
 
-        if ($this->generationOptions->tournamentMode && $poolCount >= 2) {
+        if ($this->selectionProfile->usesTournamentPipeline() && $poolCount >= 2) {
             $selectedKeys = $this->runTournamentSelectionPasses(
                 $userSystemPrompt,
                 $poolEntries,
@@ -653,7 +691,36 @@ CONTRACT;
             '{temporalContext}' => $this->temporalContextBlock(),
         ]);
 
-        return trim($userSystemPrompt) . "\n\n" . $envelope;
+        $suffix = $this->selectionInstructionSuffix();
+
+        return trim($userSystemPrompt) . "\n\n" . $envelope . $suffix;
+    }
+
+    private function selectionInstructionSuffix(): string
+    {
+        $parts = [];
+
+        if ($this->globalFingerprintXml !== '') {
+            $parts[] = 'GLOBAL POOL INDEX (all capped entries — titles/modules only; use for cross-batch and cross-module checks):'
+                . "\n" . $this->globalFingerprintXml;
+        }
+
+        if ($this->selectionProfile->useNegativeSpaceContract) {
+            $parts[] = self::RELATIONAL_NEGATIVE_SPACE_PROTOCOL;
+        }
+
+        if ($this->selectionProfile->keysOnlyJson) {
+            $parts[] = 'Return JSON with used_entry_keys ONLY. Do not emit selection_reasoning.';
+        } elseif ($this->selectionProfile->id === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
+            $parts[] = 'Return JSON with used_entries: array of objects {key, verification_rationale} '
+                . '(max 15 words per rationale). Do not emit selection_reasoning or a separate rationale block.';
+        } elseif ($this->selectionProfile->capSelectionReasoning) {
+            $parts[] = 'Optional selection_reasoning: max 15 words per selected ID. Emit used_entry_keys first.';
+        } else {
+            $parts[] = 'Emit used_entry_keys before any selection_reasoning text.';
+        }
+
+        return $parts === [] ? '' : "\n\n" . implode("\n\n", $parts);
     }
 
     /**
@@ -693,6 +760,8 @@ CONTRACT;
         int $itemCount,
         int $selectionTarget,
         bool $batchLocal,
+        bool $forceKeysOnlySchema = false,
+        bool $forceMinimalThinking = false,
     ): array {
         $systemText = $this->composeSelectionSystemInstruction(
             $userSystemPrompt,
@@ -713,7 +782,14 @@ CONTRACT;
         return [
             'systemInstruction' => ['parts' => [['text' => $systemText]]],
             'contents'          => [['role' => 'user', 'parts' => [['text' => $userText]]]],
-            'generationConfig'  => $this->selectionGenerationConfig($itemCount, $selectionTarget, true, $batchLocal),
+            'generationConfig'  => $this->selectionGenerationConfig(
+                $itemCount,
+                $selectionTarget,
+                true,
+                $batchLocal,
+                $forceKeysOnlySchema,
+                $forceMinimalThinking,
+            ),
         ];
     }
 
@@ -729,6 +805,8 @@ CONTRACT;
         string $apiKey,
         bool $batchLocal = false,
         bool $allowEmptyKeys = false,
+        bool $forceKeysOnlySchema = false,
+        bool $forceMinimalThinking = false,
     ): array {
         $payload  = $this->buildSelectionPayload(
             $userSystemPrompt,
@@ -736,6 +814,8 @@ CONTRACT;
             $itemCount,
             $selectionTarget,
             $batchLocal,
+            $forceKeysOnlySchema,
+            $forceMinimalThinking,
         );
         $response = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
 
@@ -771,7 +851,9 @@ CONTRACT;
         $this->mergeGenerationMeta([
             'tournament_selection'      => true,
             'batched_selection'         => true,
-            'selection_strategy'        => $batchCount > 1 ? 'tournament_parallel_batches' : 'tournament_batches',
+            'selection_strategy'        => $this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL
+                ? 'relational_tournament_parallel_batches'
+                : ($batchCount > 1 ? 'tournament_parallel_batches' : 'tournament_batches'),
             'selection_batches'         => $batchCount,
             'selection_batch_size'      => $batchSize,
             'selection_batch_survivors' => self::TOURNAMENT_SURVIVORS_PER_BATCH,
@@ -779,7 +861,7 @@ CONTRACT;
             'selection_championship'    => false,
         ]);
 
-        /** @var list<array{poolContext: string, selectionTarget: int, batchLocal: bool}> $jobs */
+        /** @var list<array{poolContext: string, selectionTarget: int, batchLocal: bool, entries: list<array<string, mixed>>}> $jobs */
         $jobs = [];
         foreach ($batches as $batch) {
             $batchContext = $this->buildEntryXmlContext($batch, $scoresByKey, $researcherMeta, $fallbackXml);
@@ -787,11 +869,20 @@ CONTRACT;
                 'poolContext'      => $batchContext,
                 'selectionTarget'  => self::tournamentSurvivorsForBatchSize(count($batch)),
                 'batchLocal'       => $batchCount > 1,
+                'entries'          => $batch,
             ];
         }
 
         $batchKeyLists = $batchCount > 1
-            ? $this->runSelectionPassesParallel($userSystemPrompt, $jobs, $itemCount, $apiKey)
+            ? $this->runSelectionPassesParallel(
+                $userSystemPrompt,
+                $jobs,
+                $itemCount,
+                $apiKey,
+                $scoresByKey,
+                $researcherMeta,
+                $fallbackXml,
+            )
             : [
                 $this->runSelectionPass(
                     $userSystemPrompt,
@@ -1149,7 +1240,8 @@ CONTRACT;
         int $effectiveCount,
         string $apiKey,
     ): GeminiResearcherResult {
-        $proactiveMin = $this->generationOptions->tournamentMode
+        $proactiveMin = $this->selectionProfile->usesTournamentPipeline()
+            || $this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL
             ? self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT
             : self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS;
 
@@ -1537,14 +1629,22 @@ CONTRACT;
             return 'MINIMAL';
         }
 
-        return $this->generationOptions->tournamentMode
+        return $this->generationOptions->tournamentMode()
             ? self::THINKING_LEVEL_SUMMARY
             : self::THINKING_LEVEL_SELECTION;
     }
 
     private function plannedSelectionStrategy(int $poolCount): string
     {
-        if ($this->generationOptions->tournamentMode && $poolCount >= 2) {
+        if ($this->selectionProfile->verificationAutoDetected) {
+            return 'verification_heavy_global';
+        }
+
+        if ($this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL && $poolCount >= 2) {
+            return 'relational_tournament_parallel_batches';
+        }
+
+        if ($this->selectionProfile->usesTournamentPipeline() && $poolCount >= 2) {
             return 'tournament_parallel_batches';
         }
 
@@ -1557,7 +1657,8 @@ CONTRACT;
 
     private function plannedSummaryStrategy(int $effectiveCount): string
     {
-        $proactiveMin = $this->generationOptions->tournamentMode
+        $proactiveMin = $this->selectionProfile->usesTournamentPipeline()
+            || $this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL
             ? self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT
             : self::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS;
 
@@ -1686,7 +1787,7 @@ CONTRACT;
             'responseMimeType' => 'application/json',
         ], 'selection', $itemCount, $selectionModel);
         if ($useStructuredSchema && self::usesGemini35Family($selectionModel)) {
-            $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount);
+            $config['responseSchema'] = $this->selectionResponseSchema($effectiveCount, $this->selectionProfile);
         }
 
         return $config;
@@ -1809,7 +1910,8 @@ CONTRACT;
         }
 
         $level = match ($phase) {
-            'selection' => $this->generationOptions->tournamentMode
+            'selection' => $this->selectionProfile->usesTournamentPipeline()
+                || $this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL
                 ? self::THINKING_LEVEL_SUMMARY
                 : self::THINKING_LEVEL_SELECTION,
             'summary'   => self::THINKING_LEVEL_SUMMARY,
@@ -1850,21 +1952,35 @@ CONTRACT;
     /**
      * @return array<string, mixed>
      */
-    private function selectionResponseSchema(int $selectionTarget): array
+    private function selectionResponseSchema(int $selectionTarget, GeminiResearcherSelectionProfile $profile): array
     {
+        $keysSchema = [
+            'type'        => 'ARRAY',
+            'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id>, researcher order.',
+            'items'       => ['type' => 'STRING'],
+            'minItems'    => 0,
+            'maxItems'    => $selectionTarget,
+        ];
+
+        if ($profile->keysOnlyJson || !$profile->includeSelectionReasoning) {
+            return [
+                'type'       => 'OBJECT',
+                'properties' => [
+                    'used_entry_keys' => $keysSchema,
+                ],
+                'required' => ['used_entry_keys'],
+            ];
+        }
+
         return [
             'type'       => 'OBJECT',
             'properties' => [
+                'used_entry_keys'     => $keysSchema,
                 'selection_reasoning' => [
                     'type'        => 'STRING',
-                    'description' => 'Brief step-by-step rationale: how USER PROMPT criteria map to chosen ENTRIES_DATA rows.',
-                ],
-                'used_entry_keys' => [
-                    'type'        => 'ARRAY',
-                    'description' => 'Up to ' . $selectionTarget . ' entry_type:entry_id values from ENTRIES_DATA <id> that satisfy the user prompt, researcher order.',
-                    'items'       => ['type' => 'STRING'],
-                    'minItems'    => 0,
-                    'maxItems'    => $selectionTarget,
+                    'description' => $profile->capSelectionReasoning
+                        ? 'Optional; max 15 words per selected ID.'
+                        : 'Brief rationale after used_entry_keys.',
                 ],
             ],
             'required' => ['used_entry_keys'],

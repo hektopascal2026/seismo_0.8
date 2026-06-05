@@ -54,7 +54,7 @@ final class GeminiResearcherCostEstimateTest extends TestCase
                     'api_calls'     => 6,
                 ],
             ],
-            new GeminiResearcherGenerationOptions(tournamentMode: true),
+            new GeminiResearcherGenerationOptions(selectionMode: GeminiResearcherGenerationOptions::MODE_TOURNAMENT),
             ['pool_entry_count' => 150, 'item_count' => 5, 'selection_target' => 5],
         );
 

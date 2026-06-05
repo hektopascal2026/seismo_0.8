@@ -30,7 +30,7 @@ final class GeminiResearcherGenerationMetaTest extends TestCase
 
     public function testNormalizeTournamentMode(): void
     {
-        $options = new GeminiResearcherGenerationOptions(tournamentMode: true);
+        $options = new GeminiResearcherGenerationOptions(selectionMode: GeminiResearcherGenerationOptions::MODE_TOURNAMENT);
         $meta    = GeminiResearcherGenerationMeta::normalize(
             [
                 'tournament_selection' => true,
@@ -43,6 +43,7 @@ final class GeminiResearcherGenerationMetaTest extends TestCase
         );
 
         self::assertSame('tournament_parallel_batches', $meta['selection_strategy']);
+        self::assertSame(GeminiResearcherGenerationOptions::MODE_TOURNAMENT, $meta['selection_mode']);
         self::assertTrue($meta['tournament_mode']);
         self::assertSame(2, $meta['selection_keys_count']);
         self::assertStringContainsString('tournament', $meta['meta_summary_line']);
@@ -70,7 +71,7 @@ final class GeminiResearcherGenerationMetaTest extends TestCase
     {
         $meta = GeminiResearcherGenerationMeta::normalize(
             ['generation_failed' => true],
-            new GeminiResearcherGenerationOptions(tournamentMode: true),
+            new GeminiResearcherGenerationOptions(selectionMode: GeminiResearcherGenerationOptions::MODE_TOURNAMENT),
             ['pool_entry_count' => 150, 'item_count' => 5, 'selection_target' => 5],
         );
 

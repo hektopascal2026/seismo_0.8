@@ -1369,10 +1369,11 @@ PROMPT;
         ?ResearcherSourceSelection $selection,
     ): array {
         $meta = [
-            'generation_failed'  => true,
-            'tournament_mode'    => $generationOptions->tournamentMode,
-            'pro_selection_mode' => $generationOptions->proSelectionMode,
-            'item_count'         => $itemCount,
+            'generation_failed'    => true,
+            'selection_mode'       => $generationOptions->selectionMode(),
+            'tournament_mode'      => $generationOptions->tournamentMode(),
+            'pro_selection_mode'   => $generationOptions->proSelectionMode,
+            'item_count'           => $itemCount,
         ];
 
         if ($gathered !== null) {

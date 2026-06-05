@@ -30,6 +30,7 @@ final class GeminiResearcherGenerationMeta
 
         $selectionStrategy = self::inferSelectionStrategy($meta, $options, $poolCount);
         $summaryStrategy   = self::inferSummaryStrategy($meta, $options, $itemCount);
+        $selectionProfile  = self::inferSelectionProfile($meta, $options);
 
         $selectionModel = trim((string)($meta['selection_model'] ?? $meta['model'] ?? ''));
         $summaryModel   = trim((string)($meta['summary_model'] ?? $meta['model'] ?? ''));
@@ -37,7 +38,11 @@ final class GeminiResearcherGenerationMeta
         $defaults = [
             'generation_meta_version'   => self::META_VERSION,
             'pipeline'                  => 'two_pass',
-            'tournament_mode'           => $options->tournamentMode,
+            'selection_mode'            => $options->selectionMode(),
+            'selection_profile'         => $selectionProfile,
+            'verification_auto_detected'  => (bool)($meta['verification_auto_detected'] ?? false),
+            'global_fingerprint'          => (bool)($meta['global_fingerprint'] ?? false),
+            'tournament_mode'           => $options->tournamentMode(),
             'pro_selection_mode'        => $options->proSelectionMode,
             'pool_entry_count'          => $poolCount,
             'item_count'                => $itemCount,
@@ -117,7 +122,7 @@ final class GeminiResearcherGenerationMeta
         $proOutput   = (int)($usage['pro_output_tokens'] ?? 0);
 
         $usd = GeminiResearcherFlashPricing::estimateStandardUsd($flashPrompt, $flashOutput);
-        $pipelineLabel = !empty($meta['tournament_mode']) ? 'tournament' : 'standard';
+        $pipelineLabel = self::costEstimatePipelineLabel($meta);
 
         $estimate = [
             'pipeline'              => $pipelineLabel,
@@ -183,6 +188,15 @@ final class GeminiResearcherGenerationMeta
             $parts[] = 'sum: ' . self::humanizeStrategy((string)$meta['summary_strategy']);
         }
 
+        if (!empty($meta['selection_profile']) && $meta['selection_profile'] !== GeminiResearcherSelectionProfile::STANDARD) {
+            $parts[] = 'profile ' . self::humanizeStrategy((string)$meta['selection_profile']);
+        }
+        if (!empty($meta['verification_auto_detected'])) {
+            $parts[] = 'verification auto';
+        }
+        if (!empty($meta['global_fingerprint'])) {
+            $parts[] = 'fingerprint';
+        }
         if (!empty($meta['tournament_mode'])) {
             $parts[] = 'tournament';
         }
@@ -211,12 +225,24 @@ final class GeminiResearcherGenerationMeta
             return $meta['selection_strategy'];
         }
 
-        if (!empty($meta['tournament_selection']) || ($options->tournamentMode && $poolCount >= 2)) {
-            if (!empty($meta['selection_parallel'])) {
-                return 'tournament_parallel_batches';
+        if (!empty($meta['tournament_selection'])
+            || str_starts_with((string)($meta['selection_strategy'] ?? ''), 'relational_tournament')
+            || ($options->tournamentMode() && $poolCount >= 2)) {
+            if (!empty($meta['selection_parallel'])
+                || str_contains((string)($meta['selection_strategy'] ?? ''), 'parallel')) {
+                return str_starts_with((string)($meta['selection_strategy'] ?? ''), 'relational_')
+                    ? 'relational_tournament_parallel_batches'
+                    : 'tournament_parallel_batches';
             }
 
-            return 'tournament_batches';
+            return str_starts_with((string)($meta['selection_strategy'] ?? ''), 'relational_')
+                ? 'relational_tournament_batches'
+                : 'tournament_batches';
+        }
+
+        if (!empty($meta['selection_profile'])
+            && $meta['selection_profile'] === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
+            return 'verification_heavy_global';
         }
 
         if (!empty($meta['skinny_global_selection'])) {
@@ -227,11 +253,50 @@ final class GeminiResearcherGenerationMeta
             return 'rate_limit_batched_selection';
         }
 
-        if ($options->tournamentMode) {
+        if ($options->tournamentMode()) {
             return 'tournament_batches';
         }
 
         return 'global_single_pass';
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    private static function inferSelectionProfile(
+        array $meta,
+        GeminiResearcherGenerationOptions $options,
+    ): string {
+        if (isset($meta['selection_profile'])
+            && is_string($meta['selection_profile'])
+            && $meta['selection_profile'] !== '') {
+            return $meta['selection_profile'];
+        }
+
+        if (!empty($meta['verification_auto_detected'])) {
+            return GeminiResearcherSelectionProfile::VERIFICATION_HEAVY;
+        }
+
+        return match ($options->selectionMode()) {
+            GeminiResearcherGenerationOptions::MODE_RELATIONAL => GeminiResearcherSelectionProfile::RELATIONAL,
+            GeminiResearcherGenerationOptions::MODE_TOURNAMENT => GeminiResearcherSelectionProfile::TOURNAMENT,
+            default                                            => GeminiResearcherSelectionProfile::STANDARD,
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    private static function costEstimatePipelineLabel(array $meta): string
+    {
+        $profile = (string)($meta['selection_profile'] ?? '');
+
+        return match ($profile) {
+            GeminiResearcherSelectionProfile::RELATIONAL         => 'relational',
+            GeminiResearcherSelectionProfile::VERIFICATION_HEAVY => 'verification',
+            GeminiResearcherSelectionProfile::TOURNAMENT       => 'tournament',
+            default                                            => !empty($meta['tournament_mode']) ? 'tournament' : 'standard',
+        };
     }
 
     /**
@@ -258,7 +323,7 @@ final class GeminiResearcherGenerationMeta
             return 'batched';
         }
 
-        $proactiveMin = $options->tournamentMode
+        $proactiveMin = $options->tournamentMode()
             ? GeminiResearcherService::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT
             : GeminiResearcherService::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS;
 
