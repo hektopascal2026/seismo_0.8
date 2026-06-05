@@ -231,6 +231,8 @@ final class MailModuleHandler
                 'strip_listing_boilerplate' => ((string)($_POST['strip_listing_boilerplate'] ?? '0')) === '1',
                 'body_processor'         => (string)($_POST['body_processor'] ?? ''),
                 'cleanup_config'         => (string)($_POST['cleanup_config'] ?? ''),
+                'subject_filter'         => (string)($_POST['subject_filter'] ?? ''),
+                'digest_split_config'    => (string)($_POST['digest_split_config'] ?? ''),
                 'unsubscribe_url'        => (string)($_POST['unsubscribe_url'] ?? ''),
                 'unsubscribe_mailto'     => (string)($_POST['unsubscribe_mailto'] ?? ''),
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',

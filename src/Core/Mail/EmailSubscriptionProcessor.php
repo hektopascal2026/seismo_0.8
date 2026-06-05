@@ -24,24 +24,8 @@ final class EmailSubscriptionProcessor
             return $row;
         }
 
-        // Find the best matching non-disabled, active subscription row
-        $bestRank = 0;
-        $bestRow  = null;
-        foreach ($subscriptionRows as $sub) {
-            if (!empty($sub['disabled']) || !empty($sub['auto_detected'])) {
-                continue;
-            }
-            $mt = (string)($sub['match_type'] ?? '');
-            $mv = (string)($sub['match_value'] ?? '');
-            if (!EmailSubscriptionRepository::matchesAddress($from, $mt, $mv)) {
-                continue;
-            }
-            $rank = $mt === 'email' ? 2 : 1;
-            if ($rank > $bestRank) {
-                $bestRank = $rank;
-                $bestRow  = $sub;
-            }
-        }
+        $subject = trim((string)($row['subject'] ?? ''));
+        $bestRow = EmailSubscriptionRepository::findBestMatchingSubscription($from, $subject, $subscriptionRows);
 
         if ($bestRow === null) {
             return $row;

@@ -103,6 +103,7 @@ final class EntryRepository
 
     /** Unified `emails` table (Slice 4 migration) — ordering preference. */
     private const SQL_EMAIL_VISIBLE = 'e.hidden = 0';
+    private const SQL_EMAIL_ROOT_VISIBLE = 'e.hidden = 0 AND e.parent_email_id IS NULL';
     private const EMAIL_DATE_COLUMNS = ['date_utc', 'date_received', 'created_at', 'date_sent'];
 
     /**
@@ -161,6 +162,7 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -205,6 +207,7 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -483,6 +486,7 @@ final class EntryRepository
 
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1087,6 +1091,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1180,7 +1185,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                   AND ' . $tagFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1202,7 +1207,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1219,7 +1224,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . self::SQL_EMAIL_VISIBLE . '
+            WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
 
@@ -1458,7 +1463,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                   AND ' . $tagFrag['sql'] . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1482,7 +1487,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1501,7 +1506,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . self::SQL_EMAIL_VISIBLE . '
+            WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
               AND ' . $where . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
@@ -1862,13 +1867,90 @@ final class EntryRepository
             if ($from === '') {
                 continue;
             }
-            $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail($from, $subs);
+            $subj = trim((string)($it['data']['subject'] ?? ''));
+            $ui = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail($from, $subs, $subj);
             if ($ui['display_name'] !== null && $ui['display_name'] !== '') {
                 $it['data']['subscription_display_name'] = $ui['display_name'];
             }
             $it['data']['subscription_module_scope'] = $ui['module_scope'];
             if (\Seismo\Core\Mail\EmailListingBoilerplatePolicy::shouldStrip($ui, $globalStripBoilerplate)) {
                 $it['data']['subscription_strip_listing_boilerplate'] = true;
+            }
+        }
+        unset($it);
+    }
+
+    /**
+     * Fetch child emails for any parent emails in the timeline and attach them.
+     */
+    private function attachEmailChildStories(array &$items): void
+    {
+        $parentIds = [];
+        foreach ($items as $it) {
+            if (($it['type'] ?? '') === 'email') {
+                $pid = (int)($it['entry_id'] ?? 0);
+                if ($pid > 0) {
+                    $parentIds[] = $pid;
+                }
+            }
+        }
+        if ($parentIds === []) {
+            return;
+        }
+
+        $ph = implode(',', array_fill(0, count($parentIds), '?'));
+        $t = entryTable('emails');
+        $sql = "SELECT id, parent_email_id, subject, derived_title, from_email, text_body, html_body, metadata
+                FROM {$t}
+                WHERE parent_email_id IN ({$ph}) AND hidden = 0
+                ORDER BY id ASC";
+        
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($parentIds);
+            $childRows = $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            error_log('EntryRepository attachEmailChildStories error: ' . $e->getMessage());
+            return;
+        }
+
+        $childrenByParent = [];
+        foreach ($childRows as $row) {
+            $pid = (int)$row['parent_email_id'];
+            $childrenByParent[$pid][] = $row;
+        }
+
+        $childIds = array_map(fn($row) => (int)$row['id'], $childRows);
+        $scoresByChild = [];
+        if ($childIds !== []) {
+            $phScores = implode(',', array_fill(0, count($childIds), '?'));
+            try {
+                $stmtScores = $this->pdo->prepare(
+                    "SELECT entry_id, relevance_score, predicted_label FROM entry_scores
+                     WHERE entry_type = 'email' AND entry_id IN ({$phScores}) AND score_source IN ('magnitu', 'recipe')"
+                );
+                $stmtScores->execute($childIds);
+                while ($sRow = $stmtScores->fetch()) {
+                    $scoresByChild[(int)$sRow['entry_id']] = $sRow;
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        foreach ($items as &$it) {
+            if (($it['type'] ?? '') === 'email') {
+                $pid = (int)($it['entry_id'] ?? 0);
+                if (isset($childrenByParent[$pid])) {
+                    $attachedChildren = [];
+                    foreach ($childrenByParent[$pid] as $child) {
+                        $childId = (int)$child['id'];
+                        $child['score'] = $scoresByChild[$childId] ?? null;
+                        $attachedChildren[] = $child;
+                    }
+                    $it['data']['child_stories'] = $attachedChildren;
+                } else {
+                    $it['data']['child_stories'] = [];
+                }
             }
         }
         unset($it);
@@ -1925,6 +2007,7 @@ final class EntryRepository
         $this->attachScores($items);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1947,6 +2030,7 @@ final class EntryRepository
         $this->attachScores($items);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -2064,7 +2148,7 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                   AND ' . $scopeFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
@@ -2138,7 +2222,7 @@ final class EntryRepository
                 FROM ' . $emailT . ' e
                 LEFT JOIN ' . $st . ' st
                   ON st.from_email = e.from_email AND st.removed_at IS NULL
-                WHERE ' . self::SQL_EMAIL_VISIBLE . '
+                WHERE ' . self::SQL_EMAIL_ROOT_VISIBLE . '
                   AND ' . $whereSql . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;

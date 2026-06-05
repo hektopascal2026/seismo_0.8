@@ -207,6 +207,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <div class="admin-form-field">
                     <label>Display name <input type="text" name="display_name" class="search-input" style="width:100%;" value="<?= e((string)($editRow['display_name'] ?? '')) ?>"></label>
                 </div>
+                <div class="admin-form-field">
+                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Digest Split Config (JSON)
+                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                    </label>
+                </div>
                 <?php
                 $categoryValue = (string)($editRow['category'] ?? '');
                 $datalistId = 'mail-category-suggestions';
@@ -311,6 +319,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
                             <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
+                            <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
+                            <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
@@ -348,6 +358,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 </div>
                 <div class="admin-form-field">
                     <label>Display name <input type="text" name="display_name" class="search-input" style="width:100%;" value="<?= e((string)($editRow['display_name'] ?? '')) ?>"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
+                </div>
+                <div class="admin-form-field">
+                    <label>Digest Split Config (JSON)
+                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                    </label>
                 </div>
                 <?php
                 $categoryValue = (string)($editRow['category'] ?? '');

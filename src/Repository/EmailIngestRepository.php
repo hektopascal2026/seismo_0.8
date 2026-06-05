@@ -226,6 +226,26 @@ final class EmailIngestRepository
                 $this->pdo->exec('SAVEPOINT ' . $savepoint);
                 try {
                     $stmt->execute($bindRow($row));
+
+                    $parentId = (int)$this->pdo->lastInsertId();
+                    if ($parentId === 0) {
+                        $parentId = $this->findEmailId($row);
+                    }
+
+                    if ($parentId > 0) {
+                        $sub = \Seismo\Repository\EmailSubscriptionRepository::findBestMatchingSubscription(
+                            (string)($row['from_email'] ?? ''),
+                            (string)($row['subject'] ?? ''),
+                            $subs
+                        );
+                        if ($sub !== null && !empty($sub['digest_split_config'])) {
+                            $cfg = json_decode((string)$sub['digest_split_config'], true);
+                            if (is_array($cfg) && !empty($cfg['is_digest'])) {
+                                $this->splitAndIngestStories($parentId, $row, $cfg);
+                            }
+                        }
+                    }
+
                     $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
                     ++$n;
                 } catch (\Throwable $e) {
@@ -587,7 +607,7 @@ final class EmailIngestRepository
             }
             $stmt = $this->pdo->prepare(
                 'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
-                 FROM ' . $t . ' WHERE LOWER(from_email) = ? ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
+                 FROM ' . $t . ' WHERE LOWER(from_email) = ? AND parent_email_id IS NULL ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
             $stmt->execute([$param]);
         } elseif ($matchType === 'domain') {
@@ -598,7 +618,7 @@ final class EmailIngestRepository
             $stmt = $this->pdo->prepare(
                 'SELECT id, subject, derived_title, from_email, text_body, body_text, html_body, body_html, metadata
                  FROM ' . $t . '
-                 WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . '
+                 WHERE ' . EmailSubscriptionRepository::sqlDomainHostMatch('from_email') . ' AND parent_email_id IS NULL
                  ORDER BY id DESC LIMIT ' . $limit . ' OFFSET ' . $offset
             );
             $stmt->execute([$domain, $domain]);
@@ -642,5 +662,87 @@ final class EmailIngestRepository
             $derivedTitle,
             $emailId,
         ]);
+    }
+
+    private function findEmailId(array $row): int
+    {
+        $t = entryTable('emails');
+        if (!empty($row['imap_uid'])) {
+            $stmt = $this->pdo->prepare("SELECT id FROM {$t} WHERE imap_uid = ? LIMIT 1");
+            $stmt->execute([(int)$row['imap_uid']]);
+            return (int)$stmt->fetchColumn();
+        }
+        if (!empty($row['gmail_message_id'])) {
+            $stmt = $this->pdo->prepare("SELECT id FROM {$t} WHERE gmail_message_id = ? LIMIT 1");
+            $stmt->execute([$row['gmail_message_id']]);
+            return (int)$stmt->fetchColumn();
+        }
+        if (!empty($row['message_id'])) {
+            $stmt = $this->pdo->prepare("SELECT id FROM {$t} WHERE message_id = ? LIMIT 1");
+            $stmt->execute([$row['message_id']]);
+            return (int)$stmt->fetchColumn();
+        }
+        return 0;
+    }
+
+    public function splitAndIngestStories(int $parentId, array $parentRow, array $cfg): void
+    {
+        $t = entryTable('emails');
+        // Delete existing child entries to ensure clean idempotency
+        $stmtDel = $this->pdo->prepare("DELETE FROM {$t} WHERE parent_email_id = ?");
+        $stmtDel->execute([$parentId]);
+
+        $html = (string)($parentRow['html_body'] ?? $parentRow['body_html'] ?? '');
+        $text = (string)($parentRow['text_body'] ?? $parentRow['body_text'] ?? '');
+
+        $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
+        $stories = $splitter->split($html, $text, $cfg);
+        if ($stories === []) {
+            return;
+        }
+
+        $sql = "INSERT INTO {$t} (
+            imap_uid, gmail_message_id, message_id, parent_email_id, from_addr, to_addr, cc_addr,
+            subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
+            body_text, body_html, text_body, html_body, metadata, hidden
+        ) VALUES (
+            NULL, NULL, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, 0
+        )";
+
+        $stmtIns = $this->pdo->prepare($sql);
+
+        foreach ($stories as $index => $story) {
+            $childMsgId = null;
+            if (!empty($parentRow['message_id'])) {
+                $childMsgId = $parentRow['message_id'] . '_story_' . $index;
+            }
+
+            $meta = null;
+            if ($story['link'] !== null) {
+                $meta = json_encode(['web_view_url' => $story['link']]);
+            }
+
+            $stmtIns->execute([
+                $childMsgId,
+                $parentId,
+                $parentRow['from_addr'] ?? null,
+                $parentRow['to_addr'] ?? null,
+                $parentRow['cc_addr'] ?? null,
+                $story['title'], // subject
+                $story['title'], // derived_title
+                $parentRow['from_email'] ?? null,
+                $parentRow['from_name'] ?? null,
+                $parentRow['date_utc'] ?? null,
+                $parentRow['date_received'] ?? null,
+                $parentRow['date_sent'] ?? null,
+                $story['text_body'], // body_text
+                $story['html_body'], // body_html
+                $story['text_body'], // text_body
+                $story['html_body'], // html_body
+                $meta
+            ]);
+        }
     }
 }

@@ -109,6 +109,23 @@ foreach ($registry as $sat) {
         continue;
     }
 
+    try {
+        $scoresOrphans = (new \Seismo\Repository\EntryScoreRepository($deskPdo))->pruneOrphans();
+        $favsOrphans = (new \Seismo\Repository\EntryFavouriteRepository($deskPdo))->pruneOrphans();
+        $labelsOrphans = (new \Seismo\Repository\MagnituLabelRepository($deskPdo))->pruneOrphans();
+        if ($scoresOrphans > 0 || $favsOrphans > 0 || $labelsOrphans > 0) {
+            $log(sprintf(
+                "[seismo] desk %s: pruned orphans (scores: %d, favourites: %d, labels: %d)\n",
+                $slug,
+                $scoresOrphans,
+                $favsOrphans,
+                $labelsOrphans
+            ));
+        }
+    } catch (\Throwable $e) {
+        $log("[seismo] desk {$slug}: pruning orphans failed — " . $e->getMessage() . "\n", true);
+    }
+
     if ($result === null) {
         $log("[seismo] desk {$slug} ({$scoresDb}): no recipe_json — skipped\n");
         continue;

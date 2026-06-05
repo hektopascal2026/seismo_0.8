@@ -168,4 +168,46 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         self::assertSame('News Service Bund', $ui['display_name']);
         self::assertTrue($ui['strip_listing_boilerplate']);
     }
+
+    public function testSubjectBasedRouting(): void
+    {
+        $rows = [
+            [
+                'match_type'    => 'domain',
+                'match_value'   => 'nzz.ch',
+                'display_name'  => 'NZZ am Morgen',
+                'subject_filter'=> 'am Morgen',
+                'disabled'      => 0,
+            ],
+            [
+                'match_type'    => 'domain',
+                'match_value'   => 'nzz.ch',
+                'display_name'  => 'NZZ Pro',
+                'subject_filter'=> '/\bpro\b/i',
+                'disabled'      => 0,
+            ],
+            [
+                'match_type'    => 'domain',
+                'match_value'   => 'nzz.ch',
+                'display_name'  => 'NZZ General',
+                'subject_filter'=> '',
+                'disabled'      => 0,
+            ],
+        ];
+
+        // 1. Matches "am Morgen"
+        $match = EmailSubscriptionRepository::findBestMatchingSubscription('newsletter@nzz.ch', 'NZZ am Morgen: Today\'s news', $rows);
+        self::assertNotNull($match);
+        self::assertSame('NZZ am Morgen', $match['display_name']);
+
+        // 2. Matches "Pro" via regex
+        $match2 = EmailSubscriptionRepository::findBestMatchingSubscription('newsletter@nzz.ch', 'NZZ Pro: Industry updates', $rows);
+        self::assertNotNull($match2);
+        self::assertSame('NZZ Pro', $match2['display_name']);
+
+        // 3. Falls back to "NZZ General" since it has no subject filter
+        $match3 = EmailSubscriptionRepository::findBestMatchingSubscription('newsletter@nzz.ch', 'NZZ Feuilleton: Books of the week', $rows);
+        self::assertNotNull($match3);
+        self::assertSame('NZZ General', $match3['display_name']);
+    }
 }

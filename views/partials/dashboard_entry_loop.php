@@ -377,6 +377,9 @@ $entryLoopIndex                 = 0;
                                 <?php elseif ($legacySenderTag): ?>
                                     <span class="entry-tag <?= e($emailTagClass) ?>"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
+                                <?php if (!empty($email['parent_email_id'])): ?>
+                                    <span class="entry-tag" style="background-color: #e2f0d9; color: #385723; border: 1px solid #c8e6c9;">Story</span>
+                                <?php endif; ?>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
                             <h3 class="entry-title">
@@ -400,6 +403,59 @@ $entryLoopIndex                 = 0;
                                     <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
                                 <?php endif; ?>
                             </div>
+                            <?php if (!empty($email['child_stories'])): ?>
+                                <!-- Grouped child stories list -->
+                                <div class="digest-child-stories" style="margin-top: 1rem; margin-bottom: 1rem; padding-left: 1rem; border-left: 3px solid var(--seismo-accent, #FFFFC5); display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <?php foreach ($email['child_stories'] as $child): ?>
+                                        <?php
+                                            $childScore = $child['score'] ?? null;
+                                            $childRelScore = $childScore ? (float)$childScore['relevance_score'] : null;
+                                            $childScoreBadgeClass = $childRelScore !== null ? \Seismo\Core\MagnituScoreBands::badgeCssClass($childRelScore) : '';
+                                            
+                                            $childTitle = trim((string)($child['derived_title'] ?? $child['subject'] ?? ''));
+                                            $childBody = (string)($child['text_body'] ?? $child['body_text'] ?? '');
+                                            if ($childBody === '') {
+                                                $childBody = strip_tags((string)($child['html_body'] ?? $child['body_html'] ?? ''));
+                                            }
+                                            
+                                            $childPreview = mb_substr($childBody, 0, 180);
+                                            if (mb_strlen($childBody) > 180) {
+                                                $childPreview .= '...';
+                                            }
+                                            
+                                            $childLink = null;
+                                            if (!empty($child['metadata'])) {
+                                                $childMeta = is_string($child['metadata']) ? json_decode($child['metadata'], true) : $child['metadata'];
+                                                if (!empty($childMeta['link'])) {
+                                                    $childLink = $childMeta['link'];
+                                                }
+                                            }
+                                        ?>
+                                        <div class="digest-child-card" style="background: rgba(0,0,0,0.02); padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+                                                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600;">
+                                                    <?php if ($childLink): ?>
+                                                        <a href="<?= htmlspecialchars($childLink) ?>" target="_blank" rel="noopener"><?= htmlspecialchars($childTitle) ?></a>
+                                                    <?php else: ?>
+                                                        <?= htmlspecialchars($childTitle) ?>
+                                                    <?php endif; ?>
+                                                </h4>
+                                                <?php if ($childRelScore !== null): ?>
+                                                    <span class="magnitu-badge <?= htmlspecialchars($childScoreBadgeClass) ?>" style="font-size: 0.75rem; padding: 2px 6px; font-weight: bold; border-radius: 3px;"><?= number_format($childRelScore * 100, 0) ?></span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div style="font-size: 0.85rem; color: #555; margin-top: 0.25rem; line-height: 1.4;">
+                                                <?= htmlspecialchars($childPreview) ?>
+                                            </div>
+                                            <?php if ($childLink): ?>
+                                                <div style="margin-top: 0.25rem;">
+                                                    <a href="<?= htmlspecialchars($childLink) ?>" target="_blank" rel="noopener" style="font-size: 0.8rem; text-decoration: underline; color: #666;">Read story &rarr;</a>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">

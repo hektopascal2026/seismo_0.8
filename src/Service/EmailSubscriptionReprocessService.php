@@ -94,6 +94,14 @@ final class EmailSubscriptionReprocessService
                     self::nullIfEmpty((string)($row['derived_title'] ?? '')),
                     isset($row['metadata']) && $row['metadata'] !== null ? (string)$row['metadata'] : null
                 );
+
+                if (!empty($sub['digest_split_config'])) {
+                    $cfg = json_decode((string)$sub['digest_split_config'], true);
+                    if (is_array($cfg) && !empty($cfg['is_digest'])) {
+                        $ingest->splitAndIngestStories((int)$row['id'], $row, $cfg);
+                    }
+                }
+
                 ++$total;
             }
 

@@ -92,51 +92,92 @@ final class EmailSubscriptionRepository
     /**
      * Inbox card flags from the best matching non-disabled, confirmed row.
      *
+    /**
+     * Find the best matching non-disabled, active subscription row.
+     * Evaluates subject_filter to disambiguate multiple matches.
+     *
      * @param list<array<string, mixed>> $subscriptionRows
-     * @return array{display_name: ?string, strip_listing_boilerplate: bool}
+     * @return array<string, mixed>|null
      */
-    public static function resolveSubscriptionUiForFromEmail(string $fromEmail, array $subscriptionRows): array
+    public static function findBestMatchingSubscription(string $fromEmail, ?string $subject, array $subscriptionRows): ?array
     {
         $from = trim($fromEmail);
         if ($from === '') {
+            return null;
+        }
+
+        $bestScore = -1;
+        $bestRow   = null;
+
+        $subject = $subject !== null ? trim($subject) : '';
+
+        foreach ($subscriptionRows as $sub) {
+            if (!empty($sub['disabled']) || !empty($sub['auto_detected'])) {
+                continue;
+            }
+            $mt = (string)($sub['match_type'] ?? '');
+            $mv = (string)($sub['match_value'] ?? '');
+            if (!self::matchesAddress($from, $mt, $mv)) {
+                continue;
+            }
+
+            $score = 0;
+            if ($mt === 'email') {
+                $score += 20;
+            } else {
+                $score += 10;
+            }
+
+            $subjFilter = trim((string)($sub['subject_filter'] ?? ''));
+            if ($subjFilter !== '') {
+                $matched = false;
+                if (str_starts_with($subjFilter, '/') && (str_ends_with($subjFilter, '/') || preg_match('/\/[imsuy]*$/', $subjFilter))) {
+                    try {
+                        $matched = (bool)preg_match($subjFilter, $subject);
+                    } catch (\Throwable) {
+                        $matched = false;
+                    }
+                } else {
+                    $matched = ($subject !== '' && mb_stripos($subject, $subjFilter) !== false);
+                }
+
+                if ($matched) {
+                    $score += 5;
+                } else {
+                    continue; // Disqualified
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestRow   = $sub;
+            }
+        }
+
+        return $bestRow;
+    }
+
+    /**
+     * Inbox card flags from the best matching non-disabled, confirmed row.
+     *
+     * @param list<array<string, mixed>> $subscriptionRows
+     * @return array{display_name: ?string, strip_listing_boilerplate: bool}
+     */
+    public static function resolveSubscriptionUiForFromEmail(string $fromEmail, array $subscriptionRows, ?string $subject = null): array
+    {
+        $bestRow = self::findBestMatchingSubscription($fromEmail, $subject, $subscriptionRows);
+        if ($bestRow === null) {
             return [
                 'display_name'              => null,
                 'strip_listing_boilerplate' => false,
                 'module_scope'              => self::MODULE_MAIL,
             ];
         }
-        $bestRank  = 0;
-        $bestName  = null;
-        $bestStrip = false;
-        $bestScope = self::MODULE_MAIL;
-        foreach ($subscriptionRows as $row) {
-            if (!empty($row['disabled']) || !empty($row['auto_detected'])) {
-                continue;
-            }
-            $mt = (string)($row['match_type'] ?? '');
-            $mv = (string)($row['match_value'] ?? '');
-            if (!self::matchesAddress($from, $mt, $mv)) {
-                continue;
-            }
-            $rank = $mt === 'email' ? 2 : 1;
-            $name = trim((string)($row['display_name'] ?? ''));
-            if ($rank > $bestRank) {
-                $bestRank  = $rank;
-                $bestName  = $name !== '' ? $name : null;
-                $bestStrip = !empty($row['strip_listing_boilerplate']);
-                $bestScope = self::rowModuleScope($row);
-
-                continue;
-            }
-            if ($rank === $bestRank && ($bestName === null || $bestName === '') && $name !== '') {
-                $bestName = $name;
-            }
-        }
 
         return [
-            'display_name'              => $bestName,
-            'strip_listing_boilerplate' => $bestStrip,
-            'module_scope'              => $bestScope,
+            'display_name'              => trim((string)($bestRow['display_name'] ?? '')) ?: null,
+            'strip_listing_boilerplate' => !empty($bestRow['strip_listing_boilerplate']),
+            'module_scope'              => self::rowModuleScope($bestRow),
         ];
     }
 
@@ -155,9 +196,9 @@ final class EmailSubscriptionRepository
     /**
      * @param list<array<string, mixed>> $subscriptionRows
      */
-    public static function resolveDisplayNameForFromEmail(string $fromEmail, array $subscriptionRows): ?string
+    public static function resolveDisplayNameForFromEmail(string $fromEmail, array $subscriptionRows, ?string $subject = null): ?string
     {
-        return self::resolveSubscriptionUiForFromEmail($fromEmail, $subscriptionRows)['display_name'];
+        return self::resolveSubscriptionUiForFromEmail($fromEmail, $subscriptionRows, $subject)['display_name'];
     }
 
     /**
@@ -382,20 +423,23 @@ final class EmailSubscriptionRepository
         $autoDetected = !empty($data['auto_detected']) ? 1 : 0;
         $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
         $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
+        $subjectFilter = !empty($data['subject_filter']) ? trim((string)$data['subject_filter']) : null;
+        $digestSplitConfig = !empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null;
 
         $t   = entryTable('email_subscriptions');
         $moduleScope = self::normalizeModuleScope($data['module_scope'] ?? self::MODULE_MAIL);
 
         $sql = "INSERT INTO {$t} (
-            match_type, match_value, display_name, category, module_scope, disabled, show_in_magnitu, strip_listing_boilerplate,
-            body_processor, cleanup_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
+            match_type, match_value, display_name, subject_filter, category, module_scope, disabled, show_in_magnitu, strip_listing_boilerplate,
+            body_processor, cleanup_config, digest_split_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
             $matchValue,
             $displayName,
+            $subjectFilter,
             $data['category'] ?? null,
             $moduleScope,
             !empty($data['disabled']) ? 1 : 0,
@@ -403,6 +447,7 @@ final class EmailSubscriptionRepository
             $stripListing,
             $bodyProcessor,
             $cleanupConfig,
+            $digestSplitConfig,
             $autoDetected,
             $data['unsubscribe_url'] ?? null,
             $data['unsubscribe_mailto'] ?? null,
@@ -468,6 +513,12 @@ final class EmailSubscriptionRepository
         $cleanupConfig = array_key_exists('cleanup_config', $data)
             ? (!empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null)
             : ($existing['cleanup_config'] ?? null);
+        $subjectFilter = array_key_exists('subject_filter', $data)
+            ? (!empty($data['subject_filter']) ? trim((string)$data['subject_filter']) : null)
+            : ($existing['subject_filter'] ?? null);
+        $digestSplitConfig = array_key_exists('digest_split_config', $data)
+            ? (!empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null)
+            : ($existing['digest_split_config'] ?? null);
 
         $t   = entryTable('email_subscriptions');
         $moduleScope = array_key_exists('module_scope', $data)
@@ -478,6 +529,7 @@ final class EmailSubscriptionRepository
             match_type = ?,
             match_value = ?,
             display_name = ?,
+            subject_filter = ?,
             category = ?,
             module_scope = ?,
             disabled = ?,
@@ -485,6 +537,7 @@ final class EmailSubscriptionRepository
             strip_listing_boilerplate = ?,
             body_processor = ?,
             cleanup_config = ?,
+            digest_split_config = ?,
             auto_detected = 0,
             unsubscribe_url = ?,
             unsubscribe_mailto = ?,
@@ -495,6 +548,7 @@ final class EmailSubscriptionRepository
             $matchType,
             $matchValue,
             $displayName,
+            $subjectFilter,
             $data['category'] ?? $existing['category'],
             $moduleScope,
             $disabled,
@@ -502,6 +556,7 @@ final class EmailSubscriptionRepository
             $stripListing,
             $bodyProcessor,
             $cleanupConfig,
+            $digestSplitConfig,
             $data['unsubscribe_url'] ?? $existing['unsubscribe_url'],
             $data['unsubscribe_mailto'] ?? $existing['unsubscribe_mailto'],
             array_key_exists('unsubscribe_one_click', $data)
