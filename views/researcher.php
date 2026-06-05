@@ -340,7 +340,7 @@ $moduleOptions = [
                         </p>
 
                         <p class="admin-intro" id="researcher-verification-hint" style="margin:0 0 0.75rem; font-size:0.8125rem; opacity:0.9; display:none; line-height:1.4;" hidden>
-                            Verification-style prompt detected — the pipeline will use <strong>verification-heavy</strong> selection (standard global pass, capped reasoning) even if Tournament or Blind spot is selected.
+                            Verification-style prompt detected — strict body-text compliance rules will be <strong>appended</strong> to pass 1. Your selected Deep selection mode (Standard, Tournament, or Blind spot) is kept.
                         </p>
 
                         <label style="display:block; margin-bottom:0.5rem; user-select:none; font-weight:600;">
@@ -911,7 +911,7 @@ $moduleOptions = [
                 parts.push('mode ' + meta.selection_mode.replace(/_/g, ' '));
             }
             if (meta.verification_auto_detected) {
-                parts.push('verification auto');
+                parts.push('verification appendix');
             }
             if (meta.global_fingerprint) {
                 parts.push('fingerprint');
@@ -922,11 +922,11 @@ $moduleOptions = [
             if (meta.dual_model_selection && meta.selection_model) {
                 parts.push('sel model ' + meta.selection_model);
             }
-            if (meta.selection_keys_only_retry) {
-                parts.push('keys-only retry');
-            }
             if (meta.selection_batch_retries) {
                 parts.push('batch retries ' + meta.selection_batch_retries);
+            }
+            if (meta.selection_finish_reason) {
+                parts.push('sel finish ' + meta.selection_finish_reason);
             }
             if (meta.gemini_usage && meta.gemini_usage.by_phase) {
                 var selPhase = meta.gemini_usage.by_phase.selection;

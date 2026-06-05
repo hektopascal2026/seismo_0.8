@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Seismo\Service\GeminiResearcherGenerationOptions;
 use Seismo\Service\GeminiResearcherSelectionProfile;
 use Seismo\Service\GeminiResearcherSelectionProfileResolver;
+use Seismo\Service\GeminiResearcherService;
 
 final class GeminiResearcherSelectionProfileResolverTest extends TestCase
 {
@@ -26,6 +27,7 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
         self::assertSame(GeminiResearcherSelectionProfile::STANDARD, $profile->id);
         self::assertFalse($profile->usesTournamentPipeline());
         self::assertFalse($profile->useGlobalFingerprint);
+        self::assertFalse($profile->verificationAutoDetected);
     }
 
     public function testTournamentMode(): void
@@ -53,7 +55,7 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
         self::assertTrue($profile->keysOnlyJson);
     }
 
-    public function testVerificationHeavyOverridesTournament(): void
+    public function testVerificationAppendixPreservesTournamentMode(): void
     {
         $prompt = <<<'PROMPT'
         Swissmem Monitor — zwingende Verifikation: Unter keinen Umständen ein Unternehmen wählen,
@@ -65,9 +67,15 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
             $prompt,
         );
 
-        self::assertSame(GeminiResearcherSelectionProfile::VERIFICATION_HEAVY, $profile->id);
+        self::assertSame(GeminiResearcherSelectionProfile::TOURNAMENT, $profile->id);
         self::assertTrue($profile->verificationAutoDetected);
-        self::assertFalse($profile->usesTournamentPipeline());
-        self::assertTrue($profile->capSelectionReasoning);
+        self::assertTrue($profile->usesTournamentPipeline());
+        self::assertTrue($profile->keysOnlyJson);
+    }
+
+    public function testSummaryBatchConstantsRaised(): void
+    {
+        self::assertSame(8, GeminiResearcherService::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT);
+        self::assertSame(8, GeminiResearcherService::PROACTIVE_SUMMARY_BATCH_MIN_ITEMS);
     }
 }

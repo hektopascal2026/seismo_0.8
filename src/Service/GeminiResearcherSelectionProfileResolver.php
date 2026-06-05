@@ -13,26 +13,14 @@ final class GeminiResearcherSelectionProfileResolver
         GeminiResearcherGenerationOptions $options,
         string $systemPrompt,
     ): GeminiResearcherSelectionProfile {
-        $requested = $options->selectionMode();
-
-        if ($this->detectVerificationHeavyPrompt($systemPrompt)) {
-            return new GeminiResearcherSelectionProfile(
-                id: GeminiResearcherSelectionProfile::VERIFICATION_HEAVY,
-                requestedMode: $requested,
-                verificationAutoDetected: true,
-                useGlobalFingerprint: false,
-                useTournament: false,
-                useNegativeSpaceContract: false,
-                keysOnlyJson: false,
-                includeSelectionReasoning: true,
-                capSelectionReasoning: true,
-            );
-        }
+        $requested      = $options->selectionMode();
+        $verification   = $this->detectVerificationHeavyPrompt($systemPrompt);
 
         if ($requested === GeminiResearcherGenerationOptions::MODE_RELATIONAL) {
             return new GeminiResearcherSelectionProfile(
                 id: GeminiResearcherSelectionProfile::RELATIONAL,
                 requestedMode: $requested,
+                verificationAutoDetected: $verification,
                 useGlobalFingerprint: true,
                 useTournament: true,
                 useNegativeSpaceContract: true,
@@ -46,6 +34,7 @@ final class GeminiResearcherSelectionProfileResolver
             return new GeminiResearcherSelectionProfile(
                 id: GeminiResearcherSelectionProfile::TOURNAMENT,
                 requestedMode: $requested,
+                verificationAutoDetected: $verification,
                 useGlobalFingerprint: true,
                 useTournament: true,
                 useNegativeSpaceContract: false,
@@ -58,6 +47,7 @@ final class GeminiResearcherSelectionProfileResolver
         return new GeminiResearcherSelectionProfile(
             id: GeminiResearcherSelectionProfile::STANDARD,
             requestedMode: $requested,
+            verificationAutoDetected: $verification,
             useGlobalFingerprint: false,
             useTournament: false,
             useNegativeSpaceContract: false,

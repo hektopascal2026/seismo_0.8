@@ -64,6 +64,13 @@ CRITICAL TRIAGE — BLIND SPOT / CROSS-MODULE (use GLOBAL POOL INDEX above):
 5. Put these hidden signals first in used_entry_keys when they match the USER PROMPT.
 PROTOCOL;
 
+    private const VERIFICATION_COMPLIANCE_APPENDIX = <<<'APPENDIX'
+VERIFICATION COMPLIANCE (strict USER PROMPT guardrails — applies to every entry you select):
+- Never select an entry unless required company names, entities, or facts from the USER PROMPT appear in that entry's body text (not just the title).
+- Under no circumstances infer a match from metadata, jurisdiction, or topic similarity alone.
+- When verification is ambiguous, exclude the entry rather than include it.
+APPENDIX;
+
     private const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 SYSTEM DIRECTIVE — BRIEFING PROSE (PASS 2 OF 2):
 Entries are already chosen. Output plain Markdown only (no JSON wrapper).
@@ -121,13 +128,13 @@ CONTRACT;
     private const SUMMARY_FIXED_OVERHEAD_TOKENS = 1536;
 
     /** Pass-2 batched retry when a single call hits output limits. */
-    private const SUMMARY_BATCH_SIZE = 2;
+    private const SUMMARY_BATCH_SIZE = 5;
 
-    /** Skip monolithic pass 2 when this many entries are selected (batch size 2 from the start). */
+    /** Skip monolithic pass 2 when this many entries are selected. */
     public const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS = 8;
 
-    /** Tournament runs always use batched pass 2 (full entry bodies on few picks). */
-    public const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT = 3;
+    /** Same floor as standard — preserve cross-entry synthesis before chunking. */
+    public const PROACTIVE_SUMMARY_BATCH_MIN_ITEMS_TOURNAMENT = 8;
 
     private const SELECTION_OUTPUT_TOKENS_BASE = 128;
 
@@ -709,13 +716,15 @@ CONTRACT;
             $parts[] = self::RELATIONAL_NEGATIVE_SPACE_PROTOCOL;
         }
 
+        if ($this->selectionProfile->verificationAutoDetected) {
+            $parts[] = self::VERIFICATION_COMPLIANCE_APPENDIX;
+        }
+
         if ($this->selectionProfile->keysOnlyJson) {
             $parts[] = 'Return JSON with used_entry_keys ONLY. Do not emit selection_reasoning.';
-        } elseif ($this->selectionProfile->id === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
+        } elseif ($this->selectionProfile->verificationAutoDetected) {
             $parts[] = 'Return JSON with used_entries: array of objects {key, verification_rationale} '
                 . '(max 15 words per rationale). Do not emit selection_reasoning or a separate rationale block.';
-        } elseif ($this->selectionProfile->capSelectionReasoning) {
-            $parts[] = 'Optional selection_reasoning: max 15 words per selected ID. Emit used_entry_keys first.';
         } else {
             $parts[] = 'Emit used_entry_keys before any selection_reasoning text.';
         }
@@ -1792,10 +1801,6 @@ CONTRACT;
 
     private function plannedSelectionStrategy(int $poolCount): string
     {
-        if ($this->selectionProfile->verificationAutoDetected) {
-            return 'verification_heavy_global';
-        }
-
         if ($this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL && $poolCount >= 2) {
             return 'relational_tournament_parallel_batches';
         }
@@ -1974,16 +1979,6 @@ CONTRACT;
 
     /**
      * @param array<string, mixed> $payload
-     */
-    private function selectionPayloadHasSchema(array $payload): bool
-    {
-        $config = $payload['generationConfig'] ?? null;
-
-        return is_array($config) && isset($config['responseSchema']);
-    }
-
-    /**
-     * @param array<string, mixed> $payload
      * @return list<string>
      * @throws GeminiResearcherException
      */
@@ -1993,166 +1988,38 @@ CONTRACT;
         string $apiKey,
         bool $allowEmptyKeys,
     ): array {
-        $selectionTarget = $this->selectionTargetFromPayload($payload);
-
         try {
             $keys = $this->parseSelectionResponse($response, $allowEmptyKeys);
         } catch (GeminiResearcherException $e) {
             $finishReason = $this->lastFinishReasonForPhase('selection');
-            if ($this->shouldRetrySelectionWithKeysOnly($e, $finishReason, $payload)) {
-                return $this->retrySelectionPassKeysOnly($payload, $apiKey, $allowEmptyKeys, $selectionTarget);
-            }
+            error_log(
+                'GeminiResearcherService: selection pass failed'
+                . ($finishReason !== '' ? ' (finish: ' . $finishReason . ')' : '')
+                . ': ' . $e->getMessage()
+            );
+            $this->mergeGenerationMeta([
+                'selection_pass_failed' => true,
+                'selection_finish_reason' => $finishReason !== '' ? $finishReason : null,
+            ]);
 
             throw $e;
         }
 
-        if ($keys !== []) {
-            return $keys;
-        }
+        if ($keys === [] && !$allowEmptyKeys) {
+            $finishReason = $this->lastFinishReasonForPhase('selection');
+            error_log(
+                'GeminiResearcherService: selection pass returned no used_entry_keys'
+                . ($finishReason !== '' ? ' (finish: ' . $finishReason . ')' : '')
+            );
+            $this->mergeGenerationMeta([
+                'selection_pass_failed' => true,
+                'selection_finish_reason' => $finishReason !== '' ? $finishReason : null,
+            ]);
 
-        $finishReason = $this->lastFinishReasonForPhase('selection');
-
-        if (!$this->selectionPayloadHasSchema($payload)) {
-            if (!$allowEmptyKeys) {
-                throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
-            }
-
-            return [];
-        }
-
-        if ($this->shouldRetrySelectionWithKeysOnly(null, $finishReason, $payload)) {
-            return $this->retrySelectionPassKeysOnly($payload, $apiKey, $allowEmptyKeys, $selectionTarget);
-        }
-
-        if (!$allowEmptyKeys) {
             throw GeminiResearcherException::emptyResponse('Selection pass returned no used_entry_keys.');
         }
 
-        return [];
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     * @return list<string>
-     * @throws GeminiResearcherException
-     */
-    private function retrySelectionPassKeysOnly(
-        array $payload,
-        string $apiKey,
-        bool $allowEmptyKeys,
-        int $selectionTarget,
-    ): array {
-        error_log(
-            'GeminiResearcherService: selection truncation or empty keys; retrying with keys-only schema'
-        );
-        $this->mergeGenerationMeta(['selection_keys_only_retry' => true]);
-
-        $config = $payload['generationConfig'] ?? null;
-        if (!is_array($config)) {
-            $config = [];
-        }
-        $config['responseSchema'] = $this->selectionResponseSchemaKeysOnly($selectionTarget);
-        if (self::usesGemini35Family($this->selectionModel())) {
-            $config['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
-        }
-        $payload['generationConfig'] = $config;
-
-        $retryResponse = $this->postPayloadWithSchemaFallback($payload, $apiKey, 'selection');
-
-        try {
-            return $this->parseSelectionResponse($retryResponse, $allowEmptyKeys);
-        } catch (GeminiResearcherException $e) {
-            if (!$allowEmptyKeys) {
-                throw $e;
-            }
-
-            return [];
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function shouldRetrySelectionWithKeysOnly(
-        ?GeminiResearcherException $exception,
-        string $finishReason,
-        array $payload,
-    ): bool {
-        if (!$this->selectionPayloadHasSchema($payload) || $this->selectionPayloadIsKeysOnlySchema($payload)) {
-            return false;
-        }
-
-        if ($exception !== null && $exception->isOutputTruncated()) {
-            return true;
-        }
-
-        if ($this->isOutputTruncatedFinishReason($finishReason)) {
-            return true;
-        }
-
-        if ($exception !== null) {
-            $msg = strtolower($exception->getMessage());
-            if (str_contains($msg, 'json could not be parsed') && $finishReason !== 'STOP') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function selectionTargetFromPayload(array $payload): int
-    {
-        $config = $payload['generationConfig'] ?? null;
-        if (!is_array($config)) {
-            return 1;
-        }
-
-        $schema = $config['responseSchema'] ?? null;
-        if (!is_array($schema)) {
-            return 1;
-        }
-
-        $properties = $schema['properties'] ?? null;
-        if (!is_array($properties)) {
-            return 1;
-        }
-
-        foreach (['used_entry_keys', 'used_entries'] as $field) {
-            $prop = $properties[$field] ?? null;
-            if (is_array($prop) && isset($prop['maxItems'])) {
-                return max(1, (int)$prop['maxItems']);
-            }
-        }
-
-        return 1;
-    }
-
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private function selectionPayloadIsKeysOnlySchema(array $payload): bool
-    {
-        $config = $payload['generationConfig'] ?? null;
-        if (!is_array($config)) {
-            return false;
-        }
-
-        $schema = $config['responseSchema'] ?? null;
-        if (!is_array($schema)) {
-            return false;
-        }
-
-        $properties = $schema['properties'] ?? null;
-        if (!is_array($properties)) {
-            return false;
-        }
-
-        return isset($properties['used_entry_keys'])
-            && !isset($properties['used_entries'])
-            && !isset($properties['selection_reasoning']);
+        return $keys;
     }
 
     /**
@@ -2254,33 +2121,8 @@ CONTRACT;
             'maxItems'    => $selectionTarget,
         ];
 
-        if ($profile->id === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
-            return [
-                'type'       => 'OBJECT',
-                'properties' => [
-                    'used_entries' => [
-                        'type'        => 'ARRAY',
-                        'description' => 'Selected entries with inline verification rationale (max 15 words each).',
-                        'items'       => [
-                            'type'       => 'OBJECT',
-                            'properties' => [
-                                'key' => [
-                                    'type'        => 'STRING',
-                                    'description' => 'entry_type:entry_id from ENTRIES_DATA <id>.',
-                                ],
-                                'verification_rationale' => [
-                                    'type'        => 'STRING',
-                                    'description' => 'Max 15 words: why this entry passes USER PROMPT verification.',
-                                ],
-                            ],
-                            'required' => ['key'],
-                        ],
-                        'minItems' => 0,
-                        'maxItems' => $selectionTarget,
-                    ],
-                ],
-                'required' => ['used_entries'],
-            ];
+        if ($profile->verificationAutoDetected && !$profile->keysOnlyJson) {
+            return $this->selectionResponseSchemaVerificationInline($selectionTarget);
         }
 
         if ($profile->keysOnlyJson || !$profile->includeSelectionReasoning) {
@@ -2297,6 +2139,39 @@ CONTRACT;
                 ],
             ],
             'required' => ['used_entry_keys'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectionResponseSchemaVerificationInline(int $selectionTarget): array
+    {
+        return [
+            'type'       => 'OBJECT',
+            'properties' => [
+                'used_entries' => [
+                    'type'        => 'ARRAY',
+                    'description' => 'Selected entries with inline verification rationale (max 15 words each).',
+                    'items'       => [
+                        'type'       => 'OBJECT',
+                        'properties' => [
+                            'key' => [
+                                'type'        => 'STRING',
+                                'description' => 'entry_type:entry_id from ENTRIES_DATA <id>.',
+                            ],
+                            'verification_rationale' => [
+                                'type'        => 'STRING',
+                                'description' => 'Max 15 words: why this entry passes USER PROMPT verification.',
+                            ],
+                        ],
+                        'required' => ['key'],
+                    ],
+                    'minItems' => 0,
+                    'maxItems' => $selectionTarget,
+                ],
+            ],
+            'required' => ['used_entries'],
         ];
     }
 

@@ -192,7 +192,7 @@ final class GeminiResearcherGenerationMeta
             $parts[] = 'profile ' . self::humanizeStrategy((string)$meta['selection_profile']);
         }
         if (!empty($meta['verification_auto_detected'])) {
-            $parts[] = 'verification auto';
+            $parts[] = 'verification appendix';
         }
         if (!empty($meta['global_fingerprint'])) {
             $parts[] = 'fingerprint';
@@ -205,9 +205,6 @@ final class GeminiResearcherGenerationMeta
         }
         if (!empty($meta['dual_model_selection']) && !empty($meta['selection_model'])) {
             $parts[] = 'sel model ' . (string)$meta['selection_model'];
-        }
-        if (!empty($meta['selection_keys_only_retry'])) {
-            $parts[] = 'keys-only retry';
         }
         if (!empty($meta['generation_failed'])) {
             $parts[] = 'failed';
@@ -243,11 +240,6 @@ final class GeminiResearcherGenerationMeta
                 : 'tournament_batches';
         }
 
-        if (!empty($meta['selection_profile'])
-            && $meta['selection_profile'] === GeminiResearcherSelectionProfile::VERIFICATION_HEAVY) {
-            return 'verification_heavy_global';
-        }
-
         if (!empty($meta['skinny_global_selection'])) {
             return 'global_single_pass';
         }
@@ -276,10 +268,6 @@ final class GeminiResearcherGenerationMeta
             return $meta['selection_profile'];
         }
 
-        if (!empty($meta['verification_auto_detected'])) {
-            return GeminiResearcherSelectionProfile::VERIFICATION_HEAVY;
-        }
-
         return match ($options->selectionMode()) {
             GeminiResearcherGenerationOptions::MODE_RELATIONAL => GeminiResearcherSelectionProfile::RELATIONAL,
             GeminiResearcherGenerationOptions::MODE_TOURNAMENT => GeminiResearcherSelectionProfile::TOURNAMENT,
@@ -295,10 +283,9 @@ final class GeminiResearcherGenerationMeta
         $profile = (string)($meta['selection_profile'] ?? '');
 
         return match ($profile) {
-            GeminiResearcherSelectionProfile::RELATIONAL         => 'relational',
-            GeminiResearcherSelectionProfile::VERIFICATION_HEAVY => 'verification',
-            GeminiResearcherSelectionProfile::TOURNAMENT       => 'tournament',
-            default                                            => !empty($meta['tournament_mode']) ? 'tournament' : 'standard',
+            GeminiResearcherSelectionProfile::RELATIONAL   => 'relational',
+            GeminiResearcherSelectionProfile::TOURNAMENT => 'tournament',
+            default                                      => !empty($meta['tournament_mode']) ? 'tournament' : 'standard',
         };
     }
 
