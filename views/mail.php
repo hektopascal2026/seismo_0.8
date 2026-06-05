@@ -278,6 +278,13 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         </label>
                     </div>
 
+                    <div class="admin-form-field" id="digest-split-proposed-panel" style="margin-top: 1rem;">
+                        <label>Proposed Digest Split Config (JSON):
+                            <?php $digestSplitConfigRaw = (string)($editRow['digest_split_config'] ?? ''); ?>
+                            <textarea id="digest_split_config_json" class="search-input" style="width: 100%; height: 6rem; font-family: monospace; font-size: 0.85rem;" placeholder='(Not a digest or no split config generated yet)'><?= e($digestSplitConfigRaw) ?></textarea>
+                        </label>
+                    </div>
+
                     <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
                         
@@ -320,11 +327,11 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
                             <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
                             <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
-                            <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" id="digest_split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
-                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value;">
+                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value; document.getElementById('digest_split_config_hidden').value = document.getElementById('digest_split_config_json').value;">
                                 Save Config &amp; Apply
                             </button>
                         </form>
@@ -702,6 +709,23 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             status.style.color = 'green';
             status.textContent = 'Analysis complete!';
             textarea.value = JSON.stringify(data.config, null, 2);
+            
+            var dscTextarea = document.getElementById('digest_split_config_json');
+            if (dscTextarea) {
+                if (data.digest_split_config) {
+                    try {
+                        var parsed = typeof data.digest_split_config === 'string' 
+                            ? JSON.parse(data.digest_split_config) 
+                            : data.digest_split_config;
+                        dscTextarea.value = JSON.stringify(parsed, null, 2);
+                    } catch (e) {
+                        dscTextarea.value = data.digest_split_config;
+                    }
+                } else {
+                    dscTextarea.value = '';
+                }
+            }
+
             activeSamples = data.samples || [];
             initPreviewSelect();
             resultsPanel.style.display = 'block';

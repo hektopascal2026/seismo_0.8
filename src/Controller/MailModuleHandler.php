@@ -319,9 +319,20 @@ final class MailModuleHandler
 
             $configRepo = new SystemConfigRepository($pdo);
             $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
-            $config = $generator->generateConfig($samples);
+            $res = $generator->generateConfig($samples);
 
-            echo json_encode(['success' => true, 'config' => $config, 'samples' => $samples]);
+            $cleanupConfig = [
+                'strip_regexes' => $res['strip_regexes'],
+                'webview_keywords' => $res['webview_keywords'],
+                'title_extractor' => $res['title_extractor'],
+            ];
+
+            echo json_encode([
+                'success' => true,
+                'config' => $cleanupConfig,
+                'digest_split_config' => $res['digest_split_config'],
+                'samples' => $samples
+            ]);
             exit;
         } catch (\Throwable $e) {
             error_log('Seismo analyzeBoilerplate failed: ' . $e->getMessage());

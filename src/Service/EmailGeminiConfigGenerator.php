@@ -25,7 +25,7 @@ final class EmailGeminiConfigGenerator
 
     /**
      * @param list<array{subject: string, body: string}> $samples
-     * @return array{strip_regexes: list<string>, webview_keywords: list<string>, title_extractor: ?string}
+     * @return array{strip_regexes: list<string>, webview_keywords: list<string>, title_extractor: ?string, digest_split_config: ?string}
      */
     public function generateConfig(array $samples): array
     {
@@ -42,7 +42,7 @@ final class EmailGeminiConfigGenerator
         $payload = [
             'systemInstruction' => [
                 'parts' => [
-                    ['text' => "You are an expert email layout analyzer and regular expression engineer.\nYour task is to generate regular expressions to strip repetitive boilerplate/noise lines from emails of a specific newsletter sender and extract web view link keywords."]
+                    ['text' => "You are an expert email layout analyzer and regular expression engineer.\nYour task is to generate regular expressions to strip repetitive boilerplate/noise lines from emails of a specific newsletter sender, extract web view link keywords, and generate digest split rules if the email contains multiple news stories/sections."]
                 ]
             ],
             'contents' => [
@@ -87,10 +87,19 @@ final class EmailGeminiConfigGenerator
                 throw new \RuntimeException('Failed to parse Gemini output as JSON.');
             }
 
+            $dscVal = $extracted['digest_split_config'] ?? null;
+            $dscString = null;
+            if (is_array($dscVal)) {
+                $dscString = json_encode($dscVal, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            } elseif (is_string($dscVal) && trim($dscVal) !== '') {
+                $dscString = trim($dscVal);
+            }
+
             return [
                 'strip_regexes' => $this->normalizeStringArray($extracted['strip_regexes'] ?? []),
                 'webview_keywords' => $this->normalizeStringArray($extracted['webview_keywords'] ?? []),
                 'title_extractor' => $this->normalizeString($extracted['title_extractor'] ?? null),
+                'digest_split_config' => $dscString,
             ];
         } catch (\Throwable $e) {
             error_log('Seismo EmailGeminiConfigGenerator error: ' . $e->getMessage());
@@ -119,7 +128,8 @@ final class EmailGeminiConfigGenerator
         $prompt .= "Generate a JSON response matching the following keys:\n";
         $prompt .= "1. \"strip_regexes\": An array of safe PHP-compatible regular expression strings (e.g., matching lines/sections, including pattern delimiters like /.../ui or /.../is) to replace the boilerplate text with empty strings. Focus on matching noisy start/end blocks precisely.\n";
         $prompt .= "2. \"webview_keywords\": An array of specific words or short phrases used by this sender to link to their online/web version (e.g., 'webversion', 'online lesen', 'webansicht', 'view online').\n";
-        $prompt .= "3. \"title_extractor\": (Optional string or null) If the newsletter body starts with a repetitive header prepended to the actual headline, suggest a regex pattern with a capture group (e.g. '/Subject:\\s*(.+)/iu') to extract the true, clean article title from the body. Otherwise, set this to null.\n\n";
+        $prompt .= "3. \"title_extractor\": (Optional string or null) If the newsletter body starts with a repetitive header prepended to the actual headline, suggest a regex pattern with a capture group (e.g. '/Subject:\\s*(.+)/iu') to extract the true, clean article title from the body. Otherwise, set this to null.\n";
+        $prompt .= "4. \"digest_split_config\": (Optional JSON object or null) Analyze if the email body contains multiple distinct news articles or sections. If it is a digest newsletter, provide a split configuration object. If it is a standard HTML newsletter, prefer html_css type (e.g., {\"type\": \"html_css\", \"selector_story\": \"div.story-container\", \"selector_title\": \"h2\", \"selector_body\": \"p\", \"selector_link\": \"a.read-more\"}). If it is plain-text or regex-delimited, specify a regex split config (e.g., {\"type\": \"regex\", \"pattern_split\": \"/\\s*---\\s*/\", \"pattern_title\": \"/^Title:\\s*(.*)/i\", \"pattern_body\": \"/Body:\\s*(.*)/is\", \"pattern_link\": \"/Link:\\s*(https?:\\S+)/i\"}). If the email does NOT contain multiple stories or is a single article, set this to null.\n\n";
         $prompt .= "Return ONLY a valid JSON object. Do not include markdown wraps like ```json.";
 
         return $prompt;
