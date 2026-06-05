@@ -773,7 +773,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         });
     }
 
-    var cleanupSubscriptionId = 0;
+    var cleanupSubscriptionId = <?= (int)($editRow['id'] ?? 0) ?>;
 
     function parseCleanupFeedbackLines(textareaId) {
         var el = document.getElementById(textareaId);
@@ -943,7 +943,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         });
     }
 
-    var splitSubscriptionId = 0;
+    var splitSubscriptionId = <?= (int)($editRow['id'] ?? 0) ?>;
 
     function truncatePreviewText(text, maxLen) {
         if (!text) return '';
