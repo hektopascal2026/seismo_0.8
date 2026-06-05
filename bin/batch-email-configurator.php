@@ -116,7 +116,7 @@ foreach ($subscriptions as $sub) {
     $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
         (string)$sub['match_type'],
         (string)$sub['match_value'],
-        5
+        \Seismo\Service\EmailGeminiConfigGenerator::GEMINI_SAMPLE_COUNT
     );
 
     if (empty($emails)) {

@@ -21,7 +21,10 @@ final class EmailGeminiConfigGenerator
 {
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
     private const DEFAULT_MODEL = 'gemini-3.5-flash';
-    private const MAX_SPLIT_RETRIES = 2;
+    /** Max extra retries after the first Gemini call (cleanup: 1 => 2 calls total; split: 2 => 3 calls total). */
+    private const MAX_CLEANUP_RETRIES = 1;
+    private const MAX_SPLIT_RETRIES = 1;
+    public const GEMINI_SAMPLE_COUNT = 3;
     private const HTTP_TIMEOUT_SECONDS = 120;
     private const PROMPT_BODY_MAX_CHARS = 8000;
     private const PROMPT_HTML_MAX_CHARS = 15000;
@@ -85,14 +88,18 @@ TEXT;
 
         $retryContext = null;
 
-        while ($attempts <= self::MAX_SPLIT_RETRIES) {
+        while ($attempts <= self::MAX_CLEANUP_RETRIES) {
             ++$attempts;
 
             $prompt = $retryContext === null
                 ? $this->buildBoilerplatePrompt($samples)
                 : $this->buildCleanupRetryPrompt($samples, $retryContext);
 
-            $extracted = $this->callGeminiJson(self::CLEANUP_SYSTEM_INSTRUCTION, $prompt);
+            $extracted = $this->callGeminiJson(
+                self::CLEANUP_SYSTEM_INSTRUCTION,
+                $prompt,
+                'cleanup attempt ' . $attempts . '/' . (self::MAX_CLEANUP_RETRIES + 1)
+            );
             $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
 
             $config = $this->extractCleanupConfig($extracted);
@@ -175,14 +182,18 @@ TEXT;
 
         $retryContext = null;
 
-        while ($attempts <= self::MAX_SPLIT_RETRIES) {
+        while ($attempts <= self::MAX_CLEANUP_RETRIES) {
             ++$attempts;
 
             $prompt = $retryContext === null
                 ? $this->buildCleanupRefinePrompt($samples, $currentConfig, $feedback)
                 : $this->buildCleanupRetryPrompt($samples, $retryContext);
 
-            $extracted = $this->callGeminiJson(self::CLEANUP_SYSTEM_INSTRUCTION, $prompt);
+            $extracted = $this->callGeminiJson(
+                self::CLEANUP_SYSTEM_INSTRUCTION,
+                $prompt,
+                'cleanup refine attempt ' . $attempts . '/' . (self::MAX_CLEANUP_RETRIES + 1)
+            );
             $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
 
             $config = $this->extractCleanupConfig($extracted);
@@ -261,7 +272,11 @@ TEXT;
                 ? $this->buildSplitPrompt($samples)
                 : $this->buildSplitRetryPrompt($samples, $retryContext);
 
-            $extracted = $this->callGeminiJson(self::SPLIT_SYSTEM_INSTRUCTION, $prompt);
+            $extracted = $this->callGeminiJson(
+                self::SPLIT_SYSTEM_INSTRUCTION,
+                $prompt,
+                'split attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
+            );
             $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
 
             if (empty($extracted['is_digest'])) {
@@ -374,7 +389,11 @@ TEXT;
                 ? $this->buildRefinePrompt($samples, $currentConfig, $feedback, $keepCount)
                 : $this->buildRefineRetryPrompt($samples, $retryContext);
 
-            $extracted = $this->callGeminiJson(self::SPLIT_SYSTEM_INSTRUCTION, $prompt);
+            $extracted = $this->callGeminiJson(
+                self::SPLIT_SYSTEM_INSTRUCTION,
+                $prompt,
+                'split refine attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
+            );
             $lastAnalysis = is_array($extracted['analysis'] ?? null) ? $extracted['analysis'] : null;
 
             $normalized = DigestSplitConfigNormalizer::normalize($extracted);
@@ -796,7 +815,7 @@ TEXT;
     /**
      * @return array<string, mixed>
      */
-    private function callGeminiJson(string $systemInstruction, string $prompt): array
+    private function callGeminiJson(string $systemInstruction, string $prompt, string $callLabel = 'email-config'): array
     {
         set_time_limit(300);
 
@@ -808,6 +827,14 @@ TEXT;
         $modelConfigured = trim((string)($this->configRepo->get(GeminiResearcherService::CONFIG_KEY_MODEL) ?? ''));
         $model = $modelConfigured !== '' ? $modelConfigured : self::DEFAULT_MODEL;
 
+        $generationConfig = [
+            'responseMimeType' => 'application/json',
+            'temperature' => 0.1,
+        ];
+        if (GeminiResearcherService::usesGemini35Family($model)) {
+            $generationConfig['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
+        }
+
         $payload = [
             'systemInstruction' => [
                 'parts' => [['text' => $systemInstruction]],
@@ -818,16 +845,26 @@ TEXT;
                     'parts' => [['text' => $prompt]],
                 ],
             ],
-            'generationConfig' => [
-                'responseMimeType' => 'application/json',
-                'temperature' => 0.1,
-            ],
+            'generationConfig' => $generationConfig,
         ];
 
         $url = self::API_BASE . rawurlencode($model) . ':generateContent';
+        $started = microtime(true);
+        error_log(sprintf(
+            'Seismo EmailGeminiConfigGenerator [%s]: Gemini request start (model=%s, prompt=%d chars)',
+            $callLabel,
+            $model,
+            mb_strlen($prompt)
+        ));
 
         try {
             $response = $this->http->postJson($url, $payload, ['x-goog-api-key' => $apiKey]);
+            error_log(sprintf(
+                'Seismo EmailGeminiConfigGenerator [%s]: Gemini request finished in %.1fs (HTTP %d)',
+                $callLabel,
+                microtime(true) - $started,
+                $response->status
+            ));
             if ($response->status !== 200) {
                 throw new \RuntimeException($this->formatGeminiApiError($response, $model));
             }

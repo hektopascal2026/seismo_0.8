@@ -266,7 +266,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             ?>
             <div class="admin-form-card" style="margin-top: 1.5rem;" id="ai-cleanup-configurator">
                 <h3>AI Cleanup &amp; WebView Configurator</h3>
-                <p class="admin-intro">Select 5 recent emails from this sender to analyze with Gemini and statically generate regular expressions and WebView keywords.</p>
+                <p class="admin-intro">Uses 3 recent sample emails (max 2 Gemini calls, ~1–3 min). Generates regex cleanup rules and WebView keywords.</p>
                 
 
                 <div class="admin-form-field">
@@ -365,7 +365,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <?php if ($mailModule->isNewsletter()): ?>
             <div class="admin-form-card" style="margin-top: 1.5rem;" id="ai-split-configurator">
                 <h3>AI Split Configurator</h3>
-                <p class="admin-intro">Select 5 recent emails from this sender to analyze with Gemini and statically generate regular expressions and selector configurations to split digests into individual newsletter cards.</p>
+                <p class="admin-intro">Uses 3 recent sample emails (max 2 Gemini calls, ~1–3 min). Generates selector rules to split digests into individual cards.</p>
 
                 <div class="admin-form-field">
                     <button type="button" id="btn-ai-split-analyze" class="btn btn-secondary" onclick="runAiSplitAnalysis(<?= (int)$editRow['id'] ?>)">
@@ -894,7 +894,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         btn.disabled = true;
         status.style.display = 'inline';
         status.style.color = '#333';
-        status.textContent = 'Analyzing with Gemini (editor pass → regex → verify)...';
+        status.textContent = 'Analyzing with Gemini (up to 2 API calls, may take 1–3 min)…';
         if (verificationBox) {
             verificationBox.style.display = 'none';
             verificationBox.textContent = '';
