@@ -94,7 +94,7 @@ final class EmailDigestSplitterService
             return [];
         }
 
-        $storyNodes = $this->groupIntoStoryWrappers($this->innermostStoryNodes($nodes));
+        $storyNodes = $this->innermostStoryNodes($nodes);
 
         $titleSelector = trim((string)($rules['title_selector'] ?? ''));
         $linkSelector = trim((string)($rules['link_selector'] ?? ''));
@@ -136,14 +136,6 @@ final class EmailDigestSplitterService
 
             $storyText = EmailBodyDisplay::collapseForStorage($storyText);
 
-            if ($title === '') {
-                $collapsedTitle = preg_replace('/\s+/', ' ', $storyText) ?? '';
-                $title = mb_substr(trim($collapsedTitle), 0, 80);
-                if (mb_strlen(trim($collapsedTitle)) > 80) {
-                    $title .= '...';
-                }
-            }
-
             if ($title !== '' || $storyText !== '') {
                 $stories[] = [
                     'title' => $title,
@@ -154,8 +146,21 @@ final class EmailDigestSplitterService
             }
         }
 
+        $mergedStories = $this->mergeAdjacentFragments($stories);
+        foreach ($mergedStories as &$story) {
+            if (trim($story['title']) === '') {
+                $collapsedTitle = preg_replace('/\s+/', ' ', $story['text_body']) ?? '';
+                $title = mb_substr(trim($collapsedTitle), 0, 80);
+                if (mb_strlen(trim($collapsedTitle)) > 80) {
+                    $title .= '...';
+                }
+                $story['title'] = $title;
+            }
+        }
+        unset($story);
+
         return $this->applyExcludeTitles(
-            $this->deduplicateStories($this->mergeAdjacentFragments($stories)),
+            $this->deduplicateStories($mergedStories),
             $rules,
         );
     }
@@ -202,121 +207,7 @@ final class EmailDigestSplitterService
         return mb_strtolower($title);
     }
 
-    /**
-     * @param list<DOMElement> $nodes
-     * @return list<DOMElement>
-     */
-    private function groupIntoStoryWrappers(array $nodes): array
-    {
-        $wrappers = [];
-        $seen = [];
 
-        foreach ($nodes as $node) {
-            $wrapper = $this->resolveStoryWrapper($node);
-            $id = spl_object_id($wrapper);
-            if (!isset($seen[$id])) {
-                $seen[$id] = true;
-                $wrappers[] = $wrapper;
-            }
-        }
-
-        return $wrappers;
-    }
-
-    private function resolveStoryWrapper(DOMElement $node): DOMElement
-    {
-        $current = $node;
-
-        while ($current instanceof DOMElement) {
-            if (strtolower($current->tagName) === 'table') {
-                return $current;
-            }
-
-            if ($this->elementHasClass($current, 'csc-frame-default')) {
-                return $current;
-            }
-
-            if ($this->tableContainsHeadlineAndBody($current)) {
-                return $current;
-            }
-
-            $parent = $current->parentNode;
-            $current = $parent instanceof DOMElement ? $parent : null;
-        }
-
-        return $node;
-    }
-
-    private function tableContainsHeadlineAndBody(DOMElement $table): bool
-    {
-        if (strtolower($table->tagName) !== 'table') {
-            return false;
-        }
-
-        $rows = $table->childNodes;
-        $directRows = [];
-        foreach ($rows as $child) {
-            if ($child instanceof DOMElement && strtolower($child->tagName) === 'tr') {
-                $directRows[] = $child;
-            }
-        }
-
-        if ($directRows === []) {
-            foreach ($table->getElementsByTagName('tbody') as $tbody) {
-                if (!$tbody instanceof DOMElement) {
-                    continue;
-                }
-                foreach ($tbody->childNodes as $child) {
-                    if ($child instanceof DOMElement && strtolower($child->tagName) === 'tr') {
-                        $directRows[] = $child;
-                    }
-                }
-                if ($directRows !== []) {
-                    break;
-                }
-            }
-        }
-
-        if (count($directRows) < 2 || count($directRows) > 4) {
-            return false;
-        }
-
-        $hasHeadline = false;
-        $hasBody = false;
-
-        foreach ($directRows as $row) {
-            $rowText = trim($row->textContent);
-            if ($rowText === '' || $this->isCtaLinkText($rowText)) {
-                continue;
-            }
-
-            foreach ($row->getElementsByTagName('a') as $link) {
-                if (!$link instanceof DOMElement) {
-                    continue;
-                }
-                $linkText = trim($link->textContent);
-                if ($linkText === '' || $this->isCtaLinkText($linkText)) {
-                    continue;
-                }
-
-                $style = strtolower($link->getAttribute('style'));
-                if (
-                    str_contains($style, 'font-weight:bold')
-                    || str_contains($style, 'font-weight: bold')
-                    || mb_strlen($linkText) >= 12
-                ) {
-                    $hasHeadline = true;
-                    break;
-                }
-            }
-
-            if (mb_strlen($rowText) >= 40) {
-                $hasBody = true;
-            }
-        }
-
-        return $hasHeadline && $hasBody;
-    }
 
     private function extractBestTitle(DOMXPath $xpath, DOMElement $node, string $titleSelector): string
     {
