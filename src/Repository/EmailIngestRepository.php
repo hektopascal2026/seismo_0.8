@@ -731,7 +731,7 @@ final class EmailIngestRepository
 
         $filtered = [];
         foreach ($rows as $row) {
-            if (!EmailSubscriptionRepository::subscriptionMatchesEmail(
+            if (!EmailSubscriptionRepository::matchesSubscriptionRowForStoredEmail(
                 $subscription,
                 (string)($row['from_email'] ?? ''),
                 isset($row['subject']) ? (string)$row['subject'] : null,

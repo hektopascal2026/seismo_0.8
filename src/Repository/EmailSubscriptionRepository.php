@@ -122,13 +122,17 @@ final class EmailSubscriptionRepository
     }
 
     /**
-     * Whether a stored subscription row owns an email (address + optional subject filter).
+     * Whether a stored email matches a subscription row's address + subject_filter rules.
+     * Used when resolving samples for pending proposals (auto_detected rows included).
      *
      * @param array<string, mixed> $subscription
      */
-    public static function subscriptionMatchesEmail(array $subscription, string $fromEmail, ?string $subject): bool
-    {
-        if (!empty($subscription['disabled']) || !empty($subscription['auto_detected'])) {
+    public static function matchesSubscriptionRowForStoredEmail(
+        array $subscription,
+        string $fromEmail,
+        ?string $subject,
+    ): bool {
+        if (!empty($subscription['disabled'])) {
             return false;
         }
         $mt = (string)($subscription['match_type'] ?? '');
@@ -138,6 +142,20 @@ final class EmailSubscriptionRepository
         }
 
         return self::matchesSubjectFilter($subject !== null ? trim($subject) : '', $subscription['subject_filter'] ?? null);
+    }
+
+    /**
+     * Whether a confirmed subscription row owns an email (address + optional subject filter).
+     *
+     * @param array<string, mixed> $subscription
+     */
+    public static function subscriptionMatchesEmail(array $subscription, string $fromEmail, ?string $subject): bool
+    {
+        if (!empty($subscription['disabled']) || !empty($subscription['auto_detected'])) {
+            return false;
+        }
+
+        return self::matchesSubscriptionRowForStoredEmail($subscription, $fromEmail, $subject);
     }
 
     /**
@@ -160,7 +178,10 @@ final class EmailSubscriptionRepository
         $subject = $subject !== null ? trim($subject) : '';
 
         foreach ($subscriptionRows as $sub) {
-            if (!self::subscriptionMatchesEmail($sub, $from, $subject)) {
+            if (!empty($sub['disabled']) || !empty($sub['auto_detected'])) {
+                continue;
+            }
+            if (!self::matchesSubscriptionRowForStoredEmail($sub, $from, $subject)) {
                 continue;
             }
 

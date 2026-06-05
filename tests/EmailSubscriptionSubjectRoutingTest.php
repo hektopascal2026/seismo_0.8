@@ -333,6 +333,30 @@ namespace Seismo\Tests {
             self::assertCount(1, $subRepo->listPendingForModule('newsletter', 10, 0));
         }
 
+        public function testPeekLatestEmailForPendingSenderUsesStoredSample(): void
+        {
+            $subRepo = new EmailSubscriptionRepository($this->pdo);
+            $pendingId = $subRepo->insert([
+                'match_type'    => 'domain',
+                'match_value'   => 'republik.ch',
+                'display_name'  => 'Republik',
+                'module_scope'  => 'mail',
+                'auto_detected' => 1,
+            ]);
+
+            $this->pdo->exec("
+                INSERT INTO emails (id, subject, from_email, hidden, date_utc)
+                VALUES (50, 'Republik Daily: Example', 'news@republik.ch', 0, '2026-06-05 12:00:00')
+            ");
+
+            $entryRepo = new EntryRepository($this->pdo);
+            $peek = $entryRepo->peekLatestEmailForSubscription($pendingId, 'mail');
+
+            self::assertNotNull($peek);
+            self::assertSame(50, $peek['email_id']);
+            self::assertSame('Republik Daily: Example', $peek['subject']);
+        }
+
         public function testModuleTimelineForSubscriptionFiltersBySubscriptionId(): void
         {
             $subRepo = new EmailSubscriptionRepository($this->pdo);

@@ -181,6 +181,27 @@ final class EmailSubscriptionRepositoryTest extends TestCase
         ));
     }
 
+    public function testMatchesSubscriptionRowForStoredEmailIncludesPendingRows(): void
+    {
+        $pending = [
+            'match_type'     => 'domain',
+            'match_value'    => 'republik.ch',
+            'subject_filter' => '',
+            'auto_detected'  => 1,
+            'disabled'       => 0,
+        ];
+        self::assertTrue(EmailSubscriptionRepository::matchesSubscriptionRowForStoredEmail(
+            $pending,
+            'newsletter@republik.ch',
+            'Sample headline'
+        ));
+        self::assertFalse(EmailSubscriptionRepository::subscriptionMatchesEmail(
+            $pending,
+            'newsletter@republik.ch',
+            'Sample headline'
+        ));
+    }
+
     public function testSubscriptionMatchesEmailRequiresSubjectWhenFilterSet(): void
     {
         $sub = [
