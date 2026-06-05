@@ -748,6 +748,25 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         }
     });
 
+    function parseJsonFetchResponse(res) {
+        return res.text().then(function(text) {
+            var data = null;
+            if (text !== '') {
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    var snippet = text.replace(/\s+/g, ' ').trim().slice(0, 160);
+                    throw new Error(snippet || ('Server returned HTTP ' + res.status + ' (expected JSON)'));
+                }
+            }
+            if (!res.ok) {
+                var msg = (data && data.error) ? data.error : ('Request failed (HTTP ' + res.status + ')');
+                throw new Error(msg);
+            }
+            return data || {};
+        });
+    }
+
     function runAiAnalysis(id) {
         var btn = document.getElementById('btn-ai-analyze');
         var status = document.getElementById('ai-analysis-status');
@@ -767,14 +786,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             method: 'POST',
             body: formData
         })
-        .then(function(res) {
-            return res.json().then(function(data) {
-                if (!res.ok) {
-                    throw new Error(data.error || 'Request failed');
-                }
-                return data;
-            });
-        })
+        .then(parseJsonFetchResponse)
         .then(function(data) {
             status.style.color = 'green';
             status.textContent = 'Analysis complete!';
@@ -831,14 +843,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             method: 'POST',
             body: formData
         })
-        .then(function(res) {
-            return res.json().then(function(data) {
-                if (!res.ok) {
-                    throw new Error(data.error || 'Request failed');
-                }
-                return data;
-            });
-        })
+        .then(parseJsonFetchResponse)
         .then(function(data) {
             status.style.color = 'green';
             status.textContent = 'Analysis complete!';

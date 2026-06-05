@@ -151,13 +151,88 @@ final class EmailGeminiConfigGenerator
         return $out;
     }
 
-    private function normalizeString(mixed $val): ?string
+    /**
+     * @param list<array{subject: string, body: string}> $samples
+     * @return ?string
+     */
+    public function generateSplitConfig(array $samples): ?string
     {
-        if ($val === null) {
-            return null;
+        $apiKey = trim((string)($this->configRepo->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
+        if ($apiKey === '') {
+            throw new \RuntimeException('Google Gemini API key is not configured. Please add it under Settings → General.');
         }
-        $str = trim((string)$val);
 
-        return $str !== '' ? $str : null;
+        $modelConfigured = trim((string)($this->configRepo->get(GeminiResearcherService::CONFIG_KEY_MODEL) ?? ''));
+        $model = $modelConfigured !== '' ? $modelConfigured : self::DEFAULT_MODEL;
+
+        $prompt = "We want to configure multi-story digest splitting for a newsletter. Below are 5 sample emails from this newsletter.\n\n";
+        foreach ($samples as $index => $sample) {
+            $prompt .= "--- SAMPLE EMAIL #" . ($index + 1) . " ---\n";
+            $prompt .= "Subject: " . $sample['subject'] . "\n";
+            $prompt .= "Body:\n" . $sample['body'] . "\n\n";
+        }
+        $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
+        $prompt .= "If they do, suggest a JSON split configuration matching our split schema:\n";
+        $prompt .= "- For HTML emails: {\"type\": \"html_css\", \"selector_story\": \"CSS selector for story wrapper\", \"selector_title\": \"CSS selector for title\", \"selector_body\": \"CSS selector for body content\", \"selector_link\": \"CSS selector for story URL\"}\n";
+        $prompt .= "- For plain text or regex-delimited emails: {\"type\": \"regex\", \"pattern_split\": \"PHP regex delimiter\", \"pattern_title\": \"regex pattern\", \"pattern_body\": \"regex pattern\", \"pattern_link\": \"regex pattern\"}\n\n";
+        $prompt .= "Return ONLY the JSON split config object (or null). Do not include markdown wraps like ```json.";
+
+        $payload = [
+            'systemInstruction' => [
+                'parts' => [
+                    ['text' => "You are an expert email structure analyzer. Your goal is to detect digest structures and generate CSS selector or Regex split configurations for them."]
+                ]
+            ],
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [['text' => $prompt]]
+                ]
+            ],
+            'generationConfig' => [
+                'responseMimeType' => 'application/json',
+                'temperature' => 0.1,
+            ]
+        ];
+
+        $url = self::API_BASE . rawurlencode($model) . ':generateContent?key=' . rawurlencode($apiKey);
+
+        try {
+            $response = $this->http->postJson($url, $payload);
+            if ($response->status !== 200) {
+                throw new \RuntimeException('Gemini API call failed with status ' . $response->status . ': ' . $response->body);
+            }
+
+            $data = json_decode($response->body, true);
+            $text = trim((string)($data['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+            if ($text === '' || $text === 'null') {
+                return null;
+            }
+
+            if (str_starts_with($text, '```json')) {
+                $text = substr($text, 7);
+            } elseif (str_starts_with($text, '```')) {
+                $text = substr($text, 3);
+            }
+            if (str_ends_with($text, '```')) {
+                $text = substr($text, 0, -3);
+            }
+            $text = trim($text);
+
+            if ($text === 'null' || $text === '') {
+                return null;
+            }
+
+            // Verify it's valid JSON
+            $extracted = json_decode($text, true);
+            if (!is_array($extracted)) {
+                return null;
+            }
+
+            return json_encode($extracted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo EmailGeminiConfigGenerator split error: ' . $e->getMessage());
+            throw new \RuntimeException('AI Split Analysis failed: ' . $e->getMessage(), 0, $e);
+        }
     }
 }

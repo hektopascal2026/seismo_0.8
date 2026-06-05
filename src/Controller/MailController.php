@@ -34,6 +34,11 @@ final class MailController
         $this->handler()->analyzeBoilerplate();
     }
 
+    public function analyzeSplitting(): void
+    {
+        $this->handler()->analyzeSplitting();
+    }
+
     public function deleteSubscription(): void
     {
         $this->handler()->deleteSubscription();

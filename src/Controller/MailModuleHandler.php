@@ -342,6 +342,100 @@ final class MailModuleHandler
         }
     }
 
+    public function analyzeSplitting(): void
+    {
+        header('Content-Type: application/json');
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Session expired — please try again.']);
+            exit;
+        }
+        if (isSatellite()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Satellite mode — AI configuration runs on the mothership only.']);
+            exit;
+        }
+
+        $subscriptionId = (int)($_POST['id'] ?? 0);
+        if ($subscriptionId <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid subscription ID']);
+            exit;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $subRepo = new EmailSubscriptionRepository($pdo);
+            $sub = $subRepo->findById($subscriptionId);
+            if ($sub === null || EmailSubscriptionRepository::rowModuleScope($sub) !== $this->module->scope) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Subscription not found']);
+                exit;
+            }
+
+            $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+            $emails = $ingestRepo->fetchRowsForSubscriptionMatch(
+                (string)$sub['match_type'],
+                (string)$sub['match_value'],
+                5
+            );
+
+            if ($emails === []) {
+                http_response_code(400);
+                echo json_encode(['error' => 'No sample emails found in Seismo for this sender to analyze. Please fetch some emails first.']);
+                exit;
+            }
+
+            $samples = [];
+            foreach ($emails as $email) {
+                $samples[] = [
+                    'subject' => (string)($email['subject'] ?? ''),
+                    'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                    'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                    'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
+                ];
+            }
+
+            $configRepo = new SystemConfigRepository($pdo);
+            $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
+            $digestSplitConfig = $generator->generateSplitConfig($samples);
+
+            $previewStories = [];
+            if ($digestSplitConfig !== null) {
+                $proposedConfig = json_decode($digestSplitConfig, true);
+                if (is_array($proposedConfig)) {
+                    $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
+                    // Split the first email for previewing
+                    $firstEmail = $emails[0];
+                    $previewStories = $splitter->split(
+                        (string)($firstEmail['html_body'] ?? $firstEmail['body_html'] ?? ''),
+                        (string)($firstEmail['text_body'] ?? $firstEmail['body_text'] ?? ''),
+                        (string)($firstEmail['subject'] ?? ''),
+                        $proposedConfig
+                    );
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'digest_split_config' => $digestSplitConfig,
+                'preview_stories' => $previewStories,
+                'samples' => $samples
+            ]);
+            exit;
+        } catch (\Throwable $e) {
+            error_log('Seismo analyzeSplitting failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
+        }
+    }
+
     public function deleteSubscription(): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {

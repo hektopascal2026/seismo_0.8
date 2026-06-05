@@ -393,6 +393,11 @@ $router->register(
     false
 );
 $router->register(
+    'mail_subscription_analyze_splitting',
+    \Seismo\Controller\MailController::class . '::analyzeSplitting',
+    false
+);
+$router->register(
     'mail_subscription_delete',
     \Seismo\Controller\MailController::class . '::deleteSubscription',
     false
@@ -425,6 +430,11 @@ $router->register(
 $router->register(
     'newsletter_subscription_analyze',
     \Seismo\Controller\NewsletterController::class . '::analyzeBoilerplate',
+    false
+);
+$router->register(
+    'newsletter_subscription_analyze_splitting',
+    \Seismo\Controller\NewsletterController::class . '::analyzeSplitting',
     false
 );
 $router->register(
