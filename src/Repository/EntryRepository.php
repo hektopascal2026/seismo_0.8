@@ -1905,6 +1905,110 @@ final class EntryRepository
             }
         }
         unset($it);
+        $this->attachDigestChildTimelineClocks($items);
+    }
+
+    /**
+     * Digest child rows: backfill parent inbox timestamps when missing and refresh card clocks.
+     *
+     * @param array<int, array<string, mixed>> $items
+     */
+    private function attachDigestChildTimelineClocks(array &$items): void
+    {
+        $parentIds = [];
+        foreach ($items as $idx => $it) {
+            if (($it['type'] ?? '') !== 'email') {
+                continue;
+            }
+            $data = $it['data'] ?? [];
+            if (empty($data['parent_email_id'])) {
+                continue;
+            }
+            if ((int)($it['date'] ?? 0) > 0) {
+                continue;
+            }
+            $pid = (int)$data['parent_email_id'];
+            if ($pid > 0) {
+                $parentIds[$pid][] = $idx;
+            }
+        }
+
+        $parentInboxById = [];
+        if ($parentIds !== []) {
+            $parentInboxById = $this->fetchEmailParentInboxDates(array_keys($parentIds));
+        }
+
+        foreach ($items as $idx => &$it) {
+            if (($it['type'] ?? '') !== 'email') {
+                continue;
+            }
+            $data = $it['data'] ?? [];
+            if (empty($data['parent_email_id'])) {
+                continue;
+            }
+
+            $pid = (int)$data['parent_email_id'];
+            if ((int)($it['date'] ?? 0) <= 0 && isset($parentIds[$pid]) && in_array($idx, $parentIds[$pid], true)) {
+                $parentRow = $parentInboxById[$pid] ?? null;
+                if ($parentRow !== null) {
+                    foreach (['date_received', 'date_utc', 'date_sent'] as $col) {
+                        if (trim((string)($data[$col] ?? '')) === '' && trim((string)($parentRow[$col] ?? '')) !== '') {
+                            $data[$col] = $parentRow[$col];
+                        }
+                    }
+                    $inbox = trim((string)($parentRow['date_received'] ?? ''));
+                    if ($inbox === '') {
+                        $inbox = trim((string)($parentRow['date_utc'] ?? ''));
+                    }
+                    if ($inbox === '') {
+                        $inbox = trim((string)($parentRow['date_sent'] ?? ''));
+                    }
+                    if ($inbox !== '') {
+                        $meta = $data['metadata'] ?? null;
+                        if (is_string($meta)) {
+                            $decoded = json_decode($meta, true);
+                            $meta = is_array($decoded) ? $decoded : [];
+                        } elseif (!is_array($meta)) {
+                            $meta = [];
+                        }
+                        if (trim((string)($meta['parent_inbox_date'] ?? '')) === '') {
+                            $meta['parent_inbox_date'] = $inbox;
+                            $data['metadata'] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        }
+                    }
+                    $it['data'] = $data;
+                }
+            }
+
+            $it['date'] = seismo_email_timeline_unix($it['data']);
+            $it['clock_label'] = seismo_format_wrapper_card_clock($it);
+        }
+        unset($it);
+    }
+
+    /**
+     * @param list<int> $parentIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchEmailParentInboxDates(array $parentIds): array
+    {
+        $parentIds = array_values(array_unique(array_filter(array_map('intval', $parentIds), static fn (int $id): bool => $id > 0)));
+        if ($parentIds === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($this->chunkIds($parentIds, 400) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+            $sql = 'SELECT id, date_received, date_utc, date_sent
+                    FROM ' . entryTable('emails') . '
+                    WHERE id IN (' . $ph . ')';
+            foreach ($this->selectPreparedOrEmpty($sql, $chunk) as $row) {
+                $out[(int)$row['id']] = $row;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -3350,7 +3454,7 @@ final class EntryRepository
             error_log('EntryRepository sqlEmailTimelineSelect: ' . $e->getMessage());
 
             return $this->cachedEmailTimelineSelect =
-                'e.id, e.subject, e.derived_title, e.from_email, e.from_name, e.from_addr, '
+                'e.id, e.parent_email_id, e.subject, e.derived_title, e.from_email, e.from_name, e.from_addr, '
                 . 'e.metadata, e.hidden, e.date_utc, e.date_received, e.date_sent, e.created_at, '
                 . 'SUBSTRING(COALESCE(e.text_body, e.body_text, \'\'), 1, ' . self::TIMELINE_BODY_CHARS . ') AS text_body, '
                 . 'SUBSTRING(COALESCE(e.html_body, e.body_html, \'\'), 1, ' . self::TIMELINE_BODY_CHARS . ') AS html_body';

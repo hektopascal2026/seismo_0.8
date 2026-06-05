@@ -247,6 +247,11 @@ final class MailModuleHandler
                 }
                 $wasPending = EmailSubscriptionRepository::isPendingRow($existing);
                 $oldDigest = trim((string)($existing['digest_split_config'] ?? ''));
+                $digestForSave = $this->mergeDigestSplitConfigNoiseFeedback(
+                    (string)$payload['digest_split_config'],
+                    (string)($_POST['digest_split_feedback'] ?? ''),
+                );
+                $payload['digest_split_config'] = $digestForSave;
                 $canonicalDigest = \Seismo\Core\Mail\DigestSplitConfigNormalizer::canonicalJson(
                     $payload['digest_split_config']
                 );
@@ -735,5 +740,32 @@ final class MailModuleHandler
         $p['action'] = $this->module->action;
 
         return http_build_query($p);
+    }
+
+    /**
+     * Merge AI Split preview noise checkboxes into digest_split_config on save.
+     */
+    private function mergeDigestSplitConfigNoiseFeedback(string $digestConfigJson, string $feedbackJson): string
+    {
+        $digestConfigJson = trim($digestConfigJson);
+        $feedbackJson = trim($feedbackJson);
+        if ($digestConfigJson === '' || $feedbackJson === '') {
+            return $digestConfigJson;
+        }
+
+        $config = json_decode($digestConfigJson, true);
+        $feedback = json_decode($feedbackJson, true);
+        if (!is_array($config) || !is_array($feedback)) {
+            return $digestConfigJson;
+        }
+
+        $normalized = \Seismo\Core\Mail\DigestSplitConfigNormalizer::normalize($config, rejectFragileSelectors: false);
+        if ($normalized === null) {
+            return $digestConfigJson;
+        }
+
+        $merged = \Seismo\Core\Mail\DigestSplitConfigNormalizer::mergeNoiseFeedback($normalized, $feedback);
+
+        return json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: $digestConfigJson;
     }
 }

@@ -2811,21 +2811,6 @@ textarea.search-input.setup-code-preview {
     flex-shrink: 0;
 }
 
-/* Split story rows on Highlights — lighter than full entry cards */
-.entry-card.entry-card--digest-story {
-    border-style: dashed;
-    padding: 0.625rem 0.875rem;
-    box-shadow: none;
-}
-
-.entry-card.entry-card--digest-story:hover {
-    box-shadow: 0.0625rem 0.0625rem 0 #000000;
-}
-
-.entry-card.entry-card--digest-story .entry-title {
-    font-size: 1rem;
-}
-
 .entry-tag--digest-story {
     background-color: #f5f5f5;
     color: #000000;

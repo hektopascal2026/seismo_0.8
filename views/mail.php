@@ -388,7 +388,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     <div class="admin-form-field" id="ai-split-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Split Preview (Generated Cards)</h4>
                         <div id="split-preview-toolbar" style="display: none; margin-bottom: 0.75rem;">
-                            <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Check <strong>Noise</strong> on blocks that are not real stories (headers, ads, footers). Then refine — Gemini adjusts selectors to exclude them.</p>
+                            <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Check <strong>Noise</strong> on blocks that are not real stories (headers, ads, footers). <strong>Apply Split Config</strong> saves those exclusions; use <strong>Refine</strong> only when selectors still need adjustment.</p>
                             <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" disabled onclick="runAiSplitRefine()">
                                 Refine rules (exclude marked noise)
                             </button>
@@ -418,8 +418,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
                             <input type="hidden" id="split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" id="split_config_feedback_hidden" name="digest_split_feedback" value="">
                             
-                            <button type="submit" class="btn btn-success" onclick="document.getElementById('split_config_hidden').value = document.getElementById('split_config_json').value;">
+                            <button type="submit" class="btn btn-success" onclick="return prepareSplitConfigApply()">
                                 Apply Split Config
                             </button>
                             <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel</a>
@@ -1137,6 +1138,59 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
         previewSection.style.display = 'block';
         updateSplitRefineButton();
+    }
+
+    function mergeSplitNoiseFeedback(config, feedback) {
+        if (!config || typeof config !== 'object' || !feedback || !Array.isArray(feedback.blocks)) {
+            return config;
+        }
+        var rules = config.split_rules;
+        if (!rules || typeof rules !== 'object') {
+            rules = {};
+            config.split_rules = rules;
+        }
+        var exclude = Array.isArray(rules.exclude_titles) ? rules.exclude_titles.slice() : [];
+        feedback.blocks.forEach(function(block) {
+            if (!block || block.verdict !== 'noise') {
+                return;
+            }
+            var title = (block.title || '').trim();
+            if (title === '' || title === '(No Title)' || exclude.indexOf(title) !== -1) {
+                return;
+            }
+            exclude.push(title);
+        });
+        if (exclude.length > 0) {
+            rules.exclude_titles = exclude;
+        }
+        return config;
+    }
+
+    function prepareSplitConfigApply() {
+        var textarea = document.getElementById('split_config_json');
+        var hidden = document.getElementById('split_config_hidden');
+        var feedbackHidden = document.getElementById('split_config_feedback_hidden');
+        var feedback = collectSplitFeedback();
+        if (feedbackHidden) {
+            feedbackHidden.value = JSON.stringify(feedback);
+        }
+        if (!textarea || !hidden) {
+            return true;
+        }
+        var raw = textarea.value.trim();
+        if (raw === '') {
+            hidden.value = '';
+            return true;
+        }
+        try {
+            var config = JSON.parse(raw);
+            config = mergeSplitNoiseFeedback(config, feedback);
+            hidden.value = JSON.stringify(config);
+            textarea.value = JSON.stringify(config, null, 2);
+        } catch (e) {
+            hidden.value = raw;
+        }
+        return true;
     }
 
     function collectSplitFeedback() {

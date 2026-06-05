@@ -387,12 +387,8 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                 }
                             }
                             $isDigestChildEmail = !empty($email['parent_email_id']);
-                            $entryCardClass = 'entry-card';
-                            if ($isDigestChildEmail) {
-                                $entryCardClass .= ' entry-card--digest-story';
-                            }
                         ?>
-                        <div class="<?= e($entryCardClass) ?>">
+                        <div class="entry-card">
                             <div class="entry-header">
                                 <?php
                                     $subLabel = trim((string)($email['subscription_display_name'] ?? ''));
