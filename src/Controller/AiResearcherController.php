@@ -412,7 +412,7 @@ PROMPT;
                 'cited_entry_count'      => count($usedEntryKeys),
             ];
 
-            if ($result->attributionParsed || $keysInferred) {
+            if ($usedEntryKeys !== []) {
                 [$cardsEntries, $attributionMeta] = $this->resolveAttributedEntries(
                     $entries,
                     $usedEntryKeys,
@@ -587,7 +587,10 @@ PROMPT;
         }
 
         try {
-            throw new \InvalidArgumentException('The default prompt cannot be overwritten.');
+            $content = $this->parseSystemPrompt($_POST['content'] ?? $_POST['system_prompt'] ?? null);
+            $config  = new SystemConfigRepository(getDbConnection());
+            $config->set(self::CONFIG_KEY_SYSTEM_PROMPT, $content);
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

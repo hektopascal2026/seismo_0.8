@@ -228,6 +228,10 @@ final class EmailDigestSplitterService
         $current = $node;
 
         while ($current instanceof DOMElement) {
+            if (strtolower($current->tagName) === 'table') {
+                return $current;
+            }
+
             if ($this->elementHasClass($current, 'csc-frame-default')) {
                 return $current;
             }

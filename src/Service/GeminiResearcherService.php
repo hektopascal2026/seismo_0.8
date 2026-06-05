@@ -614,7 +614,7 @@ CONTRACT;
             'selection_target'   => $selectionTarget,
         ]);
 
-        if ($this->selectionProfile->usesTournamentPipeline() && $poolCount >= 2) {
+        if ($this->selectionProfile->usesTournamentPipeline() && $poolCount >= 2 && !$this->rateLimitFallbackMode) {
             $selectedKeys = $this->runTournamentSelectionPasses(
                 $userSystemPrompt,
                 $poolEntries,
@@ -722,9 +722,6 @@ CONTRACT;
 
         if ($this->selectionProfile->keysOnlyJson) {
             $parts[] = 'Return JSON with used_entry_keys ONLY. Do not emit selection_reasoning.';
-        } elseif ($this->selectionProfile->verificationAutoDetected) {
-            $parts[] = 'Return JSON with used_entries: array of objects {key, verification_rationale} '
-                . '(max 15 words per rationale). Do not emit selection_reasoning or a separate rationale block.';
         } else {
             $parts[] = 'Emit used_entry_keys before any selection_reasoning text.';
         }
@@ -1007,9 +1004,12 @@ CONTRACT;
         $results      = [];
         $batchErrors  = [];
         foreach ($responses as $index => $response) {
-            if (!$response->isOk() && $this->shouldRetryWithoutResponseSchema($response)) {
-                $payloads[$index] = $this->selectionPayloadWithoutSchema($payloads[$index]);
-                $response         = $this->postPayloadWithSchemaFallback($payloads[$index], $apiKey, 'selection');
+            if (!$response->isOk()) {
+                error_log(
+                    'GeminiResearcherService: parallel selection batch ' . ($index + 1)
+                    . ' failed with status ' . $response->status . '; retrying sequentially'
+                );
+                $response = $this->postPayloadWithSchemaFallback($payloads[$index], $apiKey, 'selection');
             }
 
             if (!$response->isOk()) {
@@ -1801,6 +1801,10 @@ CONTRACT;
 
     private function plannedSelectionStrategy(int $poolCount): string
     {
+        if ($this->rateLimitFallbackMode) {
+            return 'rate_limit_batched_selection';
+        }
+
         if ($this->selectionProfile->id === GeminiResearcherSelectionProfile::RELATIONAL && $poolCount >= 2) {
             return 'relational_tournament_parallel_batches';
         }
@@ -2120,10 +2124,6 @@ CONTRACT;
             'minItems'    => 0,
             'maxItems'    => $selectionTarget,
         ];
-
-        if ($profile->verificationAutoDetected && !$profile->keysOnlyJson) {
-            return $this->selectionResponseSchemaVerificationInline($selectionTarget);
-        }
 
         if ($profile->keysOnlyJson || !$profile->includeSelectionReasoning) {
             return $this->selectionResponseSchemaKeysOnly($selectionTarget);
