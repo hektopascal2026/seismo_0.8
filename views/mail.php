@@ -207,6 +207,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <div class="admin-form-field">
                     <label>Display name <input type="text" name="display_name" class="search-input" style="width:100%;" value="<?= e((string)($editRow['display_name'] ?? '')) ?>"></label>
                 </div>
+                <?php if ($mailModule->isNewsletter()): ?>
                 <div class="admin-form-field">
                     <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
                 </div>
@@ -215,6 +216,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
                     </label>
                 </div>
+                <?php else: ?>
+                <input type="hidden" name="subject_filter" value="">
+                <input type="hidden" name="digest_split_config" value="">
+                <?php endif; ?>
                 <?php
                 $categoryValue = (string)($editRow['category'] ?? '');
                 $datalistId = 'mail-category-suggestions';
@@ -278,12 +283,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         </label>
                     </div>
 
+                    <?php if ($mailModule->isNewsletter()): ?>
                     <div class="admin-form-field" id="digest-split-proposed-panel" style="margin-top: 1rem;">
                         <label>Proposed Digest Split Config (JSON):
                             <?php $digestSplitConfigRaw = (string)($editRow['digest_split_config'] ?? ''); ?>
                             <textarea id="digest_split_config_json" class="search-input" style="width: 100%; height: 6rem; font-family: monospace; font-size: 0.85rem;" placeholder='(Not a digest or no split config generated yet)'><?= e($digestSplitConfigRaw) ?></textarea>
                         </label>
                     </div>
+                    <?php endif; ?>
 
                     <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
@@ -366,6 +373,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <div class="admin-form-field">
                     <label>Display name <input type="text" name="display_name" class="search-input" style="width:100%;" value="<?= e((string)($editRow['display_name'] ?? '')) ?>"></label>
                 </div>
+                <?php if ($mailModule->isNewsletter()): ?>
                 <div class="admin-form-field">
                     <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="Optional case-insensitive keyword/phrase to route multiple newsletters from the same domain"></label>
                 </div>
@@ -374,6 +382,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"type": "html_css", "selector_story": "div.story", "selector_title": "h2", "selector_body": "p", "selector_link": "a"}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
                     </label>
                 </div>
+                <?php else: ?>
+                <input type="hidden" name="subject_filter" value="">
+                <input type="hidden" name="digest_split_config" value="">
+                <?php endif; ?>
                 <?php
                 $categoryValue = (string)($editRow['category'] ?? '');
                 $datalistId = 'mail-category-suggestions';
