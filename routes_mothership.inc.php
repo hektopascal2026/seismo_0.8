@@ -223,6 +223,11 @@ $router->register(
     false
 );
 $router->register(
+    'mail_google_reconnect',
+    \Seismo\Controller\MailGoogleOAuthController::class . '::reconnect',
+    false
+);
+$router->register(
     'mail_gmail_catchup',
     \Seismo\Controller\MailGoogleOAuthController::class . '::catchUp',
     false

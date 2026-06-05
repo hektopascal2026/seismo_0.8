@@ -136,6 +136,10 @@ $mailStripListingBoilerplate = !empty($mailStripListingBoilerplate);
                         <?= $csrfField ?>
                         <button type="submit" class="btn btn-secondary">Catch up inbox</button>
                     </form>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_google_reconnect" style="display:inline;">
+                        <?= $csrfField ?>
+                        <button type="submit" class="btn btn-secondary">Reconnect Google</button>
+                    </form>
                     <form method="post" action="<?= e($basePath) ?>/index.php?action=mail_google_disconnect" style="display:inline;">
                         <?= $csrfField ?>
                         <button type="submit" class="btn btn-secondary">Disconnect Google</button>

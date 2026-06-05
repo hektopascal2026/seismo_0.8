@@ -18,20 +18,31 @@ final class MailGoogleOAuthController
     public function startConnect(): void
     {
         $this->guardMothershipPost();
-        $config = new SystemConfigRepository(getDbConnection());
-        $oauth  = new GmailOAuthService($config);
-        if (!$oauth->isConfigured()) {
-            $_SESSION['error'] = 'Enter Google OAuth Client ID and Client Secret in Settings → Mail, save, then connect.';
+        $oauth = $this->oauthServiceOrRedirect();
+        if ($oauth === null) {
+            return;
+        }
+        $this->redirectToGoogleOAuth($oauth);
+    }
+
+    /**
+     * Clear stored Gmail tokens, then start OAuth again with the saved Client ID / secret.
+     */
+    public function reconnect(): void
+    {
+        $this->guardMothershipPost();
+        $oauth = $this->oauthServiceOrRedirect();
+        if ($oauth === null) {
+            return;
+        }
+        try {
+            $oauth->disconnect();
+        } catch (\Throwable $e) {
+            error_log('Seismo mail_google_reconnect disconnect: ' . $e->getMessage());
+            $_SESSION['error'] = 'Could not clear the existing Gmail connection.';
             $this->redirectMail();
         }
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-        $state = bin2hex(random_bytes(16));
-        $_SESSION[GmailOAuthService::SESSION_STATE_KEY] = $state;
-
-        header('Location: ' . $oauth->createAuthUrl($state), true, 302);
-        exit;
+        $this->redirectToGoogleOAuth($oauth);
     }
 
     public function callback(): void
@@ -114,6 +125,29 @@ final class MailGoogleOAuthController
             $_SESSION['error'] = $e->getMessage();
         }
         $this->redirectMail();
+    }
+
+    private function oauthServiceOrRedirect(): ?GmailOAuthService
+    {
+        $oauth = new GmailOAuthService(new SystemConfigRepository(getDbConnection()));
+        if (!$oauth->isConfigured()) {
+            $_SESSION['error'] = 'Enter Google OAuth Client ID and Client Secret in Settings → Mail, save, then connect.';
+            $this->redirectMail();
+        }
+
+        return $oauth;
+    }
+
+    private function redirectToGoogleOAuth(GmailOAuthService $oauth): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+        $state = bin2hex(random_bytes(16));
+        $_SESSION[GmailOAuthService::SESSION_STATE_KEY] = $state;
+
+        header('Location: ' . $oauth->createAuthUrl($state), true, 302);
+        exit;
     }
 
     private function guardMothershipPost(): void
