@@ -384,7 +384,8 @@ TEXT;
             $prompt .= "========================================\n";
             $prompt .= trim($keepText) . "\n";
             $prompt .= "========================================\n\n";
-            $prompt .= "Please analyze the HTML template structure corresponding to this desired content. Generate split rules (CSS selectors or regex) that specifically target/isolate this repeating article container template and others like it, while excluding other sections (e.g., editorial greetings, indexes, ads, footers, or non-story text blocks) as noise.\n\n";
+            $prompt .= "Note: The pasted content above may contain multiple distinct articles/stories separated by delimiters (like '---', '___', '===', or similar divider lines). Each separated section represents a separate child story card you want to extract.\n\n";
+            $prompt .= "Please analyze the HTML template structure corresponding to these desired content items. Generate split rules (CSS selectors or regex) that specifically target/isolate this repeating article container template and others like it, while excluding other sections (e.g., editorial greetings, indexes, ads, footers, or non-story text blocks) as noise.\n\n";
         }
 
         $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
