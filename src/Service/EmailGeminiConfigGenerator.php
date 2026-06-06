@@ -384,7 +384,8 @@ TEXT;
             $prompt .= "========================================\n";
             $prompt .= trim($keepText) . "\n";
             $prompt .= "========================================\n\n";
-            $prompt .= "Note: The pasted content above may contain multiple distinct articles/stories separated by delimiters (like '---', '___', '===', or similar divider lines). Each separated section represents a separate child story card you want to extract.\n\n";
+            $prompt .= "Note: The pasted content above may contain multiple distinct articles/stories separated by delimiters (like '---', '___', '===', or similar divider lines). Each separated section represents a single child story card you want to extract.\n";
+            $prompt .= "CRITICAL: If a single story section contains multiple paragraphs, headings, or fact boxes (such as 'Das ist passiert' followed by 'Darum ist es wichtig'), these MUST all remain together within the SAME single story card. Do NOT select individual paragraphs or fact blocks as separate stories. Find the outermost common ancestor container/wrapper element in the HTML that groups all parts of a single story together.\n\n";
             $prompt .= "Please analyze the HTML template structure corresponding to these desired content items. Generate split rules (CSS selectors or regex) that specifically target/isolate this repeating article container template and others like it, while excluding other sections (e.g., editorial greetings, indexes, ads, footers, or non-story text blocks) as noise.\n\n";
         }
 
