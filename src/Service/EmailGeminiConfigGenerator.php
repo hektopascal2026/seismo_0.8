@@ -282,7 +282,7 @@ TEXT;
 
         if ($extracted === null) {
             $debugLog .= "Extracted is null\n";
-            file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
+            file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
             return [
                 'digest_split_config' => null,
                 'analysis' => null,
@@ -303,7 +303,7 @@ TEXT;
             $previewCount = $this->countPreviewCards($samples, $normalized);
             $debugLog .= "Preview count: " . $previewCount . "\n";
             if ($previewCount > 0) {
-                file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
+                file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
                 return [
                     'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     'analysis' => null,
@@ -322,7 +322,7 @@ TEXT;
 
         $probed = $this->tryProbedSplitConfig($samples, 'HTML template probe');
         $debugLog .= "Probed: " . json_encode($probed, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-        file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
+        file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
 
         if ($probed !== null) {
             return [
