@@ -24,8 +24,8 @@ final class GeminiResearcherSelectionProfileResolver
                 useGlobalFingerprint: true,
                 useTournament: true,
                 useNegativeSpaceContract: true,
-                keysOnlyJson: true,
-                includeSelectionReasoning: false,
+                keysOnlyJson: false,
+                includeSelectionReasoning: true,
                 capSelectionReasoning: false,
             );
         }
@@ -38,8 +38,8 @@ final class GeminiResearcherSelectionProfileResolver
                 useGlobalFingerprint: true,
                 useTournament: true,
                 useNegativeSpaceContract: false,
-                keysOnlyJson: true,
-                includeSelectionReasoning: false,
+                keysOnlyJson: false,
+                includeSelectionReasoning: true,
                 capSelectionReasoning: false,
             );
         }

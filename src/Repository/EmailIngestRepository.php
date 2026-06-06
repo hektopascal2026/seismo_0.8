@@ -868,6 +868,11 @@ final class EmailIngestRepository
             ?, ?, ?, ?, ?, 0
         )";
 
+        $parentWebView = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($parentRow['metadata'] ?? null);
+        if ($parentWebView === null || trim($parentWebView) === '') {
+            $parentWebView = 'https://seismo.live/';
+        }
+
         $stmtIns = $this->pdo->prepare($sql);
 
         foreach ($stories as $index => $story) {
@@ -887,9 +892,10 @@ final class EmailIngestRepository
             $childRow = EmailSubscriptionProcessor::apply($childRow, $subs);
 
             $metaPayload = [];
-            if ($story['link'] !== null) {
-                $metaPayload['link'] = $story['link'];
-                $metaPayload['web_view_url'] = $story['link'];
+            $childLink = $parentWebView;
+            if ($childLink !== null && $childLink !== '') {
+                $metaPayload['link'] = $childLink;
+                $metaPayload['web_view_url'] = $childLink;
             }
             $parentInboxDate = trim((string)($parentRow['date_received'] ?? ''));
             if ($parentInboxDate === '') {
@@ -943,7 +949,7 @@ final class EmailIngestRepository
         $t = entryTable('emails');
         $stmt = $this->pdo->prepare(
             "SELECT message_id, email_subscription_id, from_addr, to_addr, cc_addr, from_email, from_name,
-                    date_utc, date_received, date_sent
+                    date_utc, date_received, date_sent, metadata
                FROM {$t} WHERE id = ? LIMIT 1"
         );
         $stmt->execute([$parentId]);
@@ -953,7 +959,7 @@ final class EmailIngestRepository
         }
 
         $merged = array_merge($dbRow, $parentRow);
-        foreach (['message_id', 'email_subscription_id', 'from_addr', 'to_addr', 'cc_addr', 'from_email', 'from_name', 'date_utc', 'date_received', 'date_sent'] as $col) {
+        foreach (['message_id', 'email_subscription_id', 'from_addr', 'to_addr', 'cc_addr', 'from_email', 'from_name', 'date_utc', 'date_received', 'date_sent', 'metadata'] as $col) {
             $fromDb = $dbRow[$col] ?? null;
             $fromRow = $parentRow[$col] ?? null;
             if (($merged[$col] === null || $merged[$col] === '') && $fromDb !== null && $fromDb !== '') {

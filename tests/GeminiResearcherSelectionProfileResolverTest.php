@@ -40,7 +40,7 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
         self::assertSame(GeminiResearcherSelectionProfile::TOURNAMENT, $profile->id);
         self::assertTrue($profile->usesTournamentPipeline());
         self::assertTrue($profile->useGlobalFingerprint);
-        self::assertTrue($profile->keysOnlyJson);
+        self::assertFalse($profile->keysOnlyJson);
     }
 
     public function testRelationalMode(): void
@@ -52,13 +52,13 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
 
         self::assertSame(GeminiResearcherSelectionProfile::RELATIONAL, $profile->id);
         self::assertTrue($profile->useNegativeSpaceContract);
-        self::assertTrue($profile->keysOnlyJson);
+        self::assertFalse($profile->keysOnlyJson);
     }
 
     public function testVerificationAppendixPreservesTournamentMode(): void
     {
         $prompt = <<<'PROMPT'
-        Swissmem Monitor — zwingende Verifikation: Unter keinen Umständen ein Unternehmen wählen,
+         Swissmem Monitor — zwingende Verifikation: Unter keinen Umständen ein Unternehmen wählen,
         das nicht im Text erwähnt ist.
         PROMPT;
 
@@ -70,7 +70,7 @@ final class GeminiResearcherSelectionProfileResolverTest extends TestCase
         self::assertSame(GeminiResearcherSelectionProfile::TOURNAMENT, $profile->id);
         self::assertTrue($profile->verificationAutoDetected);
         self::assertTrue($profile->usesTournamentPipeline());
-        self::assertTrue($profile->keysOnlyJson);
+        self::assertFalse($profile->keysOnlyJson);
     }
 
     public function testSummaryBatchConstantsRaised(): void

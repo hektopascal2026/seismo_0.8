@@ -27,6 +27,10 @@ final class EmailHtmlSanitizer
             return '';
         }
 
+        $html = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $html) ?? $html;
+        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html) ?? $html;
+        $html = preg_replace('/<head\b[^>]*>.*?<\/head>/is', '', $html) ?? $html;
+
         if (strlen($html) > self::PURIFY_MAX_BYTES) {
             return self::normalizeAnchorHrefs(strip_tags($html), $allowWebviewRedirects);
         }

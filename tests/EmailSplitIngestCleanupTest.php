@@ -209,5 +209,70 @@ namespace Seismo\Tests {
             self::assertStringNotContainsString('another ad here!', $child2['text_body']);
             self::assertStringNotContainsString('Social Share', $child2['text_body']);
         }
+
+        public function testSplitAndIngestStoriesUniversallyOverridesLinksWithParentWebView(): void
+        {
+            // 1. Insert subscription
+            $this->pdo->exec("
+                INSERT INTO email_subscriptions (
+                    match_type, match_value, display_name, disabled, auto_detected
+                ) VALUES (
+                    'email', 'newsletter@example.com', 'Example Newsletter', 0, 0
+                )
+            ");
+            $subId = (int)$this->pdo->lastInsertId();
+
+            // 2. Insert parent email with web_view_url in metadata
+            $meta = json_encode(['web_view_url' => 'https://example.com/parent-webview-url']);
+            $this->pdo->prepare("
+                INSERT INTO emails (
+                    id, email_subscription_id, subject, derived_title, from_email, from_name, text_body, html_body, date_utc, metadata
+                ) VALUES (
+                    20, ?, 'Daily News', 'Daily News', 'newsletter@example.com', 'Example Publisher', 'Parent raw body', 'HTML body', '2026-06-06 00:00:00', ?
+                )
+            ")->execute([$subId, $meta]);
+
+            // 3. Define split config
+            $splitConfig = [
+                'is_digest' => true,
+                'split_rules' => [
+                    'split_method' => 'html_selector',
+                    'story_selector' => '.story',
+                    'title_selector' => 'h2',
+                    'link_selector' => 'a',
+                    'body_selector' => '.content',
+                ]
+            ];
+
+            // 4. Run splitAndIngestStories
+            $parentRow = [
+                'from_email' => 'newsletter@example.com',
+                'from_name' => 'Example Publisher',
+                'subject' => 'Daily News',
+                'html_body' => '
+                    <html><body>
+                        <div class="story">
+                            <h2>Story 1 Title</h2>
+                            <a href="https://example.com/wrong-story-link">Link 1</a>
+                            <div class="content">Story 1 core text.</div>
+                        </div>
+                    </body></html>
+                ',
+                'text_body' => 'Text body representation'
+            ];
+
+            $repo = new EmailIngestRepository($this->pdo);
+            $repo->splitAndIngestStories(20, $parentRow, $splitConfig);
+
+            // 5. Query inserted child
+            $stmt = $this->pdo->prepare("SELECT * FROM emails WHERE parent_email_id = 20 LIMIT 1");
+            $stmt->execute();
+            $child = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            self::assertNotEmpty($child);
+            $childMeta = json_decode($child['metadata'] ?? '', true);
+            self::assertSame('https://example.com/parent-webview-url', $childMeta['link'] ?? null);
+            self::assertSame('https://example.com/parent-webview-url', $childMeta['web_view_url'] ?? null);
+        }
     }
 }
