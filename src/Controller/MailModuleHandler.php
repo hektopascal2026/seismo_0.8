@@ -526,6 +526,7 @@ final class MailModuleHandler
             'verification' => $result['verification'],
             'preview_stories' => $previewStories,
             'samples' => $samples,
+            'debug_log' => $result['debug_log'] ?? null,
         ];
     }
 

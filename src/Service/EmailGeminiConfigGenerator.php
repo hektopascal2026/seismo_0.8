@@ -293,6 +293,7 @@ TEXT;
                     'attempts' => 1,
                     'message' => 'Not a multi-story digest — no split config needed.',
                 ],
+                'debug_log' => $debugLog,
             ];
         }
 
@@ -314,6 +315,7 @@ TEXT;
                         'attempts' => 1,
                         'message' => 'Analysis complete — ' . $previewCount . ' card(s) in preview.',
                     ],
+                    'debug_log' => $debugLog,
                 ];
             }
         } else {
@@ -329,6 +331,7 @@ TEXT;
                 'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'analysis' => null,
                 'verification' => $probed['verification'],
+                'debug_log' => $debugLog,
             ];
         }
 
@@ -342,6 +345,7 @@ TEXT;
                 'attempts' => 1,
                 'message' => 'Gemini config did not produce preview cards — try manual selectors or mark noise blocks and refine.',
             ],
+            'debug_log' => $debugLog,
         ];
     }
 
