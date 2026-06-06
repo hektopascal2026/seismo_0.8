@@ -339,6 +339,8 @@ final class BaseClient
             return null;
         }
 
+        // Disable curl_share_init_persistent to avoid stale connections/deadlocks across FPM request boundaries in PHP 8.5+
+        /*
         if (function_exists('curl_share_init_persistent')) {
             $share = curl_share_init_persistent([
                 CURL_LOCK_DATA_DNS,
@@ -352,6 +354,7 @@ final class BaseClient
 
             return null;
         }
+        */
 
         if (!function_exists('curl_share_init')) {
             return null;

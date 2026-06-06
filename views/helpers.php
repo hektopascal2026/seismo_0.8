@@ -240,7 +240,14 @@ if (!function_exists('seismo_is_navigable_url')) {
     function seismo_is_navigable_url(?string $url): bool
     {
         $u = trim((string)$url);
-        return $u !== '' && $u !== '#';
+        if ($u === '' || $u === '#') {
+            return false;
+        }
+        $lower = rtrim(strtolower($u), '/');
+        if ($lower === 'https://seismo.live' || $lower === 'http://seismo.live') {
+            return false;
+        }
+        return true;
     }
 }
 
