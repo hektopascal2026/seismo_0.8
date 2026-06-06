@@ -83,7 +83,7 @@ body {
     --seismo-pill-lex: #f5f562;
     --seismo-pill-leg: #d4edda;
     --seismo-pill-mail: #ffdbbb;
-    --seismo-pill-newsletter: #d3716d;
+    --seismo-pill-newsletter: #e5c1a7;
     
     /* Label Button Color Themes */
     --label-investigation: #FF6B6B;
@@ -1091,10 +1091,6 @@ textarea.search-input.setup-code-preview {
 
 .filter-pill-input:checked + .filter-pill-text--newsletter {
     background-color: var(--seismo-pill-newsletter);
-}
-
-.tag-filter-pill-active.tag-filter-pill--newsletter {
-    background-color: var(--seismo-pill-newsletter, #d3716d);
 }
 
 .entry-tag--email-sender {
@@ -2353,6 +2349,10 @@ textarea.search-input.setup-code-preview {
 
 .tag-filter-pill-active.tag-filter-pill--email {
     background-color: var(--seismo-pill-mail, #ffdbbb);
+}
+
+.tag-filter-pill-active.tag-filter-pill--newsletter {
+    background-color: var(--seismo-pill-newsletter, #e5c1a7);
 }
 
 .tag-filter-pill-active.tag-filter-pill--mem {

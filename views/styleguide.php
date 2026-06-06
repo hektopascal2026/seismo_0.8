@@ -72,7 +72,7 @@ $activeNav = 'styleguide';
             --pill-lex-ch: #ffffb3;          /* CH Lex lighter yellow */
             --pill-leg: #d4edda;             /* Leg green */
             --pill-mail: #ffdbbb;            /* Mail orange */
-            --pill-newsletter: #d3716d;      /* Newsletter coral */
+            --pill-newsletter: #e5c1a7;      /* Newsletter warm sand */
             
             /* Spacing Tokens */
             --space-xxs: 0.125rem;  /* 2px */
@@ -904,7 +904,7 @@ $activeNav = 'styleguide';
                         </div>
                         <div class="visual-spacing-card" style="border-top: 0.375rem solid var(--pill-newsletter);">
                             <span class="pill-source" style="background-color: var(--pill-newsletter); margin-bottom: var(--space-sm);">NEWSLETTER</span>
-                            <label>#D3716D</label>
+                            <label>#E5C1A7</label>
                             <span>--seismo-pill-newsletter<br>IMAP / digest newsletters</span>
                         </div>
                         <div class="visual-spacing-card" style="border-top: 0.375rem solid #e0e0e0;">
