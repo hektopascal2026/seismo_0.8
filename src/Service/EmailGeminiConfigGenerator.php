@@ -381,11 +381,12 @@ TEXT;
             $prompt .= "Note: The pasted content above may contain multiple distinct articles/stories separated by delimiters (like '---', '___', '===', or similar divider lines). Each separated section represents a single child story card you want to extract.\n";
             $prompt .= "CRITICAL: If a single story section contains multiple paragraphs, headings, or fact boxes (such as 'Das ist passiert' followed by 'Darum ist es wichtig'), these MUST all remain together within the SAME single story card. Do NOT select individual paragraphs or fact blocks as separate stories. Find the outermost common ancestor container/wrapper element in the HTML that groups all parts of a single story together.\n";
             $prompt .= "For newsletters (especially table-heavy layouts like NZZ), stories are typically built inside repeating `table` elements. Never select individual paragraphs (`p`), headings (`h1`-`h4`), or inner cells (`td`) as the `story_selector` if they are children of a parent story table. Instead, target the outermost `table` or `div` container that wraps the entire story block.\n\n";
-            $prompt .= "Please analyze the HTML template structure corresponding to these desired content items. Generate split rules (CSS selectors or regex) that specifically target/isolate this repeating article container template and others like it, while excluding other sections (e.g., editorial greetings, indexes, ads, footers, or non-story text blocks) as noise.\n\n";
+            $prompt .= "The user has confirmed this email is a multi-story digest. Suggest a JSON split configuration matching our split schema:\n";
+        } else {
+            $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
+            $prompt .= "If they do, suggest a JSON split configuration matching our split schema:\n";
         }
 
-        $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";
-        $prompt .= "If they do, suggest a JSON split configuration matching our split schema:\n";
         $prompt .= "- For HTML emails: {\"split_method\": \"html_selector\", \"story_selector\": \"CSS selector for story wrapper\", \"title_selector\": \"CSS selector for title relative to story node\", \"body_selector\": \"CSS selector for body content relative to story node\", \"link_selector\": \"CSS selector for story URL relative to story node\"}\n";
         $prompt .= "- For plain text or regex-delimited emails: {\"split_method\": \"regex_split\", \"split_pattern\": \"PHP regex delimiter\", \"title_pattern\": \"regex pattern\", \"body_pattern\": \"regex pattern\", \"link_pattern\": \"regex pattern\"}\n\n";
         $prompt .= 'Return ONLY the JSON split config object (or null). Do not include markdown wraps like ```json.';
