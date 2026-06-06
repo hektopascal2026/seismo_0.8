@@ -54,7 +54,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             display: flex;
             justify-content: center;
             align-items: center;
-            margin: -0.25rem 0;
+            margin: -0.65rem 0;
             position: relative;
             z-index: 10;
         }
@@ -77,17 +77,6 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             color: white;
             border-color: black;
             box-shadow: 1px 1px 0px rgba(0,0,0,1);
-        }
-        .split-preview-glue-connector.active::before {
-            content: "";
-            position: absolute;
-            top: -10px;
-            bottom: -10px;
-            width: 4px;
-            background: #22c55e;
-            z-index: -1;
-            border-left: 2px solid black;
-            border-right: 2px solid black;
         }
         .btn-split-exclude.active {
             background: #b91c1c;
@@ -102,7 +91,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             display: flex;
             justify-content: center;
             align-items: center;
-            margin: -0.25rem 0;
+            margin: -0.65rem 0;
             position: relative;
             z-index: 10;
         }
@@ -125,17 +114,6 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             color: white;
             border-color: black;
             box-shadow: 1px 1px 0px rgba(0,0,0,1);
-        }
-        .split-preview-glue-connector.active::before {
-            content: "";
-            position: absolute;
-            top: -10px;
-            bottom: -10px;
-            width: 4px;
-            background: #22c55e;
-            z-index: -1;
-            border-left: 2px solid black;
-            border-right: 2px solid black;
         }
         .btn-split-exclude.active {
             background: #b91c1c;
