@@ -688,6 +688,19 @@ final class EmailDigestSplitterService
 
     private function cssTokenToXPath(string $token): string
     {
+        if (preg_match('/^([^:]+):has\((.+)\)$/', $token, $m)) {
+            $base = $m[1];
+            $inner = $m[2];
+            $baseXpath = $this->cssTokenToXPath($base);
+            $innerXpath = $this->cssToXPath($inner);
+            if (str_starts_with($innerXpath, './/')) {
+                $innerXpath = substr($innerXpath, 3);
+            }
+            if ($baseXpath !== '' && $innerXpath !== '') {
+                return "{$baseXpath}[{$innerXpath}]";
+            }
+        }
+
         if (preg_match('/^([a-zA-Z0-9*-]*)\.([a-zA-Z0-9_-]+)$/', $token, $m)) {
             $tag = $m[1] !== '' ? $m[1] : '*';
 
