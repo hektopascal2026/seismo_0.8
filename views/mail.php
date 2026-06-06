@@ -476,9 +476,6 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Split Preview (Generated Cards)</h4>
                         <div id="split-preview-toolbar" style="display: none; margin-bottom: 0.75rem;">
                             <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Check <strong>Noise</strong> on blocks that are not real stories (headers, ads, footers). <strong>Apply Split Config</strong> saves those exclusions; use <strong>Refine</strong> only when selectors still need adjustment.</p>
-                            <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" disabled onclick="runAiSplitRefine()">
-                                Refine rules (exclude marked noise)
-                            </button>
                         </div>
                         <div id="split-preview-cards-container" style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1rem; max-height: 25rem; overflow-y: auto; padding: 0.5rem; border: 1px dashed #ccc; background-color: #fafafa;">
                             <!-- Dynamically generated story cards will go here -->
@@ -509,6 +506,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             
                             <button type="submit" class="btn btn-success" onclick="return prepareSplitConfigApply()">
                                 Apply Split Config
+                            </button>
+                            <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" style="display: none;" disabled onclick="runAiSplitRefine()">
+                                Refine rules (apply merges & exclusions)
                             </button>
                             <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel</a>
                         </form>
@@ -1040,6 +1040,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         
         if (noiseCount > 0 || glueCount > 0) {
             refineBtn.disabled = false;
+            refineBtn.style.display = 'inline-block';
             if (noiseCount > 0 && glueCount > 0) {
                 refineBtn.textContent = 'Refine rules (merge blocks & exclude noise)';
             } else if (glueCount > 0) {
@@ -1049,6 +1050,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             }
         } else {
             refineBtn.disabled = true;
+            refineBtn.style.display = 'none';
             refineBtn.textContent = 'Refine rules (apply merges & exclusions)';
         }
     }
@@ -1157,13 +1159,13 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 var glueBtn = document.createElement('button');
                 glueBtn.type = 'button';
                 glueBtn.className = 'btn-split-glue';
-                glueBtn.innerHTML = '<span>➕ Merge Blocks</span>';
+                glueBtn.innerHTML = '<span>Merge Blocks</span>';
                 glueBtn.addEventListener('click', function() {
                     connector.classList.toggle('active');
                     if (connector.classList.contains('active')) {
-                        glueBtn.innerHTML = '<span>🔗 Merged</span>';
+                        glueBtn.innerHTML = '<span>Merged</span>';
                     } else {
-                        glueBtn.innerHTML = '<span>➕ Merge Blocks</span>';
+                        glueBtn.innerHTML = '<span>Merge Blocks</span>';
                     }
                     updateSplitRefineButton();
                 });
@@ -1206,16 +1208,16 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             var noiseBtn = document.createElement('button');
             noiseBtn.type = 'button';
             noiseBtn.className = 'btn-split-exclude';
-            noiseBtn.innerHTML = '<span>➖ Exclude block</span>';
+            noiseBtn.innerHTML = '<span>Exclude block</span>';
             noiseBtn.addEventListener('click', function() {
                 noiseBtn.classList.toggle('active');
                 if (noiseBtn.classList.contains('active')) {
-                    noiseBtn.innerHTML = '<span>🔗 Excluded</span>';
+                    noiseBtn.innerHTML = '<span>Excluded</span>';
                     card.style.opacity = '0.55';
                     card.style.borderColor = '#b91c1c';
                     card.style.background = '#fef2f2';
                 } else {
-                    noiseBtn.innerHTML = '<span>➖ Exclude block</span>';
+                    noiseBtn.innerHTML = '<span>Exclude block</span>';
                     card.style.opacity = '1';
                     card.style.borderColor = 'black';
                     card.style.background = '#ffffff';
