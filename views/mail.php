@@ -377,6 +377,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <p class="admin-intro">Uses 3 recent sample emails (max 2 Gemini calls, ~1–3 min). Generates selector rules to split digests into individual cards.</p>
 
                 <div class="admin-form-field">
+                    <label style="font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem;">
+                        <input type="checkbox" id="split-advanced-mode" onchange="toggleSplitAdvancedMode()">
+                        Advanced Selection Mode
+                    </label>
+                    <div id="split-advanced-container" style="display: none; margin-bottom: 1rem;">
+                        <label style="font-weight: bold; font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">What do you want to keep? (Paste interesting parts from email body / source):</label>
+                        <textarea id="split-keep-text" class="search-input" style="width: 100%; height: 6rem; font-family: monospace; font-size: 0.85rem;" placeholder="Paste text or HTML snippets of the articles/sections you want to keep..."></textarea>
+                    </div>
                     <button type="button" id="btn-ai-split-analyze" class="btn btn-secondary" onclick="runAiSplitAnalysis(<?= (int)$editRow['id'] ?>)">
                         Analyze sample emails for splitting
                     </button>
@@ -1214,6 +1222,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         return { blocks: blocks };
     }
 
+    function toggleSplitAdvancedMode() {
+        var chk = document.getElementById('split-advanced-mode');
+        var container = document.getElementById('split-advanced-container');
+        if (chk && container) {
+            container.style.display = chk.checked ? 'block' : 'none';
+        }
+    }
+
     function runAiSplitAnalysis(id) {
         var btn = document.getElementById('btn-ai-split-analyze');
         var status = document.getElementById('ai-split-status');
@@ -1234,6 +1250,12 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var formData = new FormData();
         formData.append('id', id);
         formData.append('_csrf', '<?= CsrfToken::ensure() ?>');
+
+        var advMode = document.getElementById('split-advanced-mode');
+        var keepText = document.getElementById('split-keep-text');
+        if (advMode && advMode.checked && keepText) {
+            formData.append('keep_text', keepText.value);
+        }
 
         fetch('<?= e($basePath) ?>/index.php?action=<?= e($mailModule->analyzeSplittingAction) ?>', {
             method: 'POST',

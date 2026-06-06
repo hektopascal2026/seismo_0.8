@@ -261,6 +261,7 @@ TEXT;
 
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param ?string $keepText
      * @return array{
      *     digest_split_config: ?string,
      *     analysis: ?array<string, mixed>,
@@ -273,9 +274,9 @@ TEXT;
      *     }
      * }
      */
-    public function generateSplitConfig(array $samples): array
+    public function generateSplitConfig(array $samples, ?string $keepText = null): array
     {
-        $extracted = $this->callGeminiSplitV1($samples);
+        $extracted = $this->callGeminiSplitV1($samples, $keepText);
         if ($extracted === null) {
             return [
                 'digest_split_config' => null,
@@ -332,13 +333,14 @@ TEXT;
 
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param ?string $keepText
      * @return ?array<string, mixed>
      */
-    private function callGeminiSplitV1(array $samples): ?array
+    private function callGeminiSplitV1(array $samples, ?string $keepText = null): ?array
     {
         $extracted = $this->callGeminiJsonOrNull(
             self::SPLIT_V1_SYSTEM_INSTRUCTION,
-            $this->buildSplitV1Prompt($samples),
+            $this->buildSplitV1Prompt($samples, $keepText),
             'split v1'
         );
 
@@ -359,8 +361,9 @@ TEXT;
 
     /**
      * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
+     * @param ?string $keepText
      */
-    private function buildSplitV1Prompt(array $samples): string
+    private function buildSplitV1Prompt(array $samples, ?string $keepText = null): string
     {
         $prompt = "We want to configure multi-story digest splitting for a newsletter. Below are "
             . count($samples) . " sample emails from this newsletter.\n\n";
@@ -373,6 +376,15 @@ TEXT;
             $prompt .= '--- SAMPLE EMAIL #' . ($index + 1) . " ---\n";
             $prompt .= 'Subject: ' . $sample['subject'] . "\n";
             $prompt .= "Body:\n" . $body . "\n\n";
+        }
+
+        if ($keepText !== null && trim($keepText) !== '') {
+            $prompt .= "CRITICAL SELECTION FILTER:\n";
+            $prompt .= "The user specifically wants to extract and keep the following content from the email template:\n";
+            $prompt .= "========================================\n";
+            $prompt .= trim($keepText) . "\n";
+            $prompt .= "========================================\n\n";
+            $prompt .= "Please analyze the HTML template structure corresponding to this desired content. Generate split rules (CSS selectors or regex) that specifically target/isolate this repeating article container template and others like it, while excluding other sections (e.g., editorial greetings, indexes, ads, footers, or non-story text blocks) as noise.\n\n";
         }
 
         $prompt .= "Determine if these emails contain multiple distinct news articles/sections (a digest). If they do not, return null.\n";

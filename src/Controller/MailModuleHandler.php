@@ -453,7 +453,8 @@ final class MailModuleHandler
 
                 $result = $generator->refineSplitConfig($samples, $normalized, $feedback);
             } else {
-                $result = $generator->generateSplitConfig($samples);
+                $keepText = isset($_POST['keep_text']) ? (string)$_POST['keep_text'] : null;
+                $result = $generator->generateSplitConfig($samples, $keepText);
             }
 
             echo json_encode($this->buildSplitAnalysisResponse($result, $emails, $samples, $isRefine));
