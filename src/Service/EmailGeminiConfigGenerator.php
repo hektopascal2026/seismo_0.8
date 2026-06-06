@@ -531,15 +531,27 @@ TEXT;
      */
     public function refineSplitConfig(array $samples, array $currentConfig, array $feedback): array
     {
-        $keepCount = $this->countFeedbackVerdict($feedback, 'keep');
+        $rawKeepCount = $this->countFeedbackVerdict($feedback, 'keep');
         $noiseCount = $this->countFeedbackVerdict($feedback, 'noise');
-        if ($noiseCount === 0) {
-            throw new \InvalidArgumentException('Mark at least one preview block as noise before refining.');
+
+        // Check if user manually glued some adjacent cards together
+        $glueToggles = 0;
+        foreach ($feedback['blocks'] ?? [] as $block) {
+            if (!empty($block['glue_with_next'])) {
+                $glueToggles++;
+            }
         }
+
+        if ($noiseCount === 0 && $glueToggles === 0) {
+            throw new \InvalidArgumentException('Mark at least one preview block as noise or merge blocks together before refining.');
+        }
+
+        // Expected keepCount decreases by 1 for each glued connection (since 2 blocks merge to 1)
+        $keepCount = max(1, $rawKeepCount - $glueToggles);
 
         $currentConfig = DigestSplitConfigNormalizer::mergeNoiseFeedback($currentConfig, $feedback);
         $localCount = $this->countSplitStoriesOnSample($samples, $currentConfig);
-        if ($localCount === $keepCount && $localCount > 0) {
+        if ($localCount === $keepCount && $localCount > 0 && $glueToggles === 0) {
             return [
                 'digest_split_config' => json_encode($currentConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'analysis' => [
@@ -696,12 +708,31 @@ TEXT;
     private function buildRefinePrompt(array $samples, array $currentConfig, array $feedback, int $keepCount): string
     {
         $prompt = "REFINEMENT PASS — the user reviewed a live split preview and marked blocks as noise or keep.\n\n";
+
+        // Extract and format glue hints if present
+        $glueInstructions = "";
+        $blocks = $feedback['blocks'] ?? [];
+        foreach ($blocks as $idx => $block) {
+            if (!empty($block['glue_with_next'])) {
+                $nextIdx = $idx + 1;
+                $glueInstructions .= "- Block #" . ($idx + 1) . " (\"" . ($block['title'] ?? '') . "\") and Block #" . ($nextIdx + 1) . " (\"" . ($blocks[$nextIdx]['title'] ?? '') . "\") must be MERGED into a single card.\n";
+            }
+        }
+
+        if ($glueInstructions !== "") {
+            $prompt .= "CRITICAL MERGE REQUIREMENT:\n";
+            $prompt .= "The user has flagged that some adjacent blocks are part of the SAME story and should be kept together:\n";
+            $prompt .= $glueInstructions;
+            $prompt .= "This means your generated story_selector is too narrow (splitting a single article into multiple items). You MUST broaden or change the story_selector to target a wider ancestor container (e.g. table instead of td) so these sections remain together as one block.\n\n";
+        }
+
         $prompt .= "Current split_rules produced too many matches. Revise so ONLY the kept blocks survive.\n";
         $prompt .= "Target: exactly {$keepCount} card(s) on sample #1.\n\n";
         $prompt .= "Current config:\n" . json_encode($currentConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "User feedback on preview blocks:\n" . json_encode($feedback, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Strategies (pick what fits):\n";
-        $prompt .= "- Narrow story_selector to match only real story wrappers (e.g. tr.story not every tr).\n";
+        $prompt .= "- Broaden story_selector to a parent tag (like `table` instead of `td`) if adjacent blocks need to be kept together.\n";
+        $prompt .= "- Narrow story_selector to match only real story wrappers (e.g. tr.story not every tr) if there is unwanted noise.\n";
         $prompt .= "- Add exclude_selectors: array of simple selectors (.class, #id, tag) — matched story nodes are skipped.\n";
         $prompt .= "- Derive exclude_selectors from class/id patterns visible in noise block html_preview.\n\n";
 

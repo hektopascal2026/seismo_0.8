@@ -48,7 +48,92 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
     <title><?= e($headerTitle) ?> — <?= e(seismoBrandTitle()) ?></title>
     <link rel="stylesheet" href="<?= e($basePath) ?>/assets/css/style.css">
     <?php if ($accent): ?>
-    <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
+    <style>
+        :root { --seismo-accent: <?= e($accent) ?>; }
+        .split-preview-glue-connector {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: -0.25rem 0;
+            position: relative;
+            z-index: 10;
+        }
+        .btn-split-glue {
+            background: #ffffff;
+            border: 2px solid black;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 2px 12px;
+            cursor: pointer;
+            box-shadow: 2px 2px 0px rgba(0,0,0,1);
+            transition: all 0.15s ease;
+        }
+        .btn-split-glue:hover {
+            transform: scale(1.05);
+            background: #f3f4f6;
+        }
+        .split-preview-glue-connector.active .btn-split-glue {
+            background: #22c55e;
+            color: white;
+            border-color: black;
+            box-shadow: 1px 1px 0px rgba(0,0,0,1);
+        }
+        .split-preview-glue-connector.active::before {
+            content: "";
+            position: absolute;
+            top: -10px;
+            bottom: -10px;
+            width: 4px;
+            background: #22c55e;
+            z-index: -1;
+            border-left: 2px solid black;
+            border-right: 2px solid black;
+        }
+    </style>
+    <?php else: ?>
+    <style>
+        .split-preview-glue-connector {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: -0.25rem 0;
+            position: relative;
+            z-index: 10;
+        }
+        .btn-split-glue {
+            background: #ffffff;
+            border: 2px solid black;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 2px 12px;
+            cursor: pointer;
+            box-shadow: 2px 2px 0px rgba(0,0,0,1);
+            transition: all 0.15s ease;
+        }
+        .btn-split-glue:hover {
+            transform: scale(1.05);
+            background: #f3f4f6;
+        }
+        .split-preview-glue-connector.active .btn-split-glue {
+            background: #22c55e;
+            color: white;
+            border-color: black;
+            box-shadow: 1px 1px 0px rgba(0,0,0,1);
+        }
+        .split-preview-glue-connector.active::before {
+            content: "";
+            position: absolute;
+            top: -10px;
+            bottom: -10px;
+            width: 4px;
+            background: #22c55e;
+            z-index: -1;
+            border-left: 2px solid black;
+            border-right: 2px solid black;
+        }
+    </style>
     <?php endif; ?>
 </head>
 <body>
@@ -1061,7 +1146,31 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         }
 
         stories.forEach(function(story, index) {
+            if (index > 0) {
+                var connector = document.createElement('div');
+                connector.className = 'split-preview-glue-connector';
+                connector.dataset.aboveIndex = String(index - 1);
+                connector.dataset.belowIndex = String(index);
+
+                var glueBtn = document.createElement('button');
+                glueBtn.type = 'button';
+                glueBtn.className = 'btn-split-glue';
+                glueBtn.innerHTML = '<span>➕ Merge Blocks</span>';
+                glueBtn.addEventListener('click', function() {
+                    connector.classList.toggle('active');
+                    if (connector.classList.contains('active')) {
+                        glueBtn.innerHTML = '<span>🔗 Merged</span>';
+                    } else {
+                        glueBtn.innerHTML = '<span>➕ Merge Blocks</span>';
+                    }
+                    updateSplitRefineButton();
+                });
+                connector.appendChild(glueBtn);
+                container.appendChild(connector);
+            }
+
             var card = document.createElement('div');
+            card.className = 'split-preview-card';
             card.dataset.storyIndex = String(index);
             card.dataset.title = story.title || '';
             card.dataset.textPreview = truncatePreviewText(story.text_body || '', 400);
@@ -1209,14 +1318,22 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
     function collectSplitFeedback() {
         var blocks = [];
-        document.querySelectorAll('#split-preview-cards-container [data-story-index]').forEach(function(card) {
+        var cards = document.querySelectorAll('#split-preview-cards-container .split-preview-card');
+        cards.forEach(function(card, idx) {
             var toggle = card.querySelector('.split-noise-toggle');
+            var nextConnector = card.nextElementSibling;
+            var glueWithNext = false;
+            if (nextConnector && nextConnector.classList.contains('split-preview-glue-connector')) {
+                glueWithNext = nextConnector.classList.contains('active');
+            }
+
             blocks.push({
                 index: parseInt(card.dataset.storyIndex, 10),
                 verdict: toggle && toggle.checked ? 'noise' : 'keep',
                 title: card.dataset.title || '',
                 text_preview: card.dataset.textPreview || '',
-                html_preview: card.dataset.htmlPreview || ''
+                html_preview: card.dataset.htmlPreview || '',
+                glue_with_next: glueWithNext
             });
         });
         return { blocks: blocks };
