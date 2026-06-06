@@ -444,7 +444,7 @@ final class MailModuleHandler
                     exit;
                 }
 
-                $normalized = \Seismo\Core\Mail\DigestSplitConfigNormalizer::normalize($currentConfig);
+                $normalized = \Seismo\Core\Mail\DigestSplitConfigNormalizer::normalize($currentConfig, false);
                 if ($normalized === null) {
                     http_response_code(400);
                     echo json_encode(['error' => 'Current digest_split_config is invalid. Run initial analysis first.']);
