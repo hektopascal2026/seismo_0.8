@@ -1048,7 +1048,21 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var refineBtn = document.getElementById('btn-ai-split-refine');
         if (!refineBtn) return;
         var noiseCount = document.querySelectorAll('.split-noise-toggle:checked').length;
-        refineBtn.disabled = noiseCount === 0;
+        var glueCount = document.querySelectorAll('.split-preview-glue-connector.active').length;
+        
+        if (noiseCount > 0 || glueCount > 0) {
+            refineBtn.disabled = false;
+            if (noiseCount > 0 && glueCount > 0) {
+                refineBtn.textContent = 'Refine rules (merge blocks & exclude noise)';
+            } else if (glueCount > 0) {
+                refineBtn.textContent = 'Refine rules (merge blocks)';
+            } else {
+                refineBtn.textContent = 'Refine rules (exclude marked noise)';
+            }
+        } else {
+            refineBtn.disabled = true;
+            refineBtn.textContent = 'Refine rules (apply merges & exclusions)';
+        }
     }
 
     function applySplitAnalysisResponse(data, options) {
@@ -1399,10 +1413,11 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var textarea = document.getElementById('split_config_json');
         var feedback = collectSplitFeedback();
         var noiseMarked = feedback.blocks.filter(function(b) { return b.verdict === 'noise'; }).length;
+        var glueMarked = feedback.blocks.filter(function(b) { return b.glue_with_next === true; }).length;
 
-        if (noiseMarked === 0) {
+        if (noiseMarked === 0 && glueMarked === 0) {
             status.style.color = '#b45309';
-            status.textContent = 'Mark at least one block as noise first.';
+            status.textContent = 'Mark at least one block as noise or merge blocks first.';
             return;
         }
 
@@ -1410,7 +1425,11 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (analyzeBtn) analyzeBtn.disabled = true;
         status.style.display = 'inline';
         status.style.color = '#333';
-        status.textContent = 'Refining rules with Gemini (excluding ' + noiseMarked + ' noise block(s))...';
+        
+        var statusParts = [];
+        if (glueMarked > 0) statusParts.push('merging ' + glueMarked + ' connection(s)');
+        if (noiseMarked > 0) statusParts.push('excluding ' + noiseMarked + ' noise block(s)');
+        status.textContent = 'Refining rules with Gemini (' + statusParts.join(' & ') + ')...';
 
         var formData = new FormData();
         formData.append('id', splitSubscriptionId);
