@@ -369,13 +369,7 @@ TEXT;
             . count($samples) . " sample emails from this newsletter.\n\n";
 
         foreach ($samples as $index => $sample) {
-            $body = $this->truncateForPrompt(
-                (string)($sample['body'] ?? $sample['text_body'] ?? ''),
-                self::PROMPT_BODY_MAX_CHARS
-            );
-            $prompt .= '--- SAMPLE EMAIL #' . ($index + 1) . " ---\n";
-            $prompt .= 'Subject: ' . $sample['subject'] . "\n";
-            $prompt .= "Body:\n" . $body . "\n\n";
+            $prompt .= $this->formatSampleBlock($index, $sample);
         }
 
         if ($keepText !== null && trim($keepText) !== '') {
