@@ -270,4 +270,16 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         $urlPlain = EmailWebViewUrlExtractor::fromPlainText($plain);
         self::assertSame('https://dmp.politico.eu/?destination=https%3A%2F%2Fwww.politico.eu%2Fnewsletter%2Fglobal-security%2Fasian-allies-tiptoe-around-china-as-us-influence-wanes%2F&email=seismofetcher%40gmail.com', $urlPlain);
     }
+
+    public function testViewEmailInYourBrowserIsRecognized(): void
+    {
+        $html = '<p><a href="https://us12.campaign-archive.com/?e=8c86d464a8&u=7404e6dcdc8018f49c82e941d&id=021536b4d9">View email in your browser</a></p>';
+        $plain = "View email in your browser ( https://us12.campaign-archive.com/?e=8c86d464a8&u=7404e6dcdc8018f49c82e941d&id=021536b4d9 )";
+        
+        $url = EmailWebViewUrlExtractor::fromHtml($html);
+        self::assertSame('https://us12.campaign-archive.com/?e=8c86d464a8&u=7404e6dcdc8018f49c82e941d&id=021536b4d9', $url);
+        
+        $urlPlain = EmailWebViewUrlExtractor::fromPlainText($plain);
+        self::assertSame('https://us12.campaign-archive.com/?e=8c86d464a8&u=7404e6dcdc8018f49c82e941d&id=021536b4d9', $urlPlain);
+    }
 }
