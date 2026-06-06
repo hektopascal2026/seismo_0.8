@@ -277,7 +277,12 @@ TEXT;
     public function generateSplitConfig(array $samples, ?string $keepText = null): array
     {
         $extracted = $this->callGeminiSplitV1($samples, $keepText);
+        $debugLog = "--- GEMINI SPLIT CONFIG DEBUG ---\n";
+        $debugLog .= "Extracted raw: " . json_encode($extracted, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+
         if ($extracted === null) {
+            $debugLog .= "Extracted is null\n";
+            file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
             return [
                 'digest_split_config' => null,
                 'analysis' => null,
@@ -292,9 +297,13 @@ TEXT;
         }
 
         $normalized = DigestSplitConfigNormalizer::normalize($extracted, rejectFragileSelectors: false);
+        $debugLog .= "Normalized: " . json_encode($normalized, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+
         if ($normalized !== null) {
             $previewCount = $this->countPreviewCards($samples, $normalized);
+            $debugLog .= "Preview count: " . $previewCount . "\n";
             if ($previewCount > 0) {
+                file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
                 return [
                     'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     'analysis' => null,
@@ -307,9 +316,14 @@ TEXT;
                     ],
                 ];
             }
+        } else {
+            $debugLog .= "Normalized is null\n";
         }
 
         $probed = $this->tryProbedSplitConfig($samples, 'HTML template probe');
+        $debugLog .= "Probed: " . json_encode($probed, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        file_put_contents(SEISMO_ROOT . '/scratch/gemini_split_debug.log', $debugLog);
+
         if ($probed !== null) {
             return [
                 'digest_split_config' => json_encode($probed['config'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
