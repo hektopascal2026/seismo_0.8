@@ -58,10 +58,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             position: relative;
             z-index: 10;
         }
-        .btn-split-glue {
+        .btn-split-glue, .btn-split-exclude {
             background: #ffffff;
             border: 2px solid black;
-            border-radius: 20px;
             font-size: 0.75rem;
             font-weight: bold;
             padding: 2px 12px;
@@ -69,7 +68,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             box-shadow: 2px 2px 0px rgba(0,0,0,1);
             transition: all 0.15s ease;
         }
-        .btn-split-glue:hover {
+        .btn-split-glue:hover, .btn-split-exclude:hover {
             transform: scale(1.05);
             background: #f3f4f6;
         }
@@ -89,6 +88,12 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             z-index: -1;
             border-left: 2px solid black;
             border-right: 2px solid black;
+        }
+        .btn-split-exclude.active {
+            background: #b91c1c;
+            color: white;
+            border-color: black;
+            box-shadow: 1px 1px 0px rgba(0,0,0,1);
         }
     </style>
     <?php else: ?>
@@ -101,10 +106,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             position: relative;
             z-index: 10;
         }
-        .btn-split-glue {
+        .btn-split-glue, .btn-split-exclude {
             background: #ffffff;
             border: 2px solid black;
-            border-radius: 20px;
             font-size: 0.75rem;
             font-weight: bold;
             padding: 2px 12px;
@@ -112,7 +116,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             box-shadow: 2px 2px 0px rgba(0,0,0,1);
             transition: all 0.15s ease;
         }
-        .btn-split-glue:hover {
+        .btn-split-glue:hover, .btn-split-exclude:hover {
             transform: scale(1.05);
             background: #f3f4f6;
         }
@@ -132,6 +136,12 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             z-index: -1;
             border-left: 2px solid black;
             border-right: 2px solid black;
+        }
+        .btn-split-exclude.active {
+            background: #b91c1c;
+            color: white;
+            border-color: black;
+            box-shadow: 1px 1px 0px rgba(0,0,0,1);
         }
     </style>
     <?php endif; ?>
@@ -1047,7 +1057,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
     function updateSplitRefineButton() {
         var refineBtn = document.getElementById('btn-ai-split-refine');
         if (!refineBtn) return;
-        var noiseCount = document.querySelectorAll('.split-noise-toggle:checked').length;
+        var noiseCount = document.querySelectorAll('.btn-split-exclude.active').length;
         var glueCount = document.querySelectorAll('.split-preview-glue-connector.active').length;
         
         if (noiseCount > 0 || glueCount > 0) {
@@ -1215,32 +1225,26 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             badge.style.padding = '1px 6px';
             header.appendChild(badge);
 
-            var noiseLabel = document.createElement('label');
-            noiseLabel.style.display = 'flex';
-            noiseLabel.style.alignItems = 'center';
-            noiseLabel.style.gap = '0.35rem';
-            noiseLabel.style.fontSize = '0.8rem';
-            noiseLabel.style.fontWeight = 'bold';
-            noiseLabel.style.cursor = 'pointer';
-
-            var noiseToggle = document.createElement('input');
-            noiseToggle.type = 'checkbox';
-            noiseToggle.className = 'split-noise-toggle';
-            noiseToggle.addEventListener('change', function() {
-                if (noiseToggle.checked) {
+            var noiseBtn = document.createElement('button');
+            noiseBtn.type = 'button';
+            noiseBtn.className = 'btn-split-exclude';
+            noiseBtn.innerHTML = '<span>➖ Exclude block</span>';
+            noiseBtn.addEventListener('click', function() {
+                noiseBtn.classList.toggle('active');
+                if (noiseBtn.classList.contains('active')) {
+                    noiseBtn.innerHTML = '<span>🔗 Excluded</span>';
                     card.style.opacity = '0.55';
                     card.style.borderColor = '#b91c1c';
                     card.style.background = '#fef2f2';
                 } else {
+                    noiseBtn.innerHTML = '<span>➖ Exclude block</span>';
                     card.style.opacity = '1';
                     card.style.borderColor = 'black';
                     card.style.background = '#ffffff';
                 }
                 updateSplitRefineButton();
             });
-            noiseLabel.appendChild(noiseToggle);
-            noiseLabel.appendChild(document.createTextNode('Noise (exclude)'));
-            header.appendChild(noiseLabel);
+            header.appendChild(noiseBtn);
             card.appendChild(header);
 
             var title = document.createElement('h4');
@@ -1334,7 +1338,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var blocks = [];
         var cards = document.querySelectorAll('#split-preview-cards-container .split-preview-card');
         cards.forEach(function(card, idx) {
-            var toggle = card.querySelector('.split-noise-toggle');
+            var excludeBtn = card.querySelector('.btn-split-exclude');
             var nextConnector = card.nextElementSibling;
             var glueWithNext = false;
             if (nextConnector && nextConnector.classList.contains('split-preview-glue-connector')) {
@@ -1343,7 +1347,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
             blocks.push({
                 index: parseInt(card.dataset.storyIndex, 10),
-                verdict: toggle && toggle.checked ? 'noise' : 'keep',
+                verdict: excludeBtn && excludeBtn.classList.contains('active') ? 'noise' : 'keep',
                 title: card.dataset.title || '',
                 text_preview: card.dataset.textPreview || '',
                 html_preview: card.dataset.htmlPreview || '',
