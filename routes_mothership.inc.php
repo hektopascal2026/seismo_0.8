@@ -373,6 +373,11 @@ $router->register(
     false
 );
 $router->register(
+    'scraper_analyze_gemini',
+    \Seismo\Controller\ScraperController::class . '::analyzeGemini',
+    false
+);
+$router->register(
     'refresh_scraper_sources',
     \Seismo\Controller\ScraperController::class . '::refreshScraperSources',
     false

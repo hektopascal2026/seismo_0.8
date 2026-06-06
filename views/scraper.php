@@ -35,6 +35,49 @@ $sourcesQs = 'action=scraper&view=sources';
     <?php if ($accent): ?>
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
+    <style>
+        .btn-gemini-glow {
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            color: #ffffff !important;
+            font-weight: 600;
+            border: none;
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
+        }
+        .btn-gemini-glow:hover {
+            background: linear-gradient(135deg, #4f46e5, #9333ea);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(168, 85, 247, 0.3);
+        }
+        .btn-gemini-glow:active {
+            transform: translateY(1px);
+        }
+        .gemini-feedback-box {
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            padding: 1.2rem;
+            border-radius: var(--radius-md, 8px);
+            background: rgba(168, 85, 247, 0.05);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
+            transition: all 0.3s ease;
+        }
+        .gemini-feedback-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 700;
+            color: #9333ea;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+        .gemini-feedback-text {
+            font-size: 0.9rem;
+            color: var(--text-color, #374151);
+            line-height: 1.4;
+            margin: 0;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -120,11 +163,19 @@ $sourcesQs = 'action=scraper&view=sources';
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add source' ?></button>
                     <button type="button" class="btn btn-secondary" id="scraper-preview-btn">Preview (dry run)</button>
+                    <button type="button" class="btn btn-secondary btn-gemini-glow" id="scraper-gemini-btn">Analyze with Gemini</button>
                     <?php if ($editRow): ?>
                         <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
                     <?php endif; ?>
                 </div>
             </form>
+            <div id="gemini-feedback-panel" class="gemini-feedback-box" hidden>
+                <div class="gemini-feedback-title">
+                    <span class="sparkle-icon">✨</span> Gemini AI Insights
+                </div>
+                <p id="gemini-feedback-text" class="gemini-feedback-text"></p>
+                <p id="gemini-feedback-url" style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;"></p>
+            </div>
             <div id="scraper-preview-panel" class="scraper-preview-panel" hidden>
                 <h3 class="section-title">Preview <span class="scraper-preview-badge">not saved</span></h3>
                 <p id="scraper-preview-error" class="message message-error" hidden></p>
@@ -199,6 +250,12 @@ $sourcesQs = 'action=scraper&view=sources';
         var outWarn = document.getElementById('scraper-preview-warnings');
         var previewUrl = <?= json_encode($basePath . '/index.php?action=scraper_preview', JSON_UNESCAPED_SLASHES) ?>;
 
+        var btnGemini = document.getElementById('scraper-gemini-btn');
+        var geminiPanel = document.getElementById('gemini-feedback-panel');
+        var geminiText = document.getElementById('gemini-feedback-text');
+        var geminiLink = document.getElementById('gemini-feedback-url');
+        var geminiAnalyzeUrl = <?= json_encode($basePath . '/index.php?action=scraper_analyze_gemini', JSON_UNESCAPED_SLASHES) ?>;
+
         if (form && btnPreview && panel) {
             btnPreview.addEventListener('click', function() {
                 if (outErr) { outErr.hidden = true; outErr.textContent = ''; }
@@ -213,7 +270,7 @@ $sourcesQs = 'action=scraper&view=sources';
                         try { data = JSON.parse(res.body); } catch (e) {
                             if (outErr) {
                                 outErr.textContent = 'Invalid response (HTTP ' + res.status + ').';
-                                outErr.hidden = false;
+                                            outErr.hidden = false;
                             }
                             outCards.innerHTML = '';
                             return;
@@ -241,6 +298,59 @@ $sourcesQs = 'action=scraper&view=sources';
                             outErr.hidden = false;
                         }
                         outCards.innerHTML = '';
+                    });
+            });
+        }
+
+        if (form && btnGemini && geminiPanel) {
+            btnGemini.addEventListener('click', function() {
+                var urlInput = form.querySelector('input[name="url"]');
+                if (!urlInput || !urlInput.value) {
+                    alert('Please enter a Page URL first.');
+                    return;
+                }
+                btnGemini.disabled = true;
+                var originalText = btnGemini.textContent;
+                btnGemini.textContent = 'Analyzing… ✨';
+                geminiPanel.hidden = true;
+
+                var fd = new FormData(form);
+                fetch(geminiAnalyzeUrl, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function(r) { return r.text().then(function(t) { return { status: r.status, body: t }; }); })
+                    .then(function(res) {
+                        btnGemini.disabled = false;
+                        btnGemini.textContent = originalText;
+                        var data;
+                        try { data = JSON.parse(res.body); } catch (e) {
+                            alert('Invalid response from analyzer.');
+                            return;
+                        }
+                        if (!data.ok) {
+                            alert(data.error || 'AI analysis failed.');
+                        } else {
+                            // Populate form inputs
+                            var dateInput = form.querySelector('input[name="date_selector"]');
+                            var excludeTextarea = form.querySelector('textarea[name="exclude_selectors"]');
+                            if (dateInput) dateInput.value = data.date_selector || '';
+                            if (excludeTextarea) excludeTextarea.value = data.exclude_selectors || '';
+                            
+                            // Display explanation
+                            if (geminiText) geminiText.textContent = data.explanation || 'Analyzed successfully!';
+                            if (geminiLink && data.resolved_url) {
+                                geminiLink.innerHTML = 'Analyzed target page: <a href="' + encodeURI(data.resolved_url) + '" target="_blank" style="color: #9333ea; text-decoration: underline;">' + data.resolved_url + '</a>';
+                            }
+                            geminiPanel.hidden = false;
+
+                            // Automatically trigger preview
+                            if (btnPreview) {
+                                btnPreview.click();
+                            }
+                        }
+                    })
+                    .catch(function(err) {
+                        btnGemini.disabled = false;
+                        btnGemini.textContent = originalText;
+                        alert('Network error — could not run AI analysis.');
                     });
             });
         }

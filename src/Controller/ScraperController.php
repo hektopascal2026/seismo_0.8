@@ -11,6 +11,7 @@ use Seismo\Repository\EntryRepository;
 use Seismo\Repository\FeedItemRepository;
 use Seismo\Repository\ScraperConfigRepository;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\Http\BaseClient;
 use Seismo\Service\RefreshAllService;
 use Seismo\Service\RefreshMutexBusyException;
 
@@ -469,5 +470,254 @@ final class ScraperController
             'content_hash'       => (string)($row['content_hash'] ?? ''),
             'published_date'     => $row['published_date'] ?? null,
         ]);
+    }
+
+    public function analyzeGemini(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed. Use POST.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Session expired or invalid CSRF — reload the page.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (isSatellite()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Satellite mode — configure scraper sources on the mothership.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        $url = trim((string)($_POST['url'] ?? ''));
+        $linkPattern = trim((string)($_POST['link_pattern'] ?? ''));
+
+        if ($url === '') {
+            echo json_encode(['ok' => false, 'error' => 'Page URL is required.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        try {
+            $pdo = getDbConnection();
+            $configRepo = new SystemConfigRepository($pdo);
+            $apiKey = trim((string)($configRepo->get(SettingsController::KEY_GEMINI_API_KEY) ?? ''));
+            if ($apiKey === '') {
+                echo json_encode(['ok' => false, 'error' => 'Google Gemini API key is not configured. Please add it under Settings → General.'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $modelConfigured = trim((string)($configRepo->get('gemini:model') ?? ''));
+            $model = $modelConfigured !== '' ? $modelConfigured : 'gemini-3.5-flash';
+
+            // Step 1: Fetch listing page HTML
+            $http = new BaseClient();
+            $res = $http->getWebPage($url);
+            if ($res->status < 200 || $res->status >= 400) {
+                echo json_encode(['ok' => false, 'error' => 'Failed to fetch Page URL (HTTP ' . $res->status . ').'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+            if ($res->body === '') {
+                echo json_encode(['ok' => false, 'error' => 'Empty response from Page URL.'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $listingHtml = $res->body;
+            $targetUrl = $url;
+            $targetHtml = $listingHtml;
+
+            // Step 2: If link pattern is set, find the first article URL
+            if ($linkPattern !== '') {
+                $articleUrl = $this->resolveFirstArticleUrl($url, $listingHtml, $linkPattern);
+                if ($articleUrl === null) {
+                    echo json_encode(['ok' => false, 'error' => 'No same-host links found containing the pattern: ' . $linkPattern], JSON_UNESCAPED_UNICODE);
+                    return;
+                }
+                $targetUrl = $articleUrl;
+                // Fetch the article HTML
+                $resArticle = $http->getWebPage($targetUrl);
+                if ($resArticle->status < 200 || $resArticle->status >= 400) {
+                    echo json_encode(['ok' => false, 'error' => 'Failed to fetch article URL: ' . $targetUrl . ' (HTTP ' . $resArticle->status . ').'], JSON_UNESCAPED_UNICODE);
+                    return;
+                }
+                $targetHtml = $resArticle->body;
+            }
+
+            // Step 3: Clean and truncate target HTML
+            $cleanedHtml = $this->cleanHtmlForPrompt($targetHtml);
+
+            // Step 4: Construct Gemini payload
+            $systemInstruction = "You are an expert DOM Engineering and Web Scraping Assistant.\n"
+                . "Analyze the provided HTML of a web page and determine:\n"
+                . "1. The CSS selector or XPath query that points to the publication date of the main article. Preference order: 1) time tag, 2) meta tags like property=\"article:published_time\", 3) elements with class names containing 'date', 'time', or 'pub'. Do NOT select dates of other/teaser articles on listing pages.\n"
+                . "2. A list of CSS selectors (one per line) representing boilerplate/noise elements (e.g. headers, footers, navigation menus, ads, share buttons, sidebar widgets, related posts) that should be excluded before content/text extraction.\n\n"
+                . "Return your response ONLY as a JSON object matching this schema:\n"
+                . "{\n"
+                . "  \"date_selector\": \"CSS_SELECTOR_OR_XPATH\",\n"
+                . "  \"exclude_selectors\": [\"SELECTOR_1\", \"SELECTOR_2\", ...],\n"
+                . "  \"explanation\": \"Brief 1-2 sentence explanation of your choices.\"\n"
+                . "}\n\n"
+                . "Return ONLY valid JSON. No markdown, no comments, no extra text.";
+
+            $prompt = "Target URL: " . $targetUrl . "\n\nHTML Content:\n" . $cleanedHtml;
+
+            $generationConfig = [
+                'responseMimeType' => 'application/json',
+                'temperature' => 0.1,
+            ];
+            // If thinking level is supported by model
+            if (str_contains($model, 'gemini-3.5') || str_contains($model, 'gemini-1.5')) {
+                $generationConfig['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
+            }
+
+            $payload = [
+                'systemInstruction' => [
+                    'parts' => [['text' => $systemInstruction]],
+                ],
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [['text' => $prompt]],
+                    ],
+                ],
+                'generationConfig' => $generationConfig,
+            ];
+
+            $geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($model) . ':generateContent';
+            $geminiRes = $http->postJson($geminiUrl, $payload, ['x-goog-api-key' => $apiKey]);
+
+            if ($geminiRes->status !== 200) {
+                echo json_encode(['ok' => false, 'error' => 'Gemini API call failed (HTTP ' . $geminiRes->status . ').'], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $geminiData = json_decode($geminiRes->body, true);
+            $text = trim((string)($geminiData['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+            
+            // Clean markdown code blocks if Gemini returned them
+            if (str_starts_with($text, '```json')) {
+                $text = substr($text, 7);
+            } elseif (str_starts_with($text, '```')) {
+                $text = substr($text, 3);
+            }
+            if (str_ends_with($text, '```')) {
+                $text = substr($text, 0, -3);
+            }
+            $text = trim($text);
+
+            $extracted = json_decode($text, true);
+            if (!is_array($extracted)) {
+                echo json_encode(['ok' => false, 'error' => 'Failed to parse Gemini JSON output: ' . $text], JSON_UNESCAPED_UNICODE);
+                return;
+            }
+
+            $dateSelector = trim((string)($extracted['date_selector'] ?? ''));
+            $excludeArr = (array)($extracted['exclude_selectors'] ?? []);
+            $excludeSelectors = implode("\n", array_filter(array_map('trim', $excludeArr)));
+            $explanation = trim((string)($extracted['explanation'] ?? ''));
+
+            echo json_encode([
+                'ok' => true,
+                'date_selector' => $dateSelector,
+                'exclude_selectors' => $excludeSelectors,
+                'explanation' => $explanation,
+                'resolved_url' => $targetUrl,
+            ], JSON_UNESCAPED_UNICODE);
+
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => 'Error: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    private function resolveFirstArticleUrl(string $listingUrl, string $html, string $linkPattern): ?string
+    {
+        $dom = new \DOMDocument();
+        $libxmlPrev = libxml_use_internal_errors(true);
+        @$dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NONET);
+        libxml_clear_errors();
+        libxml_use_internal_errors($libxmlPrev);
+
+        $links = $dom->getElementsByTagName('a');
+        $listingParts = parse_url($listingUrl);
+        $listingHost  = strtolower((string)($listingParts['host'] ?? ''));
+
+        for ($i = 0; $i < $links->length; $i++) {
+            $el = $links->item($i);
+            if (!($el instanceof \DOMElement)) {
+                continue;
+            }
+            $href = $el->getAttribute('href');
+            $absolute = $this->resolveUrlAgainstBase($listingUrl, $href);
+            if ($absolute === '') {
+                continue;
+            }
+            if (str_contains($absolute, $linkPattern)) {
+                // Verify host matches
+                $targetParts = parse_url($absolute);
+                $targetHost = strtolower((string)($targetParts['host'] ?? ''));
+                if ($listingHost === '' || $this->hostsMatch($listingHost, $targetHost)) {
+                    return $absolute;
+                }
+            }
+        }
+        return null;
+    }
+
+    private function resolveUrlAgainstBase(string $base, string $ref): string
+    {
+        if (preg_match('#^https?://#i', $ref)) {
+            return $ref;
+        }
+        if (str_starts_with($ref, '//')) {
+            $scheme = parse_url($base, PHP_URL_SCHEME) ?: 'https';
+            return $scheme . ':' . $ref;
+        }
+        $parts = parse_url($base);
+        if (!$parts || empty($parts['host'])) {
+            return '';
+        }
+        $scheme = $parts['scheme'] ?? 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+        
+        if (str_starts_with($ref, '/')) {
+            return $scheme . '://' . $host . $port . $ref;
+        }
+        $path = $parts['path'] ?? '/';
+        $dir = str_contains($path, '/') ? substr($path, 0, strrpos($path, '/') + 1) : '/';
+        return $scheme . '://' . $host . $port . $dir . $ref;
+    }
+
+    private function hostsMatch(string $h1, string $h2): bool
+    {
+        $h1 = str_starts_with($h1, 'www.') ? substr($h1, 4) : $h1;
+        $h2 = str_starts_with($h2, 'www.') ? substr($h2, 4) : $h2;
+        return strtolower($h1) === strtolower($h2);
+    }
+
+    private function cleanHtmlForPrompt(string $html): string
+    {
+        // Remove style, script, svg, iframe, noscript blocks
+        $html = preg_replace('#<script[^>]*>.*?</script>#is', '', $html) ?? $html;
+        $html = preg_replace('#<style[^>]*>.*?</style>#is', '', $html) ?? $html;
+        $html = preg_replace('#<svg[^>]*>.*?</svg>#is', '', $html) ?? $html;
+        $html = preg_replace('#<noscript[^>]*>.*?</noscript>#is', '', $html) ?? $html;
+        $html = preg_replace('#<iframe[^>]*>.*?</iframe>#is', '', $html) ?? $html;
+        
+        // Remove style attributes
+        $html = preg_replace('#\s+style="[^"]*"#i', '', $html) ?? $html;
+        $html = preg_replace('#\s+style=\'[^\']*\'#i', '', $html) ?? $html;
+        
+        // Remove comments
+        $html = preg_replace('#<!--.*?-->#s', '', $html) ?? $html;
+        
+        // Remove empty lines and collapse spaces
+        $html = preg_replace('#\s+#', ' ', $html) ?? $html;
+        
+        return mb_substr(trim($html), 0, 50000);
     }
 }
