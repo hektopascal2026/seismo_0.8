@@ -869,9 +869,6 @@ final class EmailIngestRepository
         )";
 
         $parentWebView = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($parentRow['metadata'] ?? null);
-        if ($parentWebView === null || trim($parentWebView) === '') {
-            $parentWebView = 'https://seismo.live/';
-        }
 
         $stmtIns = $this->pdo->prepare($sql);
 
