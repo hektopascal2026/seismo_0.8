@@ -313,7 +313,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             
                             <!-- Custom Tab Buttons using Seismo settings-tabs visual language -->
                             <div class="settings-tabs" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none; display: flex; gap: 4px;">
-                                <button type="button" id="tab-btn-before" class="btn active" onclick="switchPreviewTab('before')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: var(--seismo-accent, #FFFFC5); border-width: 2px; border-color: black; cursor: pointer;">Before (Raw)</button>
+                                <button type="button" id="tab-btn-before" class="btn active" onclick="switchPreviewTab('before')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: var(--seismo-accent, #ffd95a); border-width: 2px; border-color: black; cursor: pointer;">Before (Raw)</button>
                                 <button type="button" id="tab-btn-after" class="btn" onclick="switchPreviewTab('after')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: #ffffff; border-width: 2px; border-color: black; cursor: pointer;">After (Cleaned)</button>
                             </div>
                         </div>
@@ -640,7 +640,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (tab === 'before') {
             btnBefore.classList.add('active');
             btnAfter.classList.remove('active');
-            btnBefore.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
+            btnBefore.style.backgroundColor = 'var(--seismo-accent, #ffd95a)';
             btnAfter.style.backgroundColor = '#ffffff';
             contentBefore.style.display = 'block';
             contentAfter.style.display = 'none';
@@ -648,7 +648,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             btnBefore.classList.remove('active');
             btnAfter.classList.add('active');
             btnBefore.style.backgroundColor = '#ffffff';
-            btnAfter.style.backgroundColor = 'var(--seismo-accent, #FFFFC5)';
+            btnAfter.style.backgroundColor = 'var(--seismo-accent, #ffd95a)';
             contentBefore.style.display = 'none';
             contentAfter.style.display = 'block';
         }
@@ -1087,7 +1087,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             badge.textContent = 'Block #' + (index + 1);
             badge.style.fontSize = '0.75rem';
             badge.style.fontWeight = 'bold';
-            badge.style.background = 'var(--seismo-accent, #FFFFC5)';
+            badge.style.background = 'var(--seismo-accent, #ffd95a)';
             badge.style.border = '1px solid black';
             badge.style.padding = '1px 6px';
             header.appendChild(badge);

@@ -15,8 +15,9 @@
     --color-border: #000000;
     
     /* Unified Tactical States */
-    --color-accent: #ffea00;         /* Vibrant brand yellow */
-    --color-hover-accent: #fff9e6;   /* Creamy yellow */
+    --seismo-accent: #ffd95a;
+    --color-accent: #ffd95a;         /* Brand yellow — buttons, nav, active pills */
+    --color-hover-accent: #fff4d1;   /* Light tint of brand yellow */
     
     /* Functional Colors (Mapped exactly to styleguide) */
     --color-success: #00aa00;
@@ -487,7 +488,7 @@ textarea.search-input.setup-code-preview {
     margin-bottom: 1.75rem;
     padding: 1rem;
     border: 0.125rem solid #000000;
-    background-color: #fff9e6;
+    background-color: var(--color-hover-accent, #fff4d1);
 }
 
 .admin-new-senders-badge {
@@ -1344,7 +1345,7 @@ textarea.search-input.setup-code-preview {
 }
 
 .settings-tabs a.active {
-    background-color: var(--seismo-accent, #FFFFC5);
+    background-color: var(--seismo-accent, #ffd95a);
     color: #000000;
     border-color: #000000;
 }
@@ -2307,7 +2308,7 @@ textarea.search-input.setup-code-preview {
 .tag-filter-pill-active {
     transform: none;
     box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Keeps refined 1px shadow */
-    background-color: #ffea00; /* Brand yellow accent */
+    background-color: var(--color-accent, #ffd95a); /* Brand yellow accent */
 }
 
 .tag-filter-pill-active.tag-filter-pill--ch-lex {
@@ -2431,7 +2432,7 @@ textarea.search-input.setup-code-preview {
 }
 
 .section-title-row .btn.active {
-    background-color: #FFFFC5;
+    background-color: var(--color-accent, #ffd95a);
 }
 
 /* ═══ Entry Expand/Collapse ═══ */
@@ -3570,14 +3571,14 @@ pre,
 .tag-filter-pill.active {
     transform: none !important; /* Rests on baseline */
     box-shadow: 0.0625rem 0.0625rem 0 #000000 !important; /* Maintains 1px drop shadow */
-    background-color: #ffea00 !important; /* Brand yellow accent */
+    background-color: var(--color-accent, #ffd95a) !important; /* Brand yellow accent */
     color: #000000 !important; /* High contrast black text */
 }
 
 .tag-filter-pill-active {
     transform: none !important;
     box-shadow: 0.0625rem 0.0625rem 0 #000000 !important;
-    background-color: #ffea00; /* Fallback brand yellow accent without !important */
+    background-color: var(--color-accent, #ffd95a); /* Fallback brand yellow accent without !important */
     color: #000000 !important;
 }
 
@@ -3866,7 +3867,7 @@ input[type="range"].search-input::-webkit-slider-thumb {
     height: 1.25rem;
     width: 0.75rem;
     border: 0.125rem solid #000000;
-    background: var(--seismo-accent, #ffea00);
+    background: var(--seismo-accent, #ffd95a);
     cursor: pointer;
     -webkit-appearance: none;
     margin-top: -0.425rem; /* center on track */
@@ -3883,7 +3884,7 @@ input[type="range"].search-input::-moz-range-thumb {
     height: 1.25rem;
     width: 0.75rem;
     border: 0.125rem solid #000000;
-    background: var(--seismo-accent, #ffea00);
+    background: var(--seismo-accent, #ffd95a);
     cursor: pointer;
     border-radius: 0 !important;
     transition: transform 0.1s ease, background-color 0.1s ease;

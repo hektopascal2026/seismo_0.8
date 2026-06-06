@@ -76,7 +76,7 @@ $activeNav = 'styleguide';
             position: absolute;
             top: -11px;
             left: 15px;
-            background: #ffea00;
+            background: #ffd95a;
             padding: 2px 8px;
             font-family: monospace;
             font-weight: 900;
@@ -271,7 +271,7 @@ $activeNav = 'styleguide';
             box-shadow: 3px 3px 0 #000;
         }
         .column-proposed .ref-nav-link.active {
-            background-color: #ffea00;
+            background-color: #ffd95a;
             color: #000000;
             transform: translate(1px, 1px);
             box-shadow: 1px 1px 0 #000;
@@ -310,7 +310,7 @@ $activeNav = 'styleguide';
             box-shadow: 3px 3px 0 #000;
         }
         .column-proposed .ref-filter-pill.active {
-            background-color: #ffea00;
+            background-color: #ffd95a;
             box-shadow: 1px 1px 0 #000;
             transform: translate(1px, 1px);
         }
@@ -351,7 +351,7 @@ $activeNav = 'styleguide';
             font-family: var(--sans-font);
             font-weight: 900;
             font-size: 0.875rem;
-            background: #ffea00;
+            background: #ffd95a;
             cursor: pointer;
             box-shadow: 3px 3px 0 #000;
             transition: transform 0.05s ease, box-shadow 0.05s ease;
@@ -376,7 +376,7 @@ $activeNav = 'styleguide';
             font-family: monospace;
             padding: 0.75rem 1.5rem;
             border: 3px solid #000;
-            background: #ffea00;
+            background: #ffd95a;
             font-weight: 900;
             cursor: pointer;
             box-shadow: 4px 4px 0 #000;

@@ -12,7 +12,7 @@ require_once __DIR__ . '/bootstrap.php';
 
 $basePath = getBasePath();
 $brandTitle = seismoBrandTitle();
-$brandAccent = seismoBrandAccent() ?: '#ffea00';
+$brandAccent = seismoBrandAccent() ?: '#ffd95a';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -42,8 +42,9 @@ $brandAccent = seismoBrandAccent() ?: '#ffea00';
             --color-border: #000000;
             
             /* Unified Tactical States */
-            --color-accent: #ffea00;         /* Vibrant brand yellow */
-            --color-hover-accent: #fff9e6;   /* Creamy yellow */
+            --seismo-accent: #ffd95a;
+            --color-accent: #ffd95a;         /* Brand yellow — buttons, nav, active pills */
+            --color-hover-accent: #fff4d1;   /* Light tint of brand yellow */
             
             /* Functional Colors (Mapped exactly to styleguide) */
             --color-success: #00aa00;
@@ -266,7 +267,7 @@ $brandAccent = seismoBrandAccent() ?: '#ffea00';
         .showcase-interactive.active {
             transform: none;
             box-shadow: 0.0625rem 0.0625rem 0 #000000;
-            background-color: #ffea00;
+            background-color: #ffd95a;
         }
         
         /* Functional Override: SUCCESS */
@@ -1080,7 +1081,7 @@ $brandAccent = seismoBrandAccent() ?: '#ffea00';
 .settings-tabs a.active, .nav-link.active, .label-btn.active {
     transform: translate(1px, 1px);
     box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Collapsed 1px shadow */
-    background-color: #ffea00; /* Brand yellow accent */
+    background-color: #ffd95a; /* Brand yellow accent */
 }</div>
 
                 <table class="code-explorer-table">

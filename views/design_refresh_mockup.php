@@ -22,8 +22,8 @@ $headerSubtitle = 'Interactive preview of refined brutalist typography, stable n
         /* --- Showcase Page Custom Styles (Tactile Brutalist Only) --- */
         :root {
             --showcase-bg: #faf9f6;
-            --showcase-accent: #ffea00;
-            --showcase-accent-hover: #fff9e6;
+            --showcase-accent: #ffd95a;
+            --showcase-accent-hover: #fff4d1;
             --showcase-border: #000000;
             --showcase-text: #000000;
         }

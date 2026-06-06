@@ -47,8 +47,9 @@ $activeNav = 'styleguide';
             --color-border: #000000;
             
             /* Unified Tactical States */
-            --color-accent: #ffea00;         /* Vibrant brand yellow */
-            --color-hover-accent: #fff9e6;   /* Creamy yellow */
+            --seismo-accent: #ffd95a;
+            --color-accent: #ffd95a;         /* Brand yellow — buttons, nav, active pills */
+            --color-hover-accent: #fff4d1;   /* Light tint of brand yellow */
             
             /* Functional Colors (Mapped exactly to styleguide) */
             --color-success: #00aa00;
@@ -263,7 +264,7 @@ $activeNav = 'styleguide';
         .showcase-interactive:hover {
             transform: translate(-1px, -1px);
             box-shadow: 0.1875rem 0.1875rem 0 #000000;
-            background-color: #fff9e6;
+            background-color: var(--color-hover-accent, #fff4d1);
         }
         
         .showcase-interactive:active {
@@ -274,7 +275,7 @@ $activeNav = 'styleguide';
         .showcase-interactive.active {
             transform: none;
             box-shadow: 0.0625rem 0.0625rem 0 #000000;
-            background-color: #ffea00;
+            background-color: #ffd95a;
         }
         
         /* Functional Override: SUCCESS */
@@ -1160,7 +1161,7 @@ $activeNav = 'styleguide';
 .settings-tabs a.active, .nav-link.active, .label-btn.active {
     transform: none; /* Rests on baseline */
     box-shadow: 0.0625rem 0.0625rem 0 #000000; /* Maintains 1px drop shadow */
-    background-color: #ffea00; /* Brand yellow accent */
+    background-color: #ffd95a; /* Brand yellow accent */
 }</div>
                     
                     <table class="code-explorer-table">
