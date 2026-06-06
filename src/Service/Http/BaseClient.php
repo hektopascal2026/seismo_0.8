@@ -204,6 +204,7 @@ final class BaseClient
             CURLOPT_MAXREDIRS      => 5,
             CURLOPT_TIMEOUT        => $this->timeoutSeconds,
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeoutSeconds),
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
             CURLOPT_HEADERFUNCTION => $headerCallback,
         ];
         // Negotiate gzip/br and transparently decompress (required for feeds such as news.un.org).

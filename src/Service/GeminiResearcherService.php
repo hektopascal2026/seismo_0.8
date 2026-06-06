@@ -1234,6 +1234,7 @@ CONTRACT;
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => $timeout,
                 CURLOPT_CONNECTTIMEOUT => min(10, $timeout),
+                CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
             ]);
             curl_multi_add_handle($mh, $ch);
             $handles[] = $ch;
