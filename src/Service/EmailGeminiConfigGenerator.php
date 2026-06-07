@@ -51,7 +51,9 @@ TEXT;
 
     private const SPLIT_REFINE_SYSTEM_INSTRUCTION = <<<'TEXT'
 You are an expert DOM Engineering Agent specializing in parsing email template layouts.
-Refine digest split_rules to exclude noise blocks while keeping story cards. Use exclude_selectors (.class, #id, tag) or narrow story_selector to drop noise blocks.
+Refine digest split_rules to exclude noise blocks or merge/broaden selectors.
+If the feedback indicates that adjacent blocks must be MERGED/GLUED (glue_with_next: true), it means your current story_selector is too narrow and matches separate children (like individual td cells, tables, or paragraphs) of a single story container. You MUST broaden the story_selector to match a higher parent/ancestor container (e.g., table or tr instead of td, or outer div) so that the content of both blocks naturally resides inside a single matched node.
+Use exclude_selectors (.class, #id, tag) to skip noise blocks.
 TEXT;
 
     private const SPLIT_SIMPLE_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -618,7 +620,8 @@ TEXT;
                 continue;
             }
 
-            $debugLog .= "Normalized (attempt {$attempts}): " . json_encode($normalized, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+            $normalized = DigestSplitConfigNormalizer::mergeNoiseFeedback($normalized, $feedback);
+            $debugLog .= "Normalized with feedback (attempt {$attempts}): " . json_encode($normalized, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
             $lastConfig = $normalized;
             $check = $this->splitVerifier->verify($samples, $normalized, []);
             $actual = (int)($check['actual_counts'][0] ?? 0);
@@ -636,7 +639,6 @@ TEXT;
             ];
 
             if ($refineOk) {
-                $normalized = DigestSplitConfigNormalizer::mergeNoiseFeedback($normalized, $feedback);
                 file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
 
                 return [
@@ -743,6 +745,14 @@ TEXT;
 
         $prompt .= "Current split_rules produced too many matches. Revise so ONLY the kept blocks survive.\n";
         $prompt .= "Target: exactly {$keepCount} card(s) on sample #1.\n\n";
+
+        if ($this->structureHint->samplesHaveHtml($samples)) {
+            $hintBlock = $this->structureHint->formatForPrompt($samples);
+            if ($hintBlock !== '') {
+                $prompt .= "HTML structures/selectors scanned from the email source:\n" . $hintBlock . "\n";
+            }
+        }
+
         $prompt .= "Current config:\n" . json_encode($currentConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "User feedback on preview blocks:\n" . json_encode($feedback, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Strategies (pick what fits):\n";
@@ -769,13 +779,34 @@ TEXT;
         return $prompt;
     }
 
-    /**
-     * @param list<array{subject: string, body?: string, text_body?: string, html_body?: string}> $samples
-     * @param array{analysis: ?array, config: array, feedback: array, verification: array} $retryContext
-     */
     private function buildRefineRetryPrompt(array $samples, array $retryContext): string
     {
         $prompt = "Refinement still failed verification. Revise split_rules again.\n\n";
+
+        // Extract and format glue hints if present
+        $glueInstructions = "";
+        $blocks = $retryContext['feedback']['blocks'] ?? [];
+        foreach ($blocks as $idx => $block) {
+            if (!empty($block['glue_with_next'])) {
+                $nextIdx = $idx + 1;
+                $glueInstructions .= "- Block #" . ($idx + 1) . " (\"" . ($block['title'] ?? '') . "\") and Block #" . ($nextIdx + 1) . " (\"" . ($blocks[$nextIdx]['title'] ?? '') . "\") must be MERGED into a single card.\n";
+            }
+        }
+
+        if ($glueInstructions !== "") {
+            $prompt .= "CRITICAL MERGE REQUIREMENT:\n";
+            $prompt .= "The user has flagged that some adjacent blocks are part of the SAME story and should be kept together:\n";
+            $prompt .= $glueInstructions;
+            $prompt .= "This means your generated story_selector is too narrow (splitting a single article into multiple items). You MUST broaden or change the story_selector to target a wider ancestor container (e.g. table or tr instead of td) so these sections remain together as one block.\n\n";
+        }
+
+        if ($this->structureHint->samplesHaveHtml($samples)) {
+            $hintBlock = $this->structureHint->formatForPrompt($samples);
+            if ($hintBlock !== '') {
+                $prompt .= "HTML structures/selectors scanned from the email source:\n" . $hintBlock . "\n";
+            }
+        }
+
         $prompt .= "Previous split_rules:\n" . json_encode($retryContext['config']['split_rules'] ?? $retryContext['config'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "User feedback (noise vs keep):\n" . json_encode($retryContext['feedback'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
         $prompt .= "Verification failure:\n" . ($retryContext['verification']['message'] ?? '') . "\n";

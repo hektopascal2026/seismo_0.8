@@ -61,11 +61,11 @@ final class EmailHtmlSanitizer
         $config->set('Cache.DefinitionImpl', null);
         $config->set(
             'HTML.Allowed',
-            'p,br,div,span,h1,h2,h3,h4,h5,h6,ul,ol,li,blockquote,'
-            . 'strong,em,b,i,a[href|title],table,tbody,thead,tr,td,th'
+            'p[class|id],br,div[class|id],span[class|id],h1[class|id],h2[class|id],h3[class|id],h4[class|id],h5[class|id],h6[class|id],ul[class|id],ol[class|id],li[class|id],blockquote[class|id],'
+            . 'strong[class|id],em[class|id],b,i,a[href|title|class|id],table[class|id],tbody[class|id],thead[class|id],tr[class|id],td[class|id|width|colspan|height],th[class|id]'
         );
         $config->set('HTML.ForbiddenElements', [
-            'img', 'script', 'style', 'meta', 'link', 'head', 'iframe', 'object', 'embed',
+            'img', 'script', 'style', 'meta', 'head', 'iframe', 'object', 'embed',
             'form', 'input', 'button', 'noscript',
         ]);
         $config->set('URI.DisableExternalResources', true);

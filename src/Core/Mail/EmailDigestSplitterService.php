@@ -24,6 +24,7 @@ final class EmailDigestSplitterService
         }
 
         $method = trim((string)($splitRules['split_method'] ?? $splitRules['type'] ?? 'html_selector'));
+        $stories = [];
         if ($method === 'html_css' || $method === 'html_selector') {
             $normalizedRules = [
                 'story_selector' => $splitRules['story_selector'] ?? $splitRules['selector_story'] ?? '',
@@ -38,10 +39,8 @@ final class EmailDigestSplitterService
                 $normalizedRules['exclude_titles'] = $splitRules['exclude_titles'];
             }
 
-            return $this->splitByHtmlSelector($htmlBody, $normalizedRules);
-        }
-
-        if ($method === 'regex' || $method === 'regex_split') {
+            $stories = $this->splitByHtmlSelector($htmlBody, $normalizedRules);
+        } elseif ($method === 'regex' || $method === 'regex_split') {
             $normalizedRules = [
                 'split_pattern' => $splitRules['split_pattern'] ?? $splitRules['pattern_split'] ?? '',
                 'title_pattern' => $splitRules['title_pattern'] ?? $splitRules['pattern_title'] ?? '',
@@ -52,10 +51,10 @@ final class EmailDigestSplitterService
                 $normalizedRules['exclude_titles'] = $splitRules['exclude_titles'];
             }
 
-            return $this->applyExcludeTitles($this->splitByRegex($textBody, $htmlBody, $normalizedRules), $normalizedRules);
+            $stories = $this->applyExcludeTitles($this->splitByRegex($textBody, $htmlBody, $normalizedRules), $normalizedRules);
         }
 
-        return [];
+        return $this->applyManualGlueRules($stories, $splitRules);
     }
 
     /**
@@ -413,9 +412,17 @@ final class EmailDigestSplitterService
     private function combineFragments(array $first, array $second): array
     {
         $title = trim($first['title']);
-        $body = trim($second['text_body']);
-        if ($body === '' || $body === $title) {
-            $body = trim($first['text_body']);
+        if ($title === '') {
+            $title = trim($second['title']);
+        }
+
+        $body1 = trim($first['text_body']);
+        $body2 = trim($second['text_body']);
+
+        if ($body1 !== '' && $body2 !== '' && $body1 !== $body2) {
+            $body = $body1 . "\n\n" . $body2;
+        } else {
+            $body = $body2 !== '' ? $body2 : $body1;
         }
 
         return [
@@ -795,5 +802,51 @@ final class EmailDigestSplitterService
         }
 
         return $stories;
+    }
+
+    /**
+     * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
+     * @param array<string, mixed> $rules
+     * @return list<array{title: string, html_body: string, text_body: string, link: ?string}>
+     */
+    private function applyManualGlueRules(array $stories, array $rules): array
+    {
+        $glueRules = $rules['glue_rules'] ?? [];
+        if (!is_array($glueRules) || $glueRules === []) {
+            return $stories;
+        }
+
+        $index = 0;
+        $out = [];
+        while ($index < count($stories)) {
+            $current = $stories[$index];
+            $next = $stories[$index + 1] ?? null;
+
+            if ($next !== null) {
+                $currentTitle = trim($current['title']);
+                $nextTitle = trim($next['title']);
+                
+                $shouldGlue = false;
+                foreach ($glueRules as $rule) {
+                    $first = trim((string)($rule['first_title'] ?? ''));
+                    $second = trim((string)($rule['second_title'] ?? ''));
+                    if ($first !== '' && $second !== '' && $currentTitle === $first && $nextTitle === $second) {
+                        $shouldGlue = true;
+                        break;
+                    }
+                }
+
+                if ($shouldGlue) {
+                    $out[] = $this->combineFragments($current, $next);
+                    $index += 2;
+                    continue;
+                }
+            }
+
+            $out[] = $current;
+            $index++;
+        }
+
+        return $out;
     }
 }

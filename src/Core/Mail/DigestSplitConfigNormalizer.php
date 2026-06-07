@@ -144,6 +144,7 @@ final class DigestSplitConfigNormalizer
             $rules = [];
         }
 
+        // 1. Exclude titles
         $excludeTitles = self::normalizeStringList($rules['exclude_titles'] ?? []);
         foreach ($feedback['blocks'] ?? [] as $block) {
             if (!is_array($block) || trim((string)($block['verdict'] ?? '')) !== 'noise') {
@@ -154,9 +155,43 @@ final class DigestSplitConfigNormalizer
                 $excludeTitles[] = $title;
             }
         }
-
         if ($excludeTitles !== []) {
             $rules['exclude_titles'] = array_values(array_unique($excludeTitles));
+        }
+
+        // 2. Glue rules
+        $glueRules = $rules['glue_rules'] ?? [];
+        if (!is_array($glueRules)) {
+            $glueRules = [];
+        }
+        $blocks = $feedback['blocks'] ?? [];
+        foreach ($blocks as $idx => $block) {
+            if (!is_array($block) || empty($block['glue_with_next'])) {
+                continue;
+            }
+            $nextIdx = $idx + 1;
+            if (isset($blocks[$nextIdx])) {
+                $firstTitle = trim((string)($block['title'] ?? ''));
+                $secondTitle = trim((string)($blocks[$nextIdx]['title'] ?? ''));
+                if ($firstTitle !== '' && $secondTitle !== '') {
+                    $exists = false;
+                    foreach ($glueRules as $existing) {
+                        if (($existing['first_title'] ?? '') === $firstTitle && ($existing['second_title'] ?? '') === $secondTitle) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                    if (!$exists) {
+                        $glueRules[] = [
+                            'first_title' => $firstTitle,
+                            'second_title' => $secondTitle,
+                        ];
+                    }
+                }
+            }
+        }
+        if ($glueRules !== []) {
+            $rules['glue_rules'] = $glueRules;
         }
 
         return ['is_digest' => true, 'split_rules' => $rules];
