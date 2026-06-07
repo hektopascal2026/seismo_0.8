@@ -510,6 +510,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" style="display: none;" disabled onclick="runAiSplitRefine()">
                                 Refine rules (apply merges & exclusions)
                             </button>
+                            <span id="ai-split-refine-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                             <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel</a>
                         </form>
                     </div>
@@ -1057,7 +1058,17 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
     function applySplitAnalysisResponse(data, options) {
         options = options || {};
-        var status = document.getElementById('ai-split-status');
+        var isRefined = !!data.refined;
+        var status = isRefined 
+            ? document.getElementById('ai-split-refine-status') 
+            : document.getElementById('ai-split-status');
+        var otherStatus = isRefined 
+            ? document.getElementById('ai-split-status') 
+            : document.getElementById('ai-split-refine-status');
+        if (otherStatus) {
+            otherStatus.style.display = 'none';
+        }
+
         var resultsPanel = document.getElementById('ai-split-results-panel');
         var textarea = document.getElementById('split_config_json');
         var verificationBox = document.getElementById('ai-split-verification');
@@ -1393,27 +1404,36 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
         var refineBtn = document.getElementById('btn-ai-split-refine');
         var analyzeBtn = document.getElementById('btn-ai-split-analyze');
-        var status = document.getElementById('ai-split-status');
+        var status = document.getElementById('ai-split-refine-status');
+        var topStatus = document.getElementById('ai-split-status');
+        if (topStatus) {
+            topStatus.style.display = 'none';
+        }
         var textarea = document.getElementById('split_config_json');
         var feedback = collectSplitFeedback();
         var noiseMarked = feedback.blocks.filter(function(b) { return b.verdict === 'noise'; }).length;
         var glueMarked = feedback.blocks.filter(function(b) { return b.glue_with_next === true; }).length;
 
         if (noiseMarked === 0 && glueMarked === 0) {
-            status.style.color = '#b45309';
-            status.textContent = 'Mark at least one block as noise or merge blocks first.';
+            if (status) {
+                status.style.display = 'inline';
+                status.style.color = '#b45309';
+                status.textContent = 'Mark at least one block as noise or merge blocks first.';
+            }
             return;
+        }
+
+        if (status) {
+            status.style.display = 'inline';
+            status.style.color = '#333';
+            var statusParts = [];
+            if (glueMarked > 0) statusParts.push('merging ' + glueMarked + ' connection(s)');
+            if (noiseMarked > 0) statusParts.push('excluding ' + noiseMarked + ' noise block(s)');
+            status.textContent = 'Refining rules with Gemini (' + statusParts.join(' & ') + ')...';
         }
 
         refineBtn.disabled = true;
         if (analyzeBtn) analyzeBtn.disabled = true;
-        status.style.display = 'inline';
-        status.style.color = '#333';
-        
-        var statusParts = [];
-        if (glueMarked > 0) statusParts.push('merging ' + glueMarked + ' connection(s)');
-        if (noiseMarked > 0) statusParts.push('excluding ' + noiseMarked + ' noise block(s)');
-        status.textContent = 'Refining rules with Gemini (' + statusParts.join(' & ') + ')...';
 
         var formData = new FormData();
         formData.append('id', splitSubscriptionId);
@@ -1433,8 +1453,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             if (analyzeBtn) analyzeBtn.disabled = false;
         })
         .catch(function(err) {
-            status.style.color = 'red';
-            status.textContent = 'Error: ' + err.message;
+            if (status) {
+                status.style.color = 'red';
+                status.textContent = 'Error: ' + err.message;
+            }
             refineBtn.disabled = false;
             if (analyzeBtn) analyzeBtn.disabled = false;
             updateSplitRefineButton();
