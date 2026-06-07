@@ -60,7 +60,25 @@ Register splitters in `EmailBodyProcessorRegistry` (or sibling `EmailDigestSplit
 
 ## Acceptance sketch
 
-- EP TODAY (or one Bund digest fixture): N stories → N timeline rows (or N visible sections with stable ids)
-- Reprocess idempotent
-- Single-story press mail unchanged (splitter returns one item)
-- Satellite: document whether digest items replicate or stay mothership-only
+- ep today (or one bund digest fixture): n stories → n timeline rows (or n visible sections with stable ids)
+- reprocess idempotent
+- single-story press mail unchanged (splitter returns one item)
+- satellite: document whether digest items replicate or stay mothership-only
+
+## Refinement and Manual Adjustments (June 2026)
+
+When the automatically generated selectors for a digest require fine-tuning, the operator can manually refine them using the **Refine rules** interface. The configurator supports:
+1. **Exclusions (Noise)**: Elements marked as noise are appended to `exclude_titles` and automatically skipped.
+2. **Merges (Glue)**: Adjacent blocks can be glued together. Since CSS selectors cannot always group disparate/sibling table cells or elements natively without matching children separately, the splitter supports manual **`glue_rules`** in the `split_rules` config:
+   ```json
+   "glue_rules": [
+     {
+       "first_title": "First Block Title",
+       "second_title": "Second Block Title"
+     }
+   ]
+   ```
+   Post-splitting, `EmailDigestSplitterService` processes these rules sequentially, combining the matching adjacent fragments (merging their HTML markup and joining text bodies with double newlines).
+
+To assist Gemini during refinement generation, `EmailHtmlSanitizer` preserves `class` and `id` attributes. Additionally, the refinement loop merges manual feedback before verification checking, allowing the split verification count check to succeed when glue rules are active.
+
