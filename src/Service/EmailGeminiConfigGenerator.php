@@ -580,6 +580,9 @@ TEXT;
         ];
 
         $retryContext = null;
+        $debugLog = "--- GEMINI SPLIT CONFIG REFINE DEBUG ---\n";
+        $debugLog .= "Initial config: " . json_encode($currentConfig, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+        $debugLog .= "Feedback: " . json_encode($feedback, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
         while ($attempts <= self::MAX_SPLIT_RETRIES) {
             ++$attempts;
@@ -588,15 +591,19 @@ TEXT;
                 ? $this->buildRefinePrompt($samples, $currentConfig, $feedback, $keepCount)
                 : $this->buildRefineRetryPrompt($samples, $retryContext);
 
+            $debugLog .= "Prompt for attempt {$attempts}:\n{$prompt}\n";
+
             $extracted = $this->callGeminiJson(
                 self::SPLIT_REFINE_SYSTEM_INSTRUCTION,
                 $prompt,
                 'split refine attempt ' . $attempts . '/' . (self::MAX_SPLIT_RETRIES + 1)
             );
             $lastAnalysis = $this->extractSplitAnalysis($extracted);
+            $debugLog .= "Extracted raw (attempt {$attempts}): " . json_encode($extracted, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
-            $normalized = DigestSplitConfigNormalizer::normalize($extracted);
+            $normalized = DigestSplitConfigNormalizer::normalize($extracted, false);
             if ($normalized === null) {
+                $debugLog .= "Normalized is null (attempt {$attempts})\n";
                 $retryContext = [
                     'analysis' => $lastAnalysis,
                     'config' => $currentConfig,
@@ -611,10 +618,13 @@ TEXT;
                 continue;
             }
 
+            $debugLog .= "Normalized (attempt {$attempts}): " . json_encode($normalized, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
             $lastConfig = $normalized;
             $check = $this->splitVerifier->verify($samples, $normalized, []);
             $actual = (int)($check['actual_counts'][0] ?? 0);
             $refineOk = $check['verified'] && $actual === $keepCount;
+            $debugLog .= "Split check count: {$actual} (refineOk: " . ($refineOk ? 'yes' : 'no') . ")\n";
+
             $verification = [
                 'verified' => $refineOk,
                 'expected_counts' => [$keepCount],
@@ -627,11 +637,13 @@ TEXT;
 
             if ($refineOk) {
                 $normalized = DigestSplitConfigNormalizer::mergeNoiseFeedback($normalized, $feedback);
+                file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
 
                 return [
                     'digest_split_config' => json_encode($normalized, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     'analysis' => $lastAnalysis,
                     'verification' => $verification,
+                    'debug_log' => $debugLog,
                 ];
             }
 
@@ -656,10 +668,13 @@ TEXT;
                 . $noiseCount . ' noise block(s).';
         }
 
+        file_put_contents('/tmp/gemini_split_debug.log', $debugLog);
+
         return [
             'digest_split_config' => json_encode($lastConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'analysis' => $lastAnalysis,
             'verification' => $verification,
+            'debug_log' => $debugLog,
         ];
     }
 
