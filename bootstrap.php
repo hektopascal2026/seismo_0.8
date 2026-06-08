@@ -606,6 +606,12 @@ function seismoSatelliteBrandSplit(): bool
         return false;
     }
     $t = trim(SEISMO_BRAND_TITLE !== '' ? (string)SEISMO_BRAND_TITLE : '');
+    if ($t === '') {
+        $sat = seismoCurrentSatellite();
+        if ($sat !== null) {
+            $t = trim((string)($sat['display_name'] ?? ''));
+        }
+    }
 
     return $t !== '' && seismoBrandDisplaySplit($t) !== null;
 }
