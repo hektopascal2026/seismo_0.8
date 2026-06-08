@@ -167,4 +167,45 @@ final class DigestSplitConfigNormalizerTest extends TestCase
 
         self::assertSame(['02. Juni 2026'], $merged['split_rules']['exclude_titles']);
     }
+
+    public function testNormalizePreservesGlueRulesAndExcludeTitles(): void
+    {
+        $raw = [
+            'is_digest' => true,
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => '.article',
+                'exclude_titles' => ['/Skip Me/'],
+                'glue_rules' => [
+                    ['first_title' => 'Title A', 'second_title' => 'Title B'],
+                ],
+            ],
+        ];
+
+        $normalized = DigestSplitConfigNormalizer::normalize($raw);
+        self::assertNotNull($normalized);
+        self::assertSame(['/Skip Me/'], $normalized['split_rules']['exclude_titles']);
+        self::assertSame([
+            ['first_title' => 'Title A', 'second_title' => 'Title B'],
+        ], $normalized['split_rules']['glue_rules']);
+
+        $regexRaw = [
+            'is_digest' => true,
+            'split_rules' => [
+                'split_method' => 'regex_split',
+                'split_pattern' => '/---/',
+                'exclude_titles' => ['/Skip Me Regex/'],
+                'glue_rules' => [
+                    ['first_title' => 'Title C', 'second_title' => 'Title D'],
+                ],
+            ],
+        ];
+
+        $regexNormalized = DigestSplitConfigNormalizer::normalize($regexRaw);
+        self::assertNotNull($regexNormalized);
+        self::assertSame(['/Skip Me Regex/'], $regexNormalized['split_rules']['exclude_titles']);
+        self::assertSame([
+            ['first_title' => 'Title C', 'second_title' => 'Title D'],
+        ], $regexNormalized['split_rules']['glue_rules']);
+    }
 }

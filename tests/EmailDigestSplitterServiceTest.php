@@ -289,4 +289,32 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertStringContainsString('Zürich Tourismus', $stories[1]['title']);
         self::assertStringContainsString('SMC Launch Event', $stories[2]['title']);
     }
+
+    public function testTitleSelectorPriority(): void
+    {
+        $html = '
+            <html><body>
+                <div class="item">
+                    <h4>Category: National</h4>
+                    <span class="actual-title">My Real Story Title</span>
+                    <p>Body text of the story which is long enough to be kept as a story block.</p>
+                </div>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => 'div.item',
+                'title_selector' => 'span.actual-title',
+                'body_selector' => 'p',
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertSame('My Real Story Title', $stories[0]['title']);
+    }
 }

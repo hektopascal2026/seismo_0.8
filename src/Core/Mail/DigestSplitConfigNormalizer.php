@@ -61,6 +61,21 @@ final class DigestSplitConfigNormalizer
             if ($excludeTitles !== []) {
                 $normalized['exclude_titles'] = $excludeTitles;
             }
+            $glueRules = $rules['glue_rules'] ?? [];
+            if (is_array($glueRules) && $glueRules !== []) {
+                $normalizedGlue = [];
+                foreach ($glueRules as $rule) {
+                    if (is_array($rule) && isset($rule['first_title'], $rule['second_title'])) {
+                        $normalizedGlue[] = [
+                            'first_title' => trim((string)$rule['first_title']),
+                            'second_title' => trim((string)$rule['second_title']),
+                        ];
+                    }
+                }
+                if ($normalizedGlue !== []) {
+                    $normalized['glue_rules'] = $normalizedGlue;
+                }
+            }
 
             return ['is_digest' => true, 'split_rules' => $normalized];
         }
@@ -75,6 +90,27 @@ final class DigestSplitConfigNormalizer
             ];
             if ($normalized['split_pattern'] === '' || !self::isValidRegexPattern($normalized['split_pattern'])) {
                 return null;
+            }
+
+            $excludeTitles = self::normalizeStringList($rules['exclude_titles'] ?? []);
+            if ($excludeTitles !== []) {
+                $normalized['exclude_titles'] = $excludeTitles;
+            }
+
+            $glueRules = $rules['glue_rules'] ?? [];
+            if (is_array($glueRules) && $glueRules !== []) {
+                $normalizedGlue = [];
+                foreach ($glueRules as $rule) {
+                    if (is_array($rule) && isset($rule['first_title'], $rule['second_title'])) {
+                        $normalizedGlue[] = [
+                            'first_title' => trim((string)$rule['first_title']),
+                            'second_title' => trim((string)$rule['second_title']),
+                        ];
+                    }
+                }
+                if ($normalizedGlue !== []) {
+                    $normalized['glue_rules'] = $normalizedGlue;
+                }
             }
 
             return ['is_digest' => true, 'split_rules' => $normalized];

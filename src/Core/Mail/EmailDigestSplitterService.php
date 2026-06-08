@@ -229,6 +229,41 @@ final class EmailDigestSplitterService
 
     private function extractBestTitle(DOMXPath $xpath, DOMElement $node, string $titleSelector): string
     {
+        if ($titleSelector !== '') {
+            try {
+                $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
+            } catch (\Throwable $e) {
+                $titleNodes = false;
+            }
+
+            if ($titleNodes !== false && $titleNodes->length > 0) {
+                $best = '';
+                foreach ($titleNodes as $candidate) {
+                    $text = trim((string)$candidate->textContent);
+                    if ($text === '' || $this->isCtaLinkText($text)) {
+                        continue;
+                    }
+
+                    if ($candidate instanceof DOMElement && strtolower($candidate->tagName) === 'a') {
+                        $style = strtolower($candidate->getAttribute('style'));
+                        if (
+                            str_contains($style, 'font-weight:bold')
+                            || str_contains($style, 'font-weight: bold')
+                        ) {
+                            return $text;
+                        }
+                    }
+
+                    if (mb_strlen($text) > mb_strlen($best)) {
+                        $best = $text;
+                    }
+                }
+                if ($best !== '') {
+                    return $best;
+                }
+            }
+        }
+
         foreach (['h1', 'h2', 'h3', 'h4'] as $tag) {
             $headings = $node->getElementsByTagName($tag);
             if ($headings->length > 0) {
@@ -239,43 +274,7 @@ final class EmailDigestSplitterService
             }
         }
 
-        if ($titleSelector === '') {
-            return '';
-        }
-
-        try {
-            $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
-        } catch (\Throwable $e) {
-            $titleNodes = false;
-        }
-
-        if ($titleNodes === false || $titleNodes->length === 0) {
-            return '';
-        }
-
-        $best = '';
-        foreach ($titleNodes as $candidate) {
-            $text = trim((string)$candidate->textContent);
-            if ($text === '' || $this->isCtaLinkText($text)) {
-                continue;
-            }
-
-            if ($candidate instanceof DOMElement && strtolower($candidate->tagName) === 'a') {
-                $style = strtolower($candidate->getAttribute('style'));
-                if (
-                    str_contains($style, 'font-weight:bold')
-                    || str_contains($style, 'font-weight: bold')
-                ) {
-                    return $text;
-                }
-            }
-
-            if (mb_strlen($text) > mb_strlen($best)) {
-                $best = $text;
-            }
-        }
-
-        return $best;
+        return '';
     }
 
     private function extractBestLink(DOMXPath $xpath, DOMElement $node, string $linkSelector): ?string
