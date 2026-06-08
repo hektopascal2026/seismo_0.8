@@ -505,7 +505,7 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                     <?php endforeach; ?>
                                 </div>
                             <?php endif; ?>
-                            <?php if ($digestChildCount === 0): ?>
+                            <?php if ($digestChildCount === 0 || !$renderNestedDigestStories): ?>
                             <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
