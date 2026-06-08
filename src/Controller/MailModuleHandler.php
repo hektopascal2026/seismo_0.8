@@ -282,7 +282,9 @@ final class MailModuleHandler
             $_SESSION['error'] = $e->getMessage();
         }
 
-        $this->redirect(['view' => 'sources']);
+        \Seismo\Http\RefreshAjax::respondOrRedirect(function (): void {
+            $this->redirect(['view' => 'sources']);
+        });
     }
 
     public function analyzeBoilerplate(): void

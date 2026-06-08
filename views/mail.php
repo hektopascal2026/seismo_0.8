@@ -554,7 +554,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
                     <div class="admin-form-field">
                         <p class="admin-hint">Review the generated splits. Click "Apply Split Config" to save the splitting rules.</p>
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
+                        <form id="split-apply-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
                             <?= $csrfField ?>
                             <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
                             <input type="hidden" name="match_type" value="<?= e((string)$editRow['match_type']) ?>">
@@ -574,9 +574,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" id="split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                             <input type="hidden" id="split_config_feedback_hidden" name="digest_split_feedback" value="">
                             
-                            <button type="submit" class="btn btn-success" onclick="return prepareSplitConfigApply()">
+                            <button type="button" id="btn-split-apply-config" class="btn btn-success" onclick="runSplitConfigApply(event)">
                                 Apply Split Config
                             </button>
+                            <span id="ai-split-apply-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                             <button type="button" id="btn-ai-split-refine" class="btn btn-secondary" style="display: none;" disabled onclick="runAiSplitRefine()">
                                 Refine rules (apply merges & exclusions)
                             </button>
@@ -1530,6 +1531,48 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             refineBtn.disabled = false;
             if (analyzeBtn) analyzeBtn.disabled = false;
             updateSplitRefineButton();
+        });
+    }
+
+    function runSplitConfigApply(event) {
+        if (event) event.preventDefault();
+        prepareSplitConfigApply();
+
+        var form = document.getElementById('split-apply-form');
+        var btn = document.getElementById('btn-split-apply-config');
+        var status = document.getElementById('ai-split-apply-status');
+        if (!form || !btn || !status) return;
+
+        btn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Saving configuration and reprocessing...';
+
+        var formData = new FormData(form);
+        formData.append('ajax', '1');
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(parseJsonFetchResponse)
+        .then(function(data) {
+            btn.disabled = false;
+            if (data.ok) {
+                status.style.color = 'green';
+                status.textContent = '✓ ' + (data.message || 'Saved successfully!');
+                setTimeout(function() {
+                    status.style.display = 'none';
+                }, 5000);
+            } else {
+                status.style.color = 'red';
+                status.textContent = 'Error: ' + (data.error || 'Failed to save configuration.');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
         });
     }
     </script>

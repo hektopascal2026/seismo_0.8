@@ -42,6 +42,7 @@ final class RefreshAjax
 
         $error = $_SESSION['error'] ?? null;
         $success = $_SESSION['success'] ?? null;
+        unset($_SESSION['error'], $_SESSION['success']);
         $ok = !(is_string($error) && $error !== '');
         $msg = $ok
             ? (is_string($success) && $success !== '' ? $success : 'Refresh completed.')
