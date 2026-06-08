@@ -115,6 +115,36 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertSame('Real Story', $stories[0]['title']);
     }
 
+    public function testExcludeTitlesRegex(): void
+    {
+        $html = '
+            <html><body>
+                <div class="article"><h2>NATIONAL 21. Juni, Zürich, SRF-«Tagesgespräch» Live mit BR Martin Pfister 17. Se...</h2><div class="content">First block</div></div>
+                <div class="article"><h2>Real Story</h2><div class="content">Second block</div></div>
+                <div class="article"><h2>«Ein gefährlicher Präzedenzfall» Rechtsanwalt Sébastien Fanti zur Dokumentenbloc...</h2><div class="content">Third block</div></div>
+            </body></html>
+        ';
+
+        $config = [
+            'split_rules' => [
+                'split_method' => 'html_selector',
+                'story_selector' => '.article',
+                'title_selector' => 'h2',
+                'body_selector' => '.content',
+                'exclude_titles' => [
+                    '/^NATIONAL \d+\. Juni/i',
+                    '/^«Ein gefährlicher/u'
+                ],
+            ],
+        ];
+
+        $service = new EmailDigestSplitterService();
+        $stories = $service->split($html, '', $config);
+
+        self::assertCount(1, $stories);
+        self::assertSame('Real Story', $stories[0]['title']);
+    }
+
     public function testExcludeSelectorsSkipNoiseNodes(): void
     {
         $html = '

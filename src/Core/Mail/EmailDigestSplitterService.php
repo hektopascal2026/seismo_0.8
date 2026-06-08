@@ -176,21 +176,40 @@ final class EmailDigestSplitterService
             return $stories;
         }
 
-        $normalizedExcludes = [];
-        foreach ($excludeTitles as $title) {
-            $norm = $this->normalizeTitleToken((string)$title);
-            if ($norm !== '') {
-                $normalizedExcludes[] = $norm;
-            }
-        }
-        if ($normalizedExcludes === []) {
-            return $stories;
-        }
-
         $out = [];
         foreach ($stories as $story) {
-            $norm = $this->normalizeTitleToken((string)($story['title'] ?? ''));
-            if ($norm !== '' && in_array($norm, $normalizedExcludes, true)) {
+            $storyTitle = (string)($story['title'] ?? '');
+            $normalizedStoryTitle = $this->normalizeTitleToken($storyTitle);
+
+            $matched = false;
+            foreach ($excludeTitles as $pattern) {
+                $patternStr = (string)$pattern;
+                if ($patternStr === '') {
+                    continue;
+                }
+
+                // Check if it is a regex pattern (e.g. /.../i or /^...$/)
+                if (preg_match('/^\/.*\/[a-z]*$/is', $patternStr)) {
+                    set_error_handler(static fn (): bool => true);
+                    $regexOk = @preg_match($patternStr, '') !== false;
+                    restore_error_handler();
+                    if ($regexOk) {
+                        if (preg_match($patternStr, $storyTitle)) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback: exact/normalized comparison
+                $normalizedPattern = $this->normalizeTitleToken($patternStr);
+                if ($normalizedStoryTitle !== '' && $normalizedStoryTitle === $normalizedPattern) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if ($matched) {
                 continue;
             }
             $out[] = $story;

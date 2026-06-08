@@ -36,6 +36,7 @@ final class MailModuleHandler
         $allItems             = [];
         $subscriptions        = [];
         $pendingSenders       = [];
+        $driftingSubscriptions = [];
         $subscriptionLatest   = [];
         $pendingLatest        = [];
         $subscriptionFilter   = null;
@@ -76,6 +77,9 @@ final class MailModuleHandler
             $subscriptions = $subRepo->listActiveForModule($this->module->scope, EmailSubscriptionRepository::MAX_LIMIT, 0);
             if ($this->module->showsPendingSenders) {
                 $pendingSenders = $subRepo->listPendingForModule($this->module->scope, EmailSubscriptionRepository::MAX_LIMIT, 0);
+            }
+            if ($this->module->scope === MailModule::SCOPE_NEWSLETTER) {
+                $driftingSubscriptions = $subRepo->listDriftingForModule($this->module->scope);
             }
             if (!$satellite) {
                 $categorySuggestions = $subRepo->listUsedCategories();

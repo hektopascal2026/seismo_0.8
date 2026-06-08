@@ -194,6 +194,76 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <h2 class="section-title"><?= e($mailModule->sourcesHeading) ?></h2>
             <?= $mailModule->sourcesIntroHtml ?>
 
+            <?php if ($mailModule->isNewsletter() && !empty($driftingSubscriptions)): ?>
+            <section class="admin-new-senders-section" style="border: 2px solid #b91c1c; background-color: #fef2f2; margin-bottom: 1.5rem; padding: 1.25rem;" aria-labelledby="drifting-selectors-heading">
+                <h3 id="drifting-selectors-heading" class="section-title section-title--compact" style="color: #b91c1c; font-weight: bold; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    ⚠️ Template drift warnings
+                    <span class="admin-new-senders-badge" style="background-color: #b91c1c; color: white; border: 1px solid #7f1d1d; border-radius: 4px; padding: 1px 6px; font-size: 0.75rem; font-weight: bold;"><?= count($driftingSubscriptions) ?></span>
+                </h3>
+                <p class="admin-hint" style="color: #991b1b; margin-bottom: 1rem;">The split rules for these newsletters extracted 0 stories from the latest incoming digest email. This usually means the publisher updated their email template. Review and refine their split config to fix ingestion.</p>
+                <table class="data-table data-table--new-senders" style="background: transparent; border-collapse: collapse; width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="border-bottom: 2px solid #fca5a5;">Match</th>
+                            <th style="border-bottom: 2px solid #fca5a5;">Subject filter</th>
+                            <th style="border-bottom: 2px solid #fca5a5;">Name</th>
+                            <th style="border-bottom: 2px solid #fca5a5;">Latest email</th>
+                            <th style="border-bottom: 2px solid #fca5a5;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($driftingSubscriptions as $row): ?>
+                        <?php
+                        $sid = (int)$row['id'];
+                        $peek = $subscriptionLatest[$sid] ?? null;
+                        $latestQs = 'action=newsletter&view=items&subscription=' . $sid;
+                        ?>
+                        <tr>
+                            <td style="border-bottom: 1px solid #fca5a5; padding: 0.5rem 0.25rem;"><?= e((string)$row['match_type']) ?>: <?= e((string)$row['match_value']) ?></td>
+                            <td style="border-bottom: 1px solid #fca5a5; padding: 0.5rem 0.25rem;"><?= e((string)($row['subject_filter'] ?? '')) !== '' ? e((string)$row['subject_filter']) : '—' ?></td>
+                            <td style="border-bottom: 1px solid #fca5a5; padding: 0.5rem 0.25rem;"><?= e((string)$row['display_name']) ?></td>
+                            <td style="border-bottom: 1px solid #fca5a5; padding: 0.5rem 0.25rem;">
+                                <?php if ($peek !== null): ?>
+                                    <?php
+                                    $subj = $peek['subject'] ?? null;
+                                    $linkText = 'Latest';
+                                    $trunc = false;
+                                    if ($subj !== null && $subj !== '') {
+                                        $max = 56;
+                                        if (function_exists('mb_strlen')) {
+                                            $trunc = mb_strlen($subj) > $max;
+                                            $linkText = mb_substr($subj, 0, $max);
+                                        } else {
+                                            $trunc = strlen($subj) > $max;
+                                            $linkText = substr($subj, 0, $max);
+                                        }
+                                    }
+                                    if ($trunc) {
+                                        $linkText .= '…';
+                                    }
+                                    ?>
+                                    <a href="<?= e($basePath) ?>/index.php?<?= e($latestQs) ?>" title="<?= e($subj ?? 'Open matching mail items') ?>" style="color: #b91c1c; font-weight: bold; text-decoration: underline;"><?= e($linkText) ?></a>
+                                    <span style="color: #b91c1c; font-size: 0.75rem; font-weight: bold; margin-left: 0.5rem;">(Split failed)</span>
+                                <?php else: ?>
+                                    <span class="table-cell-placeholder" style="color: #991b1b;">No messages yet</span>
+                                <?php endif; ?>
+                            </td>
+                            <td style="border-bottom: 1px solid #fca5a5; padding: 0.5rem 0.25rem; text-align: right;">
+                                <?php if (!$satellite): ?>
+                                <div class="admin-table-actions" style="display: inline-flex; gap: 0.5rem;">
+                                    <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>&amp;edit=<?= $sid ?>" class="btn btn-warning btn-sm" style="background-color: #f59e0b; color: white; border: 1px solid #d97706; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold;">Fix selector</a>
+                                </div>
+                                <?php else: ?>
+                                <span class="table-cell-placeholder">—</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </section>
+            <?php endif; ?>
+
             <?php if ($mailModule->showsPendingSenders && $pendingSenders !== []): ?>
             <section class="admin-new-senders-section" aria-labelledby="new-senders-heading">
                 <h3 id="new-senders-heading" class="section-title section-title--compact"><?= e($mailModule->pendingSectionTitle) ?> <span class="admin-new-senders-badge"><?= count($pendingSenders) ?></span></h3>

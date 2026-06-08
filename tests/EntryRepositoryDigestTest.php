@@ -124,6 +124,7 @@ namespace Seismo\Tests {
                     module_scope VARCHAR(20) DEFAULT 'mail',
                     disabled INTEGER DEFAULT 0,
                     auto_detected INTEGER DEFAULT 0,
+                    split_drift INTEGER DEFAULT 0,
                     strip_listing_boilerplate INTEGER DEFAULT 0,
                     category VARCHAR(255) DEFAULT NULL,
                     show_in_magnitu INTEGER DEFAULT 1,

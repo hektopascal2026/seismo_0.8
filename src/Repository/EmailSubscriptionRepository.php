@@ -391,6 +391,27 @@ final class EmailSubscriptionRepository
     }
 
     /**
+     * Active subscriptions with split drift (failed to split stories) for a module.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listDriftingForModule(string $moduleScope): array
+    {
+        $scope = self::normalizeModuleScope($moduleScope);
+        $t      = entryTable('email_subscriptions');
+        $sql    = "SELECT * FROM {$t}
+            WHERE removed_at IS NULL
+              AND auto_detected = 0
+              AND module_scope = ?
+              AND split_drift = 1
+            ORDER BY id DESC";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$scope]);
+
+        return $stmt->fetchAll() ?: [];
+    }
+
+    /**
      * Gmail-ingest proposals awaiting review for a Mail or Newsletter module.
      *
      * @return list<array<string, mixed>>
@@ -859,6 +880,7 @@ final class EmailSubscriptionRepository
             body_processor = ?,
             cleanup_config = ?,
             digest_split_config = ?,
+            split_drift = 0,
             auto_detected = 0,
             unsubscribe_url = ?,
             unsubscribe_mailto = ?,
@@ -885,6 +907,16 @@ final class EmailSubscriptionRepository
                 : (int)($existing['unsubscribe_one_click'] ?? 0),
             $id,
         ]);
+    }
+
+    public function updateSplitDrift(int $id, bool $drift): void
+    {
+        if ($id <= 0) {
+            return;
+        }
+        $t = entryTable('email_subscriptions');
+        $stmt = $this->pdo->prepare("UPDATE {$t} SET split_drift = ? WHERE id = ?");
+        $stmt->execute([$drift ? 1 : 0, $id]);
     }
 
     public function setModuleScope(int $id, string $moduleScope): void

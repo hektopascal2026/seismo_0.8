@@ -846,17 +846,24 @@ final class EmailIngestRepository
         $stmtDel = $this->pdo->prepare("DELETE FROM {$t} WHERE parent_email_id = ?");
         $stmtDel->execute([$parentId]);
 
+        $parentSubId = (int)($parentRow['email_subscription_id'] ?? 0);
+        $parentSubBind = $parentSubId > 0 ? $parentSubId : null;
+
         $html = (string)($parentRow['html_body'] ?? $parentRow['body_html'] ?? '');
         $text = (string)($parentRow['text_body'] ?? $parentRow['body_text'] ?? '');
 
         $splitter = new \Seismo\Core\Mail\EmailDigestSplitterService();
         $stories = $splitter->split($html, $text, $cfg);
         if ($stories === []) {
+            if ($parentSubId > 0) {
+                $subRepo->updateSplitDrift($parentSubId, true);
+            }
             return;
         }
 
-        $parentSubId = (int)($parentRow['email_subscription_id'] ?? 0);
-        $parentSubBind = $parentSubId > 0 ? $parentSubId : null;
+        if ($parentSubId > 0) {
+            $subRepo->updateSplitDrift($parentSubId, false);
+        }
 
         $sql = "INSERT INTO {$t} (
             imap_uid, gmail_message_id, message_id, parent_email_id, email_subscription_id, from_addr, to_addr, cc_addr,

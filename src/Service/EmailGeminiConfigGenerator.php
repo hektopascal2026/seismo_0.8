@@ -551,9 +551,21 @@ TEXT;
         // Expected keepCount decreases by 1 for each glued connection (since 2 blocks merge to 1)
         $keepCount = max(1, $rawKeepCount - $glueToggles);
 
+        // Check if any of the noise blocks have a dynamic title (date, numbers, or truncated with ...)
+        $hasDynamicNoise = false;
+        foreach ($feedback['blocks'] ?? [] as $block) {
+            if (is_array($block) && trim((string)($block['verdict'] ?? '')) === 'noise') {
+                $title = trim((string)($block['title'] ?? ''));
+                if ($this->isDynamicTitle($title)) {
+                    $hasDynamicNoise = true;
+                    break;
+                }
+            }
+        }
+
         $currentConfig = DigestSplitConfigNormalizer::mergeNoiseFeedback($currentConfig, $feedback);
         $localCount = $this->countSplitStoriesOnSample($samples, $currentConfig);
-        if ($localCount === $keepCount && $localCount > 0 && $glueToggles === 0) {
+        if ($localCount === $keepCount && $localCount > 0 && $glueToggles === 0 && !$hasDynamicNoise) {
             return [
                 'digest_split_config' => json_encode($currentConfig, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'analysis' => [
@@ -759,7 +771,8 @@ TEXT;
         $prompt .= "- Broaden story_selector to a parent tag (like `table` instead of `td`) if adjacent blocks need to be kept together.\n";
         $prompt .= "- Narrow story_selector to match only real story wrappers (e.g. tr.story not every tr) if there is unwanted noise.\n";
         $prompt .= "- Add exclude_selectors: array of simple selectors (.class, #id, tag) — matched story nodes are skipped.\n";
-        $prompt .= "- Derive exclude_selectors from class/id patterns visible in noise block html_preview.\n\n";
+        $prompt .= "- Derive exclude_selectors from class/id patterns visible in noise block html_preview.\n";
+        $prompt .= "- Add exclude_titles: array of title strings or PCRE regex patterns (e.g. \"/^NATIONAL/i\" or \"/^«Ein gefährlicher/iu\"). If a noise block's title contains dynamic parts (like dates, numbers, or names), you MUST write a generalized regex pattern in exclude_titles instead of a literal string match.\n\n";
 
         $prompt .= "Sample email for reference:\n";
         $prompt .= $this->formatSampleBlock(0, $samples[0]);
@@ -1123,6 +1136,9 @@ MJML digests (class mj-column-per-100):
 exclude_selectors (optional): simple .class, #id, tag, or tag.class selectors.
 When a matched story node itself matches an exclude selector, that match is skipped.
 
+exclude_titles (optional): array of title strings or PCRE regex patterns (e.g. ["/^NATIONAL/i"]).
+If a matched story's title matches a string or regular expression in this array, that story is skipped. Use regex for sections with dynamic titles.
+
 Plain text ONLY (no html_body — regex runs on text_body):
 {
   "split_method": "regex_split",
@@ -1354,6 +1370,27 @@ TEXT;
         $str = trim((string)$val);
 
         return $str === '' ? null : $str;
+    }
+
+    private function isDynamicTitle(string $title): bool
+    {
+        // If it contains a digit (e.g. date, number)
+        if (preg_match('/\d/', $title)) {
+            return true;
+        }
+        // If it contains '...' or '…'
+        if (str_contains($title, '...') || str_contains($title, '…')) {
+            return true;
+        }
+        // If it contains month names (German/English/French)
+        $months = ['jan', 'feb', 'mär', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'oct', 'nov', 'dez', 'dec'];
+        $lower = mb_strtolower($title);
+        foreach ($months as $m) {
+            if (str_contains($lower, $m)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

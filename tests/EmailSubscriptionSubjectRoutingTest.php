@@ -80,6 +80,7 @@ namespace Seismo\Tests {
                     cleanup_config TEXT DEFAULT NULL,
                     digest_split_config TEXT DEFAULT NULL,
                     auto_detected INTEGER NOT NULL DEFAULT 0,
+                    split_drift INTEGER NOT NULL DEFAULT 0,
                     unsubscribe_url TEXT DEFAULT NULL,
                     unsubscribe_mailto TEXT DEFAULT NULL,
                     unsubscribe_one_click INTEGER NOT NULL DEFAULT 0,
