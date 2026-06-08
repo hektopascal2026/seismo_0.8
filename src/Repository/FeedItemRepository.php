@@ -471,10 +471,18 @@ final class FeedItemRepository
                         $pubStr,
                         $hash,
                     ]);
-                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    }
                     ++$inserted;
                 } catch (\Throwable $e) {
-                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        try {
+                            $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                        } catch (\Throwable $rollbackEx) {
+                            error_log('Savepoint rollback failed: ' . $rollbackEx->getMessage());
+                        }
+                    }
                     ++$skipped;
                     error_log('Seismo feed ingest row skipped feed ' . $feedId . ': ' . $e->getMessage());
                 }
@@ -484,7 +492,11 @@ final class FeedItemRepository
             return new FeedUpsertResult($inserted, $skipped);
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+                try {
+                    $this->pdo->rollBack();
+                } catch (\Throwable $rollbackEx) {
+                    error_log('Outer transaction rollback failed: ' . $rollbackEx->getMessage());
+                }
             }
             throw $e;
         }

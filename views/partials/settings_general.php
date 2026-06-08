@@ -13,10 +13,42 @@
  * @var bool $navLeadingThrottleOn
  * @var bool $legacyRssScraperRefresh
  * @var bool $geminiApiKeyOnFile Gemini key stored in local system_config
+ * @var ?array $dbStats
  */
 
 declare(strict_types=1);
 ?>
+        <?php if (!empty($dbStats)): ?>
+        <div class="latest-entries-section">
+            <h2 class="section-title">Database Overview</h2>
+            <div class="admin-form-card" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1.5rem; border-color: #000000; margin-bottom: 1.5rem;">
+                <div>
+                    <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #666666; margin-bottom: 0.25rem;">Database Size</strong>
+                    <span style="font-size: 1.5rem; font-weight: 700;"><?= number_format($dbStats['size_mb'], 2) ?> MB</span>
+                </div>
+                <div>
+                    <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #666666; margin-bottom: 0.25rem;">Total Sources</strong>
+                    <span style="font-size: 1.5rem; font-weight: 700;"><?= number_format($dbStats['total_sources']) ?></span>
+                    <span style="display: block; font-size: 0.75rem; color: #666666; margin-top: 0.25rem; line-height: 1.3;">
+                        <?= $dbStats['feeds_count'] ?> feeds<br>
+                        <?= $dbStats['scrapers_count'] ?> scrapers<br>
+                        <?= $dbStats['email_subs_count'] ?> mail subs
+                    </span>
+                </div>
+                <div>
+                    <strong style="display: block; font-size: 0.75rem; text-transform: uppercase; color: #666666; margin-bottom: 0.25rem;">Total Items</strong>
+                    <span style="font-size: 1.5rem; font-weight: 700;"><?= number_format($dbStats['total_items']) ?></span>
+                    <span style="display: block; font-size: 0.75rem; color: #666666; margin-top: 0.25rem; line-height: 1.3;">
+                        <?= number_format($dbStats['feed_items_count']) ?> feed items<br>
+                        <?= number_format($dbStats['emails_count']) ?> emails<br>
+                        <?= number_format($dbStats['lex_count']) ?> legislative docs<br>
+                        <?= number_format($dbStats['calendar_count']) ?> parliamentary events
+                    </span>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <div class="latest-entries-section">
             <h2 class="section-title">Timeline</h2>
             <p class="admin-intro">

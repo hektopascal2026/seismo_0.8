@@ -258,10 +258,18 @@ final class EmailIngestRepository
                         }
                     }
 
-                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    }
                     ++$n;
                 } catch (\Throwable $e) {
-                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        try {
+                            $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                        } catch (\Throwable $rollbackEx) {
+                            error_log('Savepoint rollback failed: ' . $rollbackEx->getMessage());
+                        }
+                    }
                     error_log('Seismo email ingest row skipped: ' . $e->getMessage());
                 }
             }
@@ -269,7 +277,13 @@ final class EmailIngestRepository
 
             return $n;
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                try {
+                    $this->pdo->rollBack();
+                } catch (\Throwable $rollbackEx) {
+                    error_log('Outer transaction rollback failed: ' . $rollbackEx->getMessage());
+                }
+            }
             throw $e;
         }
     }
@@ -835,17 +849,6 @@ final class EmailIngestRepository
         $subRepo = new EmailSubscriptionRepository($this->pdo);
         $subs = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
 
-        $stmtChildIds = $this->pdo->prepare("SELECT id FROM {$t} WHERE parent_email_id = ?");
-        $stmtChildIds->execute([$parentId]);
-        $oldChildIds = $stmtChildIds->fetchAll(PDO::FETCH_COLUMN);
-        if (is_array($oldChildIds) && $oldChildIds !== []) {
-            $scoreRepo->deleteForEntries('email', array_map('intval', $oldChildIds));
-        }
-
-        // Delete existing child entries to ensure clean idempotency
-        $stmtDel = $this->pdo->prepare("DELETE FROM {$t} WHERE parent_email_id = ?");
-        $stmtDel->execute([$parentId]);
-
         $parentSubId = (int)($parentRow['email_subscription_id'] ?? 0);
         $parentSubBind = $parentSubId > 0 ? $parentSubId : null;
 
@@ -858,6 +861,15 @@ final class EmailIngestRepository
             if ($parentSubId > 0) {
                 $subRepo->updateSplitDrift($parentSubId, true);
             }
+            $stmtChildIds = $this->pdo->prepare("SELECT id FROM {$t} WHERE parent_email_id = ?");
+            $stmtChildIds->execute([$parentId]);
+            $oldChildIds = $stmtChildIds->fetchAll(PDO::FETCH_COLUMN);
+            if (is_array($oldChildIds) && $oldChildIds !== []) {
+                $scoreRepo->deleteForEntries('email', array_map('intval', $oldChildIds));
+            }
+            $stmtDel = $this->pdo->prepare("DELETE FROM {$t} WHERE parent_email_id = ?");
+            $stmtDel->execute([$parentId]);
+            $scoreRepo->deleteForEntry('email', $parentId);
             return;
         }
 
@@ -865,7 +877,33 @@ final class EmailIngestRepository
             $subRepo->updateSplitDrift($parentSubId, false);
         }
 
-        $sql = "INSERT INTO {$t} (
+        $stmtChildRows = $this->pdo->prepare("SELECT id, message_id FROM {$t} WHERE parent_email_id = ? ORDER BY id ASC");
+        $stmtChildRows->execute([$parentId]);
+        $existingChildren = $stmtChildRows->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $existingCount = count($existingChildren);
+
+        $sqlUpdate = "UPDATE {$t} SET
+            message_id = ?,
+            email_subscription_id = ?,
+            from_addr = ?,
+            to_addr = ?,
+            cc_addr = ?,
+            subject = ?,
+            derived_title = ?,
+            from_email = ?,
+            from_name = ?,
+            date_utc = ?,
+            date_received = ?,
+            date_sent = ?,
+            body_text = ?,
+            body_html = ?,
+            text_body = ?,
+            html_body = ?,
+            metadata = ?,
+            hidden = 0
+            WHERE id = ?";
+
+        $sqlIns = "INSERT INTO {$t} (
             imap_uid, gmail_message_id, message_id, parent_email_id, email_subscription_id, from_addr, to_addr, cc_addr,
             subject, derived_title, from_email, from_name, date_utc, date_received, date_sent,
             body_text, body_html, text_body, html_body, metadata, hidden
@@ -877,7 +915,8 @@ final class EmailIngestRepository
 
         $parentWebView = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($parentRow['metadata'] ?? null);
 
-        $stmtIns = $this->pdo->prepare($sql);
+        $stmtUpd = $this->pdo->prepare($sqlUpdate);
+        $stmtIns = $this->pdo->prepare($sqlIns);
 
         foreach ($stories as $index => $story) {
             $childMsgId = null;
@@ -915,9 +954,8 @@ final class EmailIngestRepository
             }
             $meta = $metaPayload === [] ? null : json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-            $stmtIns->execute([
+            $bindParams = [
                 $childMsgId,
-                $parentId,
                 $parentSubBind,
                 $parentRow['from_addr'] ?? null,
                 $parentRow['to_addr'] ?? null,
@@ -934,7 +972,31 @@ final class EmailIngestRepository
                 $childRow['text_body'] ?? $story['text_body'], // text_body
                 $childRow['html_body'] ?? $story['html_body'], // html_body
                 $meta
-            ]);
+            ];
+
+            if ($index < $existingCount) {
+                $childId = (int)$existingChildren[$index]['id'];
+                $bindParams[] = $childId;
+                $stmtUpd->execute($bindParams);
+                $scoreRepo->deleteForEntry('email', $childId);
+            } else {
+                $insParams = $bindParams;
+                array_splice($insParams, 1, 0, [$parentId]);
+                $stmtIns->execute($insParams);
+            }
+        }
+
+        if ($existingCount > count($stories)) {
+            $obsoleteIds = [];
+            for ($i = count($stories); $i < $existingCount; $i++) {
+                $obsoleteIds[] = (int)$existingChildren[$i]['id'];
+            }
+            if ($obsoleteIds !== []) {
+                $scoreRepo->deleteForEntries('email', $obsoleteIds);
+                $placeholders = implode(',', array_fill(0, count($obsoleteIds), '?'));
+                $stmtDelObsolete = $this->pdo->prepare("DELETE FROM {$t} WHERE id IN ({$placeholders})");
+                $stmtDelObsolete->execute($obsoleteIds);
+            }
         }
 
         $scoreRepo->deleteForEntry('email', $parentId);

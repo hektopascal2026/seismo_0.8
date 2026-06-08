@@ -141,6 +141,7 @@ final class SettingsController
         $sessionAuthEnabled              = AuthGate::isEnabled();
         $adminBootstrapTokenConfigured   = AuthGate::bootstrapSetupTokenConfigured();
         $geminiApiKeyOnFile        = false;
+        $dbStats                   = null;
 
         $diagStatus     = [];
         $diagCoreStatus = [];
@@ -161,6 +162,11 @@ final class SettingsController
             }
             $geminiKey = $config->get(self::KEY_GEMINI_API_KEY);
             $geminiApiKeyOnFile = $geminiKey !== null && trim($geminiKey) !== '';
+            try {
+                $dbStats = self::queryDbOverview($pdo);
+            } catch (\Throwable $e) {
+                error_log('Seismo settings DB stats error: ' . $e->getMessage());
+            }
         }
 
         if ($tab === 'mail') {
@@ -639,5 +645,82 @@ final class SettingsController
         } catch (\Throwable) {
             return '';
         }
+    }
+
+    private static function queryDbOverview(\PDO $pdo): array
+    {
+        $dbs = [];
+        $dbs[] = (string)SEISMO_ENTRIES_DB;
+        $scoresDb = seismoScoresDbName();
+        if ($scoresDb !== '' && !in_array($scoresDb, $dbs, true)) {
+            $dbs[] = $scoresDb;
+        }
+
+        $sizeBytes = 0.0;
+        foreach ($dbs as $db) {
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT SUM(data_length + index_length) 
+                    FROM information_schema.tables 
+                    WHERE table_schema = ?
+                ");
+                $stmt->execute([$db]);
+                $sizeBytes += (float)($stmt->fetchColumn() ?? 0);
+            } catch (\Throwable) {
+            }
+        }
+        $sizeMb = $sizeBytes / 1024 / 1024;
+
+        $feedsCount = 0;
+        try {
+            $feedsCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('feeds'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $scrapersCount = 0;
+        try {
+            $scrapersCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('scraper_configs'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $emailsSubsCount = 0;
+        try {
+            $emailsSubsCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('email_subscriptions'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $totalSources = $feedsCount + $scrapersCount + $emailsSubsCount;
+
+        $feedItemsCount = 0;
+        try {
+            $feedItemsCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('feed_items'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $emailsCount = 0;
+        try {
+            $emailsCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('emails'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $lexCount = 0;
+        try {
+            $lexCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('lex_items'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $calendarCount = 0;
+        try {
+            $calendarCount = (int)$pdo->query('SELECT COUNT(*) FROM ' . entryTable('calendar_events'))->fetchColumn();
+        } catch (\Throwable) {}
+
+        $totalItems = $feedItemsCount + $emailsCount + $lexCount + $calendarCount;
+
+        return [
+            'size_mb' => $sizeMb,
+            'total_sources' => $totalSources,
+            'feeds_count' => $feedsCount,
+            'scrapers_count' => $scrapersCount,
+            'email_subs_count' => $emailsSubsCount,
+            'total_items' => $totalItems,
+            'feed_items_count' => $feedItemsCount,
+            'emails_count' => $emailsCount,
+            'lex_count' => $lexCount,
+            'calendar_count' => $calendarCount,
+        ];
     }
 }

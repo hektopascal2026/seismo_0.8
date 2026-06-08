@@ -34,6 +34,7 @@
  * @var ?string $adminPasswordPasteBlock
  * @var bool $sessionAuthEnabled
  * @var bool $navLeadingThrottleOn Settings → General: main nav / settings tab leading-edge click throttle
+ * @var ?array $dbStats
  */
 
 declare(strict_types=1);

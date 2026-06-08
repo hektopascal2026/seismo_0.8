@@ -267,10 +267,18 @@ final class CalendarEventRepository
                         (string)($row['url'] ?? ''),
                         is_string($metadata) ? $metadata : null,
                     ]);
-                    $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
+                    }
                     ++$n;
                 } catch (\Throwable $e) {
-                    $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                    if ($this->pdo->inTransaction()) {
+                        try {
+                            $this->pdo->exec('ROLLBACK TO SAVEPOINT ' . $savepoint);
+                        } catch (\Throwable $rollbackEx) {
+                            error_log('Savepoint rollback failed: ' . $rollbackEx->getMessage());
+                        }
+                    }
                     error_log('Seismo calendar ingest row skipped: ' . $e->getMessage());
                 }
             }
@@ -279,7 +287,11 @@ final class CalendarEventRepository
             return $n;
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
-                $this->pdo->rollBack();
+                try {
+                    $this->pdo->rollBack();
+                } catch (\Throwable $rollbackEx) {
+                    error_log('Outer transaction rollback failed: ' . $rollbackEx->getMessage());
+                }
             }
             throw $e;
         }

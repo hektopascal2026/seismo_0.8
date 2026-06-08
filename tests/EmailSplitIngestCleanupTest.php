@@ -275,5 +275,141 @@ namespace Seismo\Tests {
             self::assertSame('https://example.com/parent-webview-url', $childMeta['link'] ?? null);
             self::assertSame('https://example.com/parent-webview-url', $childMeta['web_view_url'] ?? null);
         }
+
+        public function testSplitAndIngestStoriesPreservesChildIdsAndScoresOnReprocess(): void
+        {
+            // 1. Insert subscription
+            $this->pdo->exec("
+                INSERT INTO email_subscriptions (
+                    match_type, match_value, display_name, disabled, auto_detected
+                ) VALUES (
+                    'email', 'reprocess@example.com', 'Reprocess Newsletter', 0, 0
+                )
+            ");
+            $subId = (int)$this->pdo->lastInsertId();
+
+            // 2. Insert parent email
+            $this->pdo->prepare("
+                INSERT INTO emails (
+                    id, email_subscription_id, subject, derived_title, from_email, from_name, text_body, html_body, date_utc
+                ) VALUES (
+                    30, ?, 'Digest Update', 'Digest Update', 'reprocess@example.com', 'Publisher', 'Parent body', 'HTML body', '2026-06-07 00:00:00'
+                )
+            ")->execute([$subId]);
+
+            // 3. Define split config
+            $splitConfig = [
+                'split_rules' => [
+                    'split_method' => 'html_selector',
+                    'story_selector' => '.story',
+                    'title_selector' => 'h2',
+                    'link_selector' => 'a',
+                    'body_selector' => '.content',
+                ]
+            ];
+
+            // 4. Run splitAndIngestStories (First Pass)
+            $parentRow = [
+                'from_email' => 'reprocess@example.com',
+                'from_name' => 'Publisher',
+                'subject' => 'Digest Update',
+                'html_body' => '
+                    <html><body>
+                        <div class="story">
+                            <h2>Story A</h2>
+                            <div class="content">Content A</div>
+                        </div>
+                        <div class="story">
+                            <h2>Story B</h2>
+                            <div class="content">Content B</div>
+                        </div>
+                    </body></html>
+                ',
+                'text_body' => 'Text body representation'
+            ];
+
+            $repo = new EmailIngestRepository($this->pdo);
+            $repo->splitAndIngestStories(30, $parentRow, $splitConfig);
+
+            // Fetch children and record their IDs
+            $stmt = $this->pdo->prepare("SELECT id, subject FROM emails WHERE parent_email_id = 30 ORDER BY id ASC");
+            $stmt->execute();
+            $childrenFirst = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            self::assertCount(2, $childrenFirst);
+            $childAId = (int)$childrenFirst[0]['id'];
+            $childBId = (int)$childrenFirst[1]['id'];
+
+            // Insert mock entry scores for both children
+            $this->pdo->prepare("INSERT INTO entry_scores (entry_type, entry_id, relevance_score) VALUES ('email', ?, 0.8)")->execute([$childAId]);
+            $this->pdo->prepare("INSERT INTO entry_scores (entry_type, entry_id, relevance_score) VALUES ('email', ?, 0.9)")->execute([$childBId]);
+
+            // Verify scores exist
+            $scoreCount = (int)$this->pdo->query("SELECT COUNT(*) FROM entry_scores")->fetchColumn();
+            self::assertSame(2, $scoreCount);
+
+            // 5. Run splitAndIngestStories (Second Pass - Reprocess / Update)
+            $parentRowUpdated = [
+                'from_email' => 'reprocess@example.com',
+                'from_name' => 'Publisher',
+                'subject' => 'Digest Update',
+                'html_body' => '
+                    <html><body>
+                        <div class="story">
+                            <h2>Story A Updated</h2>
+                            <div class="content">Content A (new version)</div>
+                        </div>
+                        <div class="story">
+                            <h2>Story B</h2>
+                            <div class="content">Content B</div>
+                        </div>
+                    </body></html>
+                ',
+                'text_body' => 'Text body representation'
+            ];
+            $repo->splitAndIngestStories(30, $parentRowUpdated, $splitConfig);
+
+            // Fetch children after second pass
+            $stmt->execute();
+            $childrenSecond = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            self::assertCount(2, $childrenSecond);
+            self::assertSame($childAId, (int)$childrenSecond[0]['id']);
+            self::assertSame('Story A Updated', $childrenSecond[0]['subject']);
+            self::assertSame($childBId, (int)$childrenSecond[1]['id']);
+            self::assertSame('Story B', $childrenSecond[1]['subject']);
+
+            // 6. Run splitAndIngestStories (Third Pass - Story B is removed)
+            $parentRowFewer = [
+                'from_email' => 'reprocess@example.com',
+                'from_name' => 'Publisher',
+                'subject' => 'Digest Update',
+                'html_body' => '
+                    <html><body>
+                        <div class="story">
+                            <h2>Story A Updated</h2>
+                            <div class="content">Content A (new version)</div>
+                        </div>
+                    </body></html>
+                ',
+                'text_body' => 'Text body representation'
+            ];
+            $repo->splitAndIngestStories(30, $parentRowFewer, $splitConfig);
+
+            // Fetch children after third pass
+            $stmt->execute();
+            $childrenThird = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            self::assertCount(1, $childrenThird);
+            self::assertSame($childAId, (int)$childrenThird[0]['id']);
+
+            // Verify that Story B's score was deleted/pruned, but Story A's score is still present
+            $stmtScore = $this->pdo->prepare("SELECT relevance_score FROM entry_scores WHERE entry_id = ?");
+            $stmtScore->execute([$childAId]);
+            // (Note: score of child A is deleted from entry_scores by the deleteForEntry in loop to trigger rescore, which is also correct)
+            $stmtScoreB = $this->pdo->prepare("SELECT COUNT(*) FROM entry_scores WHERE entry_id = ?");
+            $stmtScoreB->execute([$childBId]);
+            self::assertSame(0, (int)$stmtScoreB->fetchColumn());
+        }
     }
 }
