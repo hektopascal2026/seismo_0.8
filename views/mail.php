@@ -364,11 +364,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <div class="admin-form-field">
                     <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="e.g. Politpuls — required when several newsletters share the same sender address"></label>
                 </div>
-                <div class="admin-form-field">
-                    <label>Digest Split Config (JSON)
-                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "body_selector": "p", "link_selector": "a"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
-                    </label>
-                </div>
+                <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                 <?php else: ?>
                 <input type="hidden" name="subject_filter" value="">
                 <input type="hidden" name="digest_split_config" value="">
@@ -424,28 +420,21 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
                 <div class="admin-form-field">
                     <button type="button" id="btn-ai-analyze" class="btn btn-secondary" onclick="runAiAnalysis(<?= (int)$editRow['id'] ?>)">
-                        Analyze sample emails with Gemini
+                        <?= $cleanupConfigRaw !== '' ? 'Reanalyze with Gemini' : 'Analyze sample emails with Gemini' ?>
                     </button>
                     <span id="ai-analysis-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                     <div id="ai-cleanup-verification" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4;"></div>
                 </div>
 
-                <div id="ai-results-panel" style="display: <?= $cleanupConfigRaw !== '' ? 'block' : 'none' ?>;">
+                <div id="ai-cleanup-config-panel" style="display: <?= $cleanupConfigRaw !== '' ? 'block' : 'none' ?>;">
                     <div class="admin-form-field">
-                        <label>Generated JSON Config:
+                        <label>Cleanup JSON config:
                             <textarea id="cleanup_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"strip_regexes": [], "webview_keywords": [], "title_extractor": null}'><?= e($cleanupConfigRaw) ?></textarea>
                         </label>
                     </div>
+                </div>
 
-                    <?php if ($mailModule->isNewsletter()): ?>
-                    <div class="admin-form-field" id="digest-split-proposed-panel" style="margin-top: 1rem;">
-                        <label>Proposed Digest Split Config (JSON):
-                            <?php $digestSplitConfigRaw = (string)($editRow['digest_split_config'] ?? ''); ?>
-                            <textarea id="digest_split_config_json" class="search-input" style="width: 100%; height: 6rem; font-family: monospace; font-size: 0.85rem;" placeholder='(Not a digest or no split config generated yet)'><?= e($digestSplitConfigRaw) ?></textarea>
-                        </label>
-                    </div>
-                    <?php endif; ?>
-
+                <div id="ai-cleanup-interactive-section" style="display: none;">
                     <div class="admin-form-field" id="ai-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Before / After Preview</h4>
                         
@@ -517,6 +506,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             </div>
 
             <?php if ($mailModule->isNewsletter()): ?>
+            <?php
+            $digestSplitConfigRaw = (string)($editRow['digest_split_config'] ?? '');
+            ?>
             <div class="admin-form-card" style="margin-top: 1.5rem;" id="ai-split-configurator">
                 <h3>AI Split Configurator</h3>
                 <p class="admin-intro">Uses 3 recent sample emails (max 2 Gemini calls, ~1–3 min). Generates selector rules to split digests into individual cards.</p>
@@ -531,19 +523,21 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <textarea id="split-keep-text" class="search-input" style="width: 100%; height: 6rem; font-family: monospace; font-size: 0.85rem;" placeholder="Paste text or HTML snippets of the articles/sections you want to keep..."></textarea>
                     </div>
                     <button type="button" id="btn-ai-split-analyze" class="btn btn-secondary" onclick="runAiSplitAnalysis(<?= (int)$editRow['id'] ?>)">
-                        Analyze sample emails for splitting
+                        <?= $digestSplitConfigRaw !== '' ? 'Reanalyze with Gemini' : 'Analyze sample emails for splitting' ?>
                     </button>
                     <span id="ai-split-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                     <div id="ai-split-verification" style="display: none; margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.4;"></div>
                 </div>
 
-                <div id="ai-split-results-panel" style="display: <?= !empty($editRow['digest_split_config']) ? 'block' : 'none' ?>;">
+                <div id="ai-split-config-panel" style="display: <?= $digestSplitConfigRaw !== '' ? 'block' : 'none' ?>;">
                     <div class="admin-form-field">
-                        <label>Proposed Split Config (JSON):
-                            <textarea id="split_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "link_selector": "a", "body_selector": "p"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
+                        <label>Split JSON config:
+                            <textarea id="split_config_json" class="search-input" style="width: 100%; height: 8rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "link_selector": "a", "body_selector": "p"}}'><?= e($digestSplitConfigRaw) ?></textarea>
                         </label>
                     </div>
+                </div>
 
+                <div id="ai-split-interactive-section" style="display: none;">
                     <div class="admin-form-field" id="ai-split-preview-section" style="display: none; margin-top: 1.5rem;">
                         <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem;">Split Preview (Generated Cards)</h4>
                         <div id="split-preview-toolbar" style="display: none; margin-bottom: 0.75rem;">
@@ -573,7 +567,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
                             <input type="hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
-                            <input type="hidden" id="split_config_hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" id="split_config_hidden" name="digest_split_config" value="<?= e($digestSplitConfigRaw) ?>">
                             <input type="hidden" id="split_config_feedback_hidden" name="digest_split_feedback" value="">
                             
                             <button type="button" id="btn-split-apply-config" class="btn btn-success" onclick="runSplitConfigApply(event)">
@@ -623,11 +617,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <div class="admin-form-field">
                     <label>Subject filter <input type="text" name="subject_filter" class="search-input" style="width:100%;" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>" placeholder="e.g. Politpuls — required when several newsletters share the same sender address"></label>
                 </div>
-                <div class="admin-form-field">
-                    <label>Digest Split Config (JSON)
-                        <textarea name="digest_split_config" class="search-input" style="width:100%; height:6rem; font-family: monospace; font-size: 0.85rem;" placeholder='{"is_digest": true, "split_rules": {"split_method": "html_selector", "story_selector": "div.story", "title_selector": "h2", "body_selector": "p", "link_selector": "a"}}'><?= e((string)($editRow['digest_split_config'] ?? '')) ?></textarea>
-                    </label>
-                </div>
+                <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                 <?php else: ?>
                 <input type="hidden" name="subject_filter" value="">
                 <input type="hidden" name="digest_split_config" value="">
@@ -806,6 +796,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
     <?php require __DIR__ . '/partials/timeline_entry_expand_script.php'; ?>
     <script>
     var activeSamples = <?= json_encode($editRowSamples ?? []) ?>;
+    var cleanupAnalysisTriggered = false;
+    var splitAnalysisTriggered = false;
 
     function switchPreviewTab(tab) {
         var btnBefore = document.getElementById('tab-btn-before');
@@ -901,7 +893,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (!select || !section) return;
         
         select.innerHTML = '';
-        if (activeSamples.length === 0) {
+        if (activeSamples.length === 0 || !cleanupAnalysisTriggered) {
             section.style.display = 'none';
             return;
         }
@@ -926,6 +918,21 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var textarea = document.getElementById('cleanup_config_json');
         if (textarea) {
             textarea.addEventListener('input', updatePreview);
+            textarea.addEventListener('input', function() {
+                var val = textarea.value;
+                document.querySelectorAll('form input[name="cleanup_config"]').forEach(function(input) {
+                    input.value = val;
+                });
+            });
+        }
+        var splitTextarea = document.getElementById('split_config_json');
+        if (splitTextarea) {
+            splitTextarea.addEventListener('input', function() {
+                var val = splitTextarea.value;
+                document.querySelectorAll('form input[name="digest_split_config"]').forEach(function(input) {
+                    input.value = val;
+                });
+            });
         }
         ['cleanup-still-noise', 'cleanup-wrongly-removed'].forEach(function(id) {
             var el = document.getElementById(id);
@@ -985,7 +992,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var status = document.getElementById('ai-analysis-status');
         var verificationBox = document.getElementById('ai-cleanup-verification');
         var textarea = document.getElementById('cleanup_config_json');
-        var resultsPanel = document.getElementById('ai-results-panel');
+        var configPanel = document.getElementById('ai-cleanup-config-panel');
+        var interactiveSection = document.getElementById('ai-cleanup-interactive-section');
         var refinePanel = document.getElementById('cleanup-refine-panel');
         var verified = data.verification && data.verification.verified;
 
@@ -1019,6 +1027,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
         if (textarea && data.config) {
             textarea.value = JSON.stringify(data.config, null, 2);
+            // Sync to main form
+            document.querySelectorAll('form input[name="cleanup_config"]').forEach(function(input) {
+                input.value = textarea.value;
+            });
         }
 
         var dscTextarea = document.getElementById('digest_split_config_json');
@@ -1037,10 +1049,16 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             }
         }
 
+        cleanupAnalysisTriggered = true;
         activeSamples = data.samples || [];
         initPreviewSelect();
-        if (resultsPanel) resultsPanel.style.display = 'block';
+        if (configPanel) configPanel.style.display = 'block';
+        if (interactiveSection) interactiveSection.style.display = 'block';
         if (refinePanel) refinePanel.style.display = 'block';
+        var analyzeBtn = document.getElementById('btn-ai-analyze');
+        if (analyzeBtn) {
+            analyzeBtn.textContent = 'Reanalyze with Gemini';
+        }
         updateCleanupRefineButton();
     }
 
@@ -1173,7 +1191,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             otherStatus.style.display = 'none';
         }
 
-        var resultsPanel = document.getElementById('ai-split-results-panel');
+        var configPanel = document.getElementById('ai-split-config-panel');
+        var interactiveSection = document.getElementById('ai-split-interactive-section');
         var textarea = document.getElementById('split_config_json');
         var verificationBox = document.getElementById('ai-split-verification');
         var verified = data.verification && data.verification.verified;
@@ -1230,14 +1249,26 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 } catch (e) {
                     textarea.value = data.digest_split_config;
                 }
+                // Sync to main form
+                document.querySelectorAll('form input[name="digest_split_config"]').forEach(function(input) {
+                    input.value = textarea.value;
+                });
             } else if (!options.keepConfigOnEmpty) {
                 textarea.value = '';
             }
         }
 
+        splitAnalysisTriggered = true;
         renderSplitPreviewCards(data.preview_stories || []);
-        if (resultsPanel) {
-            resultsPanel.style.display = 'block';
+        if (configPanel) {
+            configPanel.style.display = 'block';
+        }
+        if (interactiveSection) {
+            interactiveSection.style.display = 'block';
+        }
+        var analyzeBtn = document.getElementById('btn-ai-split-analyze');
+        if (analyzeBtn) {
+            analyzeBtn.textContent = 'Reanalyze with Gemini';
         }
     }
 
