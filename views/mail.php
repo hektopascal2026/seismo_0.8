@@ -343,6 +343,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>" class="admin-form-card">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= $editRow ? (int)$editRow['id'] : '' ?>">
+                <input type="hidden" name="cleanup_config" value="<?= e($editRow ? $editRow['cleanup_config'] ?? '' : '') ?>">
                 <h3><?= $editRow ? 'Edit subscription' : 'Add subscription' ?></h3>
                 <div class="admin-form-field">
                     <label>Match type
@@ -385,14 +386,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     <input type="hidden" name="show_in_magnitu" value="0">
                     <label><input type="checkbox" name="show_in_magnitu" value="1" <?= ($editRow === null || !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu'])) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
                 </div>
-                <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Gemini: Cleanup and Webview</label>
+                    <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
+                        <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Gemini: Cleanup and Webview</label>
+                    <?php else: ?>
+                        <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= ($editRow === null || !empty($editRow['strip_listing_boilerplate'])) ? 'checked' : '' ?>> Strip typical boilerplate</label>
+                    <?php endif; ?>
                 </div>
-                <?php else: ?>
-                <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
-                <?php endif; ?>
                 <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
@@ -487,7 +488,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
                     <div class="admin-form-field">
                         <p class="admin-hint">Make adjustments to the JSON above if needed, then save to apply locally.</p>
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
+                        <form id="cleanup-apply-form" method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>">
                             <?= $csrfField ?>
                             <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
                             <input type="hidden" name="match_type" value="<?= e((string)$editRow['match_type']) ?>">
@@ -506,9 +507,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
-                            <button type="submit" class="btn btn-success" onclick="document.getElementById('cleanup_config_hidden').value = document.getElementById('cleanup_config_json').value;">
+                            <button type="button" id="btn-cleanup-apply-config" class="btn btn-success" onclick="runCleanupConfigApply(event)">
                                 Save Config &amp; Apply
                             </button>
+                            <span id="ai-cleanup-apply-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                         </form>
                     </div>
                 </div>
@@ -599,6 +601,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->saveAction) ?>" class="admin-form-card admin-form-card--review">
                 <?= $csrfField ?>
                 <input type="hidden" name="id" value="<?= (int)$editRow['id'] ?>">
+                <input type="hidden" name="cleanup_config" value="<?= e($editRow ? $editRow['cleanup_config'] ?? '' : '') ?>">
                 <h3><?= e($mailModule->pendingReviewTitle) ?></h3>
                 <p class="admin-hint">From Gmail: <?= e((string)$editRow['match_type']) ?>: <?= e((string)$editRow['match_value']) ?><?php if ($mailModule->isNewsletter() && trim((string)($editRow['subject_filter'] ?? '')) !== ''): ?> · subject filter <code><?= e((string)$editRow['subject_filter']) ?></code><?php endif; ?></p>
                 <div class="admin-form-field">
@@ -642,14 +645,14 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     <input type="hidden" name="show_in_magnitu" value="0">
                     <label><input type="checkbox" name="show_in_magnitu" value="1" <?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? 'checked' : '' ?>> Show in Magnitu (stored preference)</label>
                 </div>
-                <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
                 <div class="admin-form-field">
                     <input type="hidden" name="strip_listing_boilerplate" value="0">
-                    <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Gemini: Cleanup and Webview</label>
+                    <?php if ($editRow && !empty($editRow['cleanup_config'])): ?>
+                        <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= !empty($editRow['strip_listing_boilerplate']) ? 'checked' : '' ?>> Gemini: Cleanup and Webview</label>
+                    <?php else: ?>
+                        <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= ($editRow === null || !empty($editRow['strip_listing_boilerplate'])) ? 'checked' : '' ?>> Strip typical boilerplate</label>
+                    <?php endif; ?>
                 </div>
-                <?php else: ?>
-                <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
-                <?php endif; ?>
                 <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
@@ -1572,6 +1575,50 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var btn = document.getElementById('btn-split-apply-config');
         var status = document.getElementById('ai-split-apply-status');
         if (!form || !btn || !status) return;
+
+        btn.disabled = true;
+        status.style.display = 'inline';
+        status.style.color = '#333';
+        status.textContent = 'Saving configuration and reprocessing...';
+
+        var formData = new FormData(form);
+        formData.append('ajax', '1');
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(parseJsonFetchResponse)
+        .then(function(data) {
+            btn.disabled = false;
+            if (data.ok) {
+                status.style.color = 'green';
+                status.textContent = '✓ ' + (data.message || 'Saved successfully!');
+                setTimeout(function() {
+                    status.style.display = 'none';
+                }, 5000);
+            } else {
+                status.style.color = 'red';
+                status.textContent = 'Error: ' + (data.error || 'Failed to save configuration.');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            status.style.color = 'red';
+            status.textContent = 'Error: ' + err.message;
+        });
+    }
+
+    function runCleanupConfigApply(event) {
+        if (event) event.preventDefault();
+        var form = document.getElementById('cleanup-apply-form');
+        var btn = document.getElementById('btn-cleanup-apply-config');
+        var status = document.getElementById('ai-cleanup-apply-status');
+        var hiddenInput = document.getElementById('cleanup_config_hidden');
+        var textarea = document.getElementById('cleanup_config_json');
+        if (!form || !btn || !status || !hiddenInput || !textarea) return;
+
+        hiddenInput.value = textarea.value;
 
         btn.disabled = true;
         status.style.display = 'inline';
