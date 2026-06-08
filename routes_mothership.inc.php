@@ -463,6 +463,11 @@ $router->register(
     false
 );
 $router->register(
+    'newsletter_reprocess_all',
+    \Seismo\Controller\NewsletterController::class . '::reprocessAll',
+    false
+);
+$router->register(
     'newsletter_subscription_move_mail',
     \Seismo\Controller\NewsletterController::class . '::moveToMail',
     false

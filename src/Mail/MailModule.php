@@ -95,8 +95,8 @@ final class MailModule
             analyzeSplittingAction: 'newsletter_subscription_analyze_splitting',
             moveAction: 'newsletter_subscription_move_mail',
             moveTargetLabel: 'Move to Mail',
-            refreshAction: 'refresh_mail_ingest',
-            refreshLabel: 'Refresh Mail',
+            refreshAction: 'newsletter_reprocess_all',
+            refreshLabel: 'Reprocess Newsletters',
             sourcesHeading: 'Newsletter sources',
             sourcesIntroHtml: '<p class="admin-intro">Newsletter subscriptions use the same Gmail/IMAP ingest as '
                 . '<a href="' . htmlspecialchars($base . '/index.php?action=mail', ENT_QUOTES, 'UTF-8') . '">Mail</a>. '

@@ -773,4 +773,43 @@ final class MailModuleHandler
 
         return json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: $digestConfigJson;
     }
+
+    public function reprocessAll(): void
+    {
+        $finish = function (): void {
+            RefreshAjax::respondOrRedirect(function (): void {
+                $this->redirect(['view' => 'sources']);
+            });
+        };
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            header('Location: ?action=' . $this->module->action, true, 303);
+            exit;
+        }
+        if (!CsrfToken::verifyRequest(rotateOnSuccess: false)) {
+            $_SESSION['error'] = 'Session expired — please try again.';
+            $finish();
+
+            return;
+        }
+        if (isSatellite()) {
+            $_SESSION['error'] = 'Satellite mode: reprocess runs on the mothership.';
+            $finish();
+
+            return;
+        }
+
+        set_time_limit(300);
+        try {
+            $pdo = getDbConnection();
+            $service = new EmailSubscriptionReprocessService($pdo);
+            $total = $service->reprocessAllSubscriptions($this->module->scope);
+            $_SESSION['success'] = 'Reprocessed ' . $total . ' stored message(s) across all ' . $this->module->pageTitle . ' subscriptions.';
+        } catch (\Throwable $e) {
+            error_log('Seismo ' . $this->module->action . ' reprocessAll failed: ' . $e->getMessage());
+            $_SESSION['error'] = 'Reprocess failed: ' . $e->getMessage();
+        }
+
+        $finish();
+    }
 }

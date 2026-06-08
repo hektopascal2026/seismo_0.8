@@ -49,6 +49,11 @@ final class NewsletterController
         $this->handler()->reprocessSubscription();
     }
 
+    public function reprocessAll(): void
+    {
+        $this->handler()->reprocessAll();
+    }
+
     public function moveToMail(): void
     {
         $this->handler()->moveToOtherModule();

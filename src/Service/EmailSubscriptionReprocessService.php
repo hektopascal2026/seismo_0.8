@@ -123,4 +123,25 @@ final class EmailSubscriptionReprocessService
 
         return $value === '' ? null : $value;
     }
+
+    /**
+     * Reprocess all active subscriptions belonging to the specified scope.
+     */
+    public function reprocessAllSubscriptions(string $scope): int
+    {
+        if (isSatellite()) {
+            throw new \RuntimeException('Email reprocess must not run on a satellite.');
+        }
+        $subRepo = new EmailSubscriptionRepository($this->pdo);
+        $subs    = $subRepo->listActive(EmailSubscriptionRepository::MAX_LIMIT, 0);
+        $total   = 0;
+
+        foreach ($subs as $sub) {
+            if (EmailSubscriptionRepository::rowModuleScope($sub) === $scope) {
+                $total += $this->reprocessSubscription((int)$sub['id']);
+            }
+        }
+
+        return $total;
+    }
 }
