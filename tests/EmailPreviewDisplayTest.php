@@ -29,4 +29,13 @@ final class EmailPreviewDisplayTest extends TestCase
         ];
         self::assertSame('Teasernoise', seismo_email_plain_body_for_display($email));
     }
+
+    public function testLinkifyAndFormatParagraphs(): void
+    {
+        $input = "Hello world!\n\nCheck out https://github.com/oliverfuchs/seismo for details.\nAnother line.";
+        $expected = "<p class=\"timeline-entry-paragraph\">Hello world!</p>\n" .
+            "<p class=\"timeline-entry-paragraph\">Check out <a href=\"https://github.com/oliverfuchs/seismo\" target=\"_blank\" rel=\"noopener\" class=\"timeline-inline-link\">github.com/oliverfuchs/se…</a> for details.<br />\nAnother line.</p>";
+        self::assertSame($expected, seismo_linkify_and_format_paragraphs($input));
+    }
 }
+

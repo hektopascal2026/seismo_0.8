@@ -672,3 +672,54 @@ if (!function_exists('seismo_ui_nav_leading_throttle_ms')) {
         return $cached = 0;
     }
 }
+
+if (!function_exists('seismo_linkify_and_format_paragraphs')) {
+    /**
+     * Escape HTML, auto-link URLs (shortening the link text for clean visuals),
+     * and convert double-newlines to paragraph blocks and single-newlines to line breaks.
+     */
+    function seismo_linkify_and_format_paragraphs(string $text): string
+    {
+        $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        // Regex pattern to find URLs (http/https/www.)
+        $pattern = '#https?://[^\s()<>]+[^\s()<>.,;:?!"\x27]#i';
+
+        $linkified = preg_replace_callback($pattern, function ($matches) {
+            $url = $matches[0];
+
+            // Decode entities in case they got double-escaped
+            $rawUrl = htmlspecialchars_decode($url, ENT_QUOTES | ENT_SUBSTITUTE);
+
+            // Create a shortened link label (e.g. domain.com/some/path... or domain.com)
+            $parsed = parse_url($rawUrl);
+            $host = $parsed['host'] ?? '';
+            $path = $parsed['path'] ?? '';
+            $displayUrl = $host;
+            if ($path !== '' && $path !== '/') {
+                $displayUrl .= mb_substr($path, 0, 15);
+                if (mb_strlen($path) > 15) {
+                    $displayUrl .= '…';
+                }
+            }
+
+            return sprintf(
+                '<a href="%s" target="_blank" rel="noopener" class="timeline-inline-link">%s</a>',
+                htmlspecialchars($rawUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                htmlspecialchars($displayUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            );
+        }, $escaped);
+
+        // Convert double-newlines to paragraphs, then single-newlines to <br>
+        $paragraphs = explode("\n\n", $linkified);
+        $formattedParagraphs = [];
+        foreach ($paragraphs as $para) {
+            $para = trim($para);
+            if ($para !== '') {
+                $formattedParagraphs[] = '<p class="timeline-entry-paragraph">' . nl2br($para) . '</p>';
+            }
+        }
+
+        return implode("\n", $formattedParagraphs);
+    }
+}

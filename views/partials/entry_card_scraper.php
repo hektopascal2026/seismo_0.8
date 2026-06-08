@@ -48,17 +48,21 @@ if (!empty($timelineMediaToggleFeature) && $isTimelineMediaEntry) {
                                 <?php endif; ?>
                             </h3>
                             <?php if (!empty($scraperContent)): ?>
-                                <div class="entry-content entry-preview">
-                                    <?php if (!empty($searchQuery)): ?>
-                                        <?= seismo_highlight_search_term($scraperPreview, (string)$searchQuery) ?>
-                                    <?php else: ?>
-                                        <?= htmlspecialchars($scraperPreview) ?>
-                                    <?php endif; ?>
-                                    <?php if (seismo_is_navigable_url($scraperLink)): ?>
-                                    <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">Open page &rarr;</a>
-                                    <?php endif; ?>
-                                </div>
-                                <div class="entry-full-content"><?= htmlspecialchars($scraperContent) ?></div>
+                                <?php if ($scraperHasMore): ?>
+                                    <div class="entry-content entry-preview">
+                                        <?php if (!empty($searchQuery)): ?>
+                                            <?= seismo_highlight_search_term($scraperPreview, (string)$searchQuery) ?>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($scraperPreview) ?>
+                                        <?php endif; ?>
+                                        <?php if (seismo_is_navigable_url($scraperLink)): ?>
+                                        <a href="<?= htmlspecialchars($scraperLink) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">Open page &rarr;</a>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="entry-full-content"><?= seismo_linkify_and_format_paragraphs($scraperContent) ?></div>
+                                <?php else: ?>
+                                    <div class="entry-full-content" style="display: block;"><?= seismo_linkify_and_format_paragraphs($scraperContent) ?></div>
+                                <?php endif; ?>
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">

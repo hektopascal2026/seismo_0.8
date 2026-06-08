@@ -429,26 +429,47 @@ $renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$ren
                                     <?= htmlspecialchars($displayTitle) ?>
                                 <?php endif; ?>
                             </h3>
-                            <div class="entry-content entry-preview">
-                                <?php if ($bodyPreview === '' && $body === ''): ?>
-                                    <span class="entry-muted">(No body text)</span>
-                                    <?php if ($webViewUrl !== null): ?>
-                                        <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
-                                    <?php endif; ?>
+                            <?php if ($digestChildCount === 0 || !$renderNestedDigestStories): ?>
+                                <?php if ($hasMore): ?>
+                                    <div class="entry-content entry-preview">
+                                        <?php if ($bodyPreview === '' && $body === ''): ?>
+                                            <span class="entry-muted">(No body text)</span>
+                                            <?php if ($webViewUrl !== null): ?>
+                                                <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <?php if ($bodyPreview !== ''): ?>
+                                                <span class="entry-preview-text"><?php
+                                                    if (!empty($searchQuery)) {
+                                                        echo seismo_highlight_search_term($bodyPreview, $searchQuery);
+                                                    } else {
+                                                        echo htmlspecialchars($bodyPreview);
+                                                    }
+                                                ?></span><?php if ($webViewUrl !== null): ?> <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a><?php endif; ?>
+                                            <?php elseif ($webViewUrl !== null): ?>
+                                                <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                            <?php endif; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="entry-full-content"><?= seismo_linkify_and_format_paragraphs($bodyDisplay) ?></div>
                                 <?php else: ?>
-                                    <?php if ($bodyPreview !== ''): ?>
-                                        <span class="entry-preview-text"><?php
-                                            if (!empty($searchQuery)) {
-                                                echo seismo_highlight_search_term($bodyPreview, $searchQuery);
-                                            } else {
-                                                echo htmlspecialchars($bodyPreview);
-                                            }
-                                        ?></span><?php if ($webViewUrl !== null): ?> <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a><?php endif; ?>
-                                    <?php elseif ($webViewUrl !== null): ?>
-                                        <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                    <?php if ($bodyDisplay === ''): ?>
+                                        <div class="entry-content entry-preview">
+                                            <span class="entry-muted">(No body text)</span>
+                                            <?php if ($webViewUrl !== null): ?>
+                                                <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview">View in browser &rarr;</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="entry-full-content" style="display: block;">
+                                            <?= seismo_linkify_and_format_paragraphs($bodyDisplay) ?>
+                                            <?php if ($webViewUrl !== null): ?>
+                                                <a href="<?= htmlspecialchars($webViewUrl) ?>" target="_blank" rel="noopener" class="entry-link entry-link--after-preview" style="margin-top: 0.5rem; display: inline-block;">View in browser &rarr;</a>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endif; ?>
                                 <?php endif; ?>
-                            </div>
+                            <?php endif; ?>
                             <?php if ($renderNestedDigestStories && !empty($email['child_stories'])): ?>
                                 <div class="digest-child-stories" aria-label="Stories in this digest">
                                     <?php foreach ($email['child_stories'] as $child): ?>
@@ -481,17 +502,19 @@ $renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$ren
                                                 <?php endif; ?>
                                             </div>
                                             <?php if ($childPreview !== '' || $childBodyDisplay !== ''): ?>
-                                                <div class="entry-content entry-preview digest-child-item__body">
-                                                    <?php if ($childPreview === ''): ?>
-                                                        <span class="entry-muted">(No body text)</span>
-                                                    <?php elseif (!empty($searchQuery)): ?>
-                                                        <?= seismo_highlight_search_term($childPreview, $searchQuery) ?>
-                                                    <?php else: ?>
-                                                        <?= htmlspecialchars($childPreview) ?>
-                                                    <?php endif; ?>
-                                                </div>
                                                 <?php if ($childHasMore): ?>
-                                                    <div class="entry-full-content"><?= htmlspecialchars($childBodyDisplay) ?></div>
+                                                    <div class="entry-content entry-preview digest-child-item__body">
+                                                        <?php if ($childPreview === ''): ?>
+                                                            <span class="entry-muted">(No body text)</span>
+                                                        <?php elseif (!empty($searchQuery)): ?>
+                                                            <?= seismo_highlight_search_term($childPreview, $searchQuery) ?>
+                                                        <?php else: ?>
+                                                            <?= htmlspecialchars($childPreview) ?>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="entry-full-content"><?= seismo_linkify_and_format_paragraphs($childBodyDisplay) ?></div>
+                                                <?php else: ?>
+                                                    <div class="entry-full-content" style="display: block;"><?= seismo_linkify_and_format_paragraphs($childBodyDisplay) ?></div>
                                                 <?php endif; ?>
                                             <?php endif; ?>
                                             <?php if ($childHasMore): ?>
@@ -504,9 +527,6 @@ $renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$ren
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-                            <?php endif; ?>
-                            <?php if ($digestChildCount === 0 || !$renderNestedDigestStories): ?>
-                            <div class="entry-full-content"><?= htmlspecialchars($bodyDisplay) ?></div>
                             <?php endif; ?>
                             <div class="entry-actions">
                                 <div class="entry-actions-main">

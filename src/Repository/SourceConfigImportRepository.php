@@ -99,7 +99,13 @@ final class SourceConfigImportRepository
             $this->pdo->commit();
             return $stats;
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                try {
+                    $this->pdo->rollBack();
+                } catch (\Throwable $rollbackEx) {
+                    error_log('SourceConfigImportRepository rollback failed: ' . $rollbackEx->getMessage());
+                }
+            }
             throw $e;
         }
     }
@@ -161,7 +167,13 @@ final class SourceConfigImportRepository
             $this->pdo->commit();
             return $stats;
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($this->pdo->inTransaction()) {
+                try {
+                    $this->pdo->rollBack();
+                } catch (\Throwable $rollbackEx) {
+                    error_log('SourceConfigImportRepository rollback failed: ' . $rollbackEx->getMessage());
+                }
+            }
             throw $e;
         }
     }

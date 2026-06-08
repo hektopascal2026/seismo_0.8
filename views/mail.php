@@ -1343,6 +1343,39 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         }
     }
 
+    function linkifyAndFormatText(text) {
+        if (!text) return '';
+        var escaped = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        var pattern = /https?:\/\/[^\s()<>]+[^\s()<>.,;:?!"']/gi;
+        var linkified = escaped.replace(pattern, function(url) {
+            var displayUrl = url;
+            try {
+                var urlObj = new URL(url);
+                displayUrl = urlObj.hostname;
+                if (urlObj.pathname && urlObj.pathname !== '/') {
+                    displayUrl += urlObj.pathname.substring(0, 15);
+                    if (urlObj.pathname.length > 15) {
+                        displayUrl += '…';
+                    }
+                }
+            } catch(e) {}
+            return '<a href="' + url + '" target="_blank" rel="noopener" class="timeline-inline-link">' + displayUrl + '</a>';
+        });
+        var paragraphs = linkified.split('\n\n');
+        return paragraphs.map(function(para) {
+            var trimmed = para.trim();
+            if (trimmed !== '') {
+                return '<p class="timeline-entry-paragraph">' + trimmed.replace(/\n/g, '<br>') + '</p>';
+            }
+            return '';
+        }).filter(Boolean).join('\n');
+    }
+
     function renderSplitPreviewCards(stories) {
         var previewSection = document.getElementById('ai-split-preview-section');
         var container = document.getElementById('split-preview-cards-container');
@@ -1452,11 +1485,12 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             card.appendChild(title);
 
             var body = document.createElement('div');
-            body.textContent = story.text_body || '';
+            body.innerHTML = linkifyAndFormatText(story.text_body || '');
             body.style.fontSize = '0.85rem';
             body.style.color = '#333';
             body.style.lineHeight = '1.4';
             card.appendChild(body);
+
 
             if (story.link) {
                 var link = document.createElement('a');

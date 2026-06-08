@@ -482,7 +482,35 @@ final class CoreRunner
         $this->magnituConfig->set($key, (string)$consecutive);
 
         if ($consecutive >= 3) {
-            $msg = 'Stuck Queue Alert: ' . $label . ' refresh has been paused on the time budget ' . $consecutive . ' consecutive runs. An active feed or scraper is likely deadlocking.';
+            $cursorKey = ($label === 'RSS') ? self::K_RSS_AFTER : self::K_SCRAPER_AFTER;
+            $afterId = $this->getCursorInt($cursorKey);
+            $stuckInfo = [];
+            if ($label === 'RSS') {
+                $batch = $this->feeds->listFeedsForRssRefreshAfterId($afterId, self::CHUNK_RSS_FEEDS);
+                foreach ($batch as $f) {
+                    $stuckInfo[] = '#' . ($f['id'] ?? '') . ' (' . ($f['title'] ?? '') . ': ' . ($f['url'] ?? '') . ')';
+                }
+            } else {
+                $batch = $this->feeds->listFeedsForScraperRefreshAfterId($afterId, self::CHUNK_SCRAPER_FEEDS);
+                foreach ($batch as $f) {
+                    $stuckInfo[] = '#' . ($f['id'] ?? '') . ' (' . ($f['name'] ?? $f['title'] ?? '') . ': ' . ($f['url'] ?? '') . ')';
+                }
+            }
+
+            $maxId = $afterId;
+            foreach ($batch as $f) {
+                $maxId = max($maxId, (int)($f['id'] ?? 0));
+            }
+            if ($maxId > $afterId) {
+                $this->magnituConfig->set($cursorKey, (string)$maxId);
+            }
+
+            $this->magnituConfig->set($key, '0');
+
+            $stuckList = implode(', ', $stuckInfo);
+            $msg = 'Stuck Queue Alert: ' . $label . ' refresh has been paused on the time budget ' . $consecutive 
+                . ' consecutive runs. An active feed or scraper is likely deadlocking. Potentially stuck sources: [' . $stuckList 
+                . ']. Automatically advanced cursor to skip this batch.';
             $r = new PluginRunResult('warn', $chunkItemSum, $msg, true);
             $coreId = ($label === 'RSS') ? self::ID_RSS : self::ID_SCRAPER;
             $this->record($coreId, $r, (int)($budgetSec * 1000));

@@ -589,15 +589,16 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era X: Story-Level Intelligence</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
-                        <h3>v0.8.4 &ndash; v0.8.5 &mdash; Digest Stories &amp; Multi-Newsletter Routing</h3>
+                        <h3>v0.8.4 &ndash; v0.8.6 &mdash; Digest Stories, Multi-Newsletter Routing, &amp; Card Readability</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> v0.8.4 split multi-headline digests into scorable child rows and hardened the Researcher selection pipeline. v0.8.5 addresses the next newsletter ops gap: one operational sender (e.g. <code>news@zhdk.ch</code>) shipping several branded products with different subjects and HTML layouts. Subscriptions are no longer limited to one row per address — <code>subject_filter</code> disambiguates products, and Newsletter Sources can auto-queue additional types after the sender is already on the digest desk.</p>
+                            <p><strong>Rationale:</strong> v0.8.4 and v0.8.5 focused on digest splitting, child email stories, and subject filtering. v0.8.6 introduces presentation enhancements to improve the layout and formatting of text cards on the timeline, rendering double newlines as distinct paragraphs and plain-text URLs as clickable links.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
+                                <li><strong>v0.8.6 &mdash; Styled Timeline Cards &amp; Auto-Linkification:</strong> Expanded feed, substack, scraper, and email cards in the UI automatically segment double-newlines into readable paragraph blocks and convert raw text URLs to clickable anchor links with truncated display names, leaving all raw data models and ML scoring/Magnitu exports 100% clean and untouched.</li>
                                 <li><strong>v0.8.5 &mdash; Subject-based subscriptions:</strong> Migration 029 relaxes the sender unique key to <code>(match_type, match_value, subject_filter, module_scope)</code> and stores <code>emails.email_subscription_id</code> at ingest. Timeline filters, reprocess, and AI sample fetch are subscription-scoped.</li>
                                 <li><strong>v0.8.5 &mdash; New newsletter types:</strong> After a sender is confirmed on Mail and moved to Newsletter, Gmail ingest proposes extra rows when an inbox subject does not match any configured filter — same review table pattern as Mail&rsquo;s <strong>New senders</strong>, with proposed subject filter and display name (e.g. Politpuls vs Stimme der Wirtschaft).</li>
                                 <li><strong>v0.8.5 &mdash; Two-step desk model:</strong> Mail = sender/domain discovery; Newsletter = product/type configuration (subject filter + per-layout split config).</li>
@@ -697,7 +698,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.8.5</strong>, signifying it is in active pre-1.0.0 bootstrapping. Multi-newsletter subject routing and digest child-story export are the latest newsletter-desk tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.8.6</strong>, signifying it is in active pre-1.0.0 bootstrapping. Multi-newsletter subject routing and digest child-story export are the latest newsletter-desk tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

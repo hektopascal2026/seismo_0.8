@@ -2446,6 +2446,27 @@ textarea.search-input.setup-code-preview {
     word-wrap: break-word;
 }
 
+.timeline-entry-paragraph {
+    margin: 0 0 0.75rem 0;
+    line-height: 1.6;
+}
+
+.timeline-entry-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-inline-link {
+    color: var(--seismo-accent, #000000);
+    text-decoration: underline;
+    font-weight: 500;
+    word-break: break-all;
+    transition: opacity 0.15s ease;
+}
+
+.timeline-inline-link:hover {
+    opacity: 0.8;
+}
+
 .entry-actions {
     display: flex;
     justify-content: space-between;
