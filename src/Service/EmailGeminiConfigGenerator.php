@@ -1177,7 +1177,7 @@ TEXT;
 
         $html = trim((string)($sample['html_body'] ?? ''));
         if ($html !== '') {
-            $sanitizedHtml = \Seismo\Core\Mail\EmailHtmlSanitizer::sanitize($html);
+            $sanitizedHtml = \Seismo\Core\Mail\EmailHtmlSanitizer::sanitize($html, true);
             $block .= "HTML Body (primary source for digest structure";
             if (mb_strlen($sanitizedHtml) > self::PROMPT_HTML_MAX_CHARS) {
                 $block .= ', truncated';
