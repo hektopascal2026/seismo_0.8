@@ -931,6 +931,12 @@ TEXT;
 
         if (!empty($retryContext['feedback'])) {
             $prompt .= "User feedback:\n" . json_encode($retryContext['feedback'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n\n";
+            if (!empty($retryContext['feedback']['wrong_webview'])) {
+                $prompt .= "WebView Extraction Feedback:\n";
+                $prompt .= "- The current webview_keywords extracted an incorrect WebView link.\n";
+                $prompt .= "- The CORRECT WebView link should match/look like this URL: " . $retryContext['feedback']['wrong_webview'] . "\n";
+                $prompt .= "- Update/replace webview_keywords to prioritize phrases or patterns that point to links resembling the CORRECT WebView link, and avoid matching incorrect links (like social media profile links, tip links, or other irrelevant links).\n\n";
+            }
         }
 
         foreach ($samples as $index => $sample) {
