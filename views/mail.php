@@ -674,13 +674,16 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Match</th>
+                        <th>Match rule</th>
                         <th>Name</th>
                         <th>Category</th>
                         <th>Latest</th>
                         <th>Disabled</th>
                         <th>Magnitu</th>
                         <th>Strip boilerplate</th>
+                        <?php if ($mailModule->isNewsletter()): ?>
+                            <th>Split</th>
+                        <?php endif; ?>
                         <th></th>
                     </tr>
                 </thead>
@@ -732,7 +735,32 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         </td>
                         <td><?= !empty($row['disabled']) ? 'yes' : 'no' ?></td>
                         <td><?= !isset($row['show_in_magnitu']) || !empty($row['show_in_magnitu']) ? 'on' : 'off' ?></td>
-                        <td><?= !empty($row['strip_listing_boilerplate']) ? 'on' : 'off' ?></td>
+                        <td>
+                            <?php
+                            if (empty($row['strip_listing_boilerplate'])) {
+                                echo 'no';
+                            } else {
+                                $cleanup = json_decode((string)($row['cleanup_config'] ?? ''), true);
+                                if (is_array($cleanup) && (!empty($cleanup['strip_regexes']) || !empty($cleanup['webview_keywords']) || !empty($cleanup['title_extractor']))) {
+                                    echo 'AI helper';
+                                } else {
+                                    echo 'standard';
+                                }
+                            }
+                            ?>
+                        </td>
+                        <?php if ($mailModule->isNewsletter()): ?>
+                        <td>
+                            <?php
+                            $splitConfig = json_decode((string)($row['digest_split_config'] ?? ''), true);
+                            if (is_array($splitConfig) && !empty($splitConfig['is_digest'])) {
+                                echo 'AI helper';
+                            } else {
+                                echo 'no';
+                            }
+                            ?>
+                        </td>
+                        <?php endif; ?>
                         <td>
                             <?php if (!$satellite): ?>
                             <div class="admin-table-actions">
@@ -744,11 +772,13 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                                     <button type="submit" class="btn btn-secondary btn-sm"><?= e($mailModule->moveTargetLabel) ?></button>
                                 </form>
                                 <?php endif; ?>
+                                <?php if (!empty($row['unsubscribe_url']) || !empty($row['unsubscribe_mailto'])): ?>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->disableAction) ?>" class="admin-inline-form">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
                                     <button type="submit" class="btn btn-warning btn-sm" title="Disable">Unsubscribe</button>
                                 </form>
+                                <?php endif; ?>
                                 <form method="post" action="<?= e($basePath) ?>/index.php?action=<?= e($mailModule->deleteAction) ?>" class="admin-inline-form" onsubmit="return confirm('Remove this subscription row?');">
                                     <?= $csrfField ?>
                                     <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
@@ -762,7 +792,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($subscriptions === []): ?>
-                    <tr class="data-table-empty"><td colspan="9">No subscriptions.</td></tr>
+                    <tr class="data-table-empty"><td colspan="<?= $mailModule->isNewsletter() ? 10 : 9 ?>">No subscriptions.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
