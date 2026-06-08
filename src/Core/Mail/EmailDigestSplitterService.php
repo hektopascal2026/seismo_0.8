@@ -678,7 +678,7 @@ final class EmailDigestSplitterService
     }
 
     /**
-     * CSS selector to XPath. Supports tags, classes, IDs, space descendants, and [attr*="…"].
+     * CSS selector to XPath. Uses Symfony's CssSelectorConverter.
      */
     private function cssToXPath(string $css): string
     {
@@ -687,81 +687,13 @@ final class EmailDigestSplitterService
             return '';
         }
 
-        $parts = explode(',', $css);
-        $xpathParts = [];
-        foreach ($parts as $part) {
-            $part = trim($part);
-            $subParts = preg_split('/\s+/', $part);
-            $subXPaths = [];
-            foreach ($subParts as $subPart) {
-                $subPart = trim($subPart);
-                if ($subPart === '') {
-                    continue;
-                }
-                $converted = $this->cssTokenToXPath($subPart);
-                if ($converted !== '') {
-                    $subXPaths[] = $converted;
-                }
-            }
-            if ($subXPaths !== []) {
-                $xpathParts[] = './/' . implode('//', $subXPaths);
-            }
+        try {
+            $converter = new \Symfony\Component\CssSelector\CssSelectorConverter();
+            return $converter->toXPath($css);
+        } catch (\Throwable $e) {
+            error_log('EmailDigestSplitterService: Invalid CSS selector "' . $css . '": ' . $e->getMessage());
+            return '';
         }
-
-        return implode(' | ', $xpathParts);
-    }
-
-    private function cssTokenToXPath(string $token): string
-    {
-        if (preg_match('/^([^:]+):has\((.+)\)$/', $token, $m)) {
-            $base = $m[1];
-            $inner = $m[2];
-            $baseXpath = $this->cssTokenToXPath($base);
-            $innerXpath = $this->cssToXPath($inner);
-            if (str_starts_with($innerXpath, './/')) {
-                $innerXpath = substr($innerXpath, 3);
-            }
-            if ($baseXpath !== '' && $innerXpath !== '') {
-                return "{$baseXpath}[{$innerXpath}]";
-            }
-        }
-
-        if (preg_match('/^([a-zA-Z0-9*-]*)\.([a-zA-Z0-9_-]+)$/', $token, $m)) {
-            $tag = $m[1] !== '' ? $m[1] : '*';
-
-            return "descendant-or-self::{$tag}[contains(concat(' ', normalize-space(@class), ' '), ' {$m[2]} ')]";
-        }
-
-        if (preg_match('/^([a-zA-Z0-9*-]*)#([a-zA-Z0-9_-]+)$/', $token, $m)) {
-            $tag = $m[1] !== '' ? $m[1] : '*';
-
-            return "descendant-or-self::{$tag}[@id='{$m[2]}']";
-        }
-
-        if (preg_match('/^\.([a-zA-Z0-9_-]+)$/', $token, $m)) {
-            return "descendant-or-self::*[contains(concat(' ', normalize-space(@class), ' '), ' {$m[1]} ')]";
-        }
-
-        if (preg_match('/^#([a-zA-Z0-9_-]+)$/', $token, $m)) {
-            return "descendant-or-self::*[@id='{$m[1]}']";
-        }
-
-        if (preg_match('/^([a-zA-Z0-9*-]+)\[([^=\]]+)(\*="([^"]+)"|"([^"]+)")?\]$/', $token, $m)) {
-            $tag = $m[1] !== '' ? $m[1] : '*';
-            $attr = $m[2];
-            $contains = $m[4] !== '' ? $m[4] : ($m[5] !== '' ? $m[5] : '');
-            if ($contains === '') {
-                return "descendant-or-self::{$tag}[@{$attr}]";
-            }
-
-            return "descendant-or-self::{$tag}[contains(@{$attr}, '{$contains}')]";
-        }
-
-        if (preg_match('/^[a-zA-Z0-9*-]+$/', $token)) {
-            return "descendant-or-self::{$token}";
-        }
-
-        return '';
     }
 
     /**

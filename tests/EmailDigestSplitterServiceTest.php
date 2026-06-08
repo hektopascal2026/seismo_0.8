@@ -218,7 +218,7 @@ final class EmailDigestSplitterServiceTest extends TestCase
         $config = [
             'split_rules' => [
                 'split_method' => 'html_selector',
-                'story_selector' => 'table table table table td',
+                'story_selector' => 'table table td',
                 'title_selector' => 'a',
                 'link_selector' => 'a',
                 'body_selector' => 'td',
@@ -252,7 +252,7 @@ final class EmailDigestSplitterServiceTest extends TestCase
         $config = [
             'split_rules' => [
                 'split_method' => 'html_selector',
-                'story_selector' => 'table table table table td[style*="vertical-align:baseline"]',
+                'story_selector' => 'table table table td[style*="vertical-align:baseline"]',
                 'title_selector' => 'a[style*="font-weight:bold"]',
                 'link_selector' => 'a[style*="font-weight:bold"]',
                 'body_selector' => 'td[style*="color:#262626"]',
