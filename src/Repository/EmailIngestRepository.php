@@ -895,7 +895,9 @@ final class EmailIngestRepository
             ];
             $childRow = EmailSubscriptionProcessor::apply($childRow, $subs);
 
-            $metaPayload = [];
+            $metaPayload = [
+                'story_index' => $index,
+            ];
             $childLink = $parentWebView;
             if ($childLink !== null && $childLink !== '') {
                 $metaPayload['link'] = $childLink;

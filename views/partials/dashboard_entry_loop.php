@@ -405,7 +405,20 @@ $renderNestedDigestStories      = !empty($renderNestedDigestStories);
                                     <span class="entry-tag <?= e($emailTagClass) ?>"><?= htmlspecialchars($email['sender_tag']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($isDigestChildEmail): ?>
-                                    <span class="entry-tag entry-tag--digest-story">Digest story</span>
+                                    <?php
+                                        $storyIndex = null;
+                                        $emailMeta = $email['metadata'] ?? null;
+                                        if (is_string($emailMeta)) {
+                                            $emailMeta = json_decode($emailMeta, true);
+                                        }
+                                        if (is_array($emailMeta) && isset($emailMeta['story_index'])) {
+                                            $storyIndex = (int)$emailMeta['story_index'];
+                                        } elseif (!empty($email['message_id']) && preg_match('/_story_(\d+)$/', (string)$email['message_id'], $matches)) {
+                                            $storyIndex = (int)$matches[1];
+                                        }
+                                        $tagText = $storyIndex !== null ? '#' . ($storyIndex + 1) : 'Digest story';
+                                    ?>
+                                    <span class="entry-tag entry-tag--digest-story"><?= htmlspecialchars($tagText) ?></span>
                                 <?php endif; ?>
                                 <?php require __DIR__ . '/entry_header_score_actions.php'; ?>
                             </div>
