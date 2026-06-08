@@ -483,6 +483,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <button type="button" id="btn-ai-cleanup-refine" class="btn btn-secondary" style="margin-top: 0.5rem;" disabled onclick="runAiCleanupRefine()">
                                 Refine cleanup rules
                             </button>
+                            <span id="ai-refine-status" style="margin-left: 10px; font-weight: bold; display: none;" class="type-sample-small"></span>
                         </div>
                     </div>
 
@@ -1028,6 +1029,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
     function applyCleanupAnalysisResponse(data) {
         var status = document.getElementById('ai-analysis-status');
+        var refineStatus = document.getElementById('ai-refine-status');
         var verificationBox = document.getElementById('ai-cleanup-verification');
         var textarea = document.getElementById('cleanup_config_json');
         var configPanel = document.getElementById('ai-cleanup-config-panel');
@@ -1035,12 +1037,30 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var refinePanel = document.getElementById('cleanup-refine-panel');
         var verified = data.verification && data.verification.verified;
 
-        if (status) {
-            status.style.display = 'inline';
-            status.style.color = verified ? 'green' : '#b45309';
-            status.textContent = data.verification && data.verification.message
-                ? data.verification.message
-                : (data.refined ? 'Refinement complete!' : 'Analysis complete!');
+        if (data.refined) {
+            if (refineStatus) {
+                refineStatus.style.display = 'inline';
+                refineStatus.style.color = verified ? 'green' : '#b45309';
+                refineStatus.textContent = data.verification && data.verification.message
+                    ? data.verification.message
+                    : 'Refinement complete!';
+            }
+            if (status) {
+                status.style.display = 'none';
+                status.textContent = '';
+            }
+        } else {
+            if (status) {
+                status.style.display = 'inline';
+                status.style.color = verified ? 'green' : '#b45309';
+                status.textContent = data.verification && data.verification.message
+                    ? data.verification.message
+                    : 'Analysis complete!';
+            }
+            if (refineStatus) {
+                refineStatus.style.display = 'none';
+                refineStatus.textContent = '';
+            }
         }
 
         if (verificationBox && data.verification) {
@@ -1140,7 +1160,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
 
         var refineBtn = document.getElementById('btn-ai-cleanup-refine');
         var analyzeBtn = document.getElementById('btn-ai-analyze');
-        var status = document.getElementById('ai-analysis-status');
+        var status = document.getElementById('ai-refine-status');
+        var topStatus = document.getElementById('ai-analysis-status');
         var textarea = document.getElementById('cleanup_config_json');
         var wrongWebviewVal = document.getElementById('cleanup-wrong-webview') ? document.getElementById('cleanup-wrong-webview').value.trim() : '';
         var feedback = {
@@ -1150,8 +1171,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         };
 
         if (feedback.still_noise.length === 0 && feedback.wrongly_removed.length === 0 && wrongWebviewVal === '') {
+            status.style.display = 'inline';
             status.style.color = '#b45309';
-            status.textContent = 'Add refinement inputs (visible noise, wrongly removed content, or wrong webview) first.';
+            status.textContent = 'Add refinement inputs first.';
             return;
         }
 
@@ -1160,6 +1182,9 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         status.style.display = 'inline';
         status.style.color = '#333';
         status.textContent = 'Refining cleanup rules with Gemini...';
+        if (topStatus) {
+            topStatus.style.display = 'none';
+        }
 
         var formData = new FormData();
         formData.append('id', cleanupSubscriptionId);
@@ -1179,6 +1204,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             if (analyzeBtn) analyzeBtn.disabled = false;
             var wField = document.getElementById('cleanup-wrong-webview');
             if (wField) wField.value = '';
+            var snField = document.getElementById('cleanup-still-noise');
+            if (snField) snField.value = '';
+            var wrField = document.getElementById('cleanup-wrongly-removed');
+            if (wrField) wrField.value = '';
         })
         .catch(function(err) {
             status.style.color = 'red';

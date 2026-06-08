@@ -343,11 +343,20 @@ final class MailModuleHandler
             $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
 
             $isRefine = !empty($_POST['refine']);
+            $currentConfig = [];
+            if ($isRefine) {
+                $configRaw = (string)($_POST['cleanup_config'] ?? '');
+                $currentConfig = json_decode($configRaw, true) ?: [];
+            }
+            $initialKeywords = $currentConfig['webview_keywords'] ?? [];
+            $samples = $this->buildSplitAnalysisSamples($emails, $initialKeywords);
+
+            $configRepo = new SystemConfigRepository($pdo);
+            $generator = new \Seismo\Service\EmailGeminiConfigGenerator($configRepo);
+
             if ($isRefine) {
                 $feedbackRaw = (string)($_POST['feedback'] ?? '');
-                $configRaw = (string)($_POST['cleanup_config'] ?? '');
                 $feedback = json_decode($feedbackRaw, true);
-                $currentConfig = json_decode($configRaw, true);
                 if (!is_array($feedback) || !is_array($currentConfig)) {
                     http_response_code(400);
                     echo json_encode(['error' => 'Invalid refine payload — feedback and cleanup_config must be JSON.']);
@@ -365,6 +374,9 @@ final class MailModuleHandler
                 'title_extractor' => $res['title_extractor'],
             ];
 
+            // Re-resolve the samples webview URLs using the newly generated/refined keywords
+            $finalSamples = $this->buildSplitAnalysisSamples($emails, $cleanupConfig['webview_keywords']);
+
             echo json_encode([
                 'success' => true,
                 'refined' => $isRefine,
@@ -372,7 +384,7 @@ final class MailModuleHandler
                 'analysis' => $res['analysis'],
                 'verification' => $res['verification'],
                 'digest_split_config' => $res['digest_split_config'],
-                'samples' => $samples,
+                'samples' => $finalSamples,
             ]);
             exit;
         } catch (\InvalidArgumentException $e) {
@@ -481,9 +493,10 @@ final class MailModuleHandler
 
     /**
      * @param list<array<string, mixed>> $emails
-     * @return list<array{subject: string, body: string, text_body: string, html_body: string}>
+     * @param list<string> $customWebviewKeywords
+     * @return list<array{subject: string, body: string, text_body: string, html_body: string, webview_url: ?string}>
      */
-    private function buildSplitAnalysisSamples(array $emails): array
+    private function buildSplitAnalysisSamples(array $emails, array $customWebviewKeywords = []): array
     {
         require_once SEISMO_ROOT . '/views/helpers.php';
         $samples = [];
@@ -493,7 +506,7 @@ final class MailModuleHandler
                 'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
                 'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
                 'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
-                'webview_url' => seismo_email_web_view_url($email),
+                'webview_url' => seismo_email_web_view_url($email, $customWebviewKeywords),
             ];
         }
 
