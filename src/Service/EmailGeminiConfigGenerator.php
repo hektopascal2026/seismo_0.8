@@ -185,14 +185,15 @@ TEXT;
     {
         $stillNoise = $feedback['still_noise'] ?? [];
         $wronglyRemoved = $feedback['wrongly_removed'] ?? [];
+        $wrongWebview = $feedback['wrong_webview'] ?? '';
         if (!is_array($stillNoise)) {
             $stillNoise = [];
         }
         if (!is_array($wronglyRemoved)) {
             $wronglyRemoved = [];
         }
-        if ($stillNoise === [] && $wronglyRemoved === []) {
-            throw new \InvalidArgumentException('Provide still-visible noise or wrongly removed content before refining.');
+        if ($stillNoise === [] && $wronglyRemoved === [] && empty($wrongWebview)) {
+            throw new \InvalidArgumentException('Provide still-visible noise, wrongly removed content, or a corrected webview URL before refining.');
         }
 
         $attempts = 0;
@@ -888,6 +889,13 @@ TEXT;
         $prompt .= "Revise strip_regexes:\n";
         $prompt .= "- still_noise: add/tighten patterns to remove these phrases (do NOT remove article text).\n";
         $prompt .= "- wrongly_removed: loosen or remove patterns that deleted this content.\n\n";
+
+        if (!empty($feedback['wrong_webview'])) {
+            $prompt .= "WebView Extraction Feedback:\n";
+            $prompt .= "- The current webview_keywords extracted an incorrect WebView link.\n";
+            $prompt .= "- The CORRECT WebView link should match/look like this URL: " . $feedback['wrong_webview'] . "\n";
+            $prompt .= "- Update/replace webview_keywords to prioritize phrases or patterns that point to links resembling the CORRECT WebView link, and avoid matching incorrect links (like social media profile links, tip links, or other irrelevant links).\n\n";
+        }
 
         foreach ($samples as $index => $sample) {
             $prompt .= $this->formatSampleBlock($index, $sample);
