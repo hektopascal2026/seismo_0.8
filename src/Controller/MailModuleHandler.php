@@ -112,10 +112,12 @@ final class MailModuleHandler
                     }
                     $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
                     $editRowEmails = $ingestRepo->fetchRowsForSubscription($editRow, 5);
+                    require_once SEISMO_ROOT . '/views/helpers.php';
                     foreach ($editRowEmails as $email) {
                         $editRowSamples[] = [
                             'subject' => (string)($email['subject'] ?? ''),
                             'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
+                            'webview_url' => seismo_email_web_view_url($email),
                         ];
                     }
                 }
@@ -483,6 +485,7 @@ final class MailModuleHandler
      */
     private function buildSplitAnalysisSamples(array $emails): array
     {
+        require_once SEISMO_ROOT . '/views/helpers.php';
         $samples = [];
         foreach ($emails as $email) {
             $samples[] = [
@@ -490,6 +493,7 @@ final class MailModuleHandler
                 'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
                 'text_body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
                 'html_body' => (string)($email['html_body'] ?? $email['body_html'] ?? ''),
+                'webview_url' => seismo_email_web_view_url($email),
             ];
         }
 

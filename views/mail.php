@@ -448,6 +448,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <div class="settings-tabs" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none; display: flex; gap: 4px;">
                                 <button type="button" id="tab-btn-before" class="btn active" onclick="switchPreviewTab('before')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: var(--seismo-accent, #ffd95a); border-width: 2px; border-color: black; cursor: pointer;">Before (Raw)</button>
                                 <button type="button" id="tab-btn-after" class="btn" onclick="switchPreviewTab('after')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: #ffffff; border-width: 2px; border-color: black; cursor: pointer;">After (Cleaned)</button>
+                                <button type="button" id="tab-btn-webview" class="btn" onclick="switchPreviewTab('webview')" style="padding: 0.35rem 0.875rem; font-size: 0.8rem; font-weight: 600; border-radius: 0; background-color: #ffffff; border-width: 2px; border-color: black; cursor: pointer;">Webview preview</button>
                             </div>
                         </div>
 
@@ -458,15 +459,25 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <div id="tab-content-after" style="display: none;">
                             <pre id="preview-after" style="background: #fff; border: 2px solid black; padding: 0.75rem; height: 18rem; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; margin: 0; color: #000;"></pre>
                         </div>
+                        <div id="tab-content-webview" style="display: none;">
+                            <div style="background: #fff; border: 2px solid black; padding: 0.75rem; height: 18rem; overflow-y: auto; font-family: monospace; font-size: 0.85rem; color: #000;">
+                                <strong>Detected Webview Link:</strong>
+                                <p id="preview-webview-link-display" style="margin: 0.5rem 0; word-break: break-all; font-weight: bold; color: blue; text-decoration: underline;"></p>
+                                <p id="preview-webview-no-link" style="margin: 0.5rem 0; color: #888; font-style: italic; display: none;">No webview link detected in this email sample.</p>
+                            </div>
+                        </div>
 
                         <div id="cleanup-refine-panel" style="display: none; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px dashed #ccc;">
                             <p class="admin-hint" style="margin: 0 0 0.5rem 0;">Still see noise in <strong>After</strong>? Paste phrases (one per line). Optionally list content wrongly removed from <strong>Before</strong>.</p>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
                                 <label style="font-size: 0.85rem; font-weight: bold;">Still visible noise
                                     <textarea id="cleanup-still-noise" class="search-input" style="width: 100%; height: 5rem; font-family: monospace; font-size: 0.8rem;" placeholder="View in browser&#10;Unsubscribe from this list"></textarea>
                                 </label>
                                 <label style="font-size: 0.85rem; font-weight: bold;">Wrongly removed content
                                     <textarea id="cleanup-wrongly-removed" class="search-input" style="width: 100%; height: 5rem; font-family: monospace; font-size: 0.8rem;" placeholder="(optional) paste article text that disappeared"></textarea>
+                                </label>
+                                <label style="font-size: 0.85rem; font-weight: bold;">Wrong webview found?
+                                    <textarea id="cleanup-wrong-webview" class="search-input" style="width: 100%; height: 5rem; font-family: monospace; font-size: 0.8rem;" placeholder="(optional) paste correct Webview URL here"></textarea>
                                 </label>
                             </div>
                             <button type="button" id="btn-ai-cleanup-refine" class="btn btn-secondary" style="margin-top: 0.5rem;" disabled onclick="runAiCleanupRefine()">
@@ -802,25 +813,35 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
     function switchPreviewTab(tab) {
         var btnBefore = document.getElementById('tab-btn-before');
         var btnAfter = document.getElementById('tab-btn-after');
+        var btnWebview = document.getElementById('tab-btn-webview');
         var contentBefore = document.getElementById('tab-content-before');
         var contentAfter = document.getElementById('tab-content-after');
+        var contentWebview = document.getElementById('tab-content-webview');
         
-        if (!btnBefore || !btnAfter || !contentBefore || !contentAfter) return;
+        if (!btnBefore || !btnAfter || !btnWebview || !contentBefore || !contentAfter || !contentWebview) return;
+        
+        btnBefore.classList.remove('active');
+        btnAfter.classList.remove('active');
+        btnWebview.classList.remove('active');
+        btnBefore.style.backgroundColor = '#ffffff';
+        btnAfter.style.backgroundColor = '#ffffff';
+        btnWebview.style.backgroundColor = '#ffffff';
+        contentBefore.style.display = 'none';
+        contentAfter.style.display = 'none';
+        contentWebview.style.display = 'none';
         
         if (tab === 'before') {
             btnBefore.classList.add('active');
-            btnAfter.classList.remove('active');
             btnBefore.style.backgroundColor = 'var(--seismo-accent, #ffd95a)';
-            btnAfter.style.backgroundColor = '#ffffff';
             contentBefore.style.display = 'block';
-            contentAfter.style.display = 'none';
-        } else {
-            btnBefore.classList.remove('active');
+        } else if (tab === 'after') {
             btnAfter.classList.add('active');
-            btnBefore.style.backgroundColor = '#ffffff';
             btnAfter.style.backgroundColor = 'var(--seismo-accent, #ffd95a)';
-            contentBefore.style.display = 'none';
             contentAfter.style.display = 'block';
+        } else {
+            btnWebview.classList.add('active');
+            btnWebview.style.backgroundColor = 'var(--seismo-accent, #ffd95a)';
+            contentWebview.style.display = 'block';
         }
     }
 
@@ -864,6 +885,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var select = document.getElementById('preview-sample-select');
         var beforeEl = document.getElementById('preview-before');
         var afterEl = document.getElementById('preview-after');
+        var webviewLinkDisplay = document.getElementById('preview-webview-link-display');
+        var webviewNoLink = document.getElementById('preview-webview-no-link');
         var textarea = document.getElementById('cleanup_config_json');
         
         if (!select || !beforeEl || !afterEl || !textarea) return;
@@ -872,6 +895,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (isNaN(index) || !activeSamples[index]) {
             beforeEl.textContent = '';
             afterEl.textContent = '';
+            if (webviewLinkDisplay) webviewLinkDisplay.textContent = '';
             return;
         }
         
@@ -885,6 +909,19 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         
         var cleanedBody = applyCleanup(sample.body, config);
         afterEl.textContent = "Subject: " + sample.subject + "\n\n" + cleanedBody;
+
+        if (webviewLinkDisplay && webviewNoLink) {
+            var webviewUrl = sample.webview_url || '';
+            if (webviewUrl) {
+                webviewLinkDisplay.textContent = webviewUrl;
+                webviewLinkDisplay.style.display = 'block';
+                webviewNoLink.style.display = 'none';
+            } else {
+                webviewLinkDisplay.textContent = '';
+                webviewLinkDisplay.style.display = 'none';
+                webviewNoLink.style.display = 'block';
+            }
+        }
     }
 
     function initPreviewSelect() {
@@ -934,7 +971,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 });
             });
         }
-        ['cleanup-still-noise', 'cleanup-wrongly-removed'].forEach(function(id) {
+        ['cleanup-still-noise', 'cleanup-wrongly-removed', 'cleanup-wrong-webview'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) {
                 el.addEventListener('input', updateCleanupRefineButton);
@@ -985,7 +1022,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         if (!btn) return;
         var stillNoise = parseCleanupFeedbackLines('cleanup-still-noise');
         var wronglyRemoved = parseCleanupFeedbackLines('cleanup-wrongly-removed');
-        btn.disabled = stillNoise.length === 0 && wronglyRemoved.length === 0;
+        var wrongWebview = document.getElementById('cleanup-wrong-webview') ? document.getElementById('cleanup-wrong-webview').value.trim() : '';
+        btn.disabled = stillNoise.length === 0 && wronglyRemoved.length === 0 && wrongWebview === '';
     }
 
     function applyCleanupAnalysisResponse(data) {
@@ -1104,14 +1142,16 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
         var analyzeBtn = document.getElementById('btn-ai-analyze');
         var status = document.getElementById('ai-analysis-status');
         var textarea = document.getElementById('cleanup_config_json');
+        var wrongWebviewVal = document.getElementById('cleanup-wrong-webview') ? document.getElementById('cleanup-wrong-webview').value.trim() : '';
         var feedback = {
             still_noise: parseCleanupFeedbackLines('cleanup-still-noise'),
-            wrongly_removed: parseCleanupFeedbackLines('cleanup-wrongly-removed')
+            wrongly_removed: parseCleanupFeedbackLines('cleanup-wrongly-removed'),
+            wrong_webview: wrongWebviewVal
         };
 
-        if (feedback.still_noise.length === 0 && feedback.wrongly_removed.length === 0) {
+        if (feedback.still_noise.length === 0 && feedback.wrongly_removed.length === 0 && wrongWebviewVal === '') {
             status.style.color = '#b45309';
-            status.textContent = 'Add still-visible noise or wrongly removed content first.';
+            status.textContent = 'Add refinement inputs (visible noise, wrongly removed content, or wrong webview) first.';
             return;
         }
 
@@ -1137,6 +1177,8 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             applyCleanupAnalysisResponse(data);
             refineBtn.disabled = false;
             if (analyzeBtn) analyzeBtn.disabled = false;
+            var wField = document.getElementById('cleanup-wrong-webview');
+            if (wField) wField.value = '';
         })
         .catch(function(err) {
             status.style.color = 'red';
