@@ -85,7 +85,7 @@ final class MailModule
             action: 'newsletter',
             navKey: 'newsletter',
             pageTitle: 'Newsletter',
-            subtitle: 'IMAP / digests',
+            subtitle: 'Briefings / digests',
             scope: self::SCOPE_NEWSLETTER,
             saveAction: 'newsletter_subscription_save',
             deleteAction: 'newsletter_subscription_delete',
