@@ -12,13 +12,18 @@ use DOMElement;
  */
 final class EmailWebViewUrlExtractor
 {
-    /**
-     * @param list<int> $preferredLocaleRanks {@see EmailAlternateLocalePolicy::preferredLocaleRanks()}
-     */
     public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = []): EmailWebViewResolution
     {
         $html  = trim($html);
         $plain = trim($plain);
+
+        // 1. If custom keywords are supplied, try matching them first to respect user rules refinement
+        if ($customWebviewKeywords !== []) {
+            $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords);
+            if ($generic !== null) {
+                return new EmailWebViewResolution($generic, null, false);
+            }
+        }
 
         $press = self::pressReleaseUrl($html, $plain);
         if ($press !== null) {
