@@ -65,6 +65,14 @@ namespace Seismo\Tests {
                 return substr($str, $pos - 1, $len);
             });
 
+            $this->pdo->sqliteCreateFunction('JSON_UNQUOTE', function ($val) {
+                return $val;
+            });
+
+            $this->pdo->sqliteCreateFunction('STR_TO_DATE', function ($str, $format) {
+                return $str;
+            });
+
             // Create emails table schema in SQLite (simplified)
             $this->pdo->exec("
                 CREATE TABLE emails (
@@ -94,7 +102,81 @@ namespace Seismo\Tests {
             $this->pdo->exec("
                 CREATE TABLE feed_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    hidden INTEGER DEFAULT 0
+                    feed_id INTEGER,
+                    guid VARCHAR(255),
+                    title VARCHAR(255),
+                    link VARCHAR(255),
+                    description TEXT,
+                    content TEXT,
+                    author VARCHAR(255),
+                    published_date DATETIME,
+                    content_hash VARCHAR(32),
+                    hidden INTEGER DEFAULT 0,
+                    cached_at TIMESTAMP
+                )
+            ");
+
+            $this->pdo->exec("
+                CREATE TABLE feeds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url VARCHAR(500),
+                    source_type VARCHAR(20),
+                    title VARCHAR(255),
+                    description TEXT,
+                    link VARCHAR(500),
+                    category VARCHAR(100),
+                    disabled INTEGER DEFAULT 0,
+                    extract_full_text INTEGER DEFAULT 0
+                )
+            ");
+
+            $this->pdo->exec("
+                CREATE TABLE lex_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    celex VARCHAR(255),
+                    title TEXT,
+                    description TEXT,
+                    document_date DATE,
+                    document_type VARCHAR(100),
+                    eurlex_url VARCHAR(500),
+                    work_uri VARCHAR(500),
+                    source VARCHAR(20),
+                    content TEXT,
+                    fetched_at TIMESTAMP,
+                    created_at TIMESTAMP
+                )
+            ");
+
+            $this->pdo->exec("
+                CREATE TABLE calendar_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source VARCHAR(50),
+                    external_id VARCHAR(255),
+                    title TEXT,
+                    description TEXT,
+                    event_date DATE,
+                    event_end_date DATE,
+                    event_type VARCHAR(50),
+                    status VARCHAR(30),
+                    council VARCHAR(10),
+                    url VARCHAR(500),
+                    metadata TEXT,
+                    fetched_at TIMESTAMP,
+                    created_at TIMESTAMP
+                )
+            ");
+
+            $this->pdo->exec("
+                CREATE TABLE scraper_configs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(255),
+                    url VARCHAR(500),
+                    link_pattern VARCHAR(500),
+                    date_selector VARCHAR(500),
+                    exclude_selectors TEXT,
+                    category VARCHAR(100),
+                    disabled INTEGER DEFAULT 0,
+                    created_at TIMESTAMP
                 )
             ");
 
@@ -306,6 +388,79 @@ namespace Seismo\Tests {
             self::assertSame('NZZ Pro v2', $rowUpdated['display_name']);
             self::assertSame('Pro v2', $rowUpdated['subject_filter']);
             self::assertSame('{"type": "html_css", "selector_story": ".story"}', $rowUpdated['digest_split_config']);
+        }
+
+        public function testIndexTimelineNestsNewsletterChildStories(): void
+        {
+            // Insert subscription row with scope=newsletter
+            $this->pdo->exec("
+                INSERT INTO email_subscriptions (id, match_type, match_value, display_name, module_scope, disabled, auto_detected)
+                VALUES (101, 'domain', 'nzz.ch', 'NZZ am Morgen', 'newsletter', 0, 0)
+            ");
+
+            // Insert parent email
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (100, NULL, 101, 'NZZ am Morgen Digest', 'NZZ am Morgen Digest', 'newsletter@nzz.ch', 'Parent body', '<html>Parent</html>', 0, '2026-06-05 12:00:00')
+            ");
+
+            // Insert child emails
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (101, 100, 101, 'Story A', 'Story A', 'newsletter@nzz.ch', 'A body', '<html>A</html>', 0, '2026-06-05 12:01:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (102, 100, 101, 'Story B', 'Story B', 'newsletter@nzz.ch', 'B body', '<html>B</html>', 0, '2026-06-05 12:02:00')
+            ");
+
+            $repo = new EntryRepository($this->pdo);
+
+            // Index timeline has pinNewsletterEmails = true
+            $filter = new \Seismo\Repository\TimelineFilter(pinNewsletterEmails: true);
+            $timeline = $repo->getLatestTimeline(10, 0, $filter);
+
+            $emails = array_values(array_filter($timeline, fn($item) => $item['type'] === 'email'));
+            self::assertCount(1, $emails);
+            self::assertSame(100, (int)$emails[0]['entry_id']); // Parent
+            self::assertCount(2, $emails[0]['data']['child_stories']); // Nested child stories
+        }
+
+        public function testFilterTimelineShowsNewsletterChildStoriesIndividually(): void
+        {
+            // Insert subscription row with scope=newsletter
+            $this->pdo->exec("
+                INSERT INTO email_subscriptions (id, match_type, match_value, display_name, module_scope, disabled, auto_detected)
+                VALUES (201, 'domain', 'nzz.ch', 'NZZ am Morgen', 'newsletter', 0, 0)
+            ");
+
+            // Insert parent email
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (200, NULL, 201, 'NZZ am Morgen Digest', 'NZZ am Morgen Digest', 'newsletter@nzz.ch', 'Parent body', '<html>Parent</html>', 0, '2026-06-05 12:00:00')
+            ");
+
+            // Insert child emails
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (201, 200, 201, 'Story A', 'Story A', 'newsletter@nzz.ch', 'A body', '<html>A</html>', 0, '2026-06-05 12:01:00')
+            ");
+            $this->pdo->exec("
+                INSERT INTO emails (id, parent_email_id, email_subscription_id, subject, derived_title, from_email, text_body, html_body, hidden, date_utc)
+                VALUES (202, 200, 201, 'Story B', 'Story B', 'newsletter@nzz.ch', 'B body', '<html>B</html>', 0, '2026-06-05 12:02:00')
+            ");
+
+            $repo = new EntryRepository($this->pdo);
+
+            // Filter timeline (pinNewsletterEmails = false)
+            $filter = new \Seismo\Repository\TimelineFilter(pinNewsletterEmails: false);
+            $timeline = $repo->getLatestTimeline(10, 0, $filter);
+
+            $emails = array_values(array_filter($timeline, fn($item) => $item['type'] === 'email'));
+            // Standard exportable view hides parents when visible children exist, showing only children.
+            self::assertCount(2, $emails);
+            self::assertSame(202, (int)$emails[0]['entry_id']); // Child B
+            self::assertSame(201, (int)$emails[1]['entry_id']); // Child A
         }
     }
 }

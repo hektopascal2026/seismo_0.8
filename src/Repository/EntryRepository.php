@@ -116,6 +116,34 @@ final class EntryRepository
         return "{$alias}.hidden = 0 AND " . EmailDigestExportPolicy::sqlExportableEmail($alias);
     }
 
+    private function sqlEmailVisibility(string $alias = 'e', ?TimelineFilter $filter = null): string
+    {
+        if ($filter !== null && $filter->pinNewsletterEmails) {
+            $tSub = entryTable('email_subscriptions');
+            return "(
+                (
+                    EXISTS (
+                        SELECT 1 FROM {$tSub} es
+                        WHERE es.id = {$alias}.email_subscription_id
+                          AND es.module_scope = 'newsletter'
+                    )
+                    AND {$alias}.parent_email_id IS NULL
+                )
+                OR
+                (
+                    NOT EXISTS (
+                        SELECT 1 FROM {$tSub} es
+                        WHERE es.id = {$alias}.email_subscription_id
+                          AND es.module_scope = 'newsletter'
+                    )
+                    AND " . EmailDigestExportPolicy::sqlExportableEmail($alias) . "
+                )
+            )";
+        }
+
+        return EmailDigestExportPolicy::sqlExportableEmail($alias);
+    }
+
     private function moduleScopeUsesNestedDigestParents(string $moduleScope): bool
     {
         return EmailSubscriptionRepository::normalizeModuleScope($moduleScope) === EmailSubscriptionRepository::MODULE_NEWSLETTER;
@@ -184,6 +212,7 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -228,6 +257,7 @@ final class EntryRepository
         $items = $this->sliceFairMergedTimeline($items, $offset, $limit, $sortByRelevance);
         $this->attachFavourites($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1082,7 +1112,7 @@ final class EntryRepository
         foreach ($this->fetchFeedRowsByIds($byType['feed_item']) as $row) {
             $items[] = $this->wrapFeedItem($row);
         }
-        foreach ($this->fetchEmailRowsByIds($byType['email'], true) as $row) {
+        foreach ($this->fetchEmailRowsByIds($byType['email'], true, $filter) as $row) {
             $items[] = $this->wrapEmail($row);
         }
         foreach ($this->fetchLexRowsByIds($byType['lex_item']) as $row) {
@@ -1119,6 +1149,7 @@ final class EntryRepository
 
         $this->attachScores($items);
         $this->attachEmailSubscriptionDisplayNames($items);
+        $this->attachEmailChildStories($items);
 
         return $items;
     }
@@ -1212,7 +1243,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . $this->sqlEmailExportableVisible('e') . '
+                WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
                   AND ' . $tagFrag['sql'] . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1234,7 +1265,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . $this->sqlEmailExportableVisible('e') . '
+                WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 ' . $orderBy . '
                 LIMIT ' . (int)$limit;
@@ -1251,7 +1282,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . $this->sqlEmailExportableVisible('e') . '
+            WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
 
@@ -1490,7 +1521,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . $this->sqlEmailExportableVisible('e') . '
+                WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
                   AND ' . $tagFrag['sql'] . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1514,7 +1545,7 @@ final class EntryRepository
                     LIMIT 1
                 ) AS sender_tag
                 FROM ' . entryTable('emails') . ' e
-                WHERE ' . $this->sqlEmailExportableVisible('e') . '
+                WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
                 ' . ($tagFrag !== null ? ' AND ' . $tagFrag['sql'] : '') . '
                 AND ' . $where . '
                 ' . $orderBy . '
@@ -1533,7 +1564,7 @@ final class EntryRepository
                 LIMIT 1
             ) AS sender_tag
             FROM ' . entryTable('emails') . ' e
-            WHERE ' . $this->sqlEmailExportableVisible('e') . '
+            WHERE e.hidden = 0 AND ' . $this->sqlEmailVisibility('e', $filter) . '
               AND ' . $where . '
             ' . $orderBy . '
             LIMIT ' . (int)$limit;
@@ -1681,14 +1712,14 @@ final class EntryRepository
      * @param array<int, int> $ids
      * @return array<int, array<string, mixed>>
      */
-    private function fetchEmailRowsByIds(array $ids, bool $digestExportableOnly = false): array
+    private function fetchEmailRowsByIds(array $ids, bool $digestExportableOnly = false, ?TimelineFilter $filter = null): array
     {
         if ($ids === []) {
             return [];
         }
         $out = [];
         $exportableClause = $digestExportableOnly
-            ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
+            ? ' AND ' . $this->sqlEmailVisibility('e', $filter)
             : '';
         foreach ($this->chunkIds($ids, 400) as $chunk) {
             $ph = implode(',', array_fill(0, count($chunk), '?'));
