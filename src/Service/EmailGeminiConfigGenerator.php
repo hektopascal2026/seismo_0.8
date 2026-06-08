@@ -70,6 +70,11 @@ CLASSIFICATION RULES:
 - KEEP: Headlines, article paragraphs, bylines, direct links, datelines, quotes, and core analysis.
 - STRIP: Mastheads, navigation links, "view in browser", dynamic ads, social sharing widgets, empty lines, copyright lines, unsubscribe/preference links, and tracking headers.
 
+WEBVIEW URL EXTRACTION RULES:
+- The `webview_keywords` array contains search keywords/phrases to match the "View in browser" link in the newsletter.
+- CRITICAL: Never include general or common words in `webview_keywords` that match irrelevant links, social media profiles (like Bluesky/Twitter/Facebook), tip links, or mailto links. 
+- If multiple different links appear in the header/footer, configure highly specific webview_keywords phrases (e.g. "Listen to Playbook and view in your browser") that uniquely target the web version link and avoid matching social profile links or tip submission links.
+
 REGEX SAFETY CONTRACT:
 1. Ensure your PHP preg_replace patterns use robust delimiters like /iu or /is.
 2. Match whole noise blocks by anchoring or using line boundaries (e.g., /^View in browser.*$/imu) rather than matching partial text.
