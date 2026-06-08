@@ -38,7 +38,7 @@ $embedTimelineExpandAllInDayRow = !empty($embedTimelineExpandAllInDayRow);
 $embedDashboardTimelineSearch   = !empty($embedDashboardTimelineSearch);
 $timelineExpandAllInDayRowDone  = false;
 $entryLoopIndex                 = 0;
-$renderNestedDigestStories      = !empty($renderNestedDigestStories);
+$renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$renderNestedDigestStories : true;
 ?>
                 <?php foreach ($allItems as $itemWrapper): ?>
                     <?php
