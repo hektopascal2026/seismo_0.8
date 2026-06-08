@@ -673,6 +673,7 @@ final class EmailWebViewUrlExtractor
                 if (str_contains($lower, 'mailchi.mp')
                     || str_contains($lower, 'campaign-archive.com')
                     || str_contains($lower, 'list-manage.com')
+                    || str_contains($lower, 'awstrack.me')
                 ) {
                     return EmailTrackingUrl::cleanNewsletterHref($href);
                 }
