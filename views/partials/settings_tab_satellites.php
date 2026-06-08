@@ -22,8 +22,9 @@ $bp = $basePath;
             </p>
             <p class="admin-intro message message-info" style="margin-top: 0.75rem;">
                 After adding a row here, SSH to the VPS and run:
-                <code class="settings-code-inline">bin/seismo-satellite-provision.sh &lt;slug&gt;</code>
-                (creates the database, migrations, and <code>/&lt;slug&gt;/</code> stub if missing).
+                <code class="settings-code-block">cd /var/www/seismo
+bin/seismo-satellite-provision.sh example</code>
+                (creates the database, migrations, and the directory stub if missing).
             </p>
 
             <?php if ($satellitesRegistry === []): ?>
