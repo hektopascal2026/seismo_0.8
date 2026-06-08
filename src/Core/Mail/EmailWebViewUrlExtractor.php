@@ -658,6 +658,8 @@ final class EmailWebViewUrlExtractor
             || str_contains($lower, 'linkedin.com')
             || str_contains($lower, 'instagram.com')
             || str_contains($lower, 'youtube.com')
+            || str_contains($lower, 'bsky.app')
+            || str_contains($lower, 'bsky.social')
         ) {
             return null;
         }
