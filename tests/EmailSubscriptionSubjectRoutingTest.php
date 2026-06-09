@@ -76,6 +76,7 @@ namespace Seismo\Tests {
                     disabled INTEGER NOT NULL DEFAULT 0,
                     show_in_magnitu INTEGER NOT NULL DEFAULT 1,
                     strip_listing_boilerplate INTEGER NOT NULL DEFAULT 0,
+                    hydrate_webview INTEGER NOT NULL DEFAULT 0,
                     body_processor VARCHAR(64) DEFAULT NULL,
                     cleanup_config TEXT DEFAULT NULL,
                     digest_split_config TEXT DEFAULT NULL,

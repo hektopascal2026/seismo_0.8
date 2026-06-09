@@ -304,19 +304,19 @@ final class EmailIngestRepository
         $row = EmailIngestNormalizer::normalizeBodies($row);
         $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
         $customKeywords = [];
+        $hydrateWebviewPreference = false;
         $from = trim((string)($row['from_email'] ?? ''));
         if ($from !== '') {
-            foreach ($subs as $sub) {
-                if (empty($sub['disabled']) && !empty($sub['cleanup_config'])) {
-                    $mt = (string)($sub['match_type'] ?? '');
-                    $mv = (string)($sub['match_value'] ?? '');
-                    if (EmailSubscriptionRepository::matchesAddress($from, $mt, $mv)) {
-                        $cfg = json_decode((string)$sub['cleanup_config'], true);
-                        if (is_array($cfg) && !empty($cfg['webview_keywords'])) {
-                            $customKeywords = (array)$cfg['webview_keywords'];
-                        }
-                        break;
-                    }
+            $best = EmailSubscriptionRepository::findBestMatchingSubscription(
+                $from,
+                isset($row['subject']) ? (string)$row['subject'] : null,
+                $subs,
+            );
+            if ($best !== null) {
+                $hydrateWebviewPreference = !empty($best['hydrate_webview']);
+                $cfg = json_decode((string)($best['cleanup_config'] ?? ''), true);
+                if (is_array($cfg) && !empty($cfg['webview_keywords'])) {
+                    $customKeywords = (array)$cfg['webview_keywords'];
                 }
             }
         }
@@ -324,7 +324,8 @@ final class EmailIngestRepository
         if (!$hydrateHostedBody) {
             $profile    = EmailLocaleGuesser::profileForEmail((string)($row['subject'] ?? ''), $plainAfterNormalize);
             $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
-            $resolution = EmailWebViewUrlExtractor::resolve($htmlBeforeNormalize, $plainAfterNormalize, $ranks, $customKeywords);
+            $warnings   = [];
+            $resolution = EmailWebViewUrlExtractor::resolve($htmlBeforeNormalize, $plainAfterNormalize, $ranks, $customKeywords, $warnings, $hydrateWebviewPreference);
             if (($resolution->hydrateBody && EmailMetadata::bodySourceFromRow($row) !== EmailMetadata::BODY_SOURCE_WEB_VIEW)
                 || EmailAlternateLocalePolicy::needsHostedHydrationRetry($row, $resolution, $plainAfterNormalize)
                 || EmailAlternateLocalePolicy::needsTruncatedWebViewHydration($row, $resolution, $plainAfterNormalize)
@@ -340,6 +341,7 @@ final class EmailIngestRepository
             $hydrateHostedBody,
             $hostedHydratesRemaining,
             $customKeywords,
+            $hydrateWebviewPreference,
         );
         $row = $this->maybeStripListingBoilerplate($row, $subs);
         $row = EmailSubscriptionProcessor::apply($row, $subs);
@@ -416,6 +418,7 @@ final class EmailIngestRepository
         bool $hydrateHostedBody = false,
         ?int &$hostedHydratesRemaining = null,
         array $customKeywords = [],
+        bool $prefersHydration = false,
     ): array {
         $html = trim($htmlForExtract);
         if ($html === '') {
@@ -431,7 +434,8 @@ final class EmailIngestRepository
             $plain
         );
         $ranks      = EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
-        $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, $ranks, $customKeywords);
+        $warnings   = [];
+        $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, $ranks, $customKeywords, $warnings, $prefersHydration);
 
         if ($resolution->url !== null) {
             $row = EmailMetadata::mergeWebViewUrl($row, $resolution->url);

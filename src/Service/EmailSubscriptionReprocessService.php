@@ -56,25 +56,33 @@ final class EmailSubscriptionReprocessService
                 $plainAfterNormalize = trim((string)($row['text_body'] ?? $row['body_text'] ?? ''));
 
                 $customKeywords = [];
+                $hydrateWebviewPreference = false;
                 $from = trim((string)($row['from_email'] ?? ''));
                 if ($from !== '') {
-                    foreach ($subs as $s) {
-                        if (empty($s['disabled']) && !empty($s['cleanup_config'])) {
-                            $mt = (string)($s['match_type'] ?? '');
-                            $mv = (string)($s['match_value'] ?? '');
-                            if (EmailSubscriptionRepository::matchesAddress($from, $mt, $mv)) {
-                                $cfg = json_decode((string)$s['cleanup_config'], true);
-                                if (is_array($cfg) && !empty($cfg['webview_keywords'])) {
-                                    $customKeywords = (array)$cfg['webview_keywords'];
-                                }
-                                break;
-                            }
+                    $best = EmailSubscriptionRepository::findBestMatchingSubscription(
+                        $from,
+                        isset($row['subject']) ? (string)$row['subject'] : null,
+                        $subs,
+                    );
+                    if ($best !== null) {
+                        $hydrateWebviewPreference = !empty($best['hydrate_webview']);
+                        $cfg = json_decode((string)($best['cleanup_config'] ?? ''), true);
+                        if (is_array($cfg) && !empty($cfg['webview_keywords'])) {
+                            $customKeywords = (array)$cfg['webview_keywords'];
                         }
                     }
                 }
 
                 $remaining = null;
-                $row = $ingest->applyWebViewProcessing($row, $htmlBeforeNormalize, $plainAfterNormalize, true, $remaining, $customKeywords);
+                $row = $ingest->applyWebViewProcessing(
+                    $row,
+                    $htmlBeforeNormalize,
+                    $plainAfterNormalize,
+                    true,
+                    $remaining,
+                    $customKeywords,
+                    $hydrateWebviewPreference
+                );
                 $ui  = EmailSubscriptionRepository::resolveSubscriptionUiForFromEmail(
                     (string)($row['from_email'] ?? ''),
                     $subs,

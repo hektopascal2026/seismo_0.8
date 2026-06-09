@@ -12,7 +12,7 @@ use DOMElement;
  */
 final class EmailWebViewUrlExtractor
 {
-    public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = [], array &$warnings = []): EmailWebViewResolution
+    public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = [], array &$warnings = [], bool $prefersHydration = false): EmailWebViewResolution
     {
         $html  = trim($html);
         $plain = trim($plain);
@@ -44,7 +44,7 @@ final class EmailWebViewUrlExtractor
             return new EmailWebViewResolution(
                 $picked['url'],
                 $picked['rank'],
-                EmailAlternateLocalePolicy::shouldHydrateBodyFromWebView($picked['rank']),
+                EmailAlternateLocalePolicy::shouldHydrateBodyFromWebView($picked['rank'], $prefersHydration),
                 self::joinWarnings($warnings)
             );
         }

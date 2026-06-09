@@ -280,6 +280,7 @@ final class EmailSubscriptionRepository
             return [
                 'display_name'              => null,
                 'strip_listing_boilerplate' => false,
+                'hydrate_webview'           => false,
                 'module_scope'              => self::MODULE_MAIL,
             ];
         }
@@ -287,6 +288,7 @@ final class EmailSubscriptionRepository
         return [
             'display_name'              => trim((string)($bestRow['display_name'] ?? '')) ?: null,
             'strip_listing_boilerplate' => !empty($bestRow['strip_listing_boilerplate']),
+            'hydrate_webview'           => !empty($bestRow['hydrate_webview']),
             'module_scope'              => self::rowModuleScope($bestRow),
         ];
     }
@@ -761,6 +763,7 @@ final class EmailSubscriptionRepository
             ? (!empty($data['show_in_magnitu']) ? 1 : 0)
             : 1;
         $stripListing = !empty($data['strip_listing_boilerplate']) ? 1 : 0;
+        $hydrateWebview = !empty($data['hydrate_webview']) ? 1 : 0;
         $autoDetected = !empty($data['auto_detected']) ? 1 : 0;
         $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
         $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
@@ -772,9 +775,9 @@ final class EmailSubscriptionRepository
 
         $sql = "INSERT INTO {$t} (
             match_type, match_value, display_name, subject_filter, category, module_scope, disabled, show_in_magnitu, strip_listing_boilerplate,
-            body_processor, cleanup_config, digest_split_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
+            hydrate_webview, body_processor, cleanup_config, digest_split_config, auto_detected, unsubscribe_url, unsubscribe_mailto, unsubscribe_one_click,
             item_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([
             $matchType,
@@ -786,6 +789,7 @@ final class EmailSubscriptionRepository
             !empty($data['disabled']) ? 1 : 0,
             $showMagnitu,
             $stripListing,
+            $hydrateWebview,
             $bodyProcessor,
             $cleanupConfig,
             $digestSplitConfig,
@@ -793,9 +797,7 @@ final class EmailSubscriptionRepository
             $data['unsubscribe_url'] ?? null,
             $data['unsubscribe_mailto'] ?? null,
             !empty($data['unsubscribe_one_click']) ? 1 : 0,
-        ]);
-
-        $newId = (int)$this->pdo->lastInsertId();
+        ]);        $newId = (int)$this->pdo->lastInsertId();
         (new SourceLogRepository($this->pdo))->appendQuietly(
             SourceLogRepository::KIND_MAIL,
             $newId,
@@ -849,6 +851,9 @@ final class EmailSubscriptionRepository
         $stripListing = array_key_exists('strip_listing_boilerplate', $data)
             ? (!empty($data['strip_listing_boilerplate']) ? 1 : 0)
             : (int)($existing['strip_listing_boilerplate'] ?? 0);
+        $hydrateWebview = array_key_exists('hydrate_webview', $data)
+            ? (!empty($data['hydrate_webview']) ? 1 : 0)
+            : (int)($existing['hydrate_webview'] ?? 0);
         $bodyProcessor = array_key_exists('body_processor', $data)
             ? self::normalizeBodyProcessor($data['body_processor'])
             : self::normalizeBodyProcessor($existing['body_processor'] ?? null);
@@ -875,6 +880,7 @@ final class EmailSubscriptionRepository
             disabled = ?,
             show_in_magnitu = ?,
             strip_listing_boilerplate = ?,
+            hydrate_webview = ?,
             body_processor = ?,
             cleanup_config = ?,
             digest_split_config = ?,
@@ -895,6 +901,7 @@ final class EmailSubscriptionRepository
             $disabled,
             $showMagnitu,
             $stripListing,
+            $hydrateWebview,
             $bodyProcessor,
             $cleanupConfig,
             $digestSplitConfig,

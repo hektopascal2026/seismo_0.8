@@ -245,6 +245,7 @@ final class MailModuleHandler
                 'disabled'               => ((string)($_POST['disabled'] ?? '0')) === '1',
                 'show_in_magnitu'        => ((string)($_POST['show_in_magnitu'] ?? '0')) === '1',
                 'strip_listing_boilerplate' => ((string)($_POST['strip_listing_boilerplate'] ?? '0')) === '1',
+                'hydrate_webview'        => ((string)($_POST['hydrate_webview'] ?? '0')) === '1',
                 'body_processor'         => (string)($_POST['body_processor'] ?? ''),
                 'cleanup_config'         => (string)($_POST['cleanup_config'] ?? ''),
                 'subject_filter'         => (string)($_POST['subject_filter'] ?? ''),

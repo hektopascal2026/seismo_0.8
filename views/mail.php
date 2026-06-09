@@ -407,6 +407,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                         <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= ($editRow === null || !empty($editRow['strip_listing_boilerplate'])) ? 'checked' : '' ?>> Strip typical boilerplate</label>
                     <?php endif; ?>
                 </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="hydrate_webview" value="0">
+                    <label><input type="checkbox" name="hydrate_webview" value="1" <?= !empty($editRow['hydrate_webview']) ? 'checked' : '' ?>> Body hydration (fetch hosted web edition)</label>
+                </div>
                 <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">
                     <label>Unsubscribe URL <input type="url" name="unsubscribe_url" class="search-input" style="width:100%;" value="<?= e((string)($editRow['unsubscribe_url'] ?? '')) ?>"></label>
@@ -516,12 +520,13 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="disabled" value="<?= !empty($editRow['disabled']) ? '1' : '0' ?>">
                             <input type="hidden" name="show_in_magnitu" value="<?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? '1' : '0' ?>">
                             <input type="hidden" name="strip_listing_boilerplate" value="1">
+                            <input type="hidden" name="hydrate_webview" value="<?= !empty($editRow['hydrate_webview']) ? '1' : '0' ?>">
                             <input type="hidden" name="body_processor" value="<?= e((string)$editRow['body_processor']) ?>">
                             <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
                             <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
                             <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
-                            <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" name="digest_split_config" value="<?= e((string)$editRow['digest_split_config'] ?? '')) ?>">
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
@@ -589,6 +594,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="disabled" value="<?= !empty($editRow['disabled']) ? '1' : '0' ?>">
                             <input type="hidden" name="show_in_magnitu" value="<?= !isset($editRow['show_in_magnitu']) || !empty($editRow['show_in_magnitu']) ? '1' : '0' ?>">
                             <input type="hidden" name="strip_listing_boilerplate" value="<?= !empty($editRow['strip_listing_boilerplate']) ? '1' : '0' ?>">
+                            <input type="hidden" name="hydrate_webview" value="<?= !empty($editRow['hydrate_webview']) ? '1' : '0' ?>">
                             <input type="hidden" name="body_processor" value="<?= e((string)$editRow['body_processor']) ?>">
                             <input type="hidden" name="unsubscribe_url" value="<?= e((string)$editRow['unsubscribe_url']) ?>">
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
@@ -671,6 +677,10 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                     <?php else: ?>
                         <label><input type="checkbox" name="strip_listing_boilerplate" value="1" <?= ($editRow === null || !empty($editRow['strip_listing_boilerplate'])) ? 'checked' : '' ?>> Strip typical boilerplate</label>
                     <?php endif; ?>
+                </div>
+                <div class="admin-form-field">
+                    <input type="hidden" name="hydrate_webview" value="0">
+                    <label><input type="checkbox" name="hydrate_webview" value="1" <?= !empty($editRow['hydrate_webview']) ? 'checked' : '' ?>> Body hydration (fetch hosted web edition)</label>
                 </div>
                 <input type="hidden" name="body_processor" value="<?= e((string)($editRow['body_processor'] ?? '')) ?>">
                 <div class="admin-form-field">

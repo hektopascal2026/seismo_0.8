@@ -46,8 +46,11 @@ final class EmailAlternateLocalePolicy
         return self::preferredLocaleRanks(EmailLocaleGuesser::PROFILE_ENGLISH);
     }
 
-    public static function shouldHydrateBodyFromWebView(?int $localeRank): bool
+    public static function shouldHydrateBodyFromWebView(?int $localeRank, bool $subscriptionPrefersHydration = false): bool
     {
+        if (!$subscriptionPrefersHydration) {
+            return false;
+        }
         return $localeRank === EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH
             || $localeRank === EmailWebViewPhraseLexicon::RANK_LOCALE_GERMAN;
     }
@@ -86,7 +89,7 @@ final class EmailAlternateLocalePolicy
     public static function preferredHydrationRankForProfile(string $profile): int
     {
         foreach (self::preferredLocaleRanks($profile) as $rank) {
-            if (self::shouldHydrateBodyFromWebView($rank)) {
+            if (self::shouldHydrateBodyFromWebView($rank, true)) {
                 return $rank;
             }
         }

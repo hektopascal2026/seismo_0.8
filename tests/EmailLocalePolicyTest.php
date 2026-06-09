@@ -57,8 +57,20 @@ final class EmailLocalePolicyTest extends TestCase
             EmailAlternateLocalePolicy::preferredLocaleRanks(EmailLocaleGuesser::PROFILE_OTHER)
         );
 
-        self::assertTrue($resolution->hydrateBody);
+        self::assertFalse($resolution->hydrateBody);
         self::assertSame(EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH, $resolution->localeRank);
+
+        $warnings = [];
+        $resolutionHydrate = EmailWebViewUrlExtractor::resolve(
+            '',
+            'Read the English version ( https://news.example.net/en )',
+            EmailAlternateLocalePolicy::preferredLocaleRanks(EmailLocaleGuesser::PROFILE_OTHER),
+            [],
+            $warnings,
+            true
+        );
+
+        self::assertTrue($resolutionHydrate->hydrateBody);
     }
 
     public function testNeedsHostedHydrationRetryForCyrillicInboxWithEnglishLink(): void
