@@ -160,6 +160,41 @@ $router->register(
     false
 );
 $router->register(
+    'seismogramm',
+    \Seismo\Controller\SeismogrammController::class . '::show',
+    true
+);
+$router->register(
+    'seismogramm_prepare',
+    \Seismo\Controller\SeismogrammController::class . '::prepare',
+    false
+);
+$router->register(
+    'seismogramm_generate',
+    \Seismo\Controller\SeismogrammController::class . '::generate',
+    false
+);
+$router->register(
+    'seismogramm_save_prompt',
+    \Seismo\Controller\SeismogrammController::class . '::saveDefaultPrompt',
+    false
+);
+$router->register(
+    'seismogramm_prompt_helper',
+    \Seismo\Controller\SeismogrammController::class . '::promptHelper',
+    false
+);
+$router->register(
+    'save_seismogramm_prompt',
+    \Seismo\Controller\SeismogrammController::class . '::savePromptLibrary',
+    false
+);
+$router->register(
+    'delete_seismogramm_prompt',
+    \Seismo\Controller\SeismogrammController::class . '::deletePromptLibrary',
+    false
+);
+$router->register(
     'label',
     \Seismo\Controller\MagnituLabelUiController::class . '::show',
     true

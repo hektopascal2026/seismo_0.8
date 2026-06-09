@@ -52,6 +52,7 @@ final class Router
         'magnitu'          => true,
         'researcher' => true,
         'briefing_builder' => true,
+        'seismogramm' => true,
         'label'            => true,
         'feeds'      => true,
         'scraper'    => true,
