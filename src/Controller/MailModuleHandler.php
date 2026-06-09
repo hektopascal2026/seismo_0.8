@@ -126,11 +126,13 @@ final class MailModuleHandler
                     }
                     $editRowEmails = $ingestRepo->fetchRowsForSubscription($editRow, 5);
                     require_once SEISMO_ROOT . '/views/helpers.php';
+                    $cleanup = json_decode((string)($editRow['cleanup_config'] ?? ''), true);
+                    $kws = is_array($cleanup) && !empty($cleanup['webview_keywords']) ? (array)$cleanup['webview_keywords'] : [];
                     foreach ($editRowEmails as $email) {
                         $editRowSamples[] = [
                             'subject' => (string)($email['subject'] ?? ''),
                             'body' => (string)($email['text_body'] ?? $email['body_text'] ?? ''),
-                            'webview_url' => seismo_email_web_view_url($email),
+                            'webview_url' => seismo_email_web_view_url($email, $kws),
                         ];
                     }
                 }

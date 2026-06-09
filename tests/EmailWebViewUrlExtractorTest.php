@@ -314,4 +314,22 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         self::assertNotEmpty($warnings);
         self::assertStringContainsString('mcusercontent.com', $warnings[0]);
     }
+
+    public function testHelperSeismoEmailWebViewUrlRespectsCustomKeywords(): void
+    {
+        require_once __DIR__ . '/../views/helpers.php';
+        
+        $email = [
+            'html_body' => '<table><tr><td>Die Ausgabe</td><td><a href="https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz">02. Juni 2026</a></td></tr></table>',
+            'text_body' => "Die Ausgabe\n02. Juni 2026 ( https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz )",
+            'subject' => 'Stimme der Wirtschaft',
+            'metadata' => null,
+        ];
+        
+        $urlWithout = seismo_email_web_view_url($email, []);
+        self::assertNull($urlWithout);
+        
+        $urlWith = seismo_email_web_view_url($email, ['Die Ausgabe']);
+        self::assertSame('https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz', $urlWith);
+    }
 }

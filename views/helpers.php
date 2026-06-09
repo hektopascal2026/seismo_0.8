@@ -523,7 +523,7 @@ if (!function_exists('seismo_email_web_view_url')) {
     /**
      * Newsletter “view in browser” / Webansicht URL from ingest metadata, if any.
      */
-    function seismo_email_web_view_url(array $email): ?string
+    function seismo_email_web_view_url(array $email, array $customKeywords = []): ?string
     {
         $url = \Seismo\Core\Mail\EmailMetadata::webViewUrlFromMetadata($email['metadata'] ?? null);
         if ($url !== null && seismo_is_navigable_url($url)) {
@@ -537,7 +537,7 @@ if (!function_exists('seismo_email_web_view_url')) {
             $plain
         );
         $ranks = \Seismo\Core\Mail\EmailAlternateLocalePolicy::preferredLocaleRanks($profile);
-        $url   = \Seismo\Core\Mail\EmailWebViewUrlExtractor::resolve($html, $plain, $ranks)->url;
+        $url   = \Seismo\Core\Mail\EmailWebViewUrlExtractor::resolve($html, $plain, $ranks, $customKeywords)->url;
         if ($url !== null && seismo_is_navigable_url($url)) {
             return $url;
         }
