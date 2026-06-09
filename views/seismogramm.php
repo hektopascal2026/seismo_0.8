@@ -116,6 +116,30 @@ $moduleOptions = [
             <button type="button" class="seismogramm-preset-btn" data-preset="Research">Research</button>
         </div>
 
+        <!-- View Toggle Bar -->
+        <div class="view-toggle view-toggle-bar" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
+            <span class="view-toggle-label" style="font-weight: 600; margin-right: 0.5rem;">View:</span>
+            <button type="button" class="btn btn-primary" id="seismogramm-view-prompt" data-view="prompt" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer;">Prompt</button>
+            <button type="button" class="btn btn-secondary" id="seismogramm-view-helper" data-view="helper" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Helper</button>
+        </div>
+
+        <!-- Helper Card -->
+        <div id="seismogramm-helper-card" class="latest-entries-section" style="display: none; margin-bottom: 1.5rem;">
+            <div class="admin-form-card">
+                <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                    <label for="seismogramm_helper_intent" style="display:block; margin-bottom:0.5rem; font-weight:600;">What should this prompt focus on?</label>
+                    <p class="admin-intro" style="margin:0 0 0.5rem; font-size: 0.875rem;">
+                        Rough notes are enough. Gemini drafts a full prompt in the style of your default.
+                    </p>
+                    <textarea id="seismogramm_helper_intent" rows="5" class="search-input" style="width:100%; max-width:40rem; margin-bottom: 0.75rem;" placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
+                    <div>
+                        <button type="button" class="btn btn-secondary" id="seismogramm-helper-generate-btn" <?= $geminiConfigured ? '' : ' disabled' ?>>Generate prompt</button>
+                    </div>
+                    <div id="seismogramm-helper-msg" class="message" style="margin-top:0.75rem; max-width:40rem; display: none;" role="status" aria-live="polite"></div>
+                </div>
+            </div>
+        </div>
+
         <div class="latest-entries-section">
             <form id="seismogramm-builder-form" class="admin-form-card">
                 
@@ -173,28 +197,9 @@ $moduleOptions = [
 
                 <!-- Custom Prompt and Advanced Sandboxing Panel -->
                 <div id="seismogramm-custom-panel" class="seismogramm-sandbox-panel" style="display: none;">
-                    
-                    <div class="view-toggle view-toggle-bar" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
-                        <span class="view-toggle-label" style="font-weight: 600; margin-right: 0.5rem;">View:</span>
-                        <button type="button" class="btn btn-primary" id="seismogramm-view-prompt" data-view="prompt" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer;">Prompt</button>
-                        <button type="button" class="btn btn-secondary" id="seismogramm-view-helper" data-view="helper" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Helper</button>
-                    </div>
-
-                    <div class="admin-form-field" id="seismogramm-prompt-editor-panel" style="margin-bottom: 1.5rem;">
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label for="seismogramm_system_prompt" style="display:block; margin-bottom:0.5rem; font-weight:600;">System Prompt Instructions</label>
                         <textarea id="seismogramm_system_prompt" name="system_prompt" rows="18" class="search-input" style="width:100%; max-width:40rem; font-family: monospace;"></textarea>
-                    </div>
-
-                    <div class="admin-form-field" id="seismogramm-helper-panel" style="display: none; margin-bottom: 1.5rem;">
-                        <label for="seismogramm_helper_intent" style="display:block; margin-bottom:0.5rem; font-weight:600;">What should this prompt focus on?</label>
-                        <p class="admin-intro" style="margin:0 0 0.5rem; font-size: 0.875rem;">
-                            Rough notes are enough. Gemini drafts a full prompt in the style of your default.
-                        </p>
-                        <textarea id="seismogramm_helper_intent" rows="5" class="search-input" style="width:100%; max-width:40rem; margin-bottom: 0.75rem;" placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
-                        <div>
-                            <button type="button" class="btn btn-secondary" id="seismogramm-helper-generate-btn" <?= $geminiConfigured ? '' : ' disabled' ?>>Generate prompt</button>
-                        </div>
-                        <div id="seismogramm-helper-msg" class="message" style="margin-top:0.75rem; max-width:40rem; display: none;" role="status" aria-live="polite"></div>
                     </div>
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
@@ -282,8 +287,7 @@ $moduleOptions = [
 
         var viewPromptBtn = document.getElementById('seismogramm-view-prompt');
         var viewHelperBtn = document.getElementById('seismogramm-view-helper');
-        var promptEditorPanel = document.getElementById('seismogramm-prompt-editor-panel');
-        var helperPanel = document.getElementById('seismogramm-helper-panel');
+        var helperCard = document.getElementById('seismogramm-helper-card');
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
@@ -296,15 +300,15 @@ $moduleOptions = [
                 viewPromptBtn.classList.add('btn-secondary');
                 viewHelperBtn.classList.remove('btn-secondary');
                 viewHelperBtn.classList.add('btn-primary');
-                promptEditorPanel.style.display = 'none';
-                helperPanel.style.display = 'block';
+                form.style.display = 'none';
+                helperCard.style.display = 'block';
             } else {
                 viewPromptBtn.classList.remove('btn-secondary');
                 viewPromptBtn.classList.add('btn-primary');
                 viewHelperBtn.classList.remove('btn-primary');
                 viewHelperBtn.classList.add('btn-secondary');
-                promptEditorPanel.style.display = 'block';
-                helperPanel.style.display = 'none';
+                form.style.display = 'block';
+                helperCard.style.display = 'none';
             }
         }
         
@@ -348,6 +352,8 @@ $moduleOptions = [
                         throw new Error(data.error || 'Helper failed.');
                     }
                     systemPromptTa.value = data.prompt;
+                    customToggle.checked = true;
+                    customPanel.style.display = 'block';
                     helperMsg.textContent = 'Prompt successfully generated! Switched back to editor view.';
                     helperMsg.className = 'message message-success';
                     setTimeout(function() {
