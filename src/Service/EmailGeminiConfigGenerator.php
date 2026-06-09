@@ -73,6 +73,7 @@ CLASSIFICATION RULES:
 WEBVIEW URL EXTRACTION RULES:
 - The `webview_keywords` array contains search keywords/phrases to match the "View in browser" link in the newsletter.
 - CRITICAL: Never include general or common words in `webview_keywords` that match irrelevant links, social media profiles (like Bluesky/Twitter/Facebook), tip links, or mailto links. 
+- CRITICAL: Never use the sender name, organization name, publisher name, or newsletter title (e.g. "Handelskammer") as a keyword, as this will incorrectly match generic header/footer links (such as "mitglied werden", signup, or homepage links). Only use specific phrases that explicitly mean web version (e.g. "online version", "webansicht", "online-version").
 - If multiple different links appear in the header/footer, configure highly specific webview_keywords phrases (e.g. "Listen to Playbook and view in your browser") that uniquely target the web version link and avoid matching social profile links or tip submission links.
 
 REGEX SAFETY CONTRACT:
