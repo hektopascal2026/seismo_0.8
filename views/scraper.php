@@ -36,22 +36,6 @@ $sourcesQs = 'action=scraper&view=sources';
     <style>:root { --seismo-accent: <?= e($accent) ?>; }</style>
     <?php endif; ?>
     <style>
-        .btn-gemini-glow {
-            background: linear-gradient(135deg, #6366f1, #a855f7);
-            color: #ffffff !important;
-            font-weight: 600;
-            border: none;
-            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
-            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
-        }
-        .btn-gemini-glow:hover {
-            background: linear-gradient(135deg, #4f46e5, #9333ea);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(168, 85, 247, 0.3);
-        }
-        .btn-gemini-glow:active {
-            transform: translateY(1px);
-        }
         .gemini-feedback-box {
             margin-top: 1.5rem;
             margin-bottom: 1.5rem;
@@ -163,7 +147,7 @@ $sourcesQs = 'action=scraper&view=sources';
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success"><?= $editRow ? 'Save' : 'Add source' ?></button>
                     <button type="button" class="btn btn-secondary" id="scraper-preview-btn">Preview (dry run)</button>
-                    <button type="button" class="btn btn-secondary btn-gemini-glow" id="scraper-gemini-btn">Analyze with Gemini</button>
+                    <button type="button" class="btn btn-secondary" id="scraper-gemini-btn">Analyze with Gemini</button>
                     <?php if ($editRow): ?>
                         <a href="<?= e($basePath) ?>/index.php?<?= e($sourcesQs) ?>" class="btn btn-secondary">Cancel edit</a>
                     <?php endif; ?>
@@ -171,7 +155,7 @@ $sourcesQs = 'action=scraper&view=sources';
             </form>
             <div id="gemini-feedback-panel" class="gemini-feedback-box" hidden>
                 <div class="gemini-feedback-title">
-                    <span class="sparkle-icon">✨</span> Gemini AI Insights
+                    Gemini AI Insights
                 </div>
                 <p id="gemini-feedback-text" class="gemini-feedback-text"></p>
                 <p id="gemini-feedback-url" style="font-size: 0.8rem; opacity: 0.8; margin-top: 0.5rem;"></p>
@@ -311,7 +295,7 @@ $sourcesQs = 'action=scraper&view=sources';
                 }
                 btnGemini.disabled = true;
                 var originalText = btnGemini.textContent;
-                btnGemini.textContent = 'Analyzing… ✨';
+                btnGemini.textContent = 'Analyzing…';
                 geminiPanel.hidden = true;
 
                 var fd = new FormData(form);
