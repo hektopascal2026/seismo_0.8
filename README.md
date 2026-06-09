@@ -1,4 +1,4 @@
-# Seismo 0.9.0
+# Seismo 0.9.1
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.9.1** | **Seismogramm Rebuild & Redesigned Preset GUI** — Greenfield AI briefing pipeline under `?action=seismogramm`, featuring a clean preset-driven GUI (Briefing, Blindspot, Research presets), default/custom toggle switch, dynamic query inputs, and referenced validation cards. |
 | **0.9.0** | **Email Ingestion Modernization, Relational Schema Migration, & Throttle Bypass** — Upgrades ingestion parsing and sanitization to standard libraries (`zbateson/mail-mime-parser`, `masterminds/html5`, `symfony/dom-crawler`, `symfony/html-sanitizer`). Normalizes layout split configurations into fully relational database schemas (`newsletter_sender`, `newsletter_template`, `template_rule`), and adds manual throttle bypass for immediate UI-initiated mail fetches. |
 | **0.8.7** | **Centralized Backup Dashboard & SQL Streaming Export** — Adds the new Backup Settings tab, centralizing the existing JSON source configuration exports and imports, and introducing a new, memory-safe SQL streaming exporter for full database backups. |
 | **0.8.6** | **Auto-linkified timeline cards & paragraphing** — Auto-links plain text URLs in feed, substack, scraper, and email expanded cards (with shortened URL text for clean visuals) and splits double-newlines into paragraphs, keeping the raw database and Magnitu exports clean and unchanged. |

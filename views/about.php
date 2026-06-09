@@ -207,6 +207,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
+                        <li><code>?action=seismogramm</code> &mdash; in-app Seismogramm briefing builder with simplified preset selection (Briefing, Blindspot, Research) and dynamic query filters.</li>
                         <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, <strong>Deep selection</strong> (Standard / Tournament / Blind spot cross-module), optional Pro selection (<code>gemini-3.1-pro-preview</code> pass 1), post-run Flash cost estimate, and source-card attribution (mothership and path satellites). Split newsletter child stories are cited individually, not as parent digest blobs.</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
