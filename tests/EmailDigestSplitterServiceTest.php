@@ -317,4 +317,43 @@ final class EmailDigestSplitterServiceTest extends TestCase
         self::assertCount(1, $stories);
         self::assertSame('My Real Story Title', $stories[0]['title']);
     }
+
+    public function testCleanStoryBodyText(): void
+    {
+        $service = new EmailDigestSplitterService();
+
+        $reflection = new \ReflectionClass(EmailDigestSplitterService::class);
+        $method = $reflection->getMethod('cleanStoryBodyText');
+        $method->setAccessible(true);
+
+        // Case 1: Simple cleanup of dividers
+        $body = "------\nActual body text here";
+        $cleaned = $method->invoke($service, $body, 'Some Title');
+        self::assertSame('Actual body text here', $cleaned);
+
+        // Case 2: Title prepended, followed by dividers
+        $body = "My Story Title\n------\nActual body text here";
+        $cleaned = $method->invoke($service, $body, 'My Story Title');
+        self::assertSame('Actual body text here', $cleaned);
+
+        // Case 3: Title duplicated and wrapped in dividers
+        $body = "------\nMy Story Title\n------\nMy Story Title\n------\nActual body text here";
+        $cleaned = $method->invoke($service, $body, 'My Story Title');
+        self::assertSame('Actual body text here', $cleaned);
+
+        // Case 4: Case insensitive, spaces collapsed title match
+        $body = "  my  story   title  \n------\nActual body text here";
+        $cleaned = $method->invoke($service, $body, 'My Story Title');
+        self::assertSame('Actual body text here', $cleaned);
+
+        // Case 5: Word/Number boundary protection (should not strip "Walon" if title is "Walo")
+        $body = "Walon Bertschinger has some text";
+        $cleaned = $method->invoke($service, $body, 'Walo');
+        self::assertSame('Walon Bertschinger has some text', $cleaned);
+
+        // Case 6: Word/Number boundary protection for digits (should not strip "100" if title is "10")
+        $body = "100 percent complete";
+        $cleaned = $method->invoke($service, $body, '10');
+        self::assertSame('100 percent complete', $cleaned);
+    }
 }

@@ -54,7 +54,14 @@ final class EmailDigestSplitterService
             $stories = $this->applyExcludeTitles($this->splitByRegex($textBody, $htmlBody, $normalizedRules), $normalizedRules);
         }
 
-        return $this->applyManualGlueRules($stories, $splitRules);
+        $stories = $this->applyManualGlueRules($stories, $splitRules);
+
+        foreach ($stories as &$story) {
+            $story['text_body'] = $this->cleanStoryBodyText($story['text_body'], $story['title']);
+        }
+        unset($story);
+
+        return $stories;
     }
 
     private function splitByHtmlSelector(string $htmlBody, array $rules): array
@@ -773,5 +780,36 @@ final class EmailDigestSplitterService
         }
 
         return $out;
+    }
+
+    private function cleanStoryBodyText(string $body, string $title): string
+    {
+        $body = trim($body);
+
+        // 1. Strip leading dividers/separators if present at the very beginning of the body
+        $body = preg_replace('/^[\s\-_=~\*\|\/➔→>+]+/u', '', $body) ?? $body;
+        $body = trim($body);
+
+        $title = trim($title);
+        if ($title === '') {
+            return $body;
+        }
+
+        // 2. Strip title if it matches the start of the body
+        $escapedTitle = preg_quote($title, '/');
+        $pattern = '/^\s*' . preg_replace('/\s+/u', '\s+', $escapedTitle) . '(?!\p{L}|\p{N})/ui';
+
+        $lastBody = '';
+        while ($body !== $lastBody) {
+            $lastBody = $body;
+            if (preg_match($pattern, $body, $matches)) {
+                $body = mb_substr($body, mb_strlen($matches[0]));
+                // Strip leading dividers/separators and whitespace after the stripped title
+                $body = preg_replace('/^[\s\-_=~\*\|\/➔→>+]+/u', '', $body) ?? $body;
+                $body = trim($body);
+            }
+        }
+
+        return $body;
     }
 }

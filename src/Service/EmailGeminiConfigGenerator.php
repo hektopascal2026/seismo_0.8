@@ -48,6 +48,7 @@ CRITICAL DESIGN PRINCIPLES:
 4. Rely on tag hierarchies only as a last resort, keeping them as short as possible.
 5. If the newsletter is not a digest (i.e. single main story or no repeated article cards), set is_digest to false.
 6. CRITICAL: Never use CSS pseudo-classes like :has(...) or :contains(...) in any selector (story_selector, title_selector, body_selector, link_selector). They are not supported by the CSS parser and will crash.
+7. DELIMITER SAFEGUARD: Delimiter lines (like '---', '===', '______') inside user-provided keep/context filters are helper markers added manually by the user. They do NOT exist in the email bodies. Never include these helper delimiters in your selectors or regex split patterns. Match the actual email structure instead.
 TEXT;
 
     private const SPLIT_REFINE_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -408,7 +409,7 @@ TEXT;
             $prompt .= "========================================\n";
             $prompt .= trim($keepText) . "\n";
             $prompt .= "========================================\n\n";
-            $prompt .= "Note: The pasted content above may contain multiple distinct articles/stories separated by delimiters (like '---', '___', '===', or similar divider lines). Each separated section represents a single child story card you want to extract.\n";
+            $prompt .= "Note: The delimiter lines (like '---', '___', '===', or similar dividers) in the pasted content above are helper markers added manually by the user to separate the stories. They DO NOT exist in the actual email samples. Never use these helper delimiters (like '------') in your split_pattern or selectors. Instead, find the corresponding structure or elements in the actual sample email HTML/text.\n";
             $prompt .= "CRITICAL: If a single story section contains multiple paragraphs, headings, or fact boxes (such as 'Das ist passiert' followed by 'Darum ist es wichtig'), these MUST all remain together within the SAME single story card. Do NOT select individual paragraphs or fact blocks as separate stories. Find the outermost common ancestor container/wrapper element in the HTML that groups all parts of a single story together.\n";
             $prompt .= "For newsletters (especially table-heavy layouts like NZZ), stories are typically built inside repeating `table` elements. Never select individual paragraphs (`p`), headings (`h1`-`h4`), or inner cells (`td`) as the `story_selector` if they are children of a parent story table. Instead, target the outermost `table` or `div` container that wraps the entire story block.\n\n";
             $prompt .= "The user has confirmed this email is a multi-story digest. Suggest a JSON split configuration matching our split schema:\n";
