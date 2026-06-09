@@ -7,18 +7,18 @@ namespace Seismo\Core\Mail;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
-use HTMLPurifier;
-use HTMLPurifier_Config;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizer;
+use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 
 /**
  * Sanitize newsletter HTML before plain-text extraction (Slice 11c).
  */
 final class EmailHtmlSanitizer
 {
-    /** Above this byte size, skip HTMLPurifier (CPU/memory) and use strip_tags. */
+    /** Above this byte size, skip HTMLSanitizer (CPU/memory) and use strip_tags. */
     private const PURIFY_MAX_BYTES = 150_000;
 
-    private static ?HTMLPurifier $purifier = null;
+    private static ?HtmlSanitizer $sanitizer = null;
 
     public static function sanitize(string $html, bool $allowWebviewRedirects = false): string
     {
@@ -36,7 +36,7 @@ final class EmailHtmlSanitizer
         }
 
         try {
-            $clean = self::purifier()->purify($html);
+            $clean = self::sanitizer()->sanitize($html);
         } catch (\Throwable $e) {
             error_log('Seismo EmailHtmlSanitizer: ' . $e->getMessage());
 
@@ -51,46 +51,47 @@ final class EmailHtmlSanitizer
         return self::normalizeAnchorHrefs($clean, $allowWebviewRedirects);
     }
 
-    private static function purifier(): HTMLPurifier
+    private static function sanitizer(): HtmlSanitizer
     {
-        if (self::$purifier !== null) {
-            return self::$purifier;
+        if (self::$sanitizer !== null) {
+            return self::$sanitizer;
         }
 
-        $config = HTMLPurifier_Config::createDefault();
-        $config->set('Cache.DefinitionImpl', null);
-        $config->set(
-            'HTML.Allowed',
-            'p[class|id],br,div[class|id],span[class|id],h1[class|id],h2[class|id],h3[class|id],h4[class|id],h5[class|id],h6[class|id],ul[class|id],ol[class|id],li[class|id],blockquote[class|id],'
-            . 'strong[class|id],em[class|id],b,i,a[href|title|class|id],table[class|id],tbody[class|id],thead[class|id],tr[class|id],td[class|id|width|colspan|height],th[class|id]'
-        );
-        $config->set('HTML.ForbiddenElements', [
-            'img', 'script', 'style', 'meta', 'head', 'iframe', 'object', 'embed',
-            'form', 'input', 'button', 'noscript',
-        ]);
-        $config->set('URI.DisableExternalResources', true);
-        $config->set('URI.DisableResources', true);
-        $config->set('AutoFormat.RemoveEmpty', true);
+        $config = (new HtmlSanitizerConfig())
+            ->allowElement('p', ['class', 'id'])
+            ->allowElement('br')
+            ->allowElement('div', ['class', 'id'])
+            ->allowElement('span', ['class', 'id'])
+            ->allowElement('h1', ['class', 'id'])
+            ->allowElement('h2', ['class', 'id'])
+            ->allowElement('h3', ['class', 'id'])
+            ->allowElement('h4', ['class', 'id'])
+            ->allowElement('h5', ['class', 'id'])
+            ->allowElement('h6', ['class', 'id'])
+            ->allowElement('ul', ['class', 'id'])
+            ->allowElement('ol', ['class', 'id'])
+            ->allowElement('li', ['class', 'id'])
+            ->allowElement('blockquote', ['class', 'id'])
+            ->allowElement('strong', ['class', 'id'])
+            ->allowElement('em', ['class', 'id'])
+            ->allowElement('b')
+            ->allowElement('i')
+            ->allowElement('a', ['href', 'title', 'class', 'id'])
+            ->allowElement('table', ['class', 'id'])
+            ->allowElement('tbody', ['class', 'id'])
+            ->allowElement('thead', ['class', 'id'])
+            ->allowElement('tr', ['class', 'id'])
+            ->allowElement('td', ['class', 'id', 'width', 'colspan', 'height'])
+            ->allowElement('th', ['class', 'id']);
 
-        self::$purifier = new HTMLPurifier($config);
+        self::$sanitizer = new HtmlSanitizer($config);
 
-        return self::$purifier;
+        return self::$sanitizer;
     }
 
     private static function normalizeAnchorHrefs(string $html, bool $allowWebviewRedirects = false): string
     {
-        $prev = libxml_use_internal_errors(true);
-        $dom  = new DOMDocument();
-        $loaded = $dom->loadHTML(
-            '<?xml encoding="UTF-8"><div id="seismo-mail-root">' . $html . '</div>',
-            LIBXML_NONET
-        );
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
-        if (!$loaded) {
-            return $html;
-        }
-
+        $dom = HtmlParser::parse('<div id="seismo-mail-root">' . $html . '</div>');
         $root = $dom->getElementById('seismo-mail-root');
         if (!$root instanceof DOMElement) {
             return $html;
@@ -100,7 +101,7 @@ final class EmailHtmlSanitizer
 
         $inner = '';
         foreach ($root->childNodes as $child) {
-            $inner .= $dom->saveHTML($child);
+            $inner .= HtmlParser::saveHTML($child);
         }
 
         return trim($inner);

@@ -6,6 +6,8 @@ namespace Seismo\Core\Fetcher;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use ZBateson\MailMimeParser\MailMimeParser;
+use ZBateson\MailMimeParser\Header\DateHeader;
 
 /**
  * IMAP inbox fetch for {@see \Seismo\Service\CoreRunner} (`core:mail`).
@@ -186,40 +188,61 @@ final class ImapMailFetchService
         if ($rawHeaders === false) {
             $rawHeaders = '';
         }
+        $rawBody = imap_body($imap, $uid, FT_UID);
+        if ($rawBody === false) {
+            $rawBody = '';
+        }
+        $rawMime = rtrim($rawHeaders) . "\r\n\r\n" . $rawBody;
 
-        $fromDisplay = isset($o->from) ? (string)$o->from : '';
-        [$fromName, $fromEmail] = $this->parseFrom($fromDisplay);
+        if ($rawMime === '') {
+            return null;
+        }
 
-        $subject = isset($o->subject) ? $this->decodeMimeHeader((string)$o->subject) : '';
+        $parser = new MailMimeParser();
+        $message = $parser->parse($rawMime);
+
+        $subject = $message->getHeaderValue('Subject') ?? '';
         $subject = $this->truncate($subject, 500);
 
-        $messageId = isset($o->message_id) ? trim((string)$o->message_id) : '';
-        if ($messageId === '') {
-            $messageId = null;
-        } else {
-            $messageId = $this->truncate($messageId, 512);
-        }
-
-        $to = isset($o->to) ? (string)$o->to : null;
-        $cc = null;
-
-        $dateUtc = $this->parseMailDate(isset($o->date) ? (string)$o->date : null);
-
-        $struct = @imap_fetchstructure($imap, $uid, FT_UID);
-        $plain = '';
-        $html  = '';
-        if ($struct instanceof \stdClass) {
-            $parts = ['plain' => '', 'html' => ''];
-            $this->collectMimeParts($imap, $uid, $struct, '', $parts);
-            $plain = $parts['plain'];
-            $html  = $parts['html'];
-        }
-        if ($plain === '' && $html === '') {
-            $fallback = imap_fetchbody($imap, $uid, '', FT_UID);
-            if (is_string($fallback) && $fallback !== '') {
-                $plain = $this->decodePart($fallback, 0);
+        $messageId = $message->getHeaderValue('Message-ID');
+        if ($messageId !== null) {
+            $messageId = trim($messageId);
+            if ($messageId === '') {
+                $messageId = null;
+            } else {
+                $messageId = $this->truncate($messageId, 512);
             }
         }
+
+        $fromEmail = null;
+        $fromName = null;
+        $fromHeader = $message->getHeader('From');
+        if ($fromHeader !== null) {
+            $addresses = $fromHeader->getAddresses();
+            if (!empty($addresses)) {
+                $fromEmail = $addresses[0]->getEmail();
+                $fromName = $addresses[0]->getName();
+            }
+        }
+        $fromDisplay = $message->getHeaderValue('From') ?? '';
+
+        $to = $message->getHeaderValue('To');
+        $cc = $message->getHeaderValue('Cc');
+
+        $dateUtc = null;
+        $dateHeader = $message->getHeader('Date');
+        if ($dateHeader instanceof DateHeader) {
+            $dt = $dateHeader->getDateTime();
+            if ($dt instanceof \DateTimeInterface) {
+                $dateUtc = DateTimeImmutable::createFromInterface($dt)->setTimezone(new \DateTimeZone('UTC'));
+            }
+        }
+        if ($dateUtc === null) {
+            $dateUtc = $this->parseMailDate($message->getHeaderValue('Date'));
+        }
+
+        $plain = $message->getTextContent() ?? '';
+        $html = $message->getHtmlContent() ?? '';
 
         // 0.4 fetch_mail.php parity: derive readable plain from HTML when there is no text/plain.
         if (trim($plain) === '' && $html !== '') {
@@ -233,8 +256,8 @@ final class ImapMailFetchService
             'imap_uid'      => $uid,
             'message_id'    => $messageId,
             'from_addr'     => $fromDisplay !== '' ? $fromDisplay : null,
-            'to_addr'       => $to,
-            'cc_addr'       => $cc,
+            'to_addr'       => $to !== '' ? $to : null,
+            'cc_addr'       => $cc !== '' ? $cc : null,
             'subject'       => $subject !== '' ? $subject : null,
             'from_email'    => $fromEmail,
             'from_name'     => $fromName,
@@ -247,55 +270,6 @@ final class ImapMailFetchService
             'text_body'     => $plain !== '' ? $plain : null,
             'html_body'     => $html !== '' ? $html : null,
         ];
-    }
-
-    /**
-     * @param array{plain: string, html: string} $acc
-     */
-    private function collectMimeParts($imap, int $uid, \stdClass $st, string $partPrefix, array &$acc): void
-    {
-        $type    = (int)($st->type ?? 0);
-        $subtype = strtolower((string)($st->subtype ?? ''));
-
-        if ($type === 0 && ($subtype === 'plain' || $subtype === 'html')) {
-            $raw = imap_fetchbody($imap, $uid, $partPrefix, FT_UID);
-            if (!is_string($raw) || $raw === '') {
-                return;
-            }
-            $enc   = (int)($st->encoding ?? 0);
-            $body  = $this->decodePart($raw, $enc);
-            $body  = $this->capBody($body);
-            if ($subtype === 'plain') {
-                $acc['plain'] .= $body;
-            } else {
-                $acc['html'] .= $body;
-            }
-
-            return;
-        }
-
-        if ($type === 1 && isset($st->parts) && is_array($st->parts)) {
-            foreach ($st->parts as $i => $sub) {
-                if (!$sub instanceof \stdClass) {
-                    continue;
-                }
-                $next = $partPrefix === '' ? (string)($i + 1) : $partPrefix . '.' . ($i + 1);
-                $this->collectMimeParts($imap, $uid, $sub, $next, $acc);
-            }
-        }
-    }
-
-    private function decodePart(string $body, int $encoding): string
-    {
-        return match ($encoding) {
-            ENCQUOTEDPRINTABLE => quoted_printable_decode(str_replace(["\r\n", "\r"], "\n", $body)),
-            ENCBASE64 => (static function (string $b): string {
-                $d = base64_decode($b, true);
-
-                return $d === false ? $b : $d;
-            })($body),
-            default => $body,
-        };
     }
 
     private function capBody(string $body): string
@@ -318,62 +292,6 @@ final class ImapMailFetchService
         }
 
         return (new DateTimeImmutable('@' . $ts))->setTimezone(new DateTimeZone('UTC'));
-    }
-
-    /**
-     * @return array{0: ?string, 1: ?string} [display name, email]
-     */
-    private function parseFrom(string $from): array
-    {
-        $from = trim($from);
-        if ($from === '') {
-            return [null, null];
-        }
-        if (function_exists('imap_rfc822_parse_adrlist')) {
-            $list = @imap_rfc822_parse_adrlist($from, 'localhost');
-            if (is_array($list) && $list !== []) {
-                $a = $list[0];
-                $mailbox = isset($a->mailbox) ? (string)$a->mailbox : '';
-                $host    = isset($a->host) ? (string)$a->host : '';
-                $email   = $mailbox !== '' && $host !== '' ? $mailbox . '@' . $host : null;
-                $personal = isset($a->personal) ? $this->decodeMimeHeader((string)$a->personal) : null;
-
-                return [$personal !== '' ? $personal : null, $email];
-            }
-        }
-        if (preg_match('/<([^>]+@[^>]+)>/', $from, $m)) {
-            return [null, strtolower(trim($m[1]))];
-        }
-        if (preg_match('/^\s*(\S+@\S+)\s*$/', $from, $m)) {
-            return [null, strtolower(trim($m[1]))];
-        }
-
-        return [null, null];
-    }
-
-    private function decodeMimeHeader(string $header): string
-    {
-        if (function_exists('imap_mime_header_decode')) {
-            $decoded = '';
-            foreach (imap_mime_header_decode($header) as $part) {
-                $t = $part->text;
-                if (isset($part->charset) && strtoupper((string)$part->charset) !== 'DEFAULT') {
-                    $cs = (string)$part->charset;
-                    if (function_exists('iconv')) {
-                        $c = @iconv($cs, 'UTF-8//IGNORE', $t);
-                        if ($c !== false) {
-                            $t = $c;
-                        }
-                    }
-                }
-                $decoded .= $t;
-            }
-            if ($decoded !== '') {
-                return $decoded;
-            }
-        }
-
-        return $header;
     }
 
     private function truncate(string $s, int $max): string

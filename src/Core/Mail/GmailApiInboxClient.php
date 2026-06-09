@@ -76,7 +76,7 @@ final class GmailApiInboxClient
                 usleep(self::MESSAGE_FETCH_DELAY_US);
             }
             try {
-                $msg = $gmail->users_messages->get('me', $id, ['format' => 'full']);
+                $msg = $gmail->users_messages->get('me', $id, ['format' => 'raw']);
                 $rows[] = GmailMessageParser::toIngestRow($msg);
             } catch (GoogleServiceException $e) {
                 if ($this->isRateLimitError($e)) {
