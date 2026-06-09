@@ -246,11 +246,37 @@ final class ScraperContentExtractor
         if ($raw === '') {
             return null;
         }
+
+        // 1. Direct match of clean German date (e.g., 15.03.2024)
         if (preg_match('/^\d{1,2}\.\d{1,2}\.\d{2,4}$/u', $raw)) {
             return self::strtotimeToDbUtc(str_replace('.', '-', $raw));
         }
 
-        return self::strtotimeToDbUtc($raw);
+        // 2. Direct strtotime parse
+        $parsed = self::strtotimeToDbUtc($raw);
+        if ($parsed !== null) {
+            return $parsed;
+        }
+
+        // 3. Search for German date pattern inside noisy text (e.g. "Likes: 1  17.04.2026")
+        if (preg_match('/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/u', $raw, $m)) {
+            $cand = $m[1] . '-' . $m[2] . '-' . $m[3];
+            $parsed = self::strtotimeToDbUtc($cand);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        // 4. Search for ISO date pattern inside noisy text (e.g. "Published on 2026-04-17")
+        if (preg_match('/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/u', $raw, $m)) {
+            $cand = $m[1] . '-' . $m[2] . '-' . $m[3];
+            $parsed = self::strtotimeToDbUtc($cand);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        return null;
     }
 
     private static function tryGermanDateStrings(string $html): ?string

@@ -130,4 +130,27 @@ final class ScraperContentExtractorTest extends TestCase
         $out = ScraperContentExtractor::extractReadableContent($htmlFallback);
         self::assertSame('Fallback Title Tag', $out['title']);
     }
+
+    public function testExtractDateFromNoisyText(): void
+    {
+        // German date embedded in noisy string
+        $htmlGerman = <<<'HTML'
+        <!DOCTYPE html>
+        <html><body>
+            <div class="date-container">17 likes &nbsp;&nbsp;&nbsp; 17.04.2026 &nbsp;&nbsp;&nbsp; News</div>
+        </body></html>
+        HTML;
+        $date = ScraperContentExtractor::extractPublishedDate($htmlGerman, '.date-container');
+        self::assertSame('2026-04-17 00:00:00', $date);
+
+        // ISO date embedded in noisy string
+        $htmlIso = <<<'HTML'
+        <!DOCTYPE html>
+        <html><body>
+            <div class="date-container">Published at 2026-04-17 12:34:56 UTC by admin</div>
+        </body></html>
+        HTML;
+        $date = ScraperContentExtractor::extractPublishedDate($htmlIso, '.date-container');
+        self::assertSame('2026-04-17 00:00:00', $date);
+    }
 }
