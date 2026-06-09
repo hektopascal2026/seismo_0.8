@@ -87,6 +87,11 @@ final class EmailDigestSplitterService
 
         $storyElements = $this->innermostStoryNodes($storyNodes);
 
+        $storyHashes = [];
+        foreach ($storyElements as $el) {
+            $storyHashes[spl_object_hash($el)] = true;
+        }
+
         $titleSelector = trim((string)($rules['title_selector'] ?? ''));
         $linkSelector = trim((string)($rules['link_selector'] ?? ''));
         $bodySelector = trim((string)($rules['body_selector'] ?? ''));
@@ -106,25 +111,61 @@ final class EmailDigestSplitterService
                 continue;
             }
 
-            $subCrawler = new Crawler($node);
+            // Sibling traversal if the matched node is a flat sibling element
+            $collectedNodes = [$node];
+            $curr = $node->nextSibling;
+            while ($curr !== null) {
+                if ($curr instanceof DOMElement) {
+                    if (isset($storyHashes[spl_object_hash($curr)])) {
+                        break;
+                    }
+                    $hasMatchedDescendant = false;
+                    foreach ($storyElements as $other) {
+                        if ($this->isDescendantOf($other, $curr)) {
+                            $hasMatchedDescendant = true;
+                            break;
+                        }
+                    }
+                    if ($hasMatchedDescendant) {
+                        break;
+                    }
+                }
+                $collectedNodes[] = $curr;
+                $curr = $curr->nextSibling;
+            }
+
+            $subCrawler = new Crawler($collectedNodes);
 
             $title = $this->extractBestTitleCrawler($subCrawler, $titleSelector);
             $link = $this->extractBestLinkCrawler($subCrawler, $linkSelector);
 
             // Extract Body text & HTML
-            $storyHtml = HtmlParser::saveHTML($node);
+            $storyHtml = '';
+            foreach ($collectedNodes as $n) {
+                $storyHtml .= HtmlParser::saveHTML($n);
+            }
+
             $storyText = '';
             if ($bodySelector !== '') {
                 try {
                     $bodyNodes = $subCrawler->filter($bodySelector);
                     if ($bodyNodes->count() > 0) {
                         $storyText = $this->longestNodeTextCrawler($bodyNodes, $title);
+                    } else {
+                        // Fallback: concatenate text content of all collected nodes
+                        foreach ($collectedNodes as $n) {
+                            $storyText .= $n->textContent . ' ';
+                        }
                     }
                 } catch (\Throwable $e) {
-                    $storyText = trim($node->textContent);
+                    foreach ($collectedNodes as $n) {
+                        $storyText .= $n->textContent . ' ';
+                    }
                 }
             } else {
-                $storyText = trim($node->textContent);
+                foreach ($collectedNodes as $n) {
+                    $storyText .= $n->textContent . ' ';
+                }
             }
 
             $storyText = EmailBodyDisplay::collapseForStorage($storyText);
@@ -157,6 +198,7 @@ final class EmailDigestSplitterService
             $rules,
         );
     }
+
 
     /**
      * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
@@ -524,6 +566,16 @@ final class EmailDigestSplitterService
             try {
                 $titleNodes = $subCrawler->filter($titleSelector);
                 if ($titleNodes->count() > 0) {
+                    // First check if there is any heading tag among the matched nodes, and prioritize it
+                    foreach ($titleNodes as $candidate) {
+                        if ($candidate instanceof DOMElement && in_array(strtolower($candidate->tagName), ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'], true)) {
+                            $text = trim((string)$candidate->textContent);
+                            if ($text !== '' && !$this->isCtaLinkText($text)) {
+                                return $text;
+                            }
+                        }
+                    }
+
                     $best = '';
                     foreach ($titleNodes as $candidate) {
                         $text = trim((string)$candidate->textContent);
