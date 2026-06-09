@@ -37,7 +37,7 @@ final class GmailMessageParser
         }
 
         $parser = new MailMimeParser();
-        $mimeMessage = $parser->parse($rawMime);
+        $mimeMessage = $parser->parse($rawMime, true);
 
         $subject = $mimeMessage->getHeaderValue('Subject') ?? '';
         $subject = self::truncate($subject, 500);

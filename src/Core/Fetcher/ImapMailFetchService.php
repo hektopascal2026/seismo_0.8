@@ -199,7 +199,7 @@ final class ImapMailFetchService
         }
 
         $parser = new MailMimeParser();
-        $message = $parser->parse($rawMime);
+        $message = $parser->parse($rawMime, true);
 
         $subject = $message->getHeaderValue('Subject') ?? '';
         $subject = $this->truncate($subject, 500);
