@@ -186,7 +186,19 @@ final class SeismogrammRequestContext
     private function parseModuleSelection(mixed $raw): ResearcherSourceSelection
     {
         $modules = is_array($raw) ? $raw : [];
-        return ResearcherSourceSelection::fromArray($modules);
+        $picked = array_flip($modules);
+
+        return ResearcherSourceSelection::forModules(
+            isset($picked['feeds']),
+            isset($picked['media']),
+            isset($picked['scraper']),
+            isset($picked['email']),
+            isset($picked['newsletter']),
+            isset($picked['lex']),
+            isset($picked['leg']),
+            false, // lexCh
+            isset($picked['mem'])
+        );
     }
 
     private function parseLookbackDays(mixed $raw): int
