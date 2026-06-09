@@ -10,3 +10,5 @@ fetcher/mail/config.php
 fetcher/.DS_Store
 .DS_Store
 /logs/
+/scratch/
+
