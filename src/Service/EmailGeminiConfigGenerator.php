@@ -47,6 +47,7 @@ CRITICAL DESIGN PRINCIPLES:
 3. Avoid fragile ID selectors containing dynamic hashes or numeric counters (e.g., #body_12345).
 4. Rely on tag hierarchies only as a last resort, keeping them as short as possible.
 5. If the newsletter is not a digest (i.e. single main story or no repeated article cards), set is_digest to false.
+6. CRITICAL: Never use CSS pseudo-classes like :has(...) or :contains(...) in any selector (story_selector, title_selector, body_selector, link_selector). They are not supported by the CSS parser and will crash.
 TEXT;
 
     private const SPLIT_REFINE_SYSTEM_INSTRUCTION = <<<'TEXT'
@@ -54,12 +55,14 @@ You are an expert DOM Engineering Agent specializing in parsing email template l
 Refine digest split_rules to exclude noise blocks or merge/broaden selectors.
 If the feedback indicates that adjacent blocks must be MERGED/GLUED (glue_with_next: true), it means your current story_selector is too narrow and matches separate children (like individual td cells, tables, or paragraphs) of a single story container. You MUST broaden the story_selector to match a higher parent/ancestor container (e.g., table or tr instead of td, or outer div) so that the content of both blocks naturally resides inside a single matched node.
 Use exclude_selectors (.class, #id, tag) to skip noise blocks.
+CRITICAL: Never use pseudo-classes like :has(...) or :contains(...) in any selector. They are not supported by the CSS parser.
 TEXT;
 
     private const SPLIT_SIMPLE_SYSTEM_INSTRUCTION = <<<'TEXT'
 You are an expert DOM Engineering Agent specializing in parsing email template layouts.
 Detect digest HTML structure and return runnable split_rules only.
 Prefer simple class-based selectors (.csc-frame-default, table wrappers) over fragile inline-style attribute selectors.
+CRITICAL: Never use pseudo-classes like :has(...) or :contains(...) in any selector. They are not supported by the CSS parser.
 TEXT;
 
     private const CLEANUP_SYSTEM_INSTRUCTION = <<<'TEXT'
