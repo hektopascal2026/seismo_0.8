@@ -652,10 +652,11 @@ final class CoreRunner
         $n       = $this->emailIngest->upsertGmailBatch($outcome->rows);
 
         if ($outcome->fetchFailures > 0) {
+            $errNote = $outcome->firstFailureMessage ? ' (' . $outcome->firstFailureMessage . ')' : '';
             return new PluginRunResult(
                 'warn',
                 $n,
-                $outcome->fetchFailures . ' Gmail message(s) failed to fetch; history cursor not advanced — they will retry on the next run.'
+                $outcome->fetchFailures . ' Gmail message(s) failed to fetch; history cursor not advanced — they will retry on the next run.' . $errNote
             );
         }
 

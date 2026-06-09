@@ -16,6 +16,7 @@ final class GmailFetchOutcome
         public readonly array $rows,
         public readonly int $fetchFailures,
         public readonly bool $historyCursorAdvanced,
+        public readonly ?string $firstFailureMessage = null,
     ) {
     }
 }

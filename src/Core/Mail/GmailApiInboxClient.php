@@ -71,6 +71,7 @@ final class GmailApiInboxClient
 
         $rows          = [];
         $fetchFailures = 0;
+        $firstFailureMessage = null;
         foreach ($messageIds as $i => $id) {
             if ($i > 0) {
                 usleep(self::MESSAGE_FETCH_DELAY_US);
@@ -83,9 +84,15 @@ final class GmailApiInboxClient
                     throw $e;
                 }
                 ++$fetchFailures;
+                if ($firstFailureMessage === null) {
+                    $firstFailureMessage = $e->getMessage();
+                }
                 error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             } catch (\Throwable $e) {
                 ++$fetchFailures;
+                if ($firstFailureMessage === null) {
+                    $firstFailureMessage = $e->getMessage();
+                }
                 error_log('Seismo Gmail message ' . $id . ': ' . $e->getMessage());
             }
         }
@@ -107,7 +114,7 @@ final class GmailApiInboxClient
 
         $this->config->set(MailConfigKeys::GMAIL_LAST_SYNC_AT, gmdate('Y-m-d H:i:s'));
 
-        return new GmailFetchOutcome($rows, $fetchFailures, $historyAdvanced);
+        return new GmailFetchOutcome($rows, $fetchFailures, $historyAdvanced, $firstFailureMessage);
     }
 
     /**
