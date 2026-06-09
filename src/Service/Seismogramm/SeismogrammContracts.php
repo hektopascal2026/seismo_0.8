@@ -116,4 +116,15 @@ PROMPT;
   "required": ["used_entry_keys"]
 }
 JSON;
+
+    public const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
+USER PROMPT DETAILS:
+Today is {temporalContext}.
+
+You MUST write the final briefing output covering ONLY the following subset of entries (SELECTED_ENTRY_KEYS) in this exact order: [{selectedEntryKeys}].
+Do NOT write about any other entry IDs.
+
+Write the final briefing covering these selected items based on the data in ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
 }
