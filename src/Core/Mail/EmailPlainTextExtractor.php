@@ -21,18 +21,7 @@ final class EmailPlainTextExtractor
             return '';
         }
 
-        $prev = libxml_use_internal_errors(true);
-        $dom  = new DOMDocument();
-        $loaded = $dom->loadHTML(
-            '<?xml encoding="UTF-8"><div id="seismo-mail-root">' . $html . '</div>',
-            LIBXML_NONET
-        );
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
-        if (!$loaded) {
-            return '';
-        }
-
+        $dom = HtmlParser::parse('<div id="seismo-mail-root">' . $html . '</div>');
         $root = $dom->getElementById('seismo-mail-root');
         if (!$root instanceof DOMElement) {
             return '';
