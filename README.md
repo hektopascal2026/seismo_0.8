@@ -1,4 +1,4 @@
-# Seismo 0.8.6
+# Seismo 0.8.7
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.8.7** | **Centralized Backup Dashboard & SQL Streaming Export** — Adds the new Backup Settings tab, centralizing the existing JSON source configuration exports and imports, and introducing a new, memory-safe SQL streaming exporter for full database backups. |
 | **0.8.6** | **Auto-linkified timeline cards & paragraphing** — Auto-links plain text URLs in feed, substack, scraper, and email expanded cards (with shortened URL text for clean visuals) and splits double-newlines into paragraphs, keeping the raw database and Magnitu exports clean and unchanged. |
 | **0.8.5** | **Multi-newsletter routing + type detection** — several digest products from one sender (e.g. Politpuls and Stimme der Wirtschaft via `news@zhdk.ch`) get separate `email_subscriptions` rows keyed by **`subject_filter`** (migration 029: unique `(match_type, match_value, subject_filter, module_scope)`, **`emails.email_subscription_id`** persisted at ingest with backfill). Subscription-scoped timeline, reprocess, and AI Split/Cleanup samples respect subject filters. **Newsletter → Sources → New newsletter types:** when a sender already on Newsletter mails an unmatched subject pattern, Gmail ingest queues a review row (Mail keeps **New senders** for unknown domains). Confirming a pending type backfills stored mail to the new subscription. |
 | **0.8.4** | **Multi-story digest split + Researcher pipeline** — **Newsletter digests** can fan out into per-story child `emails` rows (`parent_email_id`, migration 028). **AI Split Configurator** on Newsletter → Sources analyzes samples, previews story cards, and saves `digest_split_config`; **Apply Split Config** reprocesses stored mail. **Export policy:** Highlights, Magnitu, Researcher, and recipe rescoring surface **child story rows only** — parent digest blobs are hidden when visible children exist; Mail/Newsletter admin still shows the parent card with nested `child_stories`. Splitter handles TYPO3/punkt4 table layouts, MJML newsletters, adjacent title/body row merge, and MSO duplicate-block dedupe. **AI Researcher:** **Deep selection** modes — Standard, Tournament, and **Blind spot / cross-module** (relational tournament + global title index + keys-only pass 1); **Pro selection** (`gemini-3.1-pro-preview` for pass 1); verification-heavy prompts auto-detected; hardened pass 1 against truncation (keys-only retry, failed-batch recovery); improved pass 2 batching and selection-failure reporting. |
@@ -103,9 +104,9 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
 | `?action=researcher` | AI Researcher — Gemini executive researcher, per-desk prompt library + default prompt (mothership + satellites; local Magnitu scores on satellites) |
 | `?action=feeds` / `media` / `newsletter` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Newsletter** = IMAP/Gmail digests (split from Mail); **Feeds** = general RSS/Substack/Parl. press |
-| `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics |
+| `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics, backups |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
-| `?action=settings&tab=general` | UI prefs, **source config export** (JSON bundle) |
+| `?action=settings&tab=backup` | **Database SQL backup**, **source config export/import** (JSON bundle) |
 | `magnitu_*` | Magnitu v3 API (Bearer `api_key` in desk `system_config`) |
 | `export_*` | Read-only export API (mothership; separate `export:api_key`) |
 
