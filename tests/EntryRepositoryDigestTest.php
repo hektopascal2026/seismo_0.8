@@ -371,7 +371,7 @@ namespace Seismo\Tests {
             $row = $repo->findById($id);
             self::assertNotNull($row);
             self::assertSame('Pro', $row['subject_filter']);
-            self::assertSame('{"type": "regex", "delimiter": "---"}', $row['digest_split_config']);
+            self::assertNull($row['digest_split_config']);
 
             // 2. Update
             $repo->update($id, [
@@ -387,7 +387,7 @@ namespace Seismo\Tests {
             self::assertNotNull($rowUpdated);
             self::assertSame('NZZ Pro v2', $rowUpdated['display_name']);
             self::assertSame('Pro v2', $rowUpdated['subject_filter']);
-            self::assertSame('{"type": "html_css", "selector_story": ".story"}', $rowUpdated['digest_split_config']);
+            self::assertNull($rowUpdated['digest_split_config']);
         }
 
         public function testIndexTimelineNestsNewsletterChildStories(): void

@@ -6,7 +6,7 @@ namespace Seismo\Core\Mail;
 
 use DOMDocument;
 use DOMElement;
-use DOMXPath;
+use Symfony\Component\DomCrawler\Crawler;
 
 final class EmailDigestSplitterService
 {
@@ -57,10 +57,6 @@ final class EmailDigestSplitterService
         return $this->applyManualGlueRules($stories, $splitRules);
     }
 
-    /**
-     * @param array<string, mixed> $rules
-     * @return list<array{title: string, html_body: string, text_body: string, link: ?string}>
-     */
     private function splitByHtmlSelector(string $htmlBody, array $rules): array
     {
         $storySelector = trim((string)($rules['story_selector'] ?? ''));
@@ -68,32 +64,21 @@ final class EmailDigestSplitterService
             return [];
         }
 
-        $prev = libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        // Force UTF-8 encoding declaration if not present
-        if (stripos($htmlBody, 'encoding=') === false) {
-            $htmlBody = '<?xml encoding="UTF-8">' . $htmlBody;
-        }
-        $loaded = $dom->loadHTML($htmlBody, LIBXML_NONET);
-        libxml_clear_errors();
-        libxml_use_internal_errors($prev);
+        $dom = HtmlParser::parse($htmlBody);
+        $crawler = new Crawler($dom);
 
-        if (!$loaded) {
-            return [];
-        }
-
-        $xpath = new DOMXPath($dom);
-        $xQuery = $this->cssToXPath($storySelector);
         try {
-            $nodes = @$xpath->query($xQuery);
+            $storyNodes = $crawler->filter($storySelector);
         } catch (\Throwable $e) {
-            $nodes = false;
-        }
-        if ($nodes === false || $nodes->length === 0) {
+            error_log('EmailDigestSplitterService: filter failed for "' . $storySelector . '": ' . $e->getMessage());
             return [];
         }
 
-        $storyNodes = $this->innermostStoryNodes($nodes);
+        if ($storyNodes->count() === 0) {
+            return [];
+        }
+
+        $storyElements = $this->innermostStoryNodes($storyNodes);
 
         $titleSelector = trim((string)($rules['title_selector'] ?? ''));
         $linkSelector = trim((string)($rules['link_selector'] ?? ''));
@@ -105,29 +90,31 @@ final class EmailDigestSplitterService
             $excludeSelectors = [];
         }
 
-        foreach ($storyNodes as $node) {
+        foreach ($storyElements as $node) {
             if ($this->nodeMatchesExcludeSelector($node, $excludeSelectors)) {
                 continue;
             }
 
-            if (!$this->nodeLooksLikeStory($xpath, $node)) {
+            if (!$this->nodeLooksLikeStoryCrawler($node)) {
                 continue;
             }
 
-            $title = $this->extractBestTitle($xpath, $node, $titleSelector);
-            $link = $this->extractBestLink($xpath, $node, $linkSelector);
+            $subCrawler = new Crawler($node);
+
+            $title = $this->extractBestTitleCrawler($subCrawler, $titleSelector);
+            $link = $this->extractBestLinkCrawler($subCrawler, $linkSelector);
 
             // Extract Body text & HTML
-            $storyHtml = $dom->saveHTML($node);
+            $storyHtml = HtmlParser::saveHTML($node);
             $storyText = '';
             if ($bodySelector !== '') {
                 try {
-                    $bodyNodes = @$xpath->query($this->cssToXPath($bodySelector), $node);
+                    $bodyNodes = $subCrawler->filter($bodySelector);
+                    if ($bodyNodes->count() > 0) {
+                        $storyText = $this->longestNodeTextCrawler($bodyNodes, $title);
+                    }
                 } catch (\Throwable $e) {
-                    $bodyNodes = false;
-                }
-                if ($bodyNodes !== false && $bodyNodes->length > 0) {
-                    $storyText = $this->longestNodeText($bodyNodes, $title);
+                    $storyText = trim($node->textContent);
                 }
             } else {
                 $storyText = trim($node->textContent);
@@ -227,122 +214,7 @@ final class EmailDigestSplitterService
 
 
 
-    private function extractBestTitle(DOMXPath $xpath, DOMElement $node, string $titleSelector): string
-    {
-        if ($titleSelector !== '') {
-            try {
-                $titleNodes = @$xpath->query($this->cssToXPath($titleSelector), $node);
-            } catch (\Throwable $e) {
-                $titleNodes = false;
-            }
 
-            if ($titleNodes !== false && $titleNodes->length > 0) {
-                $best = '';
-                foreach ($titleNodes as $candidate) {
-                    $text = trim((string)$candidate->textContent);
-                    if ($text === '' || $this->isCtaLinkText($text)) {
-                        continue;
-                    }
-
-                    if ($candidate instanceof DOMElement && strtolower($candidate->tagName) === 'a') {
-                        $style = strtolower($candidate->getAttribute('style'));
-                        if (
-                            str_contains($style, 'font-weight:bold')
-                            || str_contains($style, 'font-weight: bold')
-                        ) {
-                            return $text;
-                        }
-                    }
-
-                    if (mb_strlen($text) > mb_strlen($best)) {
-                        $best = $text;
-                    }
-                }
-                if ($best !== '') {
-                    return $best;
-                }
-            }
-        }
-
-        foreach (['h1', 'h2', 'h3', 'h4'] as $tag) {
-            $headings = $node->getElementsByTagName($tag);
-            if ($headings->length > 0) {
-                $text = trim((string)$headings->item(0)->textContent);
-                if ($text !== '' && !$this->isCtaLinkText($text)) {
-                    return $text;
-                }
-            }
-        }
-
-        return '';
-    }
-
-    private function extractBestLink(DOMXPath $xpath, DOMElement $node, string $linkSelector): ?string
-    {
-        $candidates = [];
-
-        if ($linkSelector !== '') {
-            try {
-                $linkNodes = @$xpath->query($this->cssToXPath($linkSelector), $node);
-            } catch (\Throwable $e) {
-                $linkNodes = false;
-            }
-            if ($linkNodes !== false) {
-                foreach ($linkNodes as $item) {
-                    if ($item instanceof DOMElement) {
-                        $candidates[] = $item;
-                    }
-                }
-            }
-        } else {
-            foreach ($node->getElementsByTagName('a') as $item) {
-                if ($item instanceof DOMElement) {
-                    $candidates[] = $item;
-                }
-            }
-        }
-
-        $bestHref = null;
-        $bestScore = -1;
-        foreach ($candidates as $anchor) {
-            $href = trim($anchor->getAttribute('href'));
-            if ($href === '') {
-                continue;
-            }
-
-            $text = trim($anchor->textContent);
-            if ($this->isCtaLinkText($text)) {
-                continue;
-            }
-
-            $score = mb_strlen($text);
-            $style = strtolower($anchor->getAttribute('style'));
-            if (
-                str_contains($style, 'font-weight:bold')
-                || str_contains($style, 'font-weight: bold')
-            ) {
-                $score += 100;
-            }
-
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestHref = $href;
-            }
-        }
-
-        if ($bestHref !== null) {
-            return $bestHref;
-        }
-
-        foreach ($candidates as $anchor) {
-            $href = trim($anchor->getAttribute('href'));
-            if ($href !== '') {
-                return $href;
-            }
-        }
-
-        return null;
-    }
 
     /**
      * @param list<array{title: string, html_body: string, text_body: string, link: ?string}> $stories
@@ -508,9 +380,10 @@ final class EmailDigestSplitterService
     }
 
     /**
+     * @param iterable $nodes
      * @return list<DOMElement>
      */
-    private function innermostStoryNodes(\DOMNodeList $nodes): array
+    private function innermostStoryNodes(iterable $nodes): array
     {
         /** @var list<DOMElement> $elements */
         $elements = [];
@@ -550,74 +423,7 @@ final class EmailDigestSplitterService
         return false;
     }
 
-    private function longestNodeText(\DOMNodeList $nodes, string $title): string
-    {
-        $elements = [];
-        foreach ($nodes as $node) {
-            if ($node instanceof DOMElement) {
-                $elements[] = $node;
-            }
-        }
 
-        // Keep only elements that do not contain any other matched elements (innermost matching nodes)
-        $filtered = [];
-        foreach ($elements as $node) {
-            $hasMatchingDescendant = false;
-            foreach ($elements as $other) {
-                if ($other !== $node && $this->isDescendantOf($other, $node)) {
-                    $hasMatchingDescendant = true;
-                    break;
-                }
-            }
-            if (!$hasMatchingDescendant) {
-                $filtered[] = $node;
-            }
-        }
-
-        $parts = [];
-        foreach ($filtered as $bodyNode) {
-            $text = trim((string)$bodyNode->textContent);
-            if ($text === '' || $text === $title) {
-                continue;
-            }
-            $parts[] = $text;
-        }
-
-        if ($parts !== []) {
-            return implode("\n\n", $parts);
-        }
-
-        $first = $nodes->item(0);
-
-        return $first !== null ? trim((string)$first->textContent) : '';
-    }
-
-    private function nodeLooksLikeStory(DOMXPath $xpath, DOMElement $node): bool
-    {
-        foreach (['h1', 'h2', 'h3', 'h4'] as $headingTag) {
-            $headings = @$xpath->query('.//' . $headingTag, $node);
-            if ($headings !== false && $headings->length > 0) {
-                return true;
-            }
-        }
-
-        $anchors = @$xpath->query('.//a', $node);
-        if ($anchors !== false) {
-            foreach ($anchors as $anchor) {
-                if (!$anchor instanceof DOMElement) {
-                    continue;
-                }
-                $text = trim($anchor->textContent);
-                if ($text === '' || strcasecmp($text, 'Mehr') === 0 || mb_strlen($text) < 8) {
-                    continue;
-                }
-
-                return true;
-            }
-        }
-
-        return mb_strlen(trim($node->textContent)) >= 40;
-    }
 
     /**
      * @param list<string> $excludeSelectors
@@ -677,21 +483,190 @@ final class EmailDigestSplitterService
         return str_contains($classAttr, ' ' . $class . ' ');
     }
 
-    /**
-     * CSS selector to XPath. Uses Symfony's CssSelectorConverter.
-     */
-    private function cssToXPath(string $css): string
+    private function nodeLooksLikeStoryCrawler(\DOMElement $node): bool
     {
-        $css = trim($css);
-        if ($css === '') {
-            return '';
+        $subCrawler = new Crawler($node);
+        foreach (['h1', 'h2', 'h3', 'h4'] as $headingTag) {
+            try {
+                if ($subCrawler->filter($headingTag)->count() > 0) {
+                    return true;
+                }
+            } catch (\Throwable $e) {}
         }
 
         try {
-            $converter = new \Symfony\Component\CssSelector\CssSelectorConverter();
-            return $converter->toXPath($css);
+            $anchors = $subCrawler->filter('a');
+            foreach ($anchors as $anchor) {
+                if (!$anchor instanceof DOMElement) {
+                    continue;
+                }
+                $text = trim($anchor->textContent);
+                if ($text === '' || strcasecmp($text, 'Mehr') === 0 || mb_strlen($text) < 8) {
+                    continue;
+                }
+                return true;
+            }
+        } catch (\Throwable $e) {}
+
+        return mb_strlen(trim($node->textContent)) >= 40;
+    }
+
+    private function extractBestTitleCrawler(Crawler $subCrawler, string $titleSelector): string
+    {
+        if ($titleSelector !== '') {
+            try {
+                $titleNodes = $subCrawler->filter($titleSelector);
+                if ($titleNodes->count() > 0) {
+                    $best = '';
+                    foreach ($titleNodes as $candidate) {
+                        $text = trim((string)$candidate->textContent);
+                        if ($text === '' || $this->isCtaLinkText($text)) {
+                            continue;
+                        }
+
+                        if ($candidate instanceof DOMElement && strtolower($candidate->tagName) === 'a') {
+                            $style = strtolower($candidate->getAttribute('style'));
+                            if (
+                                str_contains($style, 'font-weight:bold')
+                                || str_contains($style, 'font-weight: bold')
+                            ) {
+                                return $text;
+                            }
+                        }
+
+                        if (mb_strlen($text) > mb_strlen($best)) {
+                            $best = $text;
+                        }
+                    }
+                    if ($best !== '') {
+                        return $best;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        foreach (['h1', 'h2', 'h3', 'h4'] as $tag) {
+            try {
+                $headings = $subCrawler->filter($tag);
+                if ($headings->count() > 0) {
+                    $text = trim((string)$headings->first()->text());
+                    if ($text !== '' && !$this->isCtaLinkText($text)) {
+                        return $text;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        return '';
+    }
+
+    private function extractBestLinkCrawler(Crawler $subCrawler, string $linkSelector): ?string
+    {
+        $candidates = [];
+
+        if ($linkSelector !== '') {
+            try {
+                $linkNodes = $subCrawler->filter($linkSelector);
+                foreach ($linkNodes as $item) {
+                    if ($item instanceof DOMElement) {
+                        $candidates[] = $item;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        } else {
+            try {
+                $linkNodes = $subCrawler->filter('a');
+                foreach ($linkNodes as $item) {
+                    if ($item instanceof DOMElement) {
+                        $candidates[] = $item;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        $bestHref = null;
+        $bestScore = -1;
+        foreach ($candidates as $anchor) {
+            $href = trim($anchor->getAttribute('href'));
+            if ($href === '') {
+                continue;
+            }
+
+            $text = trim($anchor->textContent);
+            if ($this->isCtaLinkText($text)) {
+                continue;
+            }
+
+            $score = mb_strlen($text);
+            $style = strtolower($anchor->getAttribute('style'));
+            if (
+                str_contains($style, 'font-weight:bold')
+                || str_contains($style, 'font-weight: bold')
+            ) {
+                $score += 100;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestHref = $href;
+            }
+        }
+
+        if ($bestHref !== null) {
+            return $bestHref;
+        }
+
+        foreach ($candidates as $anchor) {
+            $href = trim($anchor->getAttribute('href'));
+            if ($href !== '') {
+                return $href;
+            }
+        }
+
+        return null;
+    }
+
+    private function longestNodeTextCrawler(Crawler $nodes, string $title): string
+    {
+        $elements = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $elements[] = $node;
+            }
+        }
+
+        // Keep only elements that do not contain any other matched elements (innermost matching nodes)
+        $filtered = [];
+        foreach ($elements as $node) {
+            $hasMatchingDescendant = false;
+            foreach ($elements as $other) {
+                if ($other !== $node && $this->isDescendantOf($other, $node)) {
+                    $hasMatchingDescendant = true;
+                    break;
+                }
+            }
+            if (!$hasMatchingDescendant) {
+                $filtered[] = $node;
+            }
+        }
+
+        $parts = [];
+        foreach ($filtered as $bodyNode) {
+            $text = trim((string)$bodyNode->textContent);
+            if ($text === '' || $text === $title) {
+                continue;
+            }
+            $parts[] = $text;
+        }
+
+        if ($parts !== []) {
+            return implode("\n\n", $parts);
+        }
+
+        try {
+            $first = $nodes->first();
+            return $first->count() > 0 ? trim((string)$first->text()) : '';
         } catch (\Throwable $e) {
-            error_log('EmailDigestSplitterService: Invalid CSS selector "' . $css . '": ' . $e->getMessage());
             return '';
         }
     }

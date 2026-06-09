@@ -19,10 +19,14 @@ namespace Google\Service\DLP;
 
 class GooglePrivacyDlpV2ContentItem extends \Google\Model
 {
+  protected $batchContentItemType = GooglePrivacyDlpV2BatchContentItem::class;
+  protected $batchContentItemDataType = '';
   protected $byteItemType = GooglePrivacyDlpV2ByteContentItem::class;
   protected $byteItemDataType = '';
   protected $contentMetadataType = GooglePrivacyDlpV2ContentMetadata::class;
   protected $contentMetadataDataType = '';
+  protected $conversationType = GooglePrivacyDlpV2Conversation::class;
+  protected $conversationDataType = '';
   protected $tableType = GooglePrivacyDlpV2Table::class;
   protected $tableDataType = '';
   /**
@@ -32,6 +36,22 @@ class GooglePrivacyDlpV2ContentItem extends \Google\Model
    */
   public $value;
 
+  /**
+   * Represents a batch of items to inspect.
+   *
+   * @param GooglePrivacyDlpV2BatchContentItem $batchContentItem
+   */
+  public function setBatchContentItem(GooglePrivacyDlpV2BatchContentItem $batchContentItem)
+  {
+    $this->batchContentItem = $batchContentItem;
+  }
+  /**
+   * @return GooglePrivacyDlpV2BatchContentItem
+   */
+  public function getBatchContentItem()
+  {
+    return $this->batchContentItem;
+  }
   /**
    * Content data to inspect or redact. Replaces `type` and `data`.
    *
@@ -63,6 +83,23 @@ class GooglePrivacyDlpV2ContentItem extends \Google\Model
   public function getContentMetadata()
   {
     return $this->contentMetadata;
+  }
+  /**
+   * Represents a conversation (either complete or a slice). It is assumed that
+   * all included messages are contiguous and ordered in chronological order.
+   *
+   * @param GooglePrivacyDlpV2Conversation $conversation
+   */
+  public function setConversation(GooglePrivacyDlpV2Conversation $conversation)
+  {
+    $this->conversation = $conversation;
+  }
+  /**
+   * @return GooglePrivacyDlpV2Conversation
+   */
+  public function getConversation()
+  {
+    return $this->conversation;
   }
   /**
    * Structured content for inspection. See https://cloud.google.com/sensitive-

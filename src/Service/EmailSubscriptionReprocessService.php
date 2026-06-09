@@ -98,8 +98,9 @@ final class EmailSubscriptionReprocessService
                     isset($row['metadata']) && $row['metadata'] !== null ? (string)$row['metadata'] : null
                 );
 
-                if (!empty($sub['digest_split_config'])) {
-                    $cfg = DigestSplitConfigNormalizer::resolveForIngest((string)$sub['digest_split_config']);
+                $rule = $ingest->fetchTemplateRuleForSubscription($sub);
+                if ($rule !== null) {
+                    $cfg = DigestSplitConfigNormalizer::resolveForIngest($rule);
                     if ($cfg !== null) {
                         $ingest->splitAndIngestStories((int)$row['id'], $row, $cfg);
                     }

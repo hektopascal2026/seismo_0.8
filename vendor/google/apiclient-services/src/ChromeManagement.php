@@ -59,6 +59,7 @@ class ChromeManagement extends \Google\Service
   public $customers_certificateProvisioningProcesses;
   public $customers_certificateProvisioningProcesses_operations;
   public $customers_connectorConfigs;
+  public $customers_enterprise_securityInsights;
   public $customers_profiles;
   public $customers_profiles_commands;
   public $customers_reports;
@@ -391,6 +392,46 @@ class ChromeManagement extends \Google\Service
           ]
         ]
     );
+    $this->customers_enterprise_securityInsights = new ChromeManagement\Resource\CustomersEnterpriseSecurityInsights(
+        $this,
+        $this->serviceName,
+        'securityInsights',
+        [
+          'methods' => [
+            'checkEnablementStatus' => [
+              'path' => 'v1/{+customer}/enterprise/securityInsights:checkEnablementStatus',
+              'httpMethod' => 'GET',
+              'parameters' => [
+                'customer' => [
+                  'location' => 'path',
+                  'type' => 'string',
+                  'required' => true,
+                ],
+              ],
+            ],'disable' => [
+              'path' => 'v1/{+customer}/enterprise/securityInsights:disable',
+              'httpMethod' => 'POST',
+              'parameters' => [
+                'customer' => [
+                  'location' => 'path',
+                  'type' => 'string',
+                  'required' => true,
+                ],
+              ],
+            ],'enable' => [
+              'path' => 'v1/{+customer}/enterprise/securityInsights:enable',
+              'httpMethod' => 'POST',
+              'parameters' => [
+                'customer' => [
+                  'location' => 'path',
+                  'type' => 'string',
+                  'required' => true,
+                ],
+              ],
+            ],
+          ]
+        ]
+    );
     $this->customers_profiles = new ChromeManagement\Resource\CustomersProfiles(
         $this,
         $this->serviceName,
@@ -613,6 +654,32 @@ class ChromeManagement extends \Google\Service
                   'type' => 'string',
                 ],
                 'readMask' => [
+                  'location' => 'query',
+                  'type' => 'string',
+                ],
+              ],
+            ],'countChromeProfileVersions' => [
+              'path' => 'v1/{+customer}/reports:countChromeProfileVersions',
+              'httpMethod' => 'GET',
+              'parameters' => [
+                'customer' => [
+                  'location' => 'path',
+                  'type' => 'string',
+                  'required' => true,
+                ],
+                'filter' => [
+                  'location' => 'query',
+                  'type' => 'string',
+                ],
+                'orgUnitId' => [
+                  'location' => 'query',
+                  'type' => 'string',
+                ],
+                'pageSize' => [
+                  'location' => 'query',
+                  'type' => 'integer',
+                ],
+                'pageToken' => [
                   'location' => 'query',
                   'type' => 'string',
                 ],

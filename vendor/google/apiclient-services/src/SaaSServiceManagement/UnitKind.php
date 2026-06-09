@@ -19,6 +19,12 @@ namespace Google\Service\SaaSServiceManagement;
 
 class UnitKind extends \Google\Collection
 {
+  public const BOUNDARY_TYPE_BOUNDARY_TYPE_UNSPECIFIED = 'BOUNDARY_TYPE_UNSPECIFIED';
+  /**
+   * Tenant project boundary.
+   */
+  public const BOUNDARY_TYPE_BOUNDARY_TYPE_TENANT_PROJECT = 'BOUNDARY_TYPE_TENANT_PROJECT';
+  public const BOUNDARY_TYPE_BOUNDARY_TYPE_MANAGED_PROJECT = 'BOUNDARY_TYPE_MANAGED_PROJECT';
   protected $collection_key = 'outputVariableMappings';
   /**
    * Optional. Annotations is an unstructured key-value map stored with a
@@ -29,6 +35,13 @@ class UnitKind extends \Google\Collection
    * @var string[]
    */
   public $annotations;
+  /**
+   * Optional. Output only. BoundaryType describes the type of boundary the Unit
+   * Kind represents.
+   *
+   * @var string
+   */
+  public $boundaryType;
   /**
    * Output only. The timestamp when the resource was created.
    *
@@ -125,6 +138,26 @@ class UnitKind extends \Google\Collection
   public function getAnnotations()
   {
     return $this->annotations;
+  }
+  /**
+   * Optional. Output only. BoundaryType describes the type of boundary the Unit
+   * Kind represents.
+   *
+   * Accepted values: BOUNDARY_TYPE_UNSPECIFIED, BOUNDARY_TYPE_TENANT_PROJECT,
+   * BOUNDARY_TYPE_MANAGED_PROJECT
+   *
+   * @param self::BOUNDARY_TYPE_* $boundaryType
+   */
+  public function setBoundaryType($boundaryType)
+  {
+    $this->boundaryType = $boundaryType;
+  }
+  /**
+   * @return self::BOUNDARY_TYPE_*
+   */
+  public function getBoundaryType()
+  {
+    return $this->boundaryType;
   }
   /**
    * Output only. The timestamp when the resource was created.

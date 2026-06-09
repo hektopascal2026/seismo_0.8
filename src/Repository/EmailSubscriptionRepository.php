@@ -765,7 +765,7 @@ final class EmailSubscriptionRepository
         $bodyProcessor = self::normalizeBodyProcessor($data['body_processor'] ?? null);
         $cleanupConfig = !empty($data['cleanup_config']) ? trim((string)$data['cleanup_config']) : null;
         $subjectFilter = self::normalizeSubjectFilter($data['subject_filter'] ?? null);
-        $digestSplitConfig = !empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null;
+        $digestSplitConfig = null;
 
         $t   = entryTable('email_subscriptions');
         $moduleScope = self::normalizeModuleScope($data['module_scope'] ?? self::MODULE_MAIL);
@@ -858,9 +858,7 @@ final class EmailSubscriptionRepository
         $subjectFilter = array_key_exists('subject_filter', $data)
             ? self::normalizeSubjectFilter($data['subject_filter'])
             : self::normalizeSubjectFilter($existing['subject_filter'] ?? null);
-        $digestSplitConfig = array_key_exists('digest_split_config', $data)
-            ? (!empty($data['digest_split_config']) ? trim((string)$data['digest_split_config']) : null)
-            : ($existing['digest_split_config'] ?? null);
+        $digestSplitConfig = null;
 
         $t   = entryTable('email_subscriptions');
         $moduleScope = array_key_exists('module_scope', $data)

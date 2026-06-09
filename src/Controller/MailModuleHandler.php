@@ -85,12 +85,19 @@ final class MailModuleHandler
                 $categorySuggestions = $subRepo->listUsedCategories();
             }
             if ($view === 'sources') {
-                foreach ($subscriptions as $row) {
+                $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+                foreach ($subscriptions as $idx => $row) {
                     $sid = (int)$row['id'];
                     $subscriptionLatest[$sid] = $entryRepo->peekLatestEmailForSubscription(
                         $sid,
                         $this->module->scope,
                     );
+                    $rule = $ingestRepo->fetchTemplateRuleForSubscription($row);
+                    if ($rule !== null) {
+                        $subscriptions[$idx]['digest_split_config'] = json_encode($rule, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    } else {
+                        $subscriptions[$idx]['digest_split_config'] = null;
+                    }
                 }
                 foreach ($pendingSenders as $row) {
                     $sid = (int)$row['id'];
@@ -111,6 +118,12 @@ final class MailModuleHandler
                         $reviewingPending = true;
                     }
                     $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+                    $rule = $ingestRepo->fetchTemplateRuleForSubscription($editRow);
+                    if ($rule !== null) {
+                        $editRow['digest_split_config'] = json_encode($rule, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    } else {
+                        $editRow['digest_split_config'] = '';
+                    }
                     $editRowEmails = $ingestRepo->fetchRowsForSubscription($editRow, 5);
                     require_once SEISMO_ROOT . '/views/helpers.php';
                     foreach ($editRowEmails as $email) {
@@ -239,27 +252,40 @@ final class MailModuleHandler
                 'unsubscribe_one_click'  => ((string)($_POST['unsubscribe_one_click'] ?? '0')) === '1',
                 'module_scope'           => $this->module->scope,
             ];
+            $rawDigestConfig = (string)($_POST['digest_split_config'] ?? '');
+            $digestForSave = $this->mergeDigestSplitConfigNoiseFeedback(
+                $rawDigestConfig,
+                (string)($_POST['digest_split_feedback'] ?? '')
+            );
+            $canonicalDigest = \Seismo\Core\Mail\DigestSplitConfigNormalizer::canonicalJson($digestForSave);
+            $resolvedRules = null;
+            if ($canonicalDigest !== null) {
+                $decoded = json_decode($canonicalDigest, true);
+                if (is_array($decoded) && !empty($decoded['is_digest'])) {
+                    $resolvedRules = $decoded['split_rules'] ?? null;
+                }
+            }
+
+            $pdo = getDbConnection();
+
             if ($id > 0) {
                 $existing = $repo->findById($id);
                 if ($existing === null || EmailSubscriptionRepository::rowModuleScope($existing) !== $this->module->scope) {
                     throw new \InvalidArgumentException('Subscription not found in this module.');
                 }
                 $wasPending = EmailSubscriptionRepository::isPendingRow($existing);
-                $oldDigest = trim((string)($existing['digest_split_config'] ?? ''));
-                $digestForSave = $this->mergeDigestSplitConfigNoiseFeedback(
-                    (string)$payload['digest_split_config'],
-                    (string)($_POST['digest_split_feedback'] ?? ''),
-                );
-                $payload['digest_split_config'] = $digestForSave;
-                $canonicalDigest = \Seismo\Core\Mail\DigestSplitConfigNormalizer::canonicalJson(
-                    $payload['digest_split_config']
-                );
-                if ($canonicalDigest !== null) {
-                    $payload['digest_split_config'] = $canonicalDigest;
-                } elseif (trim((string)$payload['digest_split_config']) === '') {
-                    $payload['digest_split_config'] = '';
-                }
+
+                $ingestRepo = new \Seismo\Repository\EmailIngestRepository($pdo);
+                $oldRule = $ingestRepo->fetchTemplateRuleForSubscription($existing);
+                $oldDigest = $oldRule !== null ? json_encode($oldRule) : '';
+
+                // Save relational rules
+                $this->saveRelationalSplitRules($pdo, $payload['match_value'], $payload['display_name'], $resolvedRules);
+
+                // Omit/nullify digest_split_config from payload to update subscription
+                $payload['digest_split_config'] = null;
                 $repo->update($id, $payload);
+
                 $_SESSION['success'] = $wasPending
                     ? $this->module->pendingConfirmSuccessMessage
                     : 'Subscription updated.';
@@ -269,15 +295,28 @@ final class MailModuleHandler
                         $_SESSION['success'] .= ' Linked ' . $backfilled . ' stored message(s) to this subscription.';
                     }
                 }
-                $newDigest = trim((string)($payload['digest_split_config'] ?? ''));
+
+                $newRule = $ingestRepo->fetchTemplateRuleForSubscription($payload);
+                $newDigest = $newRule !== null ? json_encode($newRule) : '';
+
                 if ($newDigest !== '' && $newDigest !== $oldDigest) {
-                    $reprocessed = (new EmailSubscriptionReprocessService(getDbConnection()))
+                    $reprocessed = (new EmailSubscriptionReprocessService($pdo))
                         ->reprocessSubscription($id);
                     $_SESSION['success'] .= ' Reprocessed ' . $reprocessed . ' stored message(s) with split config.';
                 }
             } else {
+                $payload['digest_split_config'] = null;
                 $newId = $repo->insert($payload);
                 $_SESSION['success'] = 'Subscription added (#' . $newId . ').';
+
+                // Save relational rules
+                $this->saveRelationalSplitRules($pdo, $payload['match_value'], $payload['display_name'], $resolvedRules);
+
+                if ($canonicalDigest !== null) {
+                    $reprocessed = (new EmailSubscriptionReprocessService($pdo))
+                        ->reprocessSubscription($newId);
+                    $_SESSION['success'] .= ' Reprocessed ' . $reprocessed . ' stored message(s) with split config.';
+                }
             }
         } catch (\Throwable $e) {
             error_log('Seismo ' . $this->module->saveAction . ': ' . $e->getMessage());
@@ -828,5 +867,90 @@ final class MailModuleHandler
         }
 
         $finish();
+    }
+
+    private function saveRelationalSplitRules(\PDO $pdo, string $matchValue, string $displayName, ?array $rules): void
+    {
+        $matchValue = trim($matchValue);
+        if ($matchValue === '') {
+            return;
+        }
+
+        // 1. Insert/update newsletter_sender
+        $senderStmt = $pdo->prepare('
+            INSERT INTO newsletter_sender (email_address, sender_name)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE sender_name = VALUES(sender_name)
+        ');
+        $senderStmt->execute([$matchValue, trim($displayName)]);
+
+        // Resolve sender ID
+        $senderIdStmt = $pdo->prepare('SELECT id FROM newsletter_sender WHERE email_address = ?');
+        $senderIdStmt->execute([$matchValue]);
+        $senderId = (int)$senderIdStmt->fetchColumn();
+        if ($senderId === 0) {
+            return;
+        }
+
+        // 2. Insert/update newsletter_template
+        $templateName = 'Default Template';
+        $tplCheckStmt = $pdo->prepare('
+            SELECT id FROM newsletter_template 
+            WHERE sender_id = ? AND template_name = ?
+        ');
+        $tplCheckStmt->execute([$senderId, $templateName]);
+        $templateId = $tplCheckStmt->fetchColumn();
+
+        if (!$templateId) {
+            $tplStmt = $pdo->prepare('
+                INSERT INTO newsletter_template (sender_id, template_name, active_from) 
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ');
+            $tplStmt->execute([$senderId, $templateName]);
+            $templateId = (int)$pdo->lastInsertId();
+        } else {
+            $templateId = (int)$templateId;
+        }
+
+        if ($templateId === 0) {
+            return;
+        }
+
+        if ($rules === null) {
+            // Delete the rule if it is cleared
+            $delRuleStmt = $pdo->prepare('DELETE FROM template_rule WHERE template_id = ?');
+            $delRuleStmt->execute([$templateId]);
+        } else {
+            // Write rule settings
+            $splitMethod = trim((string)($rules['split_method'] ?? 'html_selector'));
+            $storySelector = trim((string)($rules['story_selector'] ?? ''));
+            $titleSelector = !empty($rules['title_selector']) ? trim((string)$rules['title_selector']) : null;
+            $linkSelector = !empty($rules['link_selector']) ? trim((string)$rules['link_selector']) : null;
+            $bodySelector = !empty($rules['body_selector']) ? trim((string)$rules['body_selector']) : null;
+
+            $excludeSelectors = !empty($rules['exclude_selectors']) ? json_encode($rules['exclude_selectors'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+            $excludeTitles = !empty($rules['exclude_titles']) ? json_encode($rules['exclude_titles'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+            $glueRules = !empty($rules['glue_rules']) ? json_encode($rules['glue_rules'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+
+            $ruleStmt = $pdo->prepare('
+                INSERT INTO template_rule (
+                    template_id, split_method, story_selector, title_selector, link_selector, body_selector, 
+                    exclude_selectors, exclude_titles, glue_rules
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    split_method = VALUES(split_method),
+                    story_selector = VALUES(story_selector),
+                    title_selector = VALUES(title_selector),
+                    link_selector = VALUES(link_selector),
+                    body_selector = VALUES(body_selector),
+                    exclude_selectors = VALUES(exclude_selectors),
+                    exclude_titles = VALUES(exclude_titles),
+                    glue_rules = VALUES(glue_rules)
+            ');
+            $ruleStmt->execute([
+                $templateId, $splitMethod, $storySelector, $titleSelector, $linkSelector, $bodySelector,
+                $excludeSelectors, $excludeTitles, $glueRules
+            ]);
+        }
     }
 }

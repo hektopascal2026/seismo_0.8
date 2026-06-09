@@ -170,6 +170,22 @@ class ClusterUpdate extends \Google\Collection
   protected $desiredIdentityServiceConfigType = IdentityServiceConfig::class;
   protected $desiredIdentityServiceConfigDataType = '';
   /**
+   * The desired name of the image to use for this node. This is used to create
+   * clusters using a custom image. NOTE: Set the "desired_node_pool" field as
+   * well.
+   *
+   * @var string
+   */
+  public $desiredImage;
+  /**
+   * The project containing the desired image to use for this node. This is used
+   * to create clusters using a custom image. NOTE: Set the "desired_node_pool"
+   * field as well.
+   *
+   * @var string
+   */
+  public $desiredImageProject;
+  /**
    * The desired image type for the node pool. NOTE: Set the "desired_node_pool"
    * field as well.
    *
@@ -253,6 +269,8 @@ class ClusterUpdate extends \Google\Collection
   protected $desiredNetworkPerformanceConfigDataType = '';
   protected $desiredNetworkTierConfigType = NetworkTierConfig::class;
   protected $desiredNetworkTierConfigDataType = '';
+  protected $desiredNodeCreationConfigType = NodeCreationConfig::class;
+  protected $desiredNodeCreationConfigDataType = '';
   protected $desiredNodeKubeletConfigType = NodeKubeletConfig::class;
   protected $desiredNodeKubeletConfigDataType = '';
   protected $desiredNodePoolAutoConfigKubeletConfigType = NodeKubeletConfig::class;
@@ -852,6 +870,42 @@ class ClusterUpdate extends \Google\Collection
     return $this->desiredIdentityServiceConfig;
   }
   /**
+   * The desired name of the image to use for this node. This is used to create
+   * clusters using a custom image. NOTE: Set the "desired_node_pool" field as
+   * well.
+   *
+   * @param string $desiredImage
+   */
+  public function setDesiredImage($desiredImage)
+  {
+    $this->desiredImage = $desiredImage;
+  }
+  /**
+   * @return string
+   */
+  public function getDesiredImage()
+  {
+    return $this->desiredImage;
+  }
+  /**
+   * The project containing the desired image to use for this node. This is used
+   * to create clusters using a custom image. NOTE: Set the "desired_node_pool"
+   * field as well.
+   *
+   * @param string $desiredImageProject
+   */
+  public function setDesiredImageProject($desiredImageProject)
+  {
+    $this->desiredImageProject = $desiredImageProject;
+  }
+  /**
+   * @return string
+   */
+  public function getDesiredImageProject()
+  {
+    return $this->desiredImageProject;
+  }
+  /**
    * The desired image type for the node pool. NOTE: Set the "desired_node_pool"
    * field as well.
    *
@@ -1157,6 +1211,22 @@ class ClusterUpdate extends \Google\Collection
   public function getDesiredNetworkTierConfig()
   {
     return $this->desiredNetworkTierConfig;
+  }
+  /**
+   * Optional. The desired NodeCreationConfig for the cluster.
+   *
+   * @param NodeCreationConfig $desiredNodeCreationConfig
+   */
+  public function setDesiredNodeCreationConfig(NodeCreationConfig $desiredNodeCreationConfig)
+  {
+    $this->desiredNodeCreationConfig = $desiredNodeCreationConfig;
+  }
+  /**
+   * @return NodeCreationConfig
+   */
+  public function getDesiredNodeCreationConfig()
+  {
+    return $this->desiredNodeCreationConfig;
   }
   /**
    * The desired node kubelet config for the cluster.

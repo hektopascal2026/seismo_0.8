@@ -248,12 +248,13 @@ final class EmailIngestRepository
                             (string)($row['subject'] ?? ''),
                             $subs
                         );
-                        if ($sub !== null && !empty($sub['digest_split_config'])) {
-                            $cfg = \Seismo\Core\Mail\DigestSplitConfigNormalizer::resolveForIngest(
-                                (string)$sub['digest_split_config']
-                            );
-                            if ($cfg !== null) {
-                                $this->splitAndIngestStories($parentId, $row, $cfg);
+                        if ($sub !== null) {
+                            $rule = $this->fetchTemplateRuleForSubscription($sub);
+                            if ($rule !== null) {
+                                $cfg = \Seismo\Core\Mail\DigestSplitConfigNormalizer::resolveForIngest($rule);
+                                if ($cfg !== null) {
+                                    $this->splitAndIngestStories($parentId, $row, $cfg);
+                                }
                             }
                         }
                     }
@@ -1038,5 +1039,40 @@ final class EmailIngestRepository
         }
 
         return $merged;
+    }
+
+    public function fetchTemplateRuleForSubscription(array $sub): ?array
+    {
+        $matchValue = trim((string)($sub['match_value'] ?? ''));
+        if ($matchValue === '') {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare('
+            SELECT r.* 
+            FROM template_rule r
+            JOIN newsletter_template t ON r.template_id = t.id
+            JOIN newsletter_sender s ON t.sender_id = s.id
+            WHERE s.email_address = ?
+              AND t.active_from <= CURRENT_TIMESTAMP
+              AND (t.active_to IS NULL OR t.active_to >= CURRENT_TIMESTAMP)
+            ORDER BY t.active_from DESC
+            LIMIT 1
+        ');
+        $stmt->execute([$matchValue]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+
+        // Decode JSON columns
+        $row['exclude_selectors'] = !empty($row['exclude_selectors']) ? json_decode($row['exclude_selectors'], true) : [];
+        $row['exclude_titles'] = !empty($row['exclude_titles']) ? json_decode($row['exclude_titles'], true) : [];
+        $row['glue_rules'] = !empty($row['glue_rules']) ? json_decode($row['glue_rules'], true) : [];
+
+        return [
+            'is_digest' => true,
+            'split_rules' => $row
+        ];
     }
 }

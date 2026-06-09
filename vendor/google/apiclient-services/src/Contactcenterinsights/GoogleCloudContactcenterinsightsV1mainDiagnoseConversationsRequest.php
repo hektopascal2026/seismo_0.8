@@ -32,6 +32,33 @@ class GoogleCloudContactcenterinsightsV1mainDiagnoseConversationsRequest extends
    */
   public const METRIC_TYPE_CONTAINMENT = 'CONTAINMENT';
   /**
+   * ces agent display name (e.g., "Steering", "Billing").
+   *
+   * @var string
+   */
+  public $agentDisplayName;
+  /**
+   * ces agent id to diagnose.
+   *
+   * @var string
+   */
+  public $agentId;
+  /**
+   * Required. The CES App ID.
+   *
+   * @var string
+   */
+  public $appId;
+  /**
+   * Required. The CES App version of the agent. Setting to "-" uses the latest
+   * draft version. Note that the agent active during the conversation history
+   * may have different instructions or tool definitions compared with the
+   * latest draft version.
+   *
+   * @var string
+   */
+  public $appVersion;
+  /**
    * Optional. Deprecated: If true, the request will be validated and a
    * simulation of the analysis will be performed without actually executing the
    * task. This field is unused. Use validate_only instead.
@@ -57,8 +84,17 @@ class GoogleCloudContactcenterinsightsV1mainDiagnoseConversationsRequest extends
    */
   public $fullReport;
   /**
-   * Optional. Specific instructions for the agent.
+   * Optional. A unique identifier used to group multiple diagnostic requests
+   * triggered under the same run batch or cron job.
    *
+   * @var string
+   */
+  public $groupId;
+  /**
+   * Optional. Deprecated: Specific instructions for the agent. Use app_id and
+   * subagent fields instead.
+   *
+   * @deprecated
    * @var string
    */
   public $instructions;
@@ -108,6 +144,73 @@ class GoogleCloudContactcenterinsightsV1mainDiagnoseConversationsRequest extends
    */
   public $validateOnly;
 
+  /**
+   * ces agent display name (e.g., "Steering", "Billing").
+   *
+   * @param string $agentDisplayName
+   */
+  public function setAgentDisplayName($agentDisplayName)
+  {
+    $this->agentDisplayName = $agentDisplayName;
+  }
+  /**
+   * @return string
+   */
+  public function getAgentDisplayName()
+  {
+    return $this->agentDisplayName;
+  }
+  /**
+   * ces agent id to diagnose.
+   *
+   * @param string $agentId
+   */
+  public function setAgentId($agentId)
+  {
+    $this->agentId = $agentId;
+  }
+  /**
+   * @return string
+   */
+  public function getAgentId()
+  {
+    return $this->agentId;
+  }
+  /**
+   * Required. The CES App ID.
+   *
+   * @param string $appId
+   */
+  public function setAppId($appId)
+  {
+    $this->appId = $appId;
+  }
+  /**
+   * @return string
+   */
+  public function getAppId()
+  {
+    return $this->appId;
+  }
+  /**
+   * Required. The CES App version of the agent. Setting to "-" uses the latest
+   * draft version. Note that the agent active during the conversation history
+   * may have different instructions or tool definitions compared with the
+   * latest draft version.
+   *
+   * @param string $appVersion
+   */
+  public function setAppVersion($appVersion)
+  {
+    $this->appVersion = $appVersion;
+  }
+  /**
+   * @return string
+   */
+  public function getAppVersion()
+  {
+    return $this->appVersion;
+  }
   /**
    * Optional. Deprecated: If true, the request will be validated and a
    * simulation of the analysis will be performed without actually executing the
@@ -166,8 +269,27 @@ class GoogleCloudContactcenterinsightsV1mainDiagnoseConversationsRequest extends
     return $this->fullReport;
   }
   /**
-   * Optional. Specific instructions for the agent.
+   * Optional. A unique identifier used to group multiple diagnostic requests
+   * triggered under the same run batch or cron job.
    *
+   * @param string $groupId
+   */
+  public function setGroupId($groupId)
+  {
+    $this->groupId = $groupId;
+  }
+  /**
+   * @return string
+   */
+  public function getGroupId()
+  {
+    return $this->groupId;
+  }
+  /**
+   * Optional. Deprecated: Specific instructions for the agent. Use app_id and
+   * subagent fields instead.
+   *
+   * @deprecated
    * @param string $instructions
    */
   public function setInstructions($instructions)
@@ -175,6 +297,7 @@ class GoogleCloudContactcenterinsightsV1mainDiagnoseConversationsRequest extends
     $this->instructions = $instructions;
   }
   /**
+   * @deprecated
    * @return string
    */
   public function getInstructions()

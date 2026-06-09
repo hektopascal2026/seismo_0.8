@@ -104,6 +104,22 @@ class GoogleCloudRunV2Instance extends \Google\Collection
    * Policy](https://cloud.google.com/terms/deprecation) documentation.
    */
   public const LAUNCH_STAGE_DEPRECATED = 'DEPRECATED';
+  /**
+   * Unspecified restart policy.
+   */
+  public const RESTART_POLICY_RESTART_POLICY_UNSPECIFIED = 'RESTART_POLICY_UNSPECIFIED';
+  /**
+   * Always restart the instance.
+   */
+  public const RESTART_POLICY_ALWAYS = 'ALWAYS';
+  /**
+   * Restart if the instance terminates with non-zero exit code.
+   */
+  public const RESTART_POLICY_ON_FAILURE = 'ON_FAILURE';
+  /**
+   * Never restart the instance.
+   */
+  public const RESTART_POLICY_NEVER = 'NEVER';
   protected $collection_key = 'volumes';
   /**
    * @var string[]
@@ -298,6 +314,12 @@ class GoogleCloudRunV2Instance extends \Google\Collection
    */
   public $reconciling;
   /**
+   * Optional. Restart policy for the Instance.
+   *
+   * @var string
+   */
+  public $restartPolicy;
+  /**
    * Output only. Reserved for future use.
    *
    * @var bool
@@ -309,13 +331,6 @@ class GoogleCloudRunV2Instance extends \Google\Collection
   public $serviceAccount;
   protected $terminalConditionType = GoogleCloudRunV2Condition::class;
   protected $terminalConditionDataType = '';
-  /**
-   * Optional. Duration the instance may be active before the system will shut
-   * it down.
-   *
-   * @var string
-   */
-  public $timeout;
   /**
    * Output only. Server assigned unique identifier for the trigger. The value
    * is a UUID4 string and guaranteed to remain unchanged until the resource is
@@ -869,6 +884,24 @@ class GoogleCloudRunV2Instance extends \Google\Collection
     return $this->reconciling;
   }
   /**
+   * Optional. Restart policy for the Instance.
+   *
+   * Accepted values: RESTART_POLICY_UNSPECIFIED, ALWAYS, ON_FAILURE, NEVER
+   *
+   * @param self::RESTART_POLICY_* $restartPolicy
+   */
+  public function setRestartPolicy($restartPolicy)
+  {
+    $this->restartPolicy = $restartPolicy;
+  }
+  /**
+   * @return self::RESTART_POLICY_*
+   */
+  public function getRestartPolicy()
+  {
+    return $this->restartPolicy;
+  }
+  /**
    * Output only. Reserved for future use.
    *
    * @param bool $satisfiesPzs
@@ -916,23 +949,6 @@ class GoogleCloudRunV2Instance extends \Google\Collection
   public function getTerminalCondition()
   {
     return $this->terminalCondition;
-  }
-  /**
-   * Optional. Duration the instance may be active before the system will shut
-   * it down.
-   *
-   * @param string $timeout
-   */
-  public function setTimeout($timeout)
-  {
-    $this->timeout = $timeout;
-  }
-  /**
-   * @return string
-   */
-  public function getTimeout()
-  {
-    return $this->timeout;
   }
   /**
    * Output only. Server assigned unique identifier for the trigger. The value
