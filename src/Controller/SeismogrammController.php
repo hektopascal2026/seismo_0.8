@@ -138,10 +138,16 @@ final class SeismogrammController
             $itemCount = $requestContext->parseItemCount($_POST['item_count'] ?? null);
             $systemPrompt = trim((string)($_POST['system_prompt'] ?? ''));
             $researchQuery = trim((string)($_POST['research_query'] ?? ''));
+            $briefingPersona = trim((string)($_POST['briefing_persona'] ?? ''));
 
             // Inject the research query into the prompt if present
             if ($researchQuery !== '') {
                 $systemPrompt = str_replace('{researchQuery}', $researchQuery, $systemPrompt);
+            }
+
+            // Inject the briefing persona into the prompt if present
+            if ($briefingPersona !== '') {
+                $systemPrompt = str_replace('{briefingPersona}', $briefingPersona, $systemPrompt);
             }
 
             $model = $config->get('gemini:model') ?? 'gemini-3.5-flash';
@@ -244,12 +250,18 @@ final class SeismogrammController
         $changed = false;
         foreach ($presets as $name => $content) {
             $found = false;
-            foreach ($library as $row) {
+            foreach ($library as &$row) {
                 if (($row['name'] ?? '') === $name) {
                     $found = true;
+                    // If Briefing preset is old and lacks the placeholder, update it.
+                    if ($name === 'Briefing' && strpos($row['content'] ?? '', '{briefingPersona}') === false) {
+                        $row['content'] = $content;
+                        $changed = true;
+                    }
                     break;
                 }
             }
+            unset($row);
             if (!$found) {
                 $library[] = [
                     'id' => bin2hex(random_bytes(8)),

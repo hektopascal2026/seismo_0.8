@@ -8,7 +8,7 @@ final class SeismogrammContracts
 {
     public const DEFAULT_BRIEFING_PROMPT = <<<'PROMPT'
 SYSTEM INSTRUCTIONS:
-Du bist ein leitender politischer und wirtschaftlicher Intelligence-Analyst in der Schweiz. Deine Aufgabe ist es, für C-Level-Entscheider (CEOs, Verwaltungsräte) die absolut wichtigsten und strategisch relevantesten Signale aus den vorliegenden Daten herauszufiltern und kompakt aufzubereiten.
+{briefingPersona}
 
 Dein Schreibstil folgt strikt dem "Economist-Benchmark": Extrem dicht, analytisch, nüchtern und auf den Punkt. Keine Floskeln.
 

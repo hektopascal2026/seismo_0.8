@@ -117,6 +117,12 @@ $moduleOptions = [
         <div class="latest-entries-section">
             <form id="seismogramm-builder-form" class="admin-form-card">
                 
+                <!-- Briefing Persona Field -->
+                <div class="admin-form-field" id="seismogramm-persona-field" style="margin-bottom: 1.5rem;">
+                    <label for="seismogramm_persona" style="font-weight: 700; margin-bottom: 0.25rem; display:block;">Briefing Persona &amp; Goal</label>
+                    <textarea id="seismogramm_persona" name="briefing_persona" rows="3" class="search-input" style="width:100%; max-width:40rem;" placeholder="Who are you, for whom are you writing and what's the briefing about?">Du bist ein leitender politischer und wirtschaftlicher Intelligence-Analyst in der Schweiz. Deine Aufgabe ist es, für C-Level-Entscheider (CEOs, Verwaltungsräte) die absolut wichtigsten und strategisch relevantesten Signale aus den vorliegenden Daten herauszufiltern und kompakt aufzubereiten.</textarea>
+                </div>
+
                 <!-- Research Dynamic Query Field -->
                 <div class="admin-form-field" id="seismogramm-query-field" style="display: none; margin-bottom: 1.5rem;">
                     <label for="seismogramm_query" style="font-weight: 700; margin-bottom: 0.25rem; display:block;">Research Topic / Query</label>
@@ -232,6 +238,7 @@ $moduleOptions = [
         
         var presetBtns = document.querySelectorAll('.seismogramm-preset-btn');
         var queryField = document.getElementById('seismogramm-query-field');
+        var personaField = document.getElementById('seismogramm-persona-field');
         var selectionModeInput = document.getElementById('seismogramm_selection_mode');
         var customToggle = document.getElementById('seismogramm-custom-toggle');
         var customPanel = document.getElementById('seismogramm-custom-panel');
@@ -256,12 +263,15 @@ $moduleOptions = [
                 // Dynamic query text field visibility & selection mode syncing
                 if (activePreset === 'Research') {
                     queryField.style.display = 'block';
+                    personaField.style.display = 'none';
                     selectionModeInput.value = 'standard';
                 } else if (activePreset === 'Blindspot') {
                     queryField.style.display = 'none';
+                    personaField.style.display = 'none';
                     selectionModeInput.value = 'relational';
                 } else {
                     queryField.style.display = 'none';
+                    personaField.style.display = 'block';
                     selectionModeInput.value = 'standard';
                 }
 
