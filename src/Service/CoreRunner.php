@@ -130,7 +130,7 @@ final class CoreRunner
             self::ID_RSS        => $this->runRss($force),
             self::ID_PARL_PRESS => $this->runParlPress($force),
             self::ID_SCRAPER    => $this->runScraper($force),
-            self::ID_MAIL       => $this->runMail($force),
+            self::ID_MAIL       => $this->runMail($force, true),
             default             => PluginRunResult::error('Unknown core fetcher id: ' . $coreId),
         };
     }
@@ -596,7 +596,7 @@ final class CoreRunner
         }
     }
 
-    private function runMail(bool $force): PluginRunResult
+    private function runMail(bool $force, bool $bypassThrottle = false): PluginRunResult
     {
         if (isSatellite()) {
             $r = PluginRunResult::skipped('Satellite mode — core fetchers do not run here.');
@@ -605,8 +605,8 @@ final class CoreRunner
             return $r;
         }
         $mailThrottle = self::THROTTLE_SECONDS[self::ID_MAIL];
-        // Gmail quota: always respect mail throttle (timeline/diagnostics force=true does not bypass).
-        if ($this->isMailThrottled($mailThrottle)) {
+        // Gmail quota: respect mail throttle when not explicitly bypassed (e.g. via direct refresh button).
+        if (!$bypassThrottle && $this->isMailThrottled($mailThrottle)) {
             $r = PluginRunResult::throttleSkipped(
                 'Throttled — last mail run is fresher than ' . $mailThrottle . 's.'
             );

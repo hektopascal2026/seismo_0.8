@@ -42,8 +42,18 @@ final class RefreshAjax
 
         $error = $_SESSION['error'] ?? null;
         $success = $_SESSION['success'] ?? null;
-        unset($_SESSION['error'], $_SESSION['success']);
+        
         $ok = !(is_string($error) && $error !== '');
+        if ($ok) {
+            // Since the frontend reloads the page on success, do not unset the success flash message.
+            // That way, it will be displayed on the reloaded page.
+            unset($_SESSION['error']);
+        } else {
+            // For errors, the frontend shows a window.alert and does not reload.
+            // Unset both to avoid stale messages.
+            unset($_SESSION['error'], $_SESSION['success']);
+        }
+
         $msg = $ok
             ? (is_string($success) && $success !== '' ? $success : 'Refresh completed.')
             : (is_string($error) && $error !== '' ? $error : 'Refresh could not be completed.');
