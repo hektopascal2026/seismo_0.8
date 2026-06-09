@@ -584,10 +584,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <!-- Era X -->
-                    <div class="timeline-era-card current-version-card">
+                    <div class="timeline-era-card">
                         <div class="era-meta-row">
                             <span class="era-badge era-badge-ai">Era X: Story-Level Intelligence</span>
-                            <span class="era-date">June 2026 (Current)</span>
+                            <span class="era-date">June 2026</span>
                         </div>
                         <h3>v0.8.4 &ndash; v0.8.7 &mdash; Digest Stories, Multi-Newsletter Routing, Card Readability, &amp; Centralized Backups</h3>
 
@@ -614,6 +614,34 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
                             <p>Child digest rows still reuse <code>entry_type = email</code>; export paths hide parents when children exist. Product routing is deterministic: <code>findBestMatchingSubscription()</code> at ingest/display, with <code>email_subscription_id</code> as the fast path for admin filters. Newsletter-type auto-detect intentionally does <em>not</em> replace Mail domain discovery — it only runs when at least one confirmed <code>module_scope = newsletter</code> row already matches the sender. Subject-prefix proposals use inbox subject structure (text before <code>:</code>, em dash, etc.), not runtime Gemini.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era XI -->
+                    <div class="timeline-era-card current-version-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-powerhouse">Era XI: Ingestion Modernization &amp; Relational Migration</span>
+                            <span class="era-date">June 2026 (Current)</span>
+                        </div>
+                        <h3>v0.9.0 &mdash; Modern Ingestion Libraries, Relational Schemas, &amp; Throttle Bypass</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> Maintaining custom MIME parsers, legacy HTML sanitizers, and JSON-based configurations became an operational bottleneck. To establish a robust, modern baseline, the email pipeline was refactored to use standard Symfony and Masterminds components, subscription routing was migrated to fully normalized relational tables, and manual refresh controls were equipped with throttle bypass logic for real-time responsiveness.</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.9.0 &mdash; Standard Library Transition:</strong> Replaced legacy parsing and sanitization blocks with <code>zbateson/mail-mime-parser</code>, <code>masterminds/html5</code>, <code>symfony/dom-crawler</code>, and <code>symfony/html-sanitizer</code>, improving parsing robustness for complex multipart HTML emails and standardizing HTML sanitization.</li>
+                                <li><strong>v0.9.0 &mdash; Normalized Relational Schema:</strong> Replaced JSON split configs with fully normalized database relationships across <code>newsletter_sender</code>, <code>newsletter_template</code>, and <code>template_rule</code> tables.</li>
+                                <li><strong>v0.9.0 &mdash; Manual Throttle Bypass:</strong> Updated the core ingest runner to accept a <code>$bypassThrottle</code> flag, allowing explicit "Refresh Mail" clicks in the user interface to execute immediately rather than being blocked by cron schedule guards.</li>
+                                <li><strong>v0.9.0 &mdash; AJAX Refresh Banner Persistence:</strong> Fixed UI refresh feedback by ensuring success messages are correctly persisted across page reloads during AJAX-based updates.</li>
+                            </ul>
+                        </div>
+
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Migrating from schema-less JSON configs to strict foreign-key relations required detailed data migrations but eliminated parser ambiguity. Adopting external Symfony/Masterminds dependencies increased composer package footprints but significantly reduced custom codebase maintenance.</p>
                         </div>
                     </div>
                 </div>
@@ -699,7 +727,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.8.7</strong>, signifying it is in active pre-1.0.0 bootstrapping. Multi-newsletter subject routing and digest child-story export are the latest newsletter-desk tranche; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.9.0</strong>, signifying it is in active pre-1.0.0 bootstrapping. Modernized email ingestion, normalized relational routing schemas, and throttle bypasses represent the latest milestone; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

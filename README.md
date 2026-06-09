@@ -1,4 +1,4 @@
-# Seismo 0.8.7
+# Seismo 0.9.0
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.9.0** | **Email Ingestion Modernization, Relational Schema Migration, & Throttle Bypass** — Upgrades ingestion parsing and sanitization to standard libraries (`zbateson/mail-mime-parser`, `masterminds/html5`, `symfony/dom-crawler`, `symfony/html-sanitizer`). Normalizes layout split configurations into fully relational database schemas (`newsletter_sender`, `newsletter_template`, `template_rule`), and adds manual throttle bypass for immediate UI-initiated mail fetches. |
 | **0.8.7** | **Centralized Backup Dashboard & SQL Streaming Export** — Adds the new Backup Settings tab, centralizing the existing JSON source configuration exports and imports, and introducing a new, memory-safe SQL streaming exporter for full database backups. |
 | **0.8.6** | **Auto-linkified timeline cards & paragraphing** — Auto-links plain text URLs in feed, substack, scraper, and email expanded cards (with shortened URL text for clean visuals) and splits double-newlines into paragraphs, keeping the raw database and Magnitu exports clean and unchanged. |
 | **0.8.5** | **Multi-newsletter routing + type detection** — several digest products from one sender (e.g. Politpuls and Stimme der Wirtschaft via `news@zhdk.ch`) get separate `email_subscriptions` rows keyed by **`subject_filter`** (migration 029: unique `(match_type, match_value, subject_filter, module_scope)`, **`emails.email_subscription_id`** persisted at ingest with backfill). Subscription-scoped timeline, reprocess, and AI Split/Cleanup samples respect subject filters. **Newsletter → Sources → New newsletter types:** when a sender already on Newsletter mails an unmatched subject pattern, Gmail ingest queues a review row (Mail keeps **New senders** for unknown domains). Confirming a pending type backfills stored mail to the new subscription. |
