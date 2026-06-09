@@ -50,7 +50,7 @@ final class StandardSelectionEngine
             ],
             'generationConfig' => [
                 'responseMimeType' => 'application/json',
-                'responseSchema' => json_decode(SeismogrammContracts::SELECTION_OUTPUT_CONTRACT_SCHEMA ?? SeismogrammContracts::SELECTION_OUTPUT_CONTRACT, true),
+                'responseSchema' => json_decode(SeismogrammContracts::SELECTION_OUTPUT_CONTRACT, true),
                 'maxOutputTokens' => TokenBudgeteer::resolveSelectionPassTokenBudget($itemCount, $configuredMaxTokens, $model),
                 'temperature' => 0.0,
             ]
