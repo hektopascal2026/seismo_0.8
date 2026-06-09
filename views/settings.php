@@ -88,6 +88,7 @@ $tabQs = static function (string $t) use ($basePath): string {
             <a href="<?= e($tabQs('mail')) ?>" class="<?= $tab === 'mail' ? 'active' : '' ?>">Mail</a>
             <a href="<?= e($tabQs('retention')) ?>" class="<?= $tab === 'retention' ? 'active' : '' ?>">Retention</a>
             <a href="<?= e($tabQs('satellite')) ?>" class="<?= $tab === 'satellite' ? 'active' : '' ?>">Satellites</a>
+            <a href="<?= e($tabQs('backup')) ?>" class="<?= $tab === 'backup' ? 'active' : '' ?>">Backup</a>
             <?php
             $diagClass = $tab === 'diagnostics' ? 'active' : '';
             if (isset($diagHasError) && $diagHasError) {
@@ -115,6 +116,11 @@ $tabQs = static function (string $t) use ($basePath): string {
                 <div class="message message-error"><?= e($pageError) ?></div>
             <?php endif; ?>
             <?php require __DIR__ . '/partials/settings_tab_satellites.php'; ?>
+        <?php elseif ($tab === 'backup'): ?>
+            <?php if ($pageError !== null): ?>
+                <div class="message message-error"><?= e($pageError) ?></div>
+            <?php endif; ?>
+            <?php require __DIR__ . '/partials/settings_backup.php'; ?>
         <?php elseif ($tab === 'diagnostics'): ?>
             <?php if ($pageError !== null): ?>
                 <div class="message message-error"><?= e($pageError) ?></div>

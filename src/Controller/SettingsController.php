@@ -90,7 +90,7 @@ final class SettingsController
                 header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
                 exit;
             }
-        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite', 'mail', 'diagnostics'], true)) {
+        } elseif (!in_array($tab, ['general', 'magnitu', 'retention', 'satellite', 'mail', 'diagnostics', 'backup'], true)) {
             $tab = 'general';
         }
 

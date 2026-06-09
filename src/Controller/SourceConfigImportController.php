@@ -120,7 +120,7 @@ final class SourceConfigImportController
 
     private function redirectGeneral(): void
     {
-        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=general', true, 303);
+        header('Location: ' . getBasePath() . '/index.php?action=settings&tab=backup', true, 303);
         exit;
     }
 }

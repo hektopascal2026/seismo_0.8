@@ -198,6 +198,11 @@ $router->register(
     true
 );
 $router->register(
+    'export_database_sql',
+    \Seismo\Controller\DatabaseBackupController::class . '::downloadSql',
+    true
+);
+$router->register(
     'import_source_configs',
     \Seismo\Controller\SourceConfigImportController::class . '::importFeedsAndScraper',
     false
