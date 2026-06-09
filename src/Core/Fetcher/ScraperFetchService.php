@@ -232,15 +232,28 @@ final class ScraperFetchService
         return (bool)preg_match('#^https?://#i', $u);
     }
 
-    /** Skip tab/pagination hrefs (e.g. INTERPOL `?limit=12&page=3`). */
+    /** Skip tab/pagination/category list hrefs (e.g. INTERPOL `?limit=12&page=3`, `/themen/p2`, or `/kategorie/bildung`). */
     private function isListingPaginationUrl(string $url): bool
     {
-        $query = parse_url($url, PHP_URL_QUERY);
-        if (!is_string($query) || $query === '') {
-            return false;
+        $path = parse_url($url, PHP_URL_PATH);
+        if (is_string($path)) {
+            $path = rtrim($path, '/');
+            // Check for path segments like /p2, /page2, /page/2, /seite/2, /seite-2, /p/2
+            if (preg_match('#/(?:page|seite|p)(?:-|\/)?\d+$#i', $path)) {
+                return true;
+            }
+            // Check for listing-only category / tag / archive path structures, e.g. /kategorie/nachhaltigkeit
+            if (preg_match('#/(?:kategorie|category|categories|tag|tags|topic|topics|author|authors|archiv|archive|archives)/[^/]+$#i', $path)) {
+                return true;
+            }
         }
 
-        return str_contains($query, 'page=') || str_contains($query, 'limit=');
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (is_string($query) && $query !== '') {
+            return str_contains($query, 'page=') || str_contains($query, 'limit=');
+        }
+
+        return false;
     }
 
     private function fetchHtmlBody(string $pageUrl): string
