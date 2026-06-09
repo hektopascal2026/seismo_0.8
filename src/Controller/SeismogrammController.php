@@ -241,7 +241,40 @@ final class SeismogrammController
     public function promptHelper(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => true, 'prompt' => 'Helper prompt draft']);
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $intent = trim((string)($_POST['intent'] ?? ''));
+            $config = new SystemConfigRepository(getDbConnection());
+            $style = SeismogrammContracts::DEFAULT_BRIEFING_PROMPT;
+            $helper = new \Seismo\Service\ResearcherPromptHelperService($config);
+            $prompt = $helper->reformulate($intent, $style);
+            
+            // Clean up prompt markdown code blocks if the LLM wrapped it
+            if (preg_match('/^```(?:markdown|html|xml|json)?\s*(.*?)\s*```$/is', $prompt, $matches)) {
+                $prompt = trim($matches[1]);
+            }
+            
+            echo json_encode(['ok' => true, 'prompt' => $prompt], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo seismogramm_prompt_helper: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Could not generate prompt: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     public function savePromptLibrary(): void
