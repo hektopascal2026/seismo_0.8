@@ -35,6 +35,7 @@ $moduleOptions = [
     ['key' => 'scraper', 'label' => 'Scraper'],
     ['key' => 'lex', 'label' => 'Lex'],
     ['key' => 'leg', 'label' => 'Leg'],
+    ['key' => 'mem', 'label' => 'Mem'],
 ];
 ?>
 <!DOCTYPE html>
@@ -194,13 +195,16 @@ $moduleOptions = [
                             <input type="checkbox" name="use_recipe_snippets" value="1" checked>
                             Use Magnitu Snippets (200-word passages)
                         </label>
-                        <label for="seismogramm_max_context" style="display:block; margin-top:0.5rem; font-size:0.875rem;">Maximum items sent to Gemini:</label>
+                        <label for="seismogramm_max_context" style="display:block; margin-top:0.5rem; font-size:0.875rem;">Maximum items sent to Gemini: <span id="seismogramm_max_context_val" style="font-weight:700;"><?= $maxContextEntries ?></span></label>
                         <input type="range" id="seismogramm_max_context" name="max_context_entries" min="20" max="500" value="<?= $maxContextEntries ?>" class="search-input" style="width:100%; max-width:20rem;">
                     </div>
                 </div>
 
                 <!-- Selection mode hidden input -->
                 <input type="hidden" name="selection_mode" id="seismogramm_selection_mode" value="standard">
+
+                <!-- Context Warning Banner -->
+                <div id="seismogramm-context-warning" class="message message-warning" style="display: none; margin-bottom: 1rem;"></div>
 
                 <div class="admin-form-actions">
                     <button type="submit" class="btn btn-success" id="seismogramm-generate-btn" <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
@@ -218,6 +222,8 @@ $moduleOptions = [
             <div id="seismogramm-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
                 <p class="admin-intro" id="seismogramm-placeholder">Generated text will appear here.</p>
             </div>
+            <!-- Cost Estimate Display -->
+            <div id="seismogramm-cost-estimate" class="seismogramm-cost-estimate" style="display: none; margin-top: 0.65rem; padding: 0.55rem 0.7rem; font-size: 0.8125rem; line-height: 1.45; background: #f8f8f8; border: 0.0625rem solid #000000; max-width: 100%;"></div>
         </div>
 
         <!-- Citation validation section (Always shown underneath) -->
@@ -251,7 +257,16 @@ $moduleOptions = [
         var sourcesCards = document.getElementById('seismogramm-sources-cards');
         var copyBtn = document.getElementById('seismogramm-copy-btn');
         var placeholder = document.getElementById('seismogramm-placeholder');
+        var costEstimateEl = document.getElementById('seismogramm-cost-estimate');
         var lastBriefingText = '';
+
+        var maxContextSlider = document.getElementById('seismogramm_max_context');
+        var maxContextVal = document.getElementById('seismogramm_max_context_val');
+        if (maxContextSlider && maxContextVal) {
+            maxContextSlider.addEventListener('input', function() {
+                maxContextVal.textContent = maxContextSlider.value;
+            });
+        }
 
         // Preset click handler
         presetBtns.forEach(function(btn) {
@@ -319,6 +334,8 @@ $moduleOptions = [
             });
         });
 
+        var warningEl = document.getElementById('seismogramm-context-warning');
+
         // Form Submission
         form.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -330,6 +347,14 @@ $moduleOptions = [
             }
 
             errEl.style.display = 'none';
+            if (warningEl) {
+                warningEl.style.display = 'none';
+                warningEl.textContent = '';
+            }
+            if (costEstimateEl) {
+                costEstimateEl.style.display = 'none';
+                costEstimateEl.innerHTML = '';
+            }
             sourcesSection.style.display = 'none';
             out.innerHTML = '<p class="admin-intro">Generating briefing... Please wait.</p>';
             generateBtn.disabled = true;
@@ -343,6 +368,11 @@ $moduleOptions = [
             .then(function(data) {
                 if (!data.ok) {
                     throw new Error(data.error || 'Failed to prepare context.');
+                }
+
+                if (data.meta && data.meta.context_warning && warningEl) {
+                    warningEl.textContent = data.meta.context_warning;
+                    warningEl.style.display = 'block';
                 }
                 
                 return fetch('<?= $generateUrl ?>', {
@@ -361,6 +391,36 @@ $moduleOptions = [
                 out.style.whiteSpace = 'pre-wrap';
                 out.textContent = data.text;
                 copyBtn.style.display = 'inline-block';
+
+                // Display cost estimate
+                if (data.cost_estimate && costEstimateEl) {
+                    var est = data.cost_estimate;
+                    costEstimateEl.innerHTML = '';
+                    
+                    var amount = document.createElement('p');
+                    amount.style.margin = '0 0 0.25rem';
+                    amount.style.fontWeight = '600';
+                    amount.style.fontSize = '0.9375rem';
+                    amount.textContent = 'Estimated cost: ' + String(est.estimated_usd_display) + ' USD';
+                    
+                    var detail = document.createElement('p');
+                    detail.style.margin = '0';
+                    detail.style.opacity = '0.9';
+                    detail.style.fontSize = '0.75rem';
+                    
+                    var formatInt = function(n) {
+                        return parseInt(n, 10).toLocaleString();
+                    };
+                    
+                    var pipelineLabel = est.pipeline || 'standard';
+                    detail.textContent = pipelineLabel.toUpperCase() + ' pipeline · Gemini 3.5 Flash · ' +
+                        formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens · ' +
+                        String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's');
+                    
+                    costEstimateEl.appendChild(amount);
+                    costEstimateEl.appendChild(detail);
+                    costEstimateEl.style.display = 'block';
+                }
 
                 // Display source cards
                 if (data.entries_html && data.entries_html.trim() !== '') {

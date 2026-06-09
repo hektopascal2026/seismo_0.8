@@ -11,6 +11,10 @@ final class ResilientGeminiClient
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
     private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 90;
 
+    public int $usagePromptTokens = 0;
+    public int $usageOutputTokens = 0;
+    public int $usageApiCalls = 0;
+
     /**
      * Executes a single POST request to the Gemini API with schema fallback and rate-limit retries.
      *
@@ -50,7 +54,21 @@ final class ResilientGeminiClient
             throw new GeminiResearcherException('Gemini API returned invalid JSON in ' . $phase . ' phase.');
         }
 
+        $this->recordUsage($data);
+
         return $data;
+    }
+
+    private function recordUsage(array $json): void
+    {
+        $usage = $json['usageMetadata'] ?? null;
+        if (!is_array($usage)) {
+            return;
+        }
+        $this->usagePromptTokens += max(0, (int)($usage['promptTokenCount'] ?? 0));
+        $this->usageOutputTokens += max(0, (int)($usage['candidatesTokenCount'] ?? 0))
+            + max(0, (int)($usage['thoughtsTokenCount'] ?? 0));
+        $this->usageApiCalls++;
     }
 
     /**
@@ -71,7 +89,14 @@ final class ResilientGeminiClient
             foreach ($jobs as $id => $payload) {
                 try {
                     $url = self::API_BASE . rawurlencode($model) . ':generateContent';
-                    $results[$id] = $this->postWithRetries($url, $payload, $apiKey, $timeout);
+                    $res = $this->postWithRetries($url, $payload, $apiKey, $timeout);
+                    $results[$id] = $res;
+                    if ($res['status'] === 200) {
+                        $data = json_decode($res['body'], true);
+                        if (is_array($data)) {
+                            $this->recordUsage($data);
+                        }
+                    }
                 } catch (\Throwable $e) {
                     $results[$id] = ['status' => 500, 'body' => $e->getMessage()];
                 }
@@ -126,6 +151,14 @@ final class ResilientGeminiClient
                 'status' => $status,
                 'body'   => $raw === false ? '' : $raw,
             ];
+            
+            if ($status === 200 && $raw !== false && $raw !== '') {
+                $data = json_decode($raw, true);
+                if (is_array($data)) {
+                    $this->recordUsage($data);
+                }
+            }
+
             curl_multi_remove_handle($mh, $ch);
             curl_close($ch);
         }

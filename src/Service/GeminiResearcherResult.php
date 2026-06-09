@@ -15,6 +15,7 @@ final class GeminiResearcherResult
         public readonly string $markdown,
         public readonly array $usedEntryKeys = [],
         public readonly bool $attributionParsed = true,
+        public readonly array $usage = [],
     ) {
     }
 }

@@ -93,7 +93,10 @@ final class SeismogrammController
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
             $meta = array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
-                ['markdown_chars' => $gathered['markdownChars']]
+                [
+                    'markdown_chars' => $gathered['markdownChars'],
+                    'context_warning' => $gathered['contextWarning'] ?? null,
+                ]
             );
 
             echo json_encode(['ok' => true, 'meta' => $meta]);
@@ -199,11 +202,28 @@ final class SeismogrammController
                 ]
             );
 
+            $usage = $result->usage;
+            $costEstimate = null;
+            if ($usage !== []) {
+                $promptTokens = $usage['prompt_tokens'] ?? 0;
+                $outputTokens = $usage['output_tokens'] ?? 0;
+                $apiCalls     = $usage['api_calls'] ?? 0;
+                $usd = \Seismo\Service\GeminiResearcherFlashPricing::estimateStandardUsd($promptTokens, $outputTokens);
+                $costEstimate = [
+                    'pipeline' => $selectionMode,
+                    'prompt_tokens' => $promptTokens,
+                    'output_tokens' => $outputTokens,
+                    'api_calls' => $apiCalls,
+                    'estimated_usd_display' => \Seismo\Service\GeminiResearcherFlashPricing::formatUsd($usd),
+                ];
+            }
+
             echo json_encode([
                 'ok' => true,
                 'text' => $result->markdown,
                 'meta' => $meta,
                 'entries_html' => $entriesHtml,
+                'cost_estimate' => $costEstimate,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             error_log('SeismogrammController generate error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
