@@ -32,7 +32,63 @@ final class EmailTrackingUrl
             || str_contains($lower, 'mailchi.mp')
             || str_contains($lower, 'sendgrid.net')
             || str_contains($lower, 'mandrillapp.com')
-            || str_contains($lower, 'campaign-archive.com');
+            || str_contains($lower, 'campaign-archive.com')
+            || str_contains($lower, 'activehosted.com')
+            || str_contains($lower, 'klaviyomail.com')
+            || str_contains($lower, 'convertkit-mail.com')
+            || str_contains($lower, 'ccsend.com')
+            || str_contains($lower, 'gr8.com')
+            || str_contains($lower, 'sib.com')
+            || str_contains($lower, 'sendinblue.com')
+            || str_contains($lower, 'brevo.com')
+            || str_contains($lower, 'klaviyo.com')
+            || str_contains($lower, 'mlsend.com')
+            || str_contains($lower, 'hubspotemail.net')
+            || str_contains($lower, 'mjt.lu')
+            || str_contains($lower, 'e2ma.net')
+            || str_contains($lower, 'ghost.io')
+            || str_contains($lower, 'beehiiv.com')
+            || str_contains($lower, 'aweber.com')
+            || str_contains($lower, 'customeriomail.com')
+            || str_contains($lower, 'dotmailer.com')
+            || preg_match('#\bcmail\d+\.com\b#', $lower) === 1;
+    }
+
+    /**
+     * Whitelisted tracking domains that actually host or redirect directly to the newsletter webview.
+     */
+    public static function isAllowedWebviewRedirectUrl(string $url): bool
+    {
+        $lower = mb_strtolower(trim($url), 'UTF-8');
+
+        return str_contains($lower, 'mailchi.mp')
+            || str_contains($lower, 'campaign-archive.com')
+            || str_contains($lower, 'list-manage.com')
+            || str_contains($lower, 'awstrack.me')
+            || str_contains($lower, 'sendgrid.net')
+            || str_contains($lower, 'mandrillapp.com')
+            || str_contains($lower, '/track/click')
+            || str_contains($lower, 'click.email.')
+            || str_contains($lower, 'clicks.')
+            || str_contains($lower, 'activehosted.com')
+            || str_contains($lower, 'klaviyomail.com')
+            || str_contains($lower, 'convertkit-mail.com')
+            || str_contains($lower, 'ccsend.com')
+            || str_contains($lower, 'gr8.com')
+            || str_contains($lower, 'sib.com')
+            || str_contains($lower, 'sendinblue.com')
+            || str_contains($lower, 'brevo.com')
+            || str_contains($lower, 'klaviyo.com')
+            || str_contains($lower, 'mlsend.com')
+            || str_contains($lower, 'hubspotemail.net')
+            || str_contains($lower, 'mjt.lu')
+            || str_contains($lower, 'e2ma.net')
+            || str_contains($lower, 'ghost.io')
+            || str_contains($lower, 'beehiiv.com')
+            || str_contains($lower, 'aweber.com')
+            || str_contains($lower, 'customeriomail.com')
+            || str_contains($lower, 'dotmailer.com')
+            || preg_match('#\bcmail\d+\.com\b#', $lower) === 1;
     }
 
     /**

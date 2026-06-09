@@ -314,6 +314,23 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                                     }
                                     ?>
                                     <a href="<?= e($basePath) ?>/index.php?<?= e($latestQs) ?>" title="<?= e($subj ?? 'Open matching mail items') ?>"><?= e($linkText) ?></a>
+                                    <?php
+                                    $warning = isset($peek['metadata']) ? \Seismo\Core\Mail\EmailMetadata::webViewWarningFromMetadata($peek['metadata']) : null;
+                                    ?>
+                                    <?php if ($warning !== null): ?>
+                                        <div class="webview-warning-alert" style="margin-top: 6px; padding: 6px 10px; font-size: 0.75rem; color: #9a3412; background: #fff7ed; border: 1px solid #fdba74; border-radius: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                                            <div style="display: flex; align-items: center; gap: 4px; font-weight: 600;">
+                                                <span>⚠️</span>
+                                                <span>Webview blocked</span>
+                                            </div>
+                                            <div style="color: #ea580c; font-size: 0.72rem; line-height: 1.3; word-break: break-all;">
+                                                <?= e($warning) ?>
+                                            </div>
+                                            <div style="margin-top: 2px;">
+                                                <button type="button" class="btn btn-sm" style="padding: 2px 6px; font-size: 0.65rem; height: auto; line-height: 1.2; background: #ffedd5; border: 1px solid #fdba74; color: #9a3412; font-weight: 500; cursor: pointer; border-radius: 4px;" onclick="var btn=this; navigator.clipboard.writeText('<?= e(addslashes($warning)) ?>').then(function(){ var orig=btn.textContent; btn.textContent='Copied!'; setTimeout(function(){ btn.textContent=orig; }, 1500); });">Copy Warning</button>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="table-cell-placeholder">No messages yet</span>
                                 <?php endif; ?>

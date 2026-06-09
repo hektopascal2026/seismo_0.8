@@ -12,6 +12,33 @@ final class EmailMetadata
     public const KEY_WEB_VIEW_URL    = 'web_view_url';
     public const KEY_WEB_VIEW_LOCALE = 'web_view_locale';
     public const KEY_BODY_SOURCE     = 'body_source';
+    public const KEY_WEB_VIEW_WARNING = 'web_view_warning';
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    public static function mergeWebViewWarning(array $row, ?string $warning): array
+    {
+        $warning = $warning !== null ? trim($warning) : '';
+        if ($warning === '') {
+            return $row;
+        }
+
+        $meta = self::decode($row['metadata'] ?? null);
+        $meta[self::KEY_WEB_VIEW_WARNING] = $warning;
+        $row['metadata'] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+
+        return $row;
+    }
+
+    public static function webViewWarningFromMetadata(mixed $metadata): ?string
+    {
+        $meta = self::decode($metadata);
+        $warning  = trim((string)($meta[self::KEY_WEB_VIEW_WARNING] ?? ''));
+
+        return $warning !== '' ? $warning : null;
+    }
 
     public const BODY_SOURCE_INBOX    = 'inbox';
     public const BODY_SOURCE_WEB_VIEW = 'web_view';

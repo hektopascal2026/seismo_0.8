@@ -436,6 +436,9 @@ final class EmailIngestRepository
         if ($resolution->url !== null) {
             $row = EmailMetadata::mergeWebViewUrl($row, $resolution->url);
         }
+        if ($resolution->warning !== null) {
+            $row = EmailMetadata::mergeWebViewWarning($row, $resolution->warning);
+        }
 
         $canHydrate = $hydrateHostedBody
             && $resolution->url !== null

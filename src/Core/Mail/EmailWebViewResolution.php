@@ -13,6 +13,7 @@ final class EmailWebViewResolution
         public readonly ?string $url,
         public readonly ?int $localeRank,
         public readonly bool $hydrateBody,
+        public readonly ?string $warning = null,
     ) {
     }
 }

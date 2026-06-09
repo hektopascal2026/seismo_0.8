@@ -282,4 +282,36 @@ final class EmailWebViewUrlExtractorTest extends TestCase
         $urlPlain = EmailWebViewUrlExtractor::fromPlainText($plain);
         self::assertSame('https://us12.campaign-archive.com/?e=8c86d464a8&u=7404e6dcdc8018f49c82e941d&id=021536b4d9', $urlPlain);
     }
+
+    public function testSendgridRedirectWithCustomKeywordIsExtracted(): void
+    {
+        $html = '<table><tr><td>Die Ausgabe</td><td><a href="https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz">02. Juni 2026</a></td></tr></table>';
+        $plain = "Die Ausgabe\n02. Juni 2026 ( https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz )";
+
+        $resolution = EmailWebViewUrlExtractor::resolve($html, $plain, \Seismo\Core\Mail\EmailAlternateLocalePolicy::englishFirstRanks(), ['Die Ausgabe']);
+        self::assertSame('https://u20041827.ct.sendgrid.net/ls/click?upn=u001.abc123xyz', $resolution->url);
+    }
+
+    public function testNonWhitelistedTrackingRedirectReturnsWarning(): void
+    {
+        $html = '<p>Problems viewing this email? <a href="https://mcusercontent.com/123/files/doc.pdf">Click here.</a></p>';
+        $plain = "Problems viewing this email? Click here [https://mcusercontent.com/123/files/doc.pdf]";
+        
+        $warnings = [];
+        $resolution = EmailWebViewUrlExtractor::resolve(
+            $html,
+            $plain,
+            \Seismo\Core\Mail\EmailAlternateLocalePolicy::englishFirstRanks(),
+            [],
+            $warnings
+        );
+        
+        self::assertNull($resolution->url);
+        self::assertNotNull($resolution->warning);
+        self::assertStringContainsString('Discarded potential webview link containing non-whitelisted tracking domain', $resolution->warning);
+        self::assertStringContainsString('mcusercontent.com', $resolution->warning);
+        
+        self::assertNotEmpty($warnings);
+        self::assertStringContainsString('mcusercontent.com', $warnings[0]);
+    }
 }

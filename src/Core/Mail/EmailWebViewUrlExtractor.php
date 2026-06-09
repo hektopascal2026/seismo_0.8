@@ -12,16 +12,16 @@ use DOMElement;
  */
 final class EmailWebViewUrlExtractor
 {
-    public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = []): EmailWebViewResolution
+    public static function resolve(string $html, string $plain, array $preferredLocaleRanks, array $customWebviewKeywords = [], array &$warnings = []): EmailWebViewResolution
     {
         $html  = trim($html);
         $plain = trim($plain);
 
         // 1. If custom keywords are supplied, try matching them first to respect user rules refinement
         if ($customWebviewKeywords !== []) {
-            $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords);
+            $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords, true, $warnings);
             if ($generic !== null) {
-                return new EmailWebViewResolution($generic, null, false);
+                return new EmailWebViewResolution($generic, null, false, self::joinWarnings($warnings));
             }
         }
 
@@ -31,25 +31,27 @@ final class EmailWebViewUrlExtractor
             return new EmailWebViewResolution(
                 $press,
                 $isEuComm ? EmailWebViewPhraseLexicon::RANK_LOCALE_ENGLISH : null,
-                $isEuComm
+                $isEuComm,
+                self::joinWarnings($warnings)
             );
         }
 
         $picked = self::pickAlternateByRanks(
-            self::collectAlternateLocaleCandidates($html, $plain),
+            self::collectAlternateLocaleCandidates($html, $plain, true, $warnings),
             $preferredLocaleRanks
         );
         if ($picked !== null) {
             return new EmailWebViewResolution(
                 $picked['url'],
                 $picked['rank'],
-                EmailAlternateLocalePolicy::shouldHydrateBodyFromWebView($picked['rank'])
+                EmailAlternateLocalePolicy::shouldHydrateBodyFromWebView($picked['rank']),
+                self::joinWarnings($warnings)
             );
         }
 
-        $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords);
+        $generic = self::genericWebViewUrl($html, $plain, $customWebviewKeywords, true, $warnings);
 
-        return new EmailWebViewResolution($generic, null, false);
+        return new EmailWebViewResolution($generic, null, false, self::joinWarnings($warnings));
     }
 
     public static function fromHtml(string $html): ?string
@@ -65,7 +67,7 @@ final class EmailWebViewUrlExtractor
     /**
      * @return list<array{url: string, rank: int}>
      */
-    public static function collectAlternateLocaleCandidates(string $html, string $plain, bool $allowWebviewRedirects = true): array
+    public static function collectAlternateLocaleCandidates(string $html, string $plain, bool $allowWebviewRedirects = true, array &$warnings = []): array
     {
         $byUrl = [];
 
@@ -75,12 +77,14 @@ final class EmailWebViewUrlExtractor
                 if (!$anchor instanceof DOMElement) {
                     continue;
                 }
-                $href = self::normalizeHref($anchor->getAttribute('href'), $allowWebviewRedirects);
-                if ($href === null) {
-                    continue;
-                }
+                $rawHref = $anchor->getAttribute('href');
+                $href = self::normalizeHref($rawHref, $allowWebviewRedirects);
                 $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
                 $context = self::anchorContextText($anchor);
+                if ($href === null) {
+                    self::checkAndLogDiscardedRedirect($rawHref, $label, $context, [], $warnings);
+                    continue;
+                }
                 $rank    = EmailWebViewPhraseLexicon::alternateLocaleRankForText($label);
                 if ($rank === null) {
                     $rank = EmailWebViewPhraseLexicon::alternateLocaleRankForText($context);
@@ -205,7 +209,7 @@ final class EmailWebViewUrlExtractor
         return null;
     }
 
-    private static function genericWebViewUrl(string $html, string $plain, array $customKeywords = [], bool $allowWebviewRedirects = true): ?string
+    private static function genericWebViewUrl(string $html, string $plain, array $customKeywords = [], bool $allowWebviewRedirects = true, array &$warnings = []): ?string
     {
         $root = self::loadMailRoot($html);
         if ($root instanceof DOMElement) {
@@ -213,12 +217,14 @@ final class EmailWebViewUrlExtractor
                 if (!$anchor instanceof DOMElement) {
                     continue;
                 }
-                $href = self::normalizeHref($anchor->getAttribute('href'), $allowWebviewRedirects);
-                if ($href === null) {
-                    continue;
-                }
+                $rawHref = $anchor->getAttribute('href');
+                $href = self::normalizeHref($rawHref, $allowWebviewRedirects);
                 $label   = trim($anchor->textContent . ' ' . $anchor->getAttribute('title'));
                 $context = self::anchorContextText($anchor);
+                if ($href === null) {
+                    self::checkAndLogDiscardedRedirect($rawHref, $label, $context, $customKeywords, $warnings);
+                    continue;
+                }
 
                 $matchedCustom = false;
                 if ($customKeywords !== []) {
@@ -342,7 +348,20 @@ final class EmailWebViewUrlExtractor
     {
         $parent = $anchor->parentNode;
         if ($parent instanceof DOMElement) {
-            return trim($parent->textContent ?? '');
+            $text = trim($parent->textContent ?? '');
+            if (mb_strlen($text, 'UTF-8') < 50) {
+                $grandparent = $parent->parentNode;
+                if ($grandparent instanceof DOMElement) {
+                    $gTag = strtolower($grandparent->tagName);
+                    if ($gTag === 'tr' || $gTag === 'tbody' || $gTag === 'table') {
+                        $gText = preg_replace('/\s+/u', ' ', trim($grandparent->textContent ?? '')) ?? '';
+                        if ($gText !== '') {
+                            return $gText;
+                        }
+                    }
+                }
+            }
+            return $text;
         }
 
         return '';
@@ -668,19 +687,55 @@ final class EmailWebViewUrlExtractor
         }
 
         if (EmailTrackingUrl::isRedirectTrackingUrl($href)) {
-            if ($allowWebviewRedirects) {
-                $lower = mb_strtolower($href, 'UTF-8');
-                if (str_contains($lower, 'mailchi.mp')
-                    || str_contains($lower, 'campaign-archive.com')
-                    || str_contains($lower, 'list-manage.com')
-                    || str_contains($lower, 'awstrack.me')
-                ) {
-                    return EmailTrackingUrl::cleanNewsletterHref($href);
-                }
+            if ($allowWebviewRedirects && EmailTrackingUrl::isAllowedWebviewRedirectUrl($href)) {
+                return EmailTrackingUrl::cleanNewsletterHref($href);
             }
             return null;
         }
 
         return EmailTrackingUrl::cleanNewsletterHref($href);
+    }
+
+    /**
+     * Scan discarded tracking redirects; log a warning if the link text looks like a webview
+     * version, alerting the administrator to add the domain to the whitelist.
+     */
+    private static function checkAndLogDiscardedRedirect(string $rawHref, string $label, string $context, array $customKeywords = [], array &$warnings = []): void
+    {
+        if (EmailTrackingUrl::isRedirectTrackingUrl($rawHref) && !EmailTrackingUrl::isAllowedWebviewRedirectUrl($rawHref)) {
+            $matchedCustom = false;
+            if ($customKeywords !== []) {
+                $lowerLabel = mb_strtolower($label, 'UTF-8');
+                $lowerContext = mb_strtolower($context, 'UTF-8');
+                foreach ($customKeywords as $kw) {
+                    $kwLower = mb_strtolower(trim((string)$kw), 'UTF-8');
+                    if ($kwLower !== '' && (str_contains($lowerLabel, $kwLower) || str_contains($lowerContext, $kwLower))) {
+                        $matchedCustom = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($matchedCustom
+                || EmailWebViewPhraseLexicon::textLooksLikeWebView($label)
+                || EmailWebViewPhraseLexicon::textLooksLikeWebView($context)
+                || EmailWebViewPhraseLexicon::shortAnchorInWebViewContext($label, $context)
+                || EmailWebViewPhraseLexicon::textLooksLikeAlternateLocaleVersion($label)
+                || EmailWebViewPhraseLexicon::textLooksLikeAlternateLocaleVersion($context)
+            ) {
+                $host = parse_url($rawHref, PHP_URL_HOST) ?? $rawHref;
+                $msg = "Discarded potential webview link containing non-whitelisted tracking domain '{$host}'";
+                $warnings[] = $msg;
+                error_log("Seismo warning: {$msg} with label: '{$label}'");
+            }
+        }
+    }
+
+    private static function joinWarnings(array $warnings): ?string
+    {
+        if ($warnings === []) {
+            return null;
+        }
+        return implode('; ', array_unique($warnings));
     }
 }

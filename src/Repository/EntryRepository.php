@@ -2250,6 +2250,7 @@ final class EntryRepository
             'subject'  => isset($r['subject']) && $r['subject'] !== null && $r['subject'] !== ''
                 ? (string)$r['subject']
                 : null,
+            'metadata' => $r['metadata'] ?? null,
         ];
     }
 
