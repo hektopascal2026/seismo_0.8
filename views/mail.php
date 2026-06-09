@@ -526,7 +526,7 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                             <input type="hidden" name="unsubscribe_mailto" value="<?= e((string)$editRow['unsubscribe_mailto']) ?>">
                             <input type="hidden" name="unsubscribe_one_click" value="<?= !empty($editRow['unsubscribe_one_click']) ? '1' : '0' ?>">
                             <input type="hidden" name="subject_filter" value="<?= e((string)($editRow['subject_filter'] ?? '')) ?>">
-                            <input type="hidden" name="digest_split_config" value="<?= e((string)$editRow['digest_split_config'] ?? '')) ?>">
+                            <input type="hidden" name="digest_split_config" value="<?= e((string)($editRow['digest_split_config'] ?? '')) ?>">
                             
                             <input type="hidden" id="cleanup_config_hidden" name="cleanup_config" value="<?= e($cleanupConfigRaw) ?>">
                             
