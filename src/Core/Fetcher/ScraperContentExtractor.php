@@ -48,8 +48,12 @@ final class ScraperContentExtractor
 
         $fromReadability = self::extractViaReadability($dom);
         if ($fromReadability !== null) {
-            if ($fromReadability['title'] !== '') {
+            if ($title === '' && $fromReadability['title'] !== '') {
                 $title = $fromReadability['title'];
+            }
+
+            if ($title === '') {
+                $title = self::fallbackTitleFromDocument($dom);
             }
 
             return [
@@ -60,6 +64,10 @@ final class ScraperContentExtractor
 
         self::removeNoiseElements($dom);
         $content = self::extractLongestBlockHeuristic($dom);
+
+        if ($title === '') {
+            $title = self::fallbackTitleFromDocument($dom);
+        }
 
         return [
             'title'   => $title,
@@ -468,7 +476,11 @@ final class ScraperContentExtractor
             }
         }
 
-        // 3. Fallback to standard <title> tag
+        return '';
+    }
+
+    private static function fallbackTitleFromDocument(DOMDocument $dom): string
+    {
         $titles = $dom->getElementsByTagName('title');
         if ($titles->length > 0) {
             $t = trim($titles->item(0)->textContent ?? '');
