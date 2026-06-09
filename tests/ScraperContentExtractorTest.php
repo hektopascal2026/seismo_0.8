@@ -68,4 +68,66 @@ final class ScraperContentExtractorTest extends TestCase
         self::assertStringContainsString('Kept body text', $out['content']);
         self::assertStringNotContainsString('Chrome noise', $out['content']);
     }
+
+    public function testExtractTitleHeuristics(): void
+    {
+        // Case 1: og:title is present
+        $htmlMeta = <<<'HTML'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Generic Title</title>
+            <meta property="og:title" content="OpenGraph Article Title">
+        </head>
+        <body>
+            <h1>Another Title</h1>
+            <p>This is a paragraph with enough content to be considered readable and long enough for test validation.</p>
+        </body>
+        </html>
+        HTML;
+        $out = ScraperContentExtractor::extractReadableContent($htmlMeta);
+        self::assertSame('OpenGraph Article Title', $out['title']);
+
+        // Case 2: No og:title, but has h1 outside noise element
+        $htmlH1 = <<<'HTML'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Detail - Swiss Trade</title>
+        </head>
+        <body>
+            <header>
+                <h1>Site Logo Headline</h1>
+            </header>
+            <nav>
+                <h1>Nav Title</h1>
+            </nav>
+            <article>
+                <h1>Givaudan to acquire majority stake in Eurofragance</h1>
+                <p>This is the main article content text which is long enough to bypass readability thresholds and represent actual scraped body content.</p>
+            </article>
+        </body>
+        </html>
+        HTML;
+        $out = ScraperContentExtractor::extractReadableContent($htmlH1);
+        self::assertSame('Givaudan to acquire majority stake in Eurofragance', $out['title']);
+
+        // Case 3: Fallback to <title>
+        $htmlFallback = <<<'HTML'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Fallback Title Tag</title>
+        </head>
+        <body>
+            <header>
+                <h1>Site Logo</h1>
+            </header>
+            <p>This is a paragraph with enough content to be considered readable and long enough for test validation.</p>
+        </body>
+        </html>
+        HTML;
+        $out = ScraperContentExtractor::extractReadableContent($htmlFallback);
+        self::assertSame('Fallback Title Tag', $out['title']);
+    }
 }

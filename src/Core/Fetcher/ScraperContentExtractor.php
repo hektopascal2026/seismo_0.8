@@ -450,6 +450,25 @@ final class ScraperContentExtractor
 
     private static function titleFromDocument(DOMDocument $dom): string
     {
+        // 1. Try Social / Meta tags first (og:title, twitter:title, etc.)
+        $metaTitle = self::titleFromMetaTags($dom);
+        if ($metaTitle !== null && $metaTitle !== '') {
+            return $metaTitle;
+        }
+
+        // 2. Try the first <h1> tag that is not within a noise element (header, nav, footer, aside, script, style)
+        $h1s = $dom->getElementsByTagName('h1');
+        for ($i = 0; $i < $h1s->length; $i++) {
+            $h1 = $h1s->item($i);
+            if ($h1 instanceof DOMElement && !self::isWithinNoiseElement($h1)) {
+                $t = trim($h1->textContent ?? '');
+                if ($t !== '') {
+                    return html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                }
+            }
+        }
+
+        // 3. Fallback to standard <title> tag
         $titles = $dom->getElementsByTagName('title');
         if ($titles->length > 0) {
             $t = trim($titles->item(0)->textContent ?? '');
@@ -458,6 +477,43 @@ final class ScraperContentExtractor
         }
 
         return '';
+    }
+
+    private static function titleFromMetaTags(DOMDocument $dom): ?string
+    {
+        $xp = new DOMXPath($dom);
+        $metaQueries = [
+            '//meta[@property="og:title"]/@content',
+            '//meta[@name="twitter:title"]/@content',
+            '//meta[@property="twitter:title"]/@content',
+            '//meta[@name="title"]/@content',
+        ];
+        foreach ($metaQueries as $query) {
+            $nodes = $xp->query($query);
+            if ($nodes !== false && $nodes->length > 0) {
+                $val = trim($nodes->item(0)->nodeValue ?? '');
+                if ($val !== '') {
+                    return html_entity_decode($val, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                }
+            }
+        }
+        return null;
+    }
+
+    private static function isWithinNoiseElement(DOMNode $node): bool
+    {
+        $parent = $node->parentNode;
+        while ($parent !== null) {
+            if ($parent instanceof DOMElement) {
+                $name = strtolower($parent->nodeName);
+                if (in_array($name, ['header', 'nav', 'footer', 'aside', 'script', 'style'])) {
+                    return true;
+                }
+            }
+            $parent = $parent->parentNode;
+        }
+
+        return false;
     }
 
     private static function removeNoiseElements(DOMDocument $dom): void
