@@ -150,12 +150,115 @@ final class RssFetchService
             );
         }
 
+        $xml = self::sanitizeXml($xml);
+
         $final = trim($response->finalUrl);
 
         return [
             'xml'       => $xml,
             'final_url' => $final !== '' ? $final : $requestUrl,
         ];
+    }
+
+    /**
+     * Clean and repair raw XML content to prevent common parsing failures (e.g. malformed encoding,
+     * invalid characters, or unclosed CDATA tags).
+     */
+    public static function sanitizeXml(string $xml): string
+    {
+        if ($xml === '') {
+            return '';
+        }
+
+        // 1. Detect encoding from XML declaration
+        $encoding = 'UTF-8';
+        if (preg_match('/<\?xml\s+[^>]*encoding=["\']([^"\']+)["\']/i', $xml, $m)) {
+            $encoding = strtoupper(trim($m[1]));
+        }
+
+        // 2. Convert to UTF-8 if it's not already
+        if ($encoding !== 'UTF-8' && $encoding !== 'UTF8') {
+            if (function_exists('iconv')) {
+                $converted = @iconv($encoding, 'UTF-8//IGNORE', $xml);
+                if (is_string($converted) && $converted !== '') {
+                    $xml = $converted;
+                    $xml = (string)preg_replace('/(<\?xml\s+[^>]*encoding=["\'])([^"\']+)((["\'][^>]*\?>))/i', '$1UTF-8$3', $xml);
+                }
+            } elseif (function_exists('mb_convert_encoding')) {
+                $converted = @mb_convert_encoding($xml, 'UTF-8', $encoding);
+                if (is_string($converted) && $converted !== '') {
+                    $xml = $converted;
+                    $xml = (string)preg_replace('/(<\?xml\s+[^>]*encoding=["\'])([^"\']+)((["\'][^>]*\?>))/i', '$1UTF-8$3', $xml);
+                }
+            }
+        }
+
+        // 3. Clean up invalid UTF-8 byte sequences
+        if (function_exists('mb_convert_encoding')) {
+            $xml = @mb_convert_encoding($xml, 'UTF-8', 'UTF-8');
+        }
+
+        // 4. Strip invalid XML 1.0 characters
+        // Valid XML 1.0 characters: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+        $cleaned = @preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u', '', $xml);
+        if (is_string($cleaned)) {
+            $xml = $cleaned;
+        } else {
+            // Fallback: strip ASCII control characters using character class ranges without /u
+            $xml = (string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $xml);
+        }
+
+        // 5. Fix unclosed CDATA sections
+        $cdataOpenCount = substr_count($xml, '<![CDATA[');
+        $cdataCloseCount = substr_count($xml, ']]>');
+        if ($cdataOpenCount > $cdataCloseCount) {
+            $offset = 0;
+            $result = '';
+            while (true) {
+                $pos = strpos($xml, '<![CDATA[', $offset);
+                if ($pos === false) {
+                    $result .= substr($xml, $offset);
+                    break;
+                }
+                
+                $result .= substr($xml, $offset, $pos - $offset + 9);
+                $offset = $pos + 9;
+                
+                $closePos = strpos($xml, ']]>', $offset);
+                $nextOpenPos = strpos($xml, '<![CDATA[', $offset);
+                
+                if ($closePos === false) {
+                    if ($nextOpenPos !== false) {
+                        $content = substr($xml, $offset, $nextOpenPos - $offset);
+                        $result .= $content . ']]>';
+                        $offset = $nextOpenPos;
+                    } else {
+                        // Look for closing tags of XML elements to close CDATA before them if possible.
+                        $rest = substr($xml, $offset);
+                        if (preg_match('~</(title|description|content|encoded|summary|item|entry|feed|channel|rss)>~i', $rest, $match, PREG_OFFSET_CAPTURE)) {
+                            $tagClosePos = $match[0][1];
+                            $result .= substr($rest, 0, $tagClosePos) . ']]>' . substr($rest, $tagClosePos);
+                        } else {
+                            $result .= $rest . ']]>';
+                        }
+                        $offset = strlen($xml);
+                        break;
+                    }
+                } else {
+                    if ($nextOpenPos !== false && $nextOpenPos < $closePos) {
+                        $content = substr($xml, $offset, $nextOpenPos - $offset);
+                        $result .= $content . ']]>';
+                        $offset = $nextOpenPos;
+                    } else {
+                        $result .= substr($xml, $offset, $closePos - $offset + 3);
+                        $offset = $closePos + 3;
+                    }
+                }
+            }
+            $xml = $result;
+        }
+
+        return $xml;
     }
 
     /**
