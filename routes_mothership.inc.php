@@ -625,17 +625,17 @@ $router->register(
 $router->register(
     'magnitu_scores',
     \Seismo\Controller\MagnituController::class . '::scores',
-    true
+    false
 );
 $router->register(
     'magnitu_recipe',
     \Seismo\Controller\MagnituController::class . '::recipe',
-    true
+    false
 );
 $router->register(
     'magnitu_labels',
     \Seismo\Controller\MagnituController::class . '::labels',
-    true
+    false
 );
 $router->register(
     'magnitu_status',

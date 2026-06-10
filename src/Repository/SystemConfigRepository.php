@@ -88,6 +88,7 @@ final class SystemConfigRepository
             $fallbackKey = match ($key) {
                 'researcher:system_prompt' => 'researcher:system_prompt',
                 'ai_researcher_prompts' => 'ai_researcher_prompts',
+                'seismogramm_prompts' => 'ai_researcher_prompts',
                 'researcher:max_context_entries' => 'researcher:max_context_entries',
                 default => null,
             };

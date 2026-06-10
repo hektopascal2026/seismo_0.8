@@ -86,7 +86,8 @@ foreach ($registry as $sat) {
         continue;
     }
     $status = (string)($sat['status'] ?? 'pending');
-    if ($status === 'removed') {
+    if ($status !== 'active') {
+        $log("[seismo] desk {$slug}: status={$status} — skipped (provision to activate)\n");
         continue;
     }
 

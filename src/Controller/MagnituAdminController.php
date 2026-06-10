@@ -107,7 +107,12 @@ final class MagnituAdminController
                 return;
             }
             $_SESSION[self::SESSION_API_KEY_FLASH] = $key;
-            $_SESSION['success'] = 'New Magnitu API key generated. Copy it into Magnitu\'s magnitu_config.json.';
+            if (isSatellite()) {
+                self::syncSatelliteRegistryApiKey($key);
+            }
+            $_SESSION['success'] = isSatellite()
+                ? 'New Magnitu API key generated and synced to the mothership registry. Copy it into Magnitu\'s config.'
+                : 'New Magnitu API key generated. Copy it into Magnitu\'s magnitu_config.json.';
         } catch (PDOException $e) {
             error_log('Seismo settings_regenerate_magnitu_key: ' . $e->getMessage());
             $_SESSION['error'] = self::pdoUserHint($e);
@@ -193,5 +198,39 @@ final class MagnituAdminController
     private static function satelliteDbNameForHint(): string
     {
         return defined('DB_NAME') && is_string(DB_NAME) && DB_NAME !== '' ? DB_NAME : 'your_satellite_db';
+    }
+
+    private static function syncSatelliteRegistryApiKey(string $apiKey): void
+    {
+        $slug = seismoSatelliteSlug();
+        if ($slug === '') {
+            return;
+        }
+        try {
+            $config = new SystemConfigRepository(seismoPdoForScoresCatalog((string)SEISMO_ENTRIES_DB));
+            $raw = $config->get('satellites_registry');
+            $rows = is_string($raw) && $raw !== '' ? json_decode($raw, true) : [];
+            if (!is_array($rows)) {
+                return;
+            }
+            $updated = false;
+            foreach ($rows as &$row) {
+                if (($row['slug'] ?? '') === $slug) {
+                    $row['api_key'] = $apiKey;
+                    $row['rotated_at'] = gmdate('Y-m-d\TH:i:s\Z');
+                    $updated = true;
+                    break;
+                }
+            }
+            unset($row);
+            if ($updated) {
+                $config->set(
+                    'satellites_registry',
+                    json_encode(array_values($rows), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('Seismo syncSatelliteRegistryApiKey: ' . $e->getMessage());
+        }
     }
 }

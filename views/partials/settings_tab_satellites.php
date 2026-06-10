@@ -133,5 +133,12 @@ bin/seismo-satellite-provision.sh example</code>
                     <li>Entries DB: <code><?= e($satellitesMothershipDb) ?></code></li>
                     <li>Base URL: <code><?= e($satellitesMothershipUrl) ?></code></li>
                 </ul>
+                <form method="post" action="<?= e($bp) ?>/index.php?action=satellite_rotate_refresh_key" class="admin-inline-form"
+                      style="margin-top: 0.75rem;"
+                      onsubmit="return confirm('Rotate the shared remote refresh key? All satellites pick it up immediately.');">
+                    <?= $csrfField ?>
+                    <button type="submit" class="btn btn-secondary btn-sm">Rotate remote refresh key</button>
+                </form>
+                <p class="admin-intro" style="margin-top:0.35rem; font-size:0.85rem;">Used when path satellites press Refresh to trigger mothership ingest.</p>
             </div>
         </div>

@@ -216,12 +216,9 @@ final class DashboardController
             return;
         }
 
-        $url = rtrim($mother, '/') . '/index.php?' . http_build_query([
-            'action' => 'refresh_all_remote',
-            'key'    => $key,
-        ]);
+        $url = rtrim($mother, '/') . '/index.php?action=refresh_all_remote';
 
-        [$status, $body] = self::httpGet($url);
+        [$status, $body] = self::httpPost($url, ['key' => $key]);
 
         if ($status === 0 && $body === '') {
             $_SESSION['error'] = 'Could not reach the mothership for refresh (network or TLS error).';
@@ -285,6 +282,7 @@ final class DashboardController
         }
         $success = $_SESSION['success'] ?? null;
         $error = $_SESSION['error'] ?? null;
+        unset($_SESSION['success'], $_SESSION['error']);
         $ok = ! (is_string($error) && $error !== '');
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(200);
@@ -357,6 +355,57 @@ final class DashboardController
         }
 
         return [$code, $body === false ? '' : (string)$body];
+    }
+
+    /**
+     * @param array<string, string> $fields
+     * @return array{0: int, 1: string} HTTP status (0 if unknown), response body
+     */
+    private static function httpPost(string $url, array $fields): array
+    {
+        $body = http_build_query($fields);
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT        => 320,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $body,
+                CURLOPT_HTTPHEADER     => [
+                    'Accept: application/json',
+                    'Content-Type: application/x-www-form-urlencoded',
+                ],
+            ]);
+            $response = curl_exec($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+            return [$code, $response === false ? '' : (string)$response];
+        }
+
+        $ctx = stream_context_create([
+            'http' => [
+                'method'        => 'POST',
+                'timeout'       => 320,
+                'header'        => "Accept: application/json\r\nContent-Type: application/x-www-form-urlencoded\r\n",
+                'content'       => $body,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $response = @file_get_contents($url, false, $ctx);
+        $code = 0;
+        if (function_exists('http_get_last_response_headers')) {
+            $headers = http_get_last_response_headers();
+        } else {
+            $var = 'http_response_header';
+            $headers = $$var ?? null;
+        }
+        if (is_array($headers) && !empty($headers[0]) && preg_match('#HTTP/\S+\s+(\d{3})#', $headers[0], $m)) {
+            $code = (int)$m[1];
+        }
+
+        return [$code, $response === false ? '' : (string)$response];
     }
 
     /**

@@ -2,7 +2,7 @@
 /**
  * Satellite-only route table — UI nav (drawer) is Timeline, Highlights, Label, Settings;
  * the Filter view remains registered and reachable by URL but is hidden from the nav on
- * satellites. In-app: highlights, AI Researcher, in-app Label training, settings (General +
+ * satellites. In-app: highlights, Seismogramm, in-app Label training, settings (General +
  * Magnitu), Magnitu Bearer API, remote mothership refresh POST, auth, health.
  * No feeds, Lex/Leg admin, Settings → Diagnostics tab, retention, exports, or other
  * mothership-only surfaces.
@@ -60,11 +60,6 @@ $router->register(
     false
 );
 $router->register(
-    'settings_restore_researcher_builtin_prompts',
-    \Seismo\Controller\SettingsController::class . '::restoreResearcherBuiltinPrompts',
-    false
-);
-$router->register(
     'settings_save_admin_password',
     \Seismo\Controller\SettingsController::class . '::saveAdminPassword',
     false
@@ -88,76 +83,6 @@ $router->register(
     'magnitu',
     \Seismo\Controller\MagnituHighlightsController::class . '::show',
     true
-);
-$router->register(
-    'researcher',
-    \Seismo\Controller\AiResearcherController::class . '::show',
-    true
-);
-$router->register(
-    'briefing_builder',
-    \Seismo\Controller\AiResearcherController::class . '::show',
-    true
-);
-$router->register(
-    'researcher_prepare',
-    \Seismo\Controller\AiResearcherController::class . '::prepare',
-    false
-);
-$router->register(
-    'briefing_builder_prepare',
-    \Seismo\Controller\AiResearcherController::class . '::prepare',
-    false
-);
-$router->register(
-    'researcher_generate',
-    \Seismo\Controller\AiResearcherController::class . '::generate',
-    false
-);
-$router->register(
-    'briefing_builder_generate',
-    \Seismo\Controller\AiResearcherController::class . '::generate',
-    false
-);
-$router->register(
-    'researcher_save_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::savePrompt',
-    false
-);
-$router->register(
-    'briefing_builder_save_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::savePrompt',
-    false
-);
-$router->register(
-    'researcher_prompt_helper',
-    \Seismo\Controller\AiResearcherController::class . '::promptHelper',
-    false
-);
-$router->register(
-    'briefing_prompt_helper',
-    \Seismo\Controller\AiResearcherController::class . '::promptHelper',
-    false
-);
-$router->register(
-    'save_researcher_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::savePromptLibrary',
-    false
-);
-$router->register(
-    'save_briefing_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::savePromptLibrary',
-    false
-);
-$router->register(
-    'delete_researcher_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::deletePromptLibrary',
-    false
-);
-$router->register(
-    'delete_briefing_prompt',
-    \Seismo\Controller\AiResearcherController::class . '::deletePromptLibrary',
-    false
 );
 $router->register(
     'seismogramm',
@@ -212,17 +137,17 @@ $router->register(
 $router->register(
     'magnitu_scores',
     \Seismo\Controller\MagnituController::class . '::scores',
-    true
+    false
 );
 $router->register(
     'magnitu_recipe',
     \Seismo\Controller\MagnituController::class . '::recipe',
-    true
+    false
 );
 $router->register(
     'magnitu_labels',
     \Seismo\Controller\MagnituController::class . '::labels',
-    true
+    false
 );
 $router->register(
     'magnitu_status',

@@ -671,11 +671,46 @@ final class MagnituExportRepository
     public function getEntryCounts(): array
     {
         return [
-            'feed_items'       => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('feed_items')),
-            'emails'           => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable(getEmailTableName())),
-            'lex_items'        => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('lex_items')),
-            'calendar_events'  => $this->countOrZero('SELECT COUNT(*) FROM ' . entryTable('calendar_events')),
+            'feed_items' => $this->countOrZero(
+                'SELECT COUNT(*) FROM ' . entryTable('feed_items') . ' fi
+                 JOIN ' . entryTable('feeds') . ' f ON fi.feed_id = f.id
+                 WHERE f.disabled = 0 AND fi.hidden = 0',
+            ),
+            'emails' => $this->countExportableEmails(),
+            'lex_items' => $this->countOrZero(
+                'SELECT COUNT(*) FROM ' . entryTable('lex_items'),
+            ),
+            'calendar_events' => $this->countOrZero(
+                'SELECT COUNT(*) FROM ' . entryTable('calendar_events'),
+            ),
         ];
+    }
+
+    private function countExportableEmails(): int
+    {
+        $table = entryTable(getEmailTableName());
+        try {
+            $stmt = $this->pdo->prepare(
+                'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_SCHEMA = ' . entryDbSchemaExpr() . '
+                    AND TABLE_NAME = ?',
+            );
+            $stmt->execute([getEmailTableName()]);
+            $cols = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        } catch (PDOException) {
+            return 0;
+        }
+        if ($cols === []) {
+            return 0;
+        }
+        $hiddenClause = in_array('hidden', $cols, true) ? 'e.hidden = 0' : '1=1';
+        $exportableClause = in_array('parent_email_id', $cols, true)
+            ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
+            : '';
+
+        return $this->countOrZero(
+            "SELECT COUNT(*) FROM {$table} e WHERE {$hiddenClause}{$exportableClause}",
+        );
     }
 
     // ------------------------------------------------------------------

@@ -46,6 +46,9 @@ final class AiResearcherController
 
     private const PROMPT_LIBRARY_SWISSMEM_NAME = 'Swissmem';
 
+    /** Owned by Seismogramm — never load or drop from the legacy researcher library key. */
+    private const SEISMOGRAMM_BUILTIN_PROMPTS = ['Briefing', 'Blindspot', 'Research'];
+
     private const MAX_PROMPT_LIBRARY = 50;
 
     private const MAX_PROMPT_NAME_LEN = 80;
@@ -634,7 +637,7 @@ PROMPT;
                     }
                 }
                 $library = self::updatePromptLibraryEntry($library, $id, $content);
-                $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+                self::persistPromptLibrary($config, $library);
                 echo json_encode(['ok' => true, 'prompts' => $library], JSON_UNESCAPED_UNICODE);
 
                 return;
@@ -654,7 +657,7 @@ PROMPT;
                 'name'    => $name,
                 'content' => $content,
             ];
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            self::persistPromptLibrary($config, $library);
             echo json_encode(['ok' => true, 'prompts' => $library], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
@@ -717,7 +720,7 @@ PROMPT;
 
                 return;
             }
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            self::persistPromptLibrary($config, $library);
             echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
         } catch (\InvalidArgumentException $e) {
             http_response_code(400);
@@ -769,7 +772,7 @@ PROMPT;
         $library      = $ordered;
 
         if ($changed || $orderChanged) {
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            self::persistPromptLibrary($config, $library);
         }
 
         return $library;
@@ -823,7 +826,7 @@ PROMPT;
             $swissmemAdded = true;
         }
 
-        $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, self::orderPromptLibraryDefaultFirst($library));
+        self::persistPromptLibrary($config, self::orderPromptLibraryDefaultFirst($library));
 
         return [
             'default_updated'  => $hasDefault && !$defaultAdded,
@@ -891,16 +894,55 @@ PROMPT;
             if (!is_array($row)) {
                 continue;
             }
+            if (self::isSeismogrammLibraryRow($row)) {
+                continue;
+            }
             $id      = trim((string)($row['id'] ?? ''));
             $name    = trim((string)($row['name'] ?? ''));
             $content = (string)($row['content'] ?? '');
             if ($id === '' || $name === '' || $content === '') {
                 continue;
             }
-            $out[] = ['id' => $id, 'name' => $name, 'content' => $content];
+            $entry = $row;
+            $entry['id'] = $id;
+            $entry['name'] = $name;
+            $entry['content'] = $content;
+            $out[] = $entry;
         }
 
         return self::orderPromptLibraryDefaultFirst($out);
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function isSeismogrammLibraryRow(array $row): bool
+    {
+        $name = trim((string)($row['name'] ?? ''));
+        if (in_array($name, self::SEISMOGRAMM_BUILTIN_PROMPTS, true)) {
+            return true;
+        }
+
+        return ($row['is_custom'] ?? false) === true || array_key_exists('knobs', $row);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $researcherRows
+     */
+    private static function persistPromptLibrary(SystemConfigRepository $config, array $researcherRows): void
+    {
+        $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
+        if (!is_array($raw)) {
+            $raw = [];
+        }
+        $preserved = [];
+        foreach ($raw as $row) {
+            if (is_array($row) && self::isSeismogrammLibraryRow($row)) {
+                $preserved[] = $row;
+            }
+        }
+        $config->setJson(
+            self::CONFIG_KEY_PROMPT_LIBRARY,
+            array_values(array_merge($researcherRows, $preserved)),
+        );
     }
 
     /**

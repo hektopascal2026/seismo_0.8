@@ -117,9 +117,11 @@ final class SatelliteController
         $registry = $this->loadRegistry($config);
         $found = false;
         $scoresDb = 'seismo_' . $slug;
+        $newKey = '';
         foreach ($registry as &$sat) {
             if (($sat['slug'] ?? '') === $slug) {
-                $sat['api_key'] = $this->generateKey();
+                $newKey = $this->generateKey();
+                $sat['api_key'] = $newKey;
                 $sat['rotated_at'] = gmdate('Y-m-d\TH:i:s\Z');
                 $scoresDb = (string)($sat['db_name'] ?? $scoresDb);
                 $found = true;
@@ -136,7 +138,23 @@ final class SatelliteController
         }
 
         $this->saveRegistry($config, $registry);
-        $_SESSION['success'] = "API key rotated for '{$slug}'. Update Magnitu and set api_key in `{$scoresDb}.system_config` if already provisioned.";
+
+        $deskApplied = false;
+        if ($newKey !== '') {
+            try {
+                $deskConfig = new SystemConfigRepository(seismoPdoForScoresCatalog($scoresDb));
+                $deskConfig->set('api_key', $newKey);
+                $deskApplied = true;
+            } catch (\Throwable $e) {
+                error_log("Seismo satellite_rotate_key desk {$scoresDb}: " . $e->getMessage());
+            }
+        }
+
+        if ($deskApplied) {
+            $_SESSION['success'] = "API key rotated for '{$slug}' and applied to `{$scoresDb}.system_config`. Update Magnitu's config with the new key.";
+        } else {
+            $_SESSION['success'] = "API key rotated in registry for '{$slug}'. Could not update `{$scoresDb}.system_config` — set api_key there manually if the desk is provisioned.";
+        }
         $this->redirect($slug);
     }
 

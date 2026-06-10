@@ -66,4 +66,23 @@ final class MagnituSyncHintsTest extends TestCase
 
         $this->assertFalse($hints['drain_complete']);
     }
+
+    public function testCalendarEventCursorUsesFetchedAtAndCapsAtNow(): void
+    {
+        $futureEvent = '2099-12-31 00:00:00';
+        $fetchedAt = '2026-06-02 08:00:00';
+        $entries = [
+            [
+                'entry_type'      => 'calendar_event',
+                'published_date'  => $futureEvent,
+                'fetched_at'      => $fetchedAt,
+            ],
+        ];
+
+        $hints = MagnituSyncHints::forBatch($entries, true, 200, cursorOnIngestTimeOnly: true);
+
+        $this->assertSame($futureEvent, $hints['newest_published_date']);
+        $this->assertSame($fetchedAt, $hints['recommended_next_since']);
+        $this->assertStringContainsString('fetched_at', $hints['pagination_note']);
+    }
 }

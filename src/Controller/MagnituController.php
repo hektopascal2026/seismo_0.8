@@ -116,7 +116,12 @@ final class MagnituController
             foreach ($shaped as $row) {
                 $entries[] = $row;
             }
-            $syncByType['calendar_event'] = MagnituSyncHints::forBatch($shaped, $ascending, $limit);
+            $syncByType['calendar_event'] = MagnituSyncHints::forBatch(
+                $shaped,
+                $ascending,
+                $limit,
+                cursorOnIngestTimeOnly: true,
+            );
         }
 
         self::respondJson([

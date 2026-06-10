@@ -19,7 +19,13 @@ use Seismo\Service\Seismogramm\SeismogrammPresetProfile;
 
 final class SeismogrammController
 {
-    private const CONFIG_KEY_PROMPT_LIBRARY = 'ai_researcher_prompts'; // Shared with legacy Researcher
+    private const CONFIG_KEY_PROMPT_LIBRARY = 'seismogramm_prompts';
+
+    /** One-time migration source before Seismogramm had its own config key. */
+    private const LEGACY_PROMPT_LIBRARY_KEY = 'ai_researcher_prompts';
+
+    /** @var list<string> */
+    private const BUILTIN_PRESET_NAMES = ['Briefing', 'Blindspot', 'Research'];
 
     public function show(): void
     {
@@ -42,8 +48,8 @@ final class SeismogrammController
         }
 
         foreach ($savedPrompts as $row) {
-            if ($row['name'] === 'Briefing') {
-                $initialActivePromptTabId = $row['id'];
+            if (($row['name'] ?? '') === 'Briefing') {
+                $initialActivePromptTabId = (string)($row['id'] ?? '');
                 break;
             }
         }
@@ -170,7 +176,9 @@ final class SeismogrammController
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
             $capContext = $this->resolveCapContext($pdo, $requestContext, $filters, $_POST);
             $filters = $capContext['filters'];
-            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
+            if ($this->shouldPersistMaxContextEntries($filters)) {
+                $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
+            }
 
             $preset = (string)($filters['presetRaw'] ?? $filters['preset']);
             $pipelinePreset = (string)($filters['pipelinePreset'] ?? $filters['preset']);
@@ -412,8 +420,18 @@ final class SeismogrammController
 
             if ($foundIndex !== -1) {
                 $rowName = $library[$foundIndex]['name'] ?? '';
-                if (in_array($rowName, ['Briefing', 'Blindspot', 'Research'], true)) {
+                if (in_array($rowName, self::BUILTIN_PRESET_NAMES, true)) {
                     throw new \InvalidArgumentException('The default presets cannot be overwritten.');
+                }
+                foreach ($library as $idx => $row) {
+                    if ($idx === $foundIndex) {
+                        continue;
+                    }
+                    if (($row['name'] ?? '') === $name) {
+                        throw new \InvalidArgumentException(
+                            'A preset named "' . $name . '" already exists. Choose a different name or update the existing preset.',
+                        );
+                    }
                 }
                 $library[$foundIndex]['name'] = $name;
                 $library[$foundIndex]['content'] = $content;
@@ -548,6 +566,14 @@ final class SeismogrammController
 
         $library = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
         if (is_array($library)) {
+            $presetId = trim((string)($post['preset_id'] ?? ''));
+            if ($presetId !== '') {
+                foreach ($library as $row) {
+                    if (($row['id'] ?? '') === $presetId) {
+                        return trim((string)($row['content'] ?? ''));
+                    }
+                }
+            }
             foreach ($library as $row) {
                 if (($row['name'] ?? '') === $preset) {
                     return trim((string)($row['content'] ?? ''));
@@ -562,17 +588,32 @@ final class SeismogrammController
         };
     }
 
-    private function validateResolvedPrompt(string $preset, string $systemPrompt): void
+    private function validateResolvedPrompt(string $pipelinePreset, string $systemPrompt): void
     {
-        if (str_contains($systemPrompt, '{researchQuery}')) {
+        $pipeline = SeismogrammPresetProfile::normalizePreset($pipelinePreset);
+
+        if ($pipeline === SeismogrammPresetProfile::RESEARCH && str_contains($systemPrompt, '{researchQuery}')) {
             throw new GeminiResearcherException('Research requires a topic query.', 400);
         }
 
-        $preset = SeismogrammPresetProfile::normalizePreset($preset);
-        if (in_array($preset, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT], true)
+        if (in_array($pipeline, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT], true)
             && str_contains($systemPrompt, '{briefingPersona}')) {
             throw new GeminiResearcherException('This preset requires a persona/goal.', 400);
         }
+    }
+
+    /** @param array<string, mixed> $filters */
+    private function shouldPersistMaxContextEntries(array $filters): bool
+    {
+        if (!($filters['customAdvanced'] ?? false)) {
+            return false;
+        }
+        $presetRaw = trim((string)($filters['presetRaw'] ?? $filters['preset'] ?? ''));
+        if (!in_array($presetRaw, self::BUILTIN_PRESET_NAMES, true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -638,7 +679,27 @@ final class SeismogrammController
     private function ensurePresetsSeeded(SystemConfigRepository $config): array
     {
         $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
-        $library = is_array($raw) ? $raw : [];
+        $library = is_array($raw) ? array_values($raw) : [];
+
+        if ($library === []) {
+            $legacy = $config->getJson(self::LEGACY_PROMPT_LIBRARY_KEY, []);
+            if (is_array($legacy)) {
+                foreach ($legacy as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    $name = trim((string)($row['name'] ?? ''));
+                    if ($name === '') {
+                        continue;
+                    }
+                    if (in_array($name, self::BUILTIN_PRESET_NAMES, true)
+                        || ($row['is_custom'] ?? false) === true
+                        || array_key_exists('knobs', $row)) {
+                        $library[] = $row;
+                    }
+                }
+            }
+        }
 
         $presets = [
             'Briefing' => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
@@ -646,7 +707,19 @@ final class SeismogrammController
             'Research' => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
         ];
 
-        $changed = false;
+        $changed = $library !== (is_array($raw) ? array_values($raw) : []);
+
+        foreach ($library as &$row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (trim((string)($row['id'] ?? '')) === '') {
+                $row['id'] = bin2hex(random_bytes(8));
+                $changed = true;
+            }
+        }
+        unset($row);
+
         foreach ($presets as $name => $content) {
             $found = false;
             foreach ($library as &$row) {
@@ -670,14 +743,14 @@ final class SeismogrammController
                 $library[] = [
                     'id' => bin2hex(random_bytes(8)),
                     'name' => $name,
-                    'content' => $content
+                    'content' => $content,
                 ];
                 $changed = true;
             }
         }
 
         if ($changed) {
-            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, array_values($library));
         }
 
         return $library;

@@ -345,7 +345,19 @@ function seismoSatelliteSlug(): string
     if ($segment === '' || str_contains($segment, '/')) {
         $segment = explode('/', $segment, 2)[0] ?? '';
     }
-    $resolved = seismoNormaliseSatelliteSlug($segment);
+    $slug = seismoNormaliseSatelliteSlug($segment);
+    if ($slug === '' || in_array($slug, seismoReservedSatelliteSlugs(), true)) {
+        $resolved = '';
+
+        return $resolved;
+    }
+    // Path mounts are satellites only when registered (avoids /seismo/ subfolder false positives).
+    if (!seismoSatelliteSlugInRegistry($slug)) {
+        $resolved = '';
+
+        return $resolved;
+    }
+    $resolved = $slug;
 
     return $resolved;
 }
@@ -386,10 +398,6 @@ function seismoScoresDbName(): string
     $slug = seismoSatelliteSlug();
     if ($slug === '') {
         return (string)SEISMO_ENTRIES_DB;
-    }
-    $sat = seismoCurrentSatellite();
-    if ($sat !== null && ($sat['db_name'] ?? '') !== '') {
-        return (string)$sat['db_name'];
     }
 
     return 'seismo_' . $slug;
@@ -434,44 +442,30 @@ function seismoCurrentSatellite(): ?array
 }
 
 /**
- * Mothership satellite registry from `system_config.satellites_registry`.
+ * Raw satellite registry from mothership `system_config.satellites_registry`.
+ * Uses the entries catalog only — safe before {@see getDbConnection()} on a desk.
  *
  * @return list<array<string, mixed>>
  */
-function seismoSatellitesRegistry(): array
+function seismoFetchSatellitesRegistryRaw(): array
 {
     static $registry = null;
     if ($registry !== null) {
         return $registry;
     }
     $registry = [];
-    if (!hasDbConnection() || isSatellite()) {
-        if (!isSatellite()) {
-            return $registry;
-        }
-        try {
-            $entriesDb = (string)SEISMO_ENTRIES_DB;
-            $quoted = '`' . str_replace('`', '``', $entriesDb) . '`';
-            $pdo = getDbConnection();
-            $stmt = $pdo->prepare(
-                "SELECT config_value FROM {$quoted}.system_config WHERE config_key = 'satellites_registry' LIMIT 1"
-            );
-            $stmt->execute();
-            $raw = $stmt->fetchColumn();
-            if (is_string($raw) && $raw !== '') {
-                $decoded = json_decode($raw, true);
-                $registry = is_array($decoded) ? array_values($decoded) : [];
-            }
-        } catch (\Throwable) {
-            $registry = [];
-        }
-
+    if (!isConfigured()) {
         return $registry;
     }
     try {
-        $config = new \Seismo\Repository\SystemConfigRepository(getDbConnection());
-        $raw = $config->get('satellites_registry');
-        if ($raw !== null && $raw !== '') {
+        $entriesDb = '`' . str_replace('`', '``', (string)SEISMO_ENTRIES_DB) . '`';
+        $pdo = seismoPdoForScoresCatalog((string)SEISMO_ENTRIES_DB);
+        $stmt = $pdo->prepare(
+            "SELECT config_value FROM {$entriesDb}.system_config WHERE config_key = 'satellites_registry' LIMIT 1"
+        );
+        $stmt->execute();
+        $raw = $stmt->fetchColumn();
+        if (is_string($raw) && $raw !== '') {
             $decoded = json_decode($raw, true);
             $registry = is_array($decoded) ? array_values($decoded) : [];
         }
@@ -480,6 +474,30 @@ function seismoSatellitesRegistry(): array
     }
 
     return $registry;
+}
+
+function seismoSatelliteSlugInRegistry(string $slug): bool
+{
+    if ($slug === '') {
+        return false;
+    }
+    foreach (seismoFetchSatellitesRegistryRaw() as $row) {
+        if (($row['slug'] ?? '') === $slug) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Mothership satellite registry from `system_config.satellites_registry`.
+ *
+ * @return list<array<string, mixed>>
+ */
+function seismoSatellitesRegistry(): array
+{
+    return seismoFetchSatellitesRegistryRaw();
 }
 
 /**

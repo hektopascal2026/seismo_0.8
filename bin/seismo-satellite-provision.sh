@@ -38,25 +38,28 @@ fi
 
 echo "==> Provisioning satellite slug=${SLUG} scores_db=${SCORES_DB} entries_db=${ENTRIES_DB}"
 
-php -r "
-require '$ROOT/bootstrap.php';
-\$slug = seismoNormaliseSatelliteSlug('$SLUG');
-if (\$slug === '' || in_array(\$slug, seismoReservedSatelliteSlugs(), true)) {
-    fwrite(STDERR, \"Invalid or reserved slug\\n\");
+TMP_JSON="$(mktemp /tmp/seismo-sat-XXXXXX.json)"
+trap 'rm -f "$TMP_JSON"' EXIT
+
+SEISMO_PROVISION_SLUG="$SLUG" php -r '
+require "'"$ROOT"'/bootstrap.php";
+$slug = seismoNormaliseSatelliteSlug((string)(getenv("SEISMO_PROVISION_SLUG") ?: ""));
+if ($slug === "" || in_array($slug, seismoReservedSatelliteSlugs(), true)) {
+    fwrite(STDERR, "Invalid or reserved slug\n");
     exit(1);
 }
-\$found = null;
-foreach (seismoSatellitesRegistry() as \$row) {
-    if ((\$row['slug'] ?? '') === \$slug) { \$found = \$row; break; }
+$found = null;
+foreach (seismoSatellitesRegistry() as $row) {
+    if (($row["slug"] ?? "") === $slug) { $found = $row; break; }
 }
-if (\$found === null) {
-    fwrite(STDERR, \"Slug not in satellites_registry — add it in Settings → Satellites first.\\n\");
+if ($found === null) {
+    fwrite(STDERR, "Slug not in satellites_registry — add it in Settings → Satellites first.\n");
     exit(2);
 }
-echo json_encode(\$found, JSON_UNESCAPED_SLASHES);
-" > /tmp/seismo-sat-${SLUG}.json
+echo json_encode($found, JSON_UNESCAPED_SLASHES);
+' > "$TMP_JSON"
 
-API_KEY="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["api_key"] ?? "";' /tmp/seismo-sat-${SLUG}.json)"
+API_KEY="$(php -r 'echo json_decode(file_get_contents($argv[1]), true)["api_key"] ?? "";' "$TMP_JSON")"
 if [[ -z "$API_KEY" ]]; then
   echo "Registry row has no api_key." >&2
   exit 2
@@ -105,25 +108,29 @@ fi
 chown -R www-data:www-data "$MOUNT_DIR" 2>/dev/null || true
 
 echo "==> Marking registry status=active"
-php -r "
-require '$ROOT/bootstrap.php';
-\$slug = seismoNormaliseSatelliteSlug('$SLUG');
-\$config = new Seismo\Repository\SystemConfigRepository(getDbConnection());
-\$raw = \$config->get('satellites_registry');
-\$rows = is_string(\$raw) && \$raw !== '' ? json_decode(\$raw, true) : [];
-if (!is_array(\$rows)) { \$rows = []; }
-foreach (\$rows as &\$row) {
-    if ((\$row['slug'] ?? '') === \$slug) {
-        \$row['status'] = 'active';
-        \$row['provisioned_at'] = gmdate('Y-m-d\\\\TH:i:s\\\\Z');
-        \$row['db_name'] = '$SCORES_DB';
-        \$row['mount_path'] = '/$SLUG';
+SEISMO_PROVISION_SLUG="$SLUG" SEISMO_PROVISION_SCORES_DB="$SCORES_DB" php -r '
+require "'"$ROOT"'/bootstrap.php";
+$slug = seismoNormaliseSatelliteSlug((string)(getenv("SEISMO_PROVISION_SLUG") ?: ""));
+$scoresDb = trim((string)(getenv("SEISMO_PROVISION_SCORES_DB") ?: ""));
+if ($scoresDb === "") {
+    $scoresDb = "seismo_" . $slug;
+}
+$config = new Seismo\Repository\SystemConfigRepository(
+    seismoPdoForScoresCatalog((string)SEISMO_ENTRIES_DB),
+);
+$raw = $config->get("satellites_registry");
+$rows = is_string($raw) && $raw !== "" ? json_decode($raw, true) : [];
+if (!is_array($rows)) { $rows = []; }
+foreach ($rows as &$row) {
+    if (($row["slug"] ?? "") === $slug) {
+        $row["status"] = "active";
+        $row["provisioned_at"] = gmdate("Y-m-d\TH:i:s\Z");
+        $row["db_name"] = $scoresDb;
+        $row["mount_path"] = "/" . $slug;
     }
 }
-unset(\$row);
-\$config->set('satellites_registry', json_encode(array_values(\$rows), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-"
-
-rm -f /tmp/seismo-sat-${SLUG}.json
+unset($row);
+$config->set("satellites_registry", json_encode(array_values($rows), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+'
 
 echo "Done. Open: (your mothership base URL)/${SLUG}/"
