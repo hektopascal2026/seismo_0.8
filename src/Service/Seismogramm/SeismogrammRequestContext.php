@@ -30,8 +30,12 @@ final class SeismogrammRequestContext
      */
     public function parseFiltersFromPost(array $post, PDO $pdo): array
     {
-        $preset = SeismogrammPresetProfile::normalizePreset((string)($post['preset'] ?? ''));
+        $presetRaw = trim((string)($post['preset'] ?? ''));
+        $preset = SeismogrammPresetProfile::normalizePreset($presetRaw);
         $customAdvanced = (string)($post['custom_advanced'] ?? '0') === '1';
+        if (!$customAdvanced && !in_array($presetRaw, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT, SeismogrammPresetProfile::RESEARCH], true)) {
+            $customAdvanced = true;
+        }
         $gatherDefaults = SeismogrammPresetProfile::gatherDefaults($preset, $customAdvanced);
 
         $selection = $this->parseModuleSelection($post['modules'] ?? null);

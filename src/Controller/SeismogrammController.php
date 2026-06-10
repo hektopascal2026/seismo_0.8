@@ -398,8 +398,9 @@ final class SeismogrammController
             } else {
                 foreach ($library as $idx => $row) {
                     if (($row['name'] ?? '') === $name) {
-                        $foundIndex = $idx;
-                        break;
+                        throw new \InvalidArgumentException(
+                            'A preset named "' . $name . '" already exists. Choose a different name or update the existing preset.',
+                        );
                     }
                 }
             }

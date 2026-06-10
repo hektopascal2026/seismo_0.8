@@ -249,9 +249,9 @@ $moduleOptions = [
                 <p><strong>Good for:</strong> “Everything on topic X in the last week” across feeds, mail, lex, and media.</p>
 
                 <h3>Blindspot</h3>
-                <p><strong>What:</strong> Regulatory / parliamentary signals not yet echoed in media.</p>
-                <p><strong>How:</strong> Relational tournament on Lex+Leg primary sources; compares against a global title fingerprint (Media, Feeds, Scraper). Negative-space protocol rejects fuzzy media overlap. Persona/goal filters random regulatory noise.</p>
-                <p><strong>Good for:</strong> Horizon scanning when you need primary-source signals the news cycle has not picked up.</p>
+                <p><strong>What:</strong> CH Lex and parliamentary signals not yet echoed in media or newsletters.</p>
+                <p><strong>How:</strong> Relational tournament on CH Lex+Leg primary sources; compares against a global title fingerprint from enabled echo sources (Media and Newsletter by default). Negative-space protocol rejects fuzzy overlap. Persona/goal filters random regulatory noise.</p>
+                <p><strong>Good for:</strong> Horizon scanning when Fedlex or parliament moves before the news cycle and digest mail catch up.</p>
 
                 <h3>Pipeline diagram</h3>
                 <pre>mermaid
@@ -266,7 +266,7 @@ flowchart LR
     end
     subgraph blindspot [Blindspot]
         BL1[Lex/Leg batches] --> BL2[Parallel prelims]
-        BL3[Echo fingerprint] --> BL2
+        BL3[Echo fingerprint Media/Newsletter] --> BL2
         BL2 --> BL5[Championship + persona gate]
     end
 </pre>
@@ -327,11 +327,18 @@ flowchart LR
                     <div class="tag-filter-section">
                         <div class="tag-filter-list">
                             <?php foreach ($moduleOptions as $mod): ?>
+                            <?php if ($mod['key'] === 'lex'): ?>
+                            <label class="tag-filter-pill tag-filter-pill-active tag-filter-pill--lex" id="seismogramm-lex-pill" style="user-select: none;">
+                                <input type="hidden" name="modules[]" value="lex" id="seismogramm-lex-input">
+                                <span id="seismogramm-lex-label">Lex</span>
+                            </label>
+                            <?php else: ?>
                             <?php $modChecked = $mod['key'] !== 'mem'; ?>
                             <label class="tag-filter-pill<?= $modChecked ? ' tag-filter-pill-active' : '' ?> tag-filter-pill--<?= e($mod['key']) ?>">
                                 <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $modChecked ? ' checked' : '' ?> class="seismogramm-module-cb">
                                 <span><?= e($mod['label']) ?></span>
                             </label>
+                            <?php endif; ?>
                             <?php endforeach; ?>
                         </div>
                     </div>
@@ -421,7 +428,7 @@ flowchart LR
                         </label>
                         <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
                             <input type="radio" name="selection_mode" value="relational">
-                            <strong>Blind spot / cross-module</strong> — relational tournament + fingerprint asymmetry rules (Lex/Leg primary sources vs Media/Feeds).
+                            <strong>Blind spot / cross-module</strong> — relational tournament + fingerprint asymmetry rules (CH Lex/Leg primary sources vs Media/Newsletter echo).
                         </label>
                         <label style="display:block; margin-top:0.75rem; font-weight:normal;">
                             <input type="checkbox" id="seismogramm_pro_selection_mode" name="pro_selection_mode" value="1">
@@ -438,8 +445,7 @@ flowchart LR
 
                 <div class="admin-form-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <button type="submit" class="btn btn-success" id="seismogramm-generate-btn" <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
-                    <button type="button" class="btn btn-secondary" id="seismogramm-save-preset-btn" style="display: none;">Save Preset</button>
-                    <button type="button" class="btn btn-secondary" id="seismogramm-save-new-preset-btn">Save as New...</button>
+                    <button type="button" class="btn btn-secondary" id="seismogramm-save-preset-btn" style="display: none;">Save as New...</button>
                     <span id="seismogramm-save-msg" class="message" style="margin: 0; display: none;" role="status" aria-live="polite"></span>
                 </div>
             </form>
@@ -488,8 +494,12 @@ flowchart LR
         var form = document.getElementById('seismogramm-builder-form');
         var generateBtn = document.getElementById('seismogramm-generate-btn');
         var savePresetBtn = document.getElementById('seismogramm-save-preset-btn');
-        var saveNewPresetBtn = document.getElementById('seismogramm-save-new-preset-btn');
         var saveMsg = document.getElementById('seismogramm-save-msg');
+        var RESERVED_PRESETS = ['Briefing', 'Blindspot', 'Research'];
+        var briefingPreviewGenerated = false;
+        var presetSettingsDirty = false;
+        var baselineSettingsJson = '';
+        var applyingPreset = false;
         var out = document.getElementById('seismogramm-output');
         var errEl = document.getElementById('seismogramm-output-error');
         var rateLimitRetryEl = document.getElementById('seismogramm-rate-limit-retry');
@@ -529,6 +539,55 @@ flowchart LR
 
         var RESEARCH_MAX_CONTEXT = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?>;
         var TOURNAMENT_THRESHOLD = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?>;
+        var BLINDSPOT_DEFAULT_MODULES = ['lex_ch', 'leg', 'media', 'newsletter'];
+        var lexPill = document.getElementById('seismogramm-lex-pill');
+        var lexInput = document.getElementById('seismogramm-lex-input');
+        var lexLabel = document.getElementById('seismogramm-lex-label');
+        var lexState = 1;
+
+        function setLexModuleState(state) {
+            lexState = state;
+            if (!lexPill || !lexInput || !lexLabel) {
+                return;
+            }
+            if (state === 0) {
+                lexInput.disabled = true;
+                lexPill.className = 'tag-filter-pill tag-filter-pill--lex';
+                lexLabel.textContent = 'Lex';
+            } else if (state === 2) {
+                lexInput.disabled = false;
+                lexInput.value = 'lex_ch';
+                lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--ch-lex';
+                lexLabel.textContent = 'CH Lex';
+            } else {
+                lexInput.disabled = false;
+                lexInput.value = 'lex';
+                lexPill.className = 'tag-filter-pill tag-filter-pill-active tag-filter-pill--lex';
+                lexLabel.textContent = 'Lex';
+            }
+        }
+
+        function applyModulesList(modules) {
+            var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
+            sourceCbs.forEach(function(cb) {
+                cb.checked = modules.indexOf(cb.value) !== -1;
+                var pill = cb.closest('.tag-filter-pill');
+                if (pill) {
+                    pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                }
+            });
+            if (modules.indexOf('lex_ch') !== -1) {
+                setLexModuleState(2);
+            } else if (modules.indexOf('lex') !== -1) {
+                setLexModuleState(1);
+            } else {
+                setLexModuleState(0);
+            }
+        }
+
+        function allModulesExceptMem() {
+            return ['feeds', 'media', 'email', 'newsletter', 'scraper', 'leg', 'lex'];
+        }
 
         var modeCopy = {
             Briefing: {
@@ -545,11 +604,152 @@ flowchart LR
             },
             Blindspot: {
                 title: 'Blindspot',
-                what: 'What: Regulatory and parliamentary signals not yet reflected in media.',
-                how: 'How: Relational tournament on Lex+Leg with a global media/feeds/scraper title fingerprint. Entries that overlap media topics are rejected. Your persona/goal filters irrelevant regulatory noise.',
-                good: 'Good for: Horizon scanning when primary sources move before the news cycle catches up.'
+                what: 'What: Swiss Fedlex and parliamentary signals not yet reflected in media or newsletters.',
+                how: 'How: Relational tournament on CH Lex+Leg with a global Media/Newsletter title fingerprint (Feeds/Scraper optional). Entries that overlap echo topics are rejected. Your persona/goal filters irrelevant regulatory noise.',
+                good: 'Good for: Horizon scanning when primary sources move before the news cycle and digest mail catch up.'
             }
         };
+
+        function isReservedPreset(name) {
+            return RESERVED_PRESETS.indexOf(name) !== -1;
+        }
+
+        function isCustomPresetActive() {
+            return !isReservedPreset(activePreset);
+        }
+
+        function inferFieldModeFromPrompt(content, knobs) {
+            if (knobs && knobs.field_mode) {
+                return knobs.field_mode;
+            }
+            if (content && content.indexOf('{researchQuery}') !== -1) {
+                return 'query';
+            }
+            return 'persona';
+        }
+
+        function applyFieldMode(mode, knobs) {
+            if (mode === 'query') {
+                queryField.style.display = 'block';
+                personaField.style.display = 'none';
+                if (queryInput) {
+                    queryInput.value = (knobs && typeof knobs.research_query === 'string') ? knobs.research_query : '';
+                }
+            } else {
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+                if (personaInput) {
+                    personaInput.value = (knobs && typeof knobs.persona === 'string') ? knobs.persona : '';
+                }
+            }
+        }
+
+        function enforceCustomAdvancedForActivePreset() {
+            if (isCustomPresetActive() || customToggle.checked || promptView === 'workbench') {
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = '1';
+                }
+                return true;
+            }
+            if (customAdvancedInput) {
+                customAdvancedInput.value = customToggle.checked ? '1' : '0';
+            }
+            return customToggle.checked;
+        }
+
+        function snapshotCurrentSettings() {
+            return JSON.stringify({
+                content: systemPromptTa.value,
+                knobs: getKnobsData(),
+                query: queryInput ? queryInput.value : '',
+                persona: personaInput ? personaInput.value : ''
+            });
+        }
+
+        function settingsMatchBaseline() {
+            if (!baselineSettingsJson) {
+                return true;
+            }
+            return snapshotCurrentSettings() === baselineSettingsJson;
+        }
+
+        function setBaselineFromCurrent() {
+            baselineSettingsJson = snapshotCurrentSettings();
+            presetSettingsDirty = false;
+        }
+
+        function updateSavePresetButton() {
+            if (!savePresetBtn) {
+                return;
+            }
+            if (!briefingPreviewGenerated) {
+                savePresetBtn.style.display = 'none';
+                return;
+            }
+            savePresetBtn.style.display = 'inline-block';
+            savePresetBtn.textContent = (presetSettingsDirty && isCustomPresetActive())
+                ? 'Update prompt'
+                : 'Save as New...';
+        }
+
+        function markPresetDirty() {
+            if (applyingPreset || !briefingPreviewGenerated) {
+                return;
+            }
+            if (settingsMatchBaseline()) {
+                if (presetSettingsDirty) {
+                    presetSettingsDirty = false;
+                    updateSavePresetButton();
+                }
+                return;
+            }
+            if (!presetSettingsDirty) {
+                presetSettingsDirty = true;
+                updateSavePresetButton();
+            }
+        }
+
+        function onBriefingPreviewGenerated() {
+            briefingPreviewGenerated = true;
+            setBaselineFromCurrent();
+            updateSavePresetButton();
+        }
+
+        function resetBriefingPreviewState() {
+            briefingPreviewGenerated = false;
+            presetSettingsDirty = false;
+            baselineSettingsJson = '';
+            updateSavePresetButton();
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderPresetBar() {
+            var bar = document.getElementById('seismogramm-preset-bar');
+            if (!bar) {
+                return;
+            }
+            var html = '';
+            presets.forEach(function(sp) {
+                var isDefault = isReservedPreset(sp.name);
+                var isActive = sp.name === activePreset;
+                html += '<div class="preset-btn-wrap"' + (isActive ? ' style="z-index:3;"' : '') + '>';
+                html += '<button type="button" class="seismogramm-preset-btn' + (isActive ? ' is-active' : '') + '"';
+                html += ' data-preset="' + escapeHtml(sp.name) + '" data-id="' + escapeHtml(sp.id || '') + '">';
+                html += escapeHtml(sp.name) + '</button>';
+                if (!isDefault) {
+                    html += '<button type="button" class="seismogramm-preset-delete-btn"';
+                    html += ' data-id="' + escapeHtml(sp.id || '') + '" data-name="' + escapeHtml(sp.name) + '" title="Delete preset">&times;</button>';
+                }
+                html += '</div>';
+            });
+            bar.innerHTML = html;
+            attachPresetBtnListeners();
+        }
 
         function updateModeIntro(presetName) {
             var copy = modeCopy[presetName] || {
@@ -623,11 +823,7 @@ flowchart LR
         function applyBaseModeKnobs(baseMode) {
             var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
             if (baseMode === 'Research') {
-                sourceCbs.forEach(function(cb) {
-                    cb.checked = cb.value !== 'mem';
-                    var pill = cb.closest('.tag-filter-pill');
-                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                });
+                applyModulesList(allModulesExceptMem());
                 if (snippetsCb) snippetsCb.checked = true;
                 if (disregardMagnituCb) disregardMagnituCb.checked = true;
                 if (poolPriorityNewest) poolPriorityNewest.checked = true;
@@ -640,11 +836,7 @@ flowchart LR
                 queryField.style.display = 'block';
                 personaField.style.display = 'none';
             } else if (baseMode === 'Blindspot') {
-                sourceCbs.forEach(function(cb) {
-                    cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
-                    var pill = cb.closest('.tag-filter-pill');
-                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                });
+                applyModulesList(BLINDSPOT_DEFAULT_MODULES);
                 if (snippetsCb) snippetsCb.checked = false;
                 if (disregardMagnituCb) disregardMagnituCb.checked = false;
                 if (poolPriorityHighest) poolPriorityHighest.checked = true;
@@ -657,11 +849,7 @@ flowchart LR
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
             } else {
-                sourceCbs.forEach(function(cb) {
-                    cb.checked = cb.value !== 'mem';
-                    var pill = cb.closest('.tag-filter-pill');
-                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                });
+                applyModulesList(allModulesExceptMem());
                 if (snippetsCb) snippetsCb.checked = false;
                 if (disregardMagnituCb) disregardMagnituCb.checked = false;
                 if (poolPriorityHighest) poolPriorityHighest.checked = true;
@@ -720,12 +908,13 @@ flowchart LR
                     systemPromptTa.value = data.prompt;
                     customToggle.checked = true;
                     customPanel.style.display = 'block';
-                    helperMsg.textContent = 'Prompt successfully generated! Switched back to editor view.';
+                    if (customAdvancedInput) {
+                        customAdvancedInput.value = '1';
+                    }
+                    applyFieldMode(inferFieldModeFromPrompt(data.prompt, null), null);
+                    helperMsg.textContent = 'Prompt drafted. Adjust settings, generate a preview briefing, then save as a new preset.';
                     helperMsg.className = 'message message-success';
-                    setTimeout(function() {
-                        helperMsg.style.display = 'none';
-                        setPromptView('prompt');
-                    }, 2000);
+                    markPresetDirty();
                 })
                 .catch(function(err) {
                     helperGenerateBtn.disabled = false;
@@ -747,10 +936,18 @@ flowchart LR
             var warnings = [];
             var relationalChecked = document.querySelector('input[name="selection_mode"][value="relational"]:checked');
             if (relationalChecked) {
-                var lexChecked = document.querySelector('.seismogramm-module-cb[value="lex"]').checked;
-                var legChecked = document.querySelector('.seismogramm-module-cb[value="leg"]').checked;
-                if (!lexChecked && !legChecked) {
-                    warnings.push('Relational mode requires primary sources (Lex or Leg) to compare against media echo. Please check Lex or Leg source.');
+                var lexOn = lexInput && !lexInput.disabled;
+                var legCb = document.querySelector('.seismogramm-module-cb[value="leg"]');
+                var legChecked = legCb ? legCb.checked : false;
+                if (!lexOn && !legChecked) {
+                    warnings.push('Relational mode requires primary sources (CH Lex or Leg). Enable CH Lex and Leg.');
+                }
+                var echoOn = ['media', 'newsletter', 'feeds', 'scraper', 'email'].some(function(key) {
+                    var cb = document.querySelector('.seismogramm-module-cb[value="' + key + '"]');
+                    return cb && cb.checked;
+                });
+                if (!echoOn) {
+                    warnings.push('Relational mode needs at least one echo source (Media, Newsletter, Feeds, Scraper, or Mail) to compare against primary sources.');
                 }
             }
 
@@ -784,6 +981,9 @@ flowchart LR
             document.querySelectorAll('.seismogramm-module-cb:checked').forEach(function(cb) {
                 modules.push(cb.value);
             });
+            if (lexInput && !lexInput.disabled) {
+                modules.push(lexInput.value);
+            }
 
             var lookback = document.getElementById('seismogramm_lookback') ? document.getElementById('seismogramm_lookback').value : '7';
             var itemCount = document.getElementById('seismogramm_item_count') ? document.getElementById('seismogramm_item_count').value : '5';
@@ -839,14 +1039,7 @@ flowchart LR
                 
                 // Modules
                 var modules = k.modules || [];
-                var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
-                sourceCbs.forEach(function(cb) {
-                    cb.checked = modules.indexOf(cb.value) !== -1;
-                    var pill = cb.closest('.tag-filter-pill');
-                    if (pill) {
-                        pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                    }
-                });
+                applyModulesList(modules);
 
                 // Lookback
                 var lookback = document.getElementById('seismogramm_lookback');
@@ -972,9 +1165,13 @@ flowchart LR
                 }
             }
             validateKnobs();
+            applyingPreset = false;
         }
 
-        function selectPreset(presetName) {
+        function selectPreset(presetName, keepPreviewState) {
+            if (!keepPreviewState && presetName !== activePreset) {
+                resetBriefingPreviewState();
+            }
             document.querySelectorAll('.seismogramm-preset-btn').forEach(function(b) {
                 var wrap = b.closest('.preset-btn-wrap');
                 if (b.getAttribute('data-preset') === presetName) {
@@ -1016,8 +1213,11 @@ flowchart LR
                         .then(function(r) { return r.json(); })
                         .then(function(data) {
                             if (!data.ok) throw new Error(data.error || 'Failed to delete preset');
-                            // Reload page to reflect changes
-                            window.location.reload();
+                            presets = data.presets || [];
+                            if (name === activePreset) {
+                                selectPreset('Briefing', false);
+                            }
+                            renderPresetBar();
                         })
                         .catch(function(err) {
                             alert(err.message);
@@ -1038,16 +1238,17 @@ flowchart LR
         }
         selectPreset(activePreset);
 
-        function savePresetAction(isNew) {
+        function savePresetAction() {
+            var isUpdate = presetSettingsDirty && isCustomPresetActive();
             var name = activePreset;
-            var id = isNew ? '' : activePresetId;
+            var id = isUpdate ? activePresetId : '';
 
-            if (isNew || ['Briefing', 'Blindspot', 'Research'].indexOf(name) !== -1) {
+            if (!isUpdate) {
                 var enteredName = prompt('Enter a name for the new preset:');
                 if (!enteredName) return;
                 name = enteredName.trim();
                 if (name === '') return;
-                if (['Briefing', 'Blindspot', 'Research'].indexOf(name) !== -1) {
+                if (isReservedPreset(name)) {
                     alert('Cannot use reserved preset names (Briefing, Blindspot, Research).');
                     return;
                 }
@@ -1079,13 +1280,17 @@ flowchart LR
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) throw new Error(data.error || 'Failed to save preset');
-                saveMsg.textContent = 'Preset saved successfully!';
+                presets = data.presets || presets;
+                renderPresetBar();
+                selectPreset(name, true);
+                briefingPreviewGenerated = true;
+                setBaselineFromCurrent();
+                updateSavePresetButton();
+                saveMsg.textContent = isUpdate ? 'Preset updated.' : 'Preset saved successfully!';
                 saveMsg.className = 'message message-success';
                 setTimeout(function() {
                     saveMsg.style.display = 'none';
-                    // Reload to update dynamic preset bar
-                    window.location.reload();
-                }, 1500);
+                }, 2500);
             })
             .catch(function(err) {
                 saveMsg.textContent = err.message;
@@ -1094,18 +1299,27 @@ flowchart LR
         }
 
         if (savePresetBtn) {
-            savePresetBtn.addEventListener('click', function() { savePresetAction(false); });
+            savePresetBtn.addEventListener('click', function() { savePresetAction(); });
         }
-        if (saveNewPresetBtn) {
-            saveNewPresetBtn.addEventListener('click', function() { savePresetAction(true); });
-        }
+
+        form.addEventListener('input', markPresetDirty);
+        form.addEventListener('change', markPresetDirty);
 
         // Custom sandbox toggle
         customToggle.addEventListener('change', function() {
-            customPanel.style.display = customToggle.checked ? 'block' : 'none';
-            if (customAdvancedInput) {
-                customAdvancedInput.value = customToggle.checked ? '1' : '0';
+            if (isCustomPresetActive()) {
+                customToggle.checked = true;
+                customPanel.style.display = 'block';
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = '1';
+                }
+            } else {
+                customPanel.style.display = customToggle.checked ? 'block' : 'none';
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = customToggle.checked ? '1' : '0';
+                }
             }
+            markPresetDirty();
         });
 
         // Toggle module pills visually
@@ -1116,8 +1330,23 @@ flowchart LR
                 if (pill) {
                     pill.classList.toggle('tag-filter-pill-active', cb.checked);
                 }
+                validateKnobs();
             });
         });
+
+        if (lexPill && lexInput && lexLabel) {
+            lexPill.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                if (lexState === 1) {
+                    setLexModuleState(2);
+                } else if (lexState === 2) {
+                    setLexModuleState(0);
+                } else {
+                    setLexModuleState(1);
+                }
+                validateKnobs();
+            });
+        }
 
         var warningEl = document.getElementById('seismogramm-context-warning');
         var statusTimerIds = [];
@@ -1291,20 +1520,32 @@ flowchart LR
             return true;
         }
 
+        function promptNeedsQuery(content) {
+            return content.indexOf('{researchQuery}') !== -1;
+        }
+
+        function promptNeedsPersona(content) {
+            return content.indexOf('{briefingPersona}') !== -1;
+        }
+
         function validateBeforeGenerate() {
             var presetName = presetInput ? presetInput.value : 'Briefing';
-            if (presetName === 'Research') {
+            var promptContent = systemPromptTa ? systemPromptTa.value : '';
+            var needsQuery = presetName === 'Research' || promptNeedsQuery(promptContent);
+            var needsPersona = presetName === 'Briefing' || presetName === 'Blindspot' || promptNeedsPersona(promptContent);
+
+            if (needsQuery) {
                 var query = queryInput ? queryInput.value.trim() : '';
                 if (!query) {
-                    errEl.textContent = 'Research requires a topic query.';
+                    errEl.textContent = 'This prompt requires a topic query.';
                     errEl.style.display = 'block';
                     return false;
                 }
             }
-            if (presetName === 'Briefing' || presetName === 'Blindspot') {
+            if (needsPersona) {
                 var persona = personaInput ? personaInput.value.trim() : '';
                 if (!persona) {
-                    errEl.textContent = 'This preset requires a persona/goal.';
+                    errEl.textContent = 'This prompt requires a persona/goal.';
                     errEl.style.display = 'block';
                     return false;
                 }
@@ -1377,6 +1618,8 @@ flowchart LR
                 sourcesCards.innerHTML = data.entries_html;
                 sourcesSection.style.display = 'block';
             }
+
+            onBriefingPreviewGenerated();
         }
 
         function runGenerate(withRateLimitRetry) {
@@ -1388,8 +1631,12 @@ flowchart LR
             if (presetInput) {
                 formData.set('preset', presetInput.value);
             }
+            enforceCustomAdvancedForActivePreset();
             if (customAdvancedInput) {
                 formData.set('custom_advanced', customAdvancedInput.value);
+            }
+            if (activePresetId && isCustomPresetActive()) {
+                formData.set('preset_id', activePresetId);
             }
             formData.set('rate_limit_user_retry', withRateLimitRetry ? '1' : '0');
             if (withRateLimitRetry && pendingRetryCap) {
@@ -1464,6 +1711,7 @@ flowchart LR
                 if (placeholder) {
                     out.appendChild(placeholder);
                 }
+                resetBriefingPreviewState();
                 var retryShown = showRateLimitRetry(err.seismogrammResponse);
                 if (!retryShown) {
                     errEl.textContent = err.message;
