@@ -110,6 +110,44 @@ final class SeismogrammRequestContext
         return $configuredMax;
     }
 
+    public function isRateLimitUserRetryPosted(array $post): bool
+    {
+        return (string)($post['rate_limit_user_retry'] ?? '0') === '1';
+    }
+
+    public function halveContextCap(int $cap): int
+    {
+        $halved = (int)floor($cap / 2);
+
+        return max(ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES, $halved);
+    }
+
+    /**
+     * @return array{filters: array<string, mixed>, original_cap: int, effective_cap: int, rate_limit_user_retry: bool}
+     */
+    public function applyContextCapForRequest(
+        array $filters,
+        int $configuredMax,
+        mixed $postedMax,
+        bool $rateLimitUserRetry,
+    ): array {
+        $originalCap = $this->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
+        $effectiveCap = $originalCap;
+
+        if ($rateLimitUserRetry) {
+            $effectiveCap = $this->halveContextCap($originalCap);
+        }
+
+        $filters['maxContextEntries'] = $effectiveCap;
+
+        return [
+            'filters'               => $filters,
+            'original_cap'          => $originalCap,
+            'effective_cap'         => $effectiveCap,
+            'rate_limit_user_retry' => $rateLimitUserRetry,
+        ];
+    }
+
     public function parseItemCount(mixed $raw): int
     {
         if ($raw === null || $raw === '') {

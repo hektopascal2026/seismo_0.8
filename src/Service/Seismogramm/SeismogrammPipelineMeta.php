@@ -69,7 +69,29 @@ final class SeismogrammPipelineMeta
             $parts[] = $recoveryNote;
         }
 
+        $rateLimitNote = self::rateLimitRetryNote($meta);
+        if ($rateLimitNote !== '') {
+            $parts[] = $rateLimitNote;
+        }
+
         return implode(' · ', $parts);
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    public static function rateLimitRetryNote(array $meta): string
+    {
+        if (empty($meta['rate_limit_user_retry'])) {
+            return '';
+        }
+
+        $cap = (int)($meta['max_context_entries'] ?? $meta['effective_cap'] ?? 0);
+        if ($cap < 1) {
+            return 'rate-limit retry (reduced pool)';
+        }
+
+        return 'rate-limit retry (cap ' . $cap . ')';
     }
 
     /**

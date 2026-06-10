@@ -74,4 +74,10 @@ final class SeismogrammPresetProfileTest extends TestCase
             SeismogrammPresetProfile::defaultPoolPriority(SeismogrammPresetProfile::BLINDSPOT),
         );
     }
+
+    public function testResearchDisallowsRateLimitUserRetry(): void
+    {
+        self::assertFalse(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::RESEARCH));
+        self::assertTrue(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::BRIEFING));
+    }
 }

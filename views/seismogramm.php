@@ -351,6 +351,10 @@ flowchart LR
                 <button type="button" class="btn btn-secondary" id="seismogramm-copy-btn" style="display: none;">Copy to clipboard</button>
             </div>
             <div id="seismogramm-output-error" class="message message-error" style="display: none;"></div>
+            <div id="seismogramm-rate-limit-retry" class="message message-warning" style="display: none; margin-bottom: 1rem;" role="region" aria-live="polite">
+                <p id="seismogramm-rate-limit-retry-msg" style="margin: 0 0 0.75rem;"></p>
+                <button type="button" class="btn btn-secondary" id="seismogramm-rate-limit-retry-btn">Retry with smaller pool</button>
+            </div>
             <div id="seismogramm-output" class="admin-form-card" style="white-space:pre-wrap; min-height:4rem; max-width:100%;">
                 <p class="admin-intro" id="seismogramm-placeholder">Generated text will appear here.</p>
             </div>
@@ -385,6 +389,9 @@ flowchart LR
         var generateBtn = document.getElementById('seismogramm-generate-btn');
         var out = document.getElementById('seismogramm-output');
         var errEl = document.getElementById('seismogramm-output-error');
+        var rateLimitRetryEl = document.getElementById('seismogramm-rate-limit-retry');
+        var rateLimitRetryMsg = document.getElementById('seismogramm-rate-limit-retry-msg');
+        var rateLimitRetryBtn = document.getElementById('seismogramm-rate-limit-retry-btn');
         var sourcesSection = document.getElementById('seismogramm-sources-section');
         var sourcesCards = document.getElementById('seismogramm-sources-cards');
         var copyBtn = document.getElementById('seismogramm-copy-btn');
@@ -634,10 +641,91 @@ flowchart LR
 
         var warningEl = document.getElementById('seismogramm-context-warning');
 
-        // Form Submission
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
+        function parseJsonResponse(r) {
+            return r.json().then(function(data) {
+                return { httpOk: r.ok, status: r.status, data: data };
+            });
+        }
 
+        function hideRateLimitRetry() {
+            if (rateLimitRetryEl) {
+                rateLimitRetryEl.style.display = 'none';
+            }
+            if (rateLimitRetryMsg) {
+                rateLimitRetryMsg.textContent = '';
+            }
+        }
+
+        function showRateLimitRetry(payload) {
+            hideRateLimitRetry();
+            if (!payload || !payload.rate_limit_retry_available || !rateLimitRetryEl || !rateLimitRetryBtn) {
+                return;
+            }
+            if (rateLimitRetryMsg) {
+                rateLimitRetryMsg.textContent = payload.error || 'Gemini rate limit exceeded.';
+            }
+            var cap = payload.rate_limit_retry_cap;
+            rateLimitRetryBtn.textContent = cap
+                ? 'Retry with smaller pool (cap ' + cap + ' items)'
+                : 'Retry with smaller pool';
+            rateLimitRetryEl.style.display = 'block';
+        }
+
+        function renderGenerateSuccess(data) {
+            hideRateLimitRetry();
+            lastBriefingText = data.text;
+            out.style.whiteSpace = 'pre-wrap';
+            out.textContent = data.text;
+            copyBtn.style.display = 'inline-block';
+
+            if (data.cost_estimate && costEstimateEl) {
+                var est = data.cost_estimate;
+                costEstimateEl.innerHTML = '';
+
+                var amount = document.createElement('p');
+                amount.style.margin = '0 0 0.25rem';
+                amount.style.fontWeight = '600';
+                amount.style.fontSize = '0.9375rem';
+                amount.textContent = 'Estimated cost: ' + String(est.estimated_usd_display) + ' USD';
+
+                var detail = document.createElement('p');
+                detail.style.margin = '0';
+                detail.style.opacity = '0.9';
+                detail.style.fontSize = '0.75rem';
+
+                var formatInt = function(n) {
+                    return parseInt(n, 10).toLocaleString();
+                };
+
+                var pipelineLabel = est.pipeline || 'standard';
+                var cacheNote = (data.meta && data.meta.context_cache_used) ? ' · context cache' : '';
+                var fpNote = (data.meta && data.meta.global_fingerprint) ? ' · global fingerprint' : '';
+                detail.textContent = pipelineLabel.toUpperCase() + ' pipeline · Gemini 3.5 Flash · ' +
+                    formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens · ' +
+                    String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's') + cacheNote + fpNote;
+
+                costEstimateEl.appendChild(amount);
+                costEstimateEl.appendChild(detail);
+
+                if (data.meta && data.meta.meta_summary_line) {
+                    var metaLine = document.createElement('p');
+                    metaLine.style.margin = '0.35rem 0 0';
+                    metaLine.style.fontSize = '0.75rem';
+                    metaLine.style.opacity = '0.9';
+                    metaLine.textContent = String(data.meta.meta_summary_line);
+                    costEstimateEl.appendChild(metaLine);
+                }
+
+                costEstimateEl.style.display = 'block';
+            }
+
+            if (data.entries_html && data.entries_html.trim() !== '') {
+                sourcesCards.innerHTML = data.entries_html;
+                sourcesSection.style.display = 'block';
+            }
+        }
+
+        function runGenerate(withRateLimitRetry) {
             var formData = new FormData(form);
             if (presetInput) {
                 formData.set('preset', presetInput.value);
@@ -645,12 +733,14 @@ flowchart LR
             if (customAdvancedInput) {
                 formData.set('custom_advanced', customAdvancedInput.value);
             }
+            formData.set('rate_limit_user_retry', withRateLimitRetry ? '1' : '0');
             var csrfInput = document.querySelector('input[name="_csrf"]');
             if (csrfInput) {
                 formData.set('_csrf', csrfInput.value);
             }
 
             errEl.style.display = 'none';
+            hideRateLimitRetry();
             if (warningEl) {
                 warningEl.style.display = 'none';
                 warningEl.textContent = '';
@@ -660,99 +750,72 @@ flowchart LR
                 costEstimateEl.innerHTML = '';
             }
             sourcesSection.style.display = 'none';
-            out.innerHTML = '<p class="admin-intro">Generating briefing... Please wait.</p>';
+            out.innerHTML = '<p class="admin-intro">' + (withRateLimitRetry
+                ? 'Retrying with a smaller entry pool...'
+                : 'Generating briefing... Please wait.') + '</p>';
             generateBtn.disabled = true;
+            if (rateLimitRetryBtn) {
+                rateLimitRetryBtn.disabled = true;
+            }
 
-            // Prepare context pass, then generate
             fetch('<?= $prepareUrl ?>', {
                 method: 'POST',
                 body: formData
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (!data.ok) {
-                    throw new Error(data.error || 'Failed to prepare context.');
+            .then(parseJsonResponse)
+            .then(function(res) {
+                if (!res.data.ok) {
+                    var prepErr = new Error(res.data.error || 'Failed to prepare context.');
+                    prepErr.seismogrammResponse = res.data;
+                    throw prepErr;
                 }
 
-                if (data.meta && data.meta.context_warning && warningEl) {
-                    warningEl.textContent = data.meta.context_warning;
+                if (res.data.meta && res.data.meta.context_warning && warningEl) {
+                    warningEl.textContent = res.data.meta.context_warning;
                     warningEl.style.display = 'block';
                 }
-                
+
                 return fetch('<?= $generateUrl ?>', {
                     method: 'POST',
                     body: formData
-                });
+                }).then(parseJsonResponse);
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+            .then(function(res) {
                 generateBtn.disabled = false;
-                if (!data.ok) {
-                    throw new Error(data.error || 'Failed to generate briefing.');
+                if (rateLimitRetryBtn) {
+                    rateLimitRetryBtn.disabled = false;
                 }
-
-                lastBriefingText = data.text;
-                out.style.whiteSpace = 'pre-wrap';
-                out.textContent = data.text;
-                copyBtn.style.display = 'inline-block';
-
-                // Display cost estimate
-                if (data.cost_estimate && costEstimateEl) {
-                    var est = data.cost_estimate;
-                    costEstimateEl.innerHTML = '';
-                    
-                    var amount = document.createElement('p');
-                    amount.style.margin = '0 0 0.25rem';
-                    amount.style.fontWeight = '600';
-                    amount.style.fontSize = '0.9375rem';
-                    amount.textContent = 'Estimated cost: ' + String(est.estimated_usd_display) + ' USD';
-                    
-                    var detail = document.createElement('p');
-                    detail.style.margin = '0';
-                    detail.style.opacity = '0.9';
-                    detail.style.fontSize = '0.75rem';
-                    
-                    var formatInt = function(n) {
-                        return parseInt(n, 10).toLocaleString();
-                    };
-                    
-                    var pipelineLabel = est.pipeline || 'standard';
-                    var cacheNote = (data.meta && data.meta.context_cache_used) ? ' · context cache' : '';
-                    var fpNote = (data.meta && data.meta.global_fingerprint) ? ' · global fingerprint' : '';
-                    detail.textContent = pipelineLabel.toUpperCase() + ' pipeline · Gemini 3.5 Flash · ' +
-                        formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens · ' +
-                        String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's') + cacheNote + fpNote;
-                    
-                    costEstimateEl.appendChild(amount);
-                    costEstimateEl.appendChild(detail);
-
-                    if (data.meta && data.meta.meta_summary_line) {
-                        var metaLine = document.createElement('p');
-                        metaLine.style.margin = '0.35rem 0 0';
-                        metaLine.style.fontSize = '0.75rem';
-                        metaLine.style.opacity = '0.9';
-                        metaLine.textContent = String(data.meta.meta_summary_line);
-                        costEstimateEl.appendChild(metaLine);
-                    }
-
-                    costEstimateEl.style.display = 'block';
+                if (!res.data.ok) {
+                    var genErr = new Error(res.data.error || 'Failed to generate briefing.');
+                    genErr.seismogrammResponse = res.data;
+                    throw genErr;
                 }
-
-                // Display source cards
-                if (data.entries_html && data.entries_html.trim() !== '') {
-                    sourcesCards.innerHTML = data.entries_html;
-                    sourcesSection.style.display = 'block';
-                }
+                renderGenerateSuccess(res.data);
             })
             .catch(function(err) {
                 generateBtn.disabled = false;
+                if (rateLimitRetryBtn) {
+                    rateLimitRetryBtn.disabled = false;
+                }
                 out.innerHTML = '';
                 if (placeholder) {
                     out.appendChild(placeholder);
                 }
                 errEl.textContent = err.message;
                 errEl.style.display = 'block';
+                showRateLimitRetry(err.seismogrammResponse);
             });
+        }
+
+        if (rateLimitRetryBtn) {
+            rateLimitRetryBtn.addEventListener('click', function() {
+                runGenerate(true);
+            });
+        }
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            runGenerate(false);
         });
 
         // Copy button

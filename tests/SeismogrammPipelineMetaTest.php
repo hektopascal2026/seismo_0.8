@@ -40,4 +40,15 @@ final class SeismogrammPipelineMetaTest extends TestCase
             'selection_batch_recovered_count' => 1,
         ]));
     }
+
+    public function testRateLimitRetryNote(): void
+    {
+        self::assertSame(
+            'rate-limit retry (cap 50)',
+            SeismogrammPipelineMeta::rateLimitRetryNote([
+                'rate_limit_user_retry' => true,
+                'max_context_entries' => 50,
+            ]),
+        );
+    }
 }

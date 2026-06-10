@@ -54,11 +54,11 @@ Planned work stays preset-native — no port of legacy `GeminiResearcherGenerati
 - **UX:** `selection_batch_recovered`, `selection_batch_errors`, and `meta_summary_line` (via `SeismogrammPipelineMeta`) when recovery succeeds.
 - **Modes:** Research, Blindspot, Briefing (pool &gt; 80).
 
-### P2 — User-initiated 429 retry (one PR)
+### P2 — User-initiated 429 retry ✅
 
-- **Research preset:** Fail fast on 429 with an actionable error (e.g. shorten lookback, reduce sources). **No** shrink/retry button.
-- **Briefing / Blindspot:** After a failed generate where the error is rate-limit (HTTP 429), show a **warning-style button** (e.g. “Retry with smaller pool”). User must click — never automatic.
-- **Retry behaviour:** Re-run with halved context cap (and meta flags `rate_limit_user_retry: true`, `effective_cap`). Same preset and prompt; user is informed that the pool was reduced.
+- **Research preset:** Fail fast on 429 — suggest shorter lookback / fewer sources. No smaller-pool button.
+- **Briefing / Blindspot:** Warning panel + **Retry with smaller pool** button after HTTP 429 (user must click).
+- **Retry:** POST `rate_limit_user_retry=1` → halved `maxContextEntries` (floor 20). Meta: `rate_limit_user_retry`, `rate_limit_retry_original_cap`, `meta_summary_line` note.
 
 ### P3 — Observability (one PR)
 

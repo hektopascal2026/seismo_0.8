@@ -10,6 +10,7 @@ use Seismo\Service\GeminiResearcherException;
 use Seismo\Service\Seismogramm\SeismogrammRequestContext;
 use Seismo\Service\Seismogramm\SeismogrammOrchestrator;
 use Seismo\Service\Seismogramm\SeismogrammContracts;
+use Seismo\Service\Seismogramm\SeismogrammPipelineMeta;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Service\ResearcherEntryCardPresenter;
@@ -91,7 +92,8 @@ final class SeismogrammController
             $pdo = getDbConnection();
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $filters['maxContextEntries'] = $this->resolveEffectiveMaxContext($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $capContext = $this->resolveCapContext($pdo, $requestContext, $filters, $_POST);
+            $filters = $capContext['filters'];
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
@@ -105,6 +107,9 @@ final class SeismogrammController
             );
 
             echo json_encode(['ok' => true, 'meta' => $meta]);
+        } catch (GeminiResearcherException $e) {
+            http_response_code($e->httpStatus ?? 400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             error_log('SeismogrammController prepare error: ' . $e->getMessage());
             http_response_code(500);
@@ -129,6 +134,15 @@ final class SeismogrammController
             return;
         }
 
+        $presetForError = SeismogrammPresetProfile::BRIEFING;
+        $capContext = [
+            'filters'               => [],
+            'original_cap'          => 0,
+            'effective_cap'         => 0,
+            'rate_limit_user_retry' => false,
+        ];
+        $requestContext = null;
+
         try {
             $pdo = getDbConnection();
             $config = new SystemConfigRepository($pdo);
@@ -141,10 +155,12 @@ final class SeismogrammController
 
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $filters['maxContextEntries'] = $this->resolveEffectiveMaxContext($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $capContext = $this->resolveCapContext($pdo, $requestContext, $filters, $_POST);
+            $filters = $capContext['filters'];
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $preset = $filters['preset'];
+            $presetForError = $preset;
             $customAdvanced = (bool)($filters['customAdvanced'] ?? false);
             $moduleSelection = $filters['selection'];
 
@@ -212,15 +228,17 @@ final class SeismogrammController
                 }
             }
 
-            $meta = array_merge(
+            $meta = SeismogrammPipelineMeta::enrich(array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
                 $pipelineMeta,
+                $this->rateLimitMetaFromCapContext($capContext),
                 [
-                    'lookback_days' => $filters['lookbackDays'],
+                    'preset'            => $preset,
+                    'lookback_days'     => $filters['lookbackDays'],
                     'cited_entry_count' => count($result->usedEntryKeys),
-                    'used_entry_keys' => $result->usedEntryKeys,
-                ]
-            );
+                    'used_entry_keys'   => $result->usedEntryKeys,
+                ],
+            ));
 
             $usage = $result->usage;
             $costEstimate = null;
@@ -246,8 +264,23 @@ final class SeismogrammController
                 'cost_estimate' => $costEstimate,
             ], JSON_UNESCAPED_UNICODE);
         } catch (GeminiResearcherException $e) {
-            http_response_code($e->httpStatus ?? 400);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            $status = $e->httpStatus ?? 400;
+            http_response_code($status);
+            $payload = [
+                'ok'    => false,
+                'error' => $this->formatRateLimitErrorMessage($e, $presetForError),
+            ];
+            if ($e->isRateLimitExceeded()) {
+                $payload = array_merge(
+                    $payload,
+                    $this->rateLimitFailureExtras(
+                        $presetForError,
+                        (int)($capContext['effective_cap'] ?? 0),
+                        $requestContext,
+                    ),
+                );
+            }
+            echo json_encode($payload, JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             error_log('SeismogrammController generate error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             http_response_code(500);
@@ -312,16 +345,94 @@ final class SeismogrammController
         echo json_encode(['ok' => true]);
     }
 
-    private function resolveEffectiveMaxContext(
+    /**
+     * @return array{filters: array<string, mixed>, original_cap: int, effective_cap: int, rate_limit_user_retry: bool}
+     */
+    private function resolveCapContext(
         PDO $pdo,
         SeismogrammRequestContext $requestContext,
         array $filters,
-        mixed $postedMax,
-    ): int {
+        array $post,
+    ): array {
+        $preset = (string)($filters['preset'] ?? SeismogrammPresetProfile::BRIEFING);
+        $retryPosted = $requestContext->isRateLimitUserRetryPosted($post);
+
+        if ($retryPosted && !SeismogrammPresetProfile::allowsRateLimitUserRetry($preset)) {
+            throw new GeminiResearcherException(
+                'Smaller-pool retry is not available for Research. Shorten the lookback window, reduce sources, or wait a few minutes.',
+                400,
+            );
+        }
+
         $configRepo = new SystemConfigRepository($pdo);
         $configuredMax = (int)($configRepo->get('researcher:max_context_entries') ?? '100');
 
-        return $requestContext->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
+        return $requestContext->applyContextCapForRequest(
+            $filters,
+            $configuredMax,
+            $post['max_context_entries'] ?? null,
+            $retryPosted && SeismogrammPresetProfile::allowsRateLimitUserRetry($preset),
+        );
+    }
+
+    /**
+     * @param array{filters: array<string, mixed>, original_cap: int, effective_cap: int, rate_limit_user_retry: bool} $capContext
+     * @return array<string, mixed>
+     */
+    private function rateLimitMetaFromCapContext(array $capContext): array
+    {
+        if (!($capContext['rate_limit_user_retry'] ?? false)) {
+            return [];
+        }
+
+        return [
+            'rate_limit_user_retry'      => true,
+            'rate_limit_retry_original_cap' => (int)$capContext['original_cap'],
+            'effective_cap'            => (int)$capContext['effective_cap'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function rateLimitFailureExtras(
+        string $preset,
+        int $attemptedCap,
+        ?SeismogrammRequestContext $requestContext,
+    ): array {
+        $extras = ['rate_limit_exceeded' => true];
+
+        if (!SeismogrammPresetProfile::allowsRateLimitUserRetry($preset)) {
+            $extras['rate_limit_retry_available'] = false;
+
+            return $extras;
+        }
+
+        $retryCap = $attemptedCap > 0 && $requestContext !== null
+            ? $requestContext->halveContextCap($attemptedCap)
+            : 0;
+
+        $extras['rate_limit_retry_available'] = $retryCap >= \Seismo\Service\ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES
+            && ($attemptedCap <= 0 || $retryCap < $attemptedCap);
+        if ($extras['rate_limit_retry_available']) {
+            $extras['rate_limit_retry_cap'] = $retryCap;
+        }
+
+        return $extras;
+    }
+
+    private function formatRateLimitErrorMessage(GeminiResearcherException $e, string $preset): string
+    {
+        if (!$e->isRateLimitExceeded()) {
+            return $e->getMessage();
+        }
+
+        if (!SeismogrammPresetProfile::allowsRateLimitUserRetry($preset)) {
+            return 'Gemini rate limit exceeded. Research scans a large pool — try a shorter lookback window, '
+                . 'fewer sources, or wait a few minutes before running again.';
+        }
+
+        return 'Gemini rate limit exceeded. Wait a few minutes, or retry with a smaller entry pool using the button below.';
     }
 
     private function ensurePresetsSeeded(SystemConfigRepository $config): array

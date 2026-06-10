@@ -102,6 +102,11 @@ final class SeismogrammPresetProfile
             : self::POOL_PRIORITY_HIGHEST;
     }
 
+    public static function allowsRateLimitUserRetry(string $preset): bool
+    {
+        return self::normalizePreset($preset) !== self::RESEARCH;
+    }
+
     /**
      * Apply preset gather defaults unless the user opened advanced settings.
      *
