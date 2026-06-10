@@ -6,7 +6,7 @@ namespace Seismo\Service\Seismogramm\Pipeline;
 
 use Seismo\Service\GeminiResearcherException;
 
-final class ResilientGeminiClient
+class ResilientGeminiClient
 {
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
     private const CACHE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/cachedContents';

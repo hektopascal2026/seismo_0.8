@@ -28,9 +28,9 @@ final class SeismogrammOrchestrator
     /** @var array<string, mixed> */
     private array $lastPipelineMeta = [];
 
-    public function __construct()
+    public function __construct(?ResilientGeminiClient $client = null)
     {
-        $this->client = new ResilientGeminiClient();
+        $this->client = $client ?? new ResilientGeminiClient();
         $this->parser = new SelectionResponseParser();
         $this->selectionEngine = new StandardSelectionEngine($this->client, $this->parser);
         $this->tournamentEngine = new TournamentSelectionEngine($this->client, $this->parser, $this->selectionEngine);
@@ -161,6 +161,16 @@ final class SeismogrammOrchestrator
             $recoveryMeta = $this->tournamentEngine->lastBatchRecoveryMeta();
             if (!empty($recoveryMeta['selection_batch_rate_limited'])) {
                 throw GeminiResearcherException::fromHttpStatus(429);
+            }
+
+            if ($preset === SeismogrammPresetProfile::MONITOR) {
+                $usage = $this->client->usageReport();
+                return new GeminiResearcherResult(
+                    SeismogrammContracts::MONITOR_EMPTY_REPORT_MARKDOWN,
+                    [],
+                    false,
+                    $usage,
+                );
             }
 
             throw GeminiResearcherException::badResponse(

@@ -192,8 +192,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
 
                 <!-- VI. Seismogramm -->
                 <section class="settings-section about-card dashboard-section">
-                    <h2>VI. Seismogramm — preset Gemini briefing (v0.9.2)</h2>
-                    <p class="about-lede">v0.9.2 fully deprecates the legacy <strong>Researcher</strong> tool. Instead of stacking Standard, Tournament, and Relational modes behind a complex checkbox matrix, desks now exclusively use <strong>Seismogramm</strong> (<code>?action=seismogramm</code>) to select a <strong>preset</strong> (Briefing, Blindspot, or Research) that encodes the selection strategy, context cap, and source mix. The Seismogramm Preset Workbench serves as the interactive prompt playground and knob configurator.</p>
+                    <h2>VI. Seismogramm — preset Gemini briefing (v0.9.3)</h2>
+                    <p class="about-lede">Desks use <strong>Seismogramm</strong> (<code>?action=seismogramm</code>) to pick a <strong>preset</strong> (Briefing, Blindspot, Research, or Monitor) that encodes selection strategy, context cap, and source mix. v0.9.2 deprecated the legacy <strong>Researcher</strong> checkbox matrix; v0.9.3 adds <strong>Monitor</strong> for watchlist cross-reference (who on your list was mentioned and what they said). The Preset Workbench drafts custom variants on any base mode.</p>
 
                     <h3 class="about-subheading">Presets</h3>
                     <div class="table-responsive">
@@ -221,6 +221,11 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                                     <td>Forensic topic search across a large haystack</td>
                                     <td>Disregards Magnitu scoring; Magnitu <strong>snippets</strong> on; pool up to 300 per request; <strong>newest-first</strong> cap ordering by default; tournament when pool exceeds batch size (~35).</td>
                                 </tr>
+                                <tr>
+                                    <td><strong>Monitor</strong></td>
+                                    <td>Watchlist cross-reference — who was mentioned and what they said</td>
+                                    <td><strong>Standard</strong> selection on a regex-pre-filtered pool; mandatory watchlist verification in pass 1; explicit &ldquo;no hits&rdquo; report when nothing matches. Ships with the Swissmem directory as the default list; paste your own one-per-line watchlist anytime.</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -239,10 +244,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <ul>
                         <li>Preset bar with live mode intro; <strong>About</strong> panel documents each preset and a pipeline diagram.</li>
                         <li><strong>Default / Custom</strong> toggle: advanced settings (context cap slider, pool ordering, experimental context-cache checkbox) stay hidden until expanded.</li>
-                        <li>Dynamic fields: persona for Briefing/Blindspot; research topic query for Research.</li>
+                        <li>Dynamic fields: persona for Briefing/Blindspot; research topic query for Research; watchlist textarea for Monitor (v0.9.3).</li>
                         <li>Referenced source cards parsed from the summary for validation.</li>
-                        <li><strong>P1</strong> tournament batch recovery (one sequential retry per failed batch); <strong>P2</strong> user-initiated 429 retry with halved cap (Briefing/Blindspot; Research fails fast); <strong>P3</strong> preset-aware loading steps and <code>SeismogrammPipelineMeta</code> cost/meta line.</li>
-                        <li>Mem module pill <strong>off by default</strong>; Blindspot uses a strict Lex/Leg pool (no silent fallback to the full timeline).</li>
+                        <li><strong>P1</strong> tournament batch recovery (one sequential retry per failed batch); <strong>P2</strong> user-initiated 429 retry with halved cap (Briefing/Blindspot/Monitor; Research fails fast); <strong>P3</strong> preset-aware loading steps and <code>SeismogrammPipelineMeta</code> cost/meta line.</li>
+                        <li>Legacy <strong>Mem</strong> source checkbox removed from Seismogramm (v0.9.3); use Monitor instead. Dashboard timeline Mem filter unchanged. Blindspot uses a strict Lex/Leg pool (no silent fallback to the full timeline).</li>
                     </ul>
                     <p class="meta-text">Implementation detail: <code>docs/seismogramm.md</code>. In-app help: Seismogramm &rarr; <strong>About</strong>.</p>
                 </section>
@@ -264,7 +269,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=seismogramm</code> &mdash; <strong>recommended</strong> preset briefing builder (Briefing / Blindspot / Research); decomposed two-pass pipeline, referenced validation cards, per-phase cost telemetry. Includes the Preset Workbench for configuring custom persona prompts and context options. See <strong>§ VI</strong>.</li>
+                        <li><code>?action=seismogramm</code> &mdash; <strong>recommended</strong> preset briefing builder (Briefing / Blindspot / Research / Monitor); decomposed two-pass pipeline, referenced validation cards, per-phase cost telemetry. Includes the Preset Workbench for custom presets and context options. See <strong>§ VI</strong>.</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
@@ -619,18 +624,21 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era IX: Seismogramm &mdash; Gemini Pipeline Refactor</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
-                        <h3>v0.9.2 &mdash; Deprecation of Legacy Researcher, Seismogramm Preset Workbench Knobs &amp; Presets Cleanup</h3>
+                        <h3>v0.9.3 &mdash; Monitor Preset &amp; Watchlist Cross-Reference</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> The legacy AI Researcher page accumulated standard, tournament, and cross-module relational modes behind a dense checkbox interface, creating maintenance friction. v0.9.1 introduced <strong>Seismogramm</strong>: a greenfield two-pass briefing pipeline. v0.9.2 completes this transition by deprecating the legacy Researcher view and fully integrating configuration knobs (context caching, relevance threshold sliders, and mode-styled prompt generation presets) directly into the Seismogramm Preset Workbench.</p>
+                            <p><strong>Rationale:</strong> Swissmem-style entity monitoring lived behind a dedicated <strong>Mem</strong> source toggle and a legacy Researcher prompt. v0.9.3 generalises that workflow as the fourth Seismogramm preset: operators supply a watchlist, the pool is pre-filtered with <code>WatchlistMatcher</code>, Gemini verifies mentions in two passes, and the report states clearly when nobody on the list appears — without inventing hits.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
+                                <li><strong>v0.9.3 &mdash; Monitor preset:</strong> Built-in fourth default alongside Briefing, Blindspot, and Research; Swissmem directory preloaded; custom monitor desks via Workbench (Monitor base mode).</li>
+                                <li><strong>v0.9.3 &mdash; WatchlistMatcher:</strong> Generalised person/entity list parser and regex gate (ported from Swissmem); acronym and false-positive rules retained.</li>
+                                <li><strong>v0.9.3 &mdash; Mem checkbox removed:</strong> Seismogramm and legacy Researcher no longer expose a Mem module pill; Monitor replaces that path.</li>
                                 <li><strong>v0.9.2 &mdash; Legacy Researcher Deprecation:</strong> Removed legacy researcher routes, views, controllers, and navigation menu links.</li>
                                 <li><strong>v0.9.2 &mdash; Preset Workbench Knobs:</strong> Brought full configuration sliders, Magnitu snippets toggles, and Context Cache controls directly to the Seismogramm builder page.</li>
-                                <li><strong>v0.9.2 &mdash; Mode-Styled Prompt Playground:</strong> Prompt generator creates adapted instructions styled on top of selected base modes (Briefing / Research / Blindspot).</li>
+                                <li><strong>v0.9.2 &mdash; Mode-Styled Prompt Playground:</strong> Prompt generator creates adapted instructions styled on top of selected base modes (Briefing / Research / Blindspot; Monitor added in v0.9.3).</li>
                                 <li><strong>v0.9.2 &mdash; Custom Preset Management:</strong> Standard configurations are protected, while custom user presets can be named, saved, and individually deleted using interactive tag controls.</li>
                                 <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> manages gathering rules and tournament thresholds (~80 Briefing, ~35 Research batches) without exposing engine settings to users.</li>
                                 <li><strong>v0.9.1 &mdash; Decomposed Pipeline Engines:</strong> Segregated logic into <code>SeismogrammOrchestrator</code>, <code>StandardSelectionEngine</code>, <code>TournamentSelectionEngine</code>, <code>SummaryBriefingEngine</code>, and <code>ResilientGeminiClient</code>.</li>
@@ -726,7 +734,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.9.1</strong>, signifying it is in active pre-1.0.0 bootstrapping. The Seismogramm Gemini pipeline refactor (preset profiles, decomposed orchestrator, resilience telemetry) is the latest milestone alongside v0.9.0 ingestion modernization; we recommend freezing the 0.x line once Seismogramm and relational mail routing complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.9.3</strong>, signifying it is in active pre-1.0.0 bootstrapping. The Seismogramm Gemini pipeline (four presets including Monitor, decomposed orchestrator, resilience telemetry) is the latest milestone alongside v0.9.0 ingestion modernization; we recommend freezing the 0.x line once Seismogramm and relational mail routing complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

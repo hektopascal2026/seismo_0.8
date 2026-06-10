@@ -1,4 +1,4 @@
-# Seismo 0.9.2
+# Seismo 0.9.3
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.9.3** | **Seismogramm Monitor preset** — Fourth default preset for watchlist cross-reference: paste a person/organisation list (Swissmem directory ships as default), regex pre-filter on the entry pool, two-pass Gemini verification, and an explicit empty report when nothing matches. Removes the legacy **Mem** source checkbox from Seismogramm and Researcher; custom monitor desks can be drafted in the Preset Workbench (Monitor base mode). |
 | **0.9.2** | **Deprecate Researcher, Seismogramm Preset Workbench Knobs** — Full deprecation of legacy Researcher and removal from navigation menu. Exposes full array of knobs (Context cache toggle, relevance filtering, Magnitu snippets, max items sent) inside the Seismogramm Preset Workbench. Dynamic modes support (Briefing / Research / Blindspot) for prompt generation with custom preset save/delete management. |
 | **0.9.1** | **Seismogramm Rebuild & Redesigned Preset GUI** — Greenfield AI briefing pipeline under `?action=seismogramm`, featuring a clean preset-driven GUI (Briefing, Blindspot, Research presets), default/custom toggle switch, dynamic query inputs, and referenced validation cards. |
 | **0.9.0** | **Email Ingestion Modernization, Relational Schema Migration, & Throttle Bypass** — Upgrades ingestion parsing and sanitization to standard libraries (`zbateson/mail-mime-parser`, `masterminds/html5`, `symfony/dom-crawler`, `symfony/html-sanitizer`). Normalizes layout split configurations into fully relational database schemas (`newsletter_sender`, `newsletter_template`, `template_rule`), and adds manual throttle bypass for immediate UI-initiated mail fetches. |
@@ -82,7 +83,7 @@ Optional **Pro selection** runs pass 1 on `gemini-3.1-pro-preview`; pass 2 stays
 
 ### Seismogramm (`?action=seismogramm`)
 
-Preset-driven greenfield pipeline (**Briefing**, **Blindspot**, **Research**) — separate from legacy Researcher. Architecture and presets: `docs/seismogramm.md`.
+Preset-driven greenfield pipeline (**Briefing**, **Blindspot**, **Research**, **Monitor**) — separate from legacy Researcher. **Monitor** cross-references a watchlist against gathered entries (who was mentioned, what they said; no invented hits). Architecture and presets: `docs/seismogramm.md`.
 
 **Deferred (possible later):** Pass 2 **summary batching** (proactive/reactive multi-call summary when Gemini truncates output). Legacy Researcher batches pass 2 at 8+ cited items. Seismogramm currently uses a single pass 2 over the selected subset (typically 5–15 entries). Add only if truncation shows up in production.
 
@@ -113,7 +114,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 |--------|---------|
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
-| `?action=seismogramm` | Seismogramm — Preset Workbench and briefing builder (Briefing / Blindspot / Research); greenfield two-pass pipeline (`docs/seismogramm.md`) |
+| `?action=seismogramm` | Seismogramm — Preset Workbench and briefing builder (Briefing / Blindspot / Research / Monitor); greenfield two-pass pipeline (`docs/seismogramm.md`) |
 | `?action=feeds` / `media` / `newsletter` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Newsletter** = IMAP/Gmail digests (split from Mail); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics, backups |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |
