@@ -52,24 +52,60 @@ $moduleOptions = [
     <style>
     .seismogramm-preset-bar {
         display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
+        gap: 0.35rem;
+        margin-bottom: 0;
+        position: relative;
+        z-index: 2;
+        flex-wrap: wrap;
+    }
+    .preset-btn-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        margin-bottom: -0.125rem;
+        z-index: 2;
     }
     .seismogramm-preset-btn {
-        flex: 1;
-        padding: 0.75rem;
+        padding: 0.5rem 1rem;
         font-family: var(--font-header, inherit);
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        background: #f8f8f8;
+        background: #ffffff;
         border: 0.125rem solid #000;
-        box-shadow: 0.125rem 0.125rem 0 #000;
+        border-bottom: none;
         cursor: pointer;
         transition: all 0.1s ease;
     }
     .seismogramm-preset-btn:hover {
         background: #eee;
+    }
+    .seismogramm-preset-btn.is-active {
+        background: var(--seismo-accent, #ffd95a);
+        color: #000;
+        border-bottom: 0.125rem solid var(--seismo-accent, #ffd95a);
+        box-shadow: none;
+        transform: none;
+        position: relative;
+        z-index: 3;
+    }
+    .seismogramm-preset-delete-btn {
+        background: #ef4444;
+        color: #fff;
+        border: 0.125rem solid #000;
+        border-left: none;
+        border-bottom: none;
+        padding: 0.5rem 0.5rem;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.1s ease;
+        margin-bottom: 0;
+        height: calc(100% - 0.125rem);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: none !important;
+        transform: none !important;
     }
     .seismogramm-output-status__lead {
         margin: 0 0 0.5rem;
@@ -91,12 +127,6 @@ $moduleOptions = [
     .seismogramm-output-status__step.is-done::before {
         content: '\2713  ';
         color: var(--seismo-accent, #2563eb);
-    }
-    .seismogramm-preset-btn.is-active {
-        background: var(--seismo-accent, #000);
-        color: #fff;
-        box-shadow: none;
-        transform: translate(0.125rem, 0.125rem);
     }
     .seismogramm-sandbox-panel {
         border-top: 0.125rem dashed #000;
@@ -169,37 +199,12 @@ $moduleOptions = [
             </div>
         <?php endif; ?>
 
-        <!-- Preset Selection Bar -->
-        <div class="seismogramm-preset-bar" style="flex-wrap: wrap;">
-            <?php foreach ($savedPrompts as $sp): ?>
-                <?php $isDefault = in_array($sp['name'], ['Briefing', 'Blindspot', 'Research'], true); ?>
-                <div class="preset-btn-wrap" style="position: relative; display: flex; align-items: center; margin-right: 0.5rem; margin-bottom: 0.5rem;">
-                    <button type="button" class="seismogramm-preset-btn<?= $sp['name'] === 'Briefing' ? ' is-active' : '' ?>"
-                            data-preset="<?= e($sp['name']) ?>"
-                            data-id="<?= e($sp['id']) ?>"
-                            style="border-top-right-radius: <?= $isDefault ? 'inherit' : '0' ?>; border-bottom-right-radius: <?= $isDefault ? 'inherit' : '0' ?>;">
-                        <?= e($sp['name']) ?>
-                    </button>
-                    <?php if (!$isDefault): ?>
-                        <button type="button" class="seismogramm-preset-delete-btn"
-                                data-id="<?= e($sp['id']) ?>"
-                                data-name="<?= e($sp['name']) ?>"
-                                title="Delete preset"
-                                style="background: #ef4444; color: #fff; border: 0.125rem solid #000; border-left: none; padding: 0.75rem 0.5rem; cursor: pointer; box-shadow: 0.125rem 0.125rem 0 #000; font-weight: bold; border-top-right-radius: 4px; border-bottom-right-radius: 4px; transition: all 0.1s ease;">
-                            &times;
-                        </button>
-                    <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-
         <!-- View Toggle Bar -->
-        <div class="view-toggle view-toggle-bar" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
-            <span class="view-toggle-label" style="font-weight: 600; margin-right: 0.5rem;">View:</span>
-            <button type="button" class="btn btn-primary" id="seismogramm-view-prompt" data-view="prompt" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer;">Prompt</button>
-            <button type="button" class="btn btn-secondary" id="seismogramm-view-workbench" data-view="workbench" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Workbench</button>
-            <button type="button" class="btn btn-secondary" id="seismogramm-view-about" data-view="about" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">About</button>
-        </div>
+        <nav class="settings-tabs" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
+            <a href="#" id="seismogramm-view-prompt" data-view="prompt" class="active">Prompt</a>
+            <a href="#" id="seismogramm-view-workbench" data-view="workbench">Workbench</a>
+            <a href="#" id="seismogramm-view-about" data-view="about">About</a>
+        </nav>
 
         <!-- Workbench Card (Prompt Generator) -->
         <div id="seismogramm-workbench-card" class="latest-entries-section" style="display: none; margin-bottom: 1.5rem;">
@@ -269,6 +274,28 @@ flowchart LR
 </pre>
                 <p class="admin-intro" style="margin-top: 0.75rem;">Legacy <code>?action=researcher</code> remains available for manual Standard / Tournament / Relational overrides.</p>
             </div>
+        </div>
+
+        <!-- Preset Selection Bar -->
+        <div class="seismogramm-preset-bar" id="seismogramm-preset-bar">
+            <?php foreach ($savedPrompts as $sp): ?>
+                <?php $isDefault = in_array($sp['name'], ['Briefing', 'Blindspot', 'Research'], true); ?>
+                <div class="preset-btn-wrap">
+                    <button type="button" class="seismogramm-preset-btn"
+                            data-preset="<?= e($sp['name']) ?>"
+                            data-id="<?= e($sp['id']) ?>">
+                        <?= e($sp['name']) ?>
+                    </button>
+                    <?php if (!$isDefault): ?>
+                        <button type="button" class="seismogramm-preset-delete-btn"
+                                data-id="<?= e($sp['id']) ?>"
+                                data-name="<?= e($sp['name']) ?>"
+                                title="Delete preset">
+                            &times;
+                        </button>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
         </div>
 
         <div id="seismogramm-mode-intro" class="seismogramm-mode-intro" aria-live="polite">
@@ -544,17 +571,19 @@ flowchart LR
             [viewPromptBtn, viewWorkbenchBtn, viewAboutBtn].forEach(function(btn) {
                 if (!btn) return;
                 if (btn === activeBtn) {
-                    btn.classList.remove('btn-secondary');
-                    btn.classList.add('btn-primary');
+                    btn.classList.add('active');
                 } else {
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-secondary');
+                    btn.classList.remove('active');
                 }
             });
         }
 
         function setPromptView(view) {
             promptView = view;
+            var presetBar = document.getElementById('seismogramm-preset-bar');
+            if (presetBar) {
+                presetBar.style.display = (view === 'prompt') ? 'flex' : 'none';
+            }
             if (view === 'workbench') {
                 setViewButtonState(viewWorkbenchBtn);
                 if (formSection) formSection.style.display = 'block';
@@ -584,13 +613,13 @@ flowchart LR
         }
         
         if (viewPromptBtn) {
-            viewPromptBtn.addEventListener('click', function() { setPromptView('prompt'); });
+            viewPromptBtn.addEventListener('click', function(e) { e.preventDefault(); setPromptView('prompt'); });
         }
         if (viewWorkbenchBtn) {
-            viewWorkbenchBtn.addEventListener('click', function() { setPromptView('workbench'); });
+            viewWorkbenchBtn.addEventListener('click', function(e) { e.preventDefault(); setPromptView('workbench'); });
         }
         if (viewAboutBtn) {
-            viewAboutBtn.addEventListener('click', function() { setPromptView('about'); });
+            viewAboutBtn.addEventListener('click', function(e) { e.preventDefault(); setPromptView('about'); });
         }
 
         function applyBaseModeKnobs(baseMode) {
@@ -947,13 +976,25 @@ flowchart LR
             validateKnobs();
         }
 
+        function selectPreset(presetName) {
+            document.querySelectorAll('.seismogramm-preset-btn').forEach(function(b) {
+                var wrap = b.closest('.preset-btn-wrap');
+                if (b.getAttribute('data-preset') === presetName) {
+                    b.classList.add('is-active');
+                    if (wrap) wrap.style.zIndex = '3';
+                } else {
+                    b.classList.remove('is-active');
+                    if (wrap) wrap.style.zIndex = '2';
+                }
+            });
+            applyPreset(presetName);
+        }
+
         // Preset click handler
         function attachPresetBtnListeners() {
             document.querySelectorAll('.seismogramm-preset-btn').forEach(function(btn) {
                 btn.onclick = function() {
-                    document.querySelectorAll('.seismogramm-preset-btn').forEach(function(b) { b.classList.remove('is-active'); });
-                    btn.classList.add('is-active');
-                    applyPreset(btn.getAttribute('data-preset'));
+                    selectPreset(btn.getAttribute('data-preset'));
                 };
             });
 
@@ -989,6 +1030,15 @@ flowchart LR
         }
 
         attachPresetBtnListeners();
+
+        // Initial selection setup
+        if (activePresetId) {
+            var found = presets.find(function(p) { return p.id === activePresetId; });
+            if (found) {
+                activePreset = found.name;
+            }
+        }
+        selectPreset(activePreset);
 
         function savePresetAction(isNew) {
             var name = activePreset;
