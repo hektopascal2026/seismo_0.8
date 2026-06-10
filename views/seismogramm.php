@@ -53,7 +53,7 @@ $moduleOptions = [
     .seismogramm-preset-bar {
         display: flex;
         gap: 0.35rem;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0;
         position: relative;
         z-index: 2;
         flex-wrap: wrap;
@@ -62,6 +62,7 @@ $moduleOptions = [
         position: relative;
         display: flex;
         align-items: center;
+        margin-bottom: -0.125rem;
         z-index: 2;
     }
     .seismogramm-preset-btn {
@@ -82,6 +83,7 @@ $moduleOptions = [
         background: var(--seismo-accent, #ffd95a);
         color: #000;
         border: 0.125rem solid #000;
+        border-bottom: 0.125rem solid var(--seismo-accent, #ffd95a);
         box-shadow: none;
         transform: none;
         position: relative;
