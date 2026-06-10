@@ -42,7 +42,7 @@ final class PluginRunLogRepository
                 $pluginId,
                 $result->status,
                 $result->count,
-                ($result->status === 'ok') ? null : $result->message,
+                ($result->message === null || $result->message === '') ? null : $result->message,
                 $durationMs,
             ]);
         } catch (PDOException $e) {

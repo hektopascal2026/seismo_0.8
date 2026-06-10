@@ -164,6 +164,17 @@ namespace Seismo\Tests {
             self::assertSame('0', $this->configRepo->get('refresh_chunk:rss_consecutive_pauses'));
         }
 
+        public function testClearChunkedFeedRefreshStateClearsConsecutivePauseCounters(): void
+        {
+            $this->configRepo->set('refresh_chunk:rss_consecutive_pauses', '2');
+            $this->configRepo->set('refresh_chunk:scraper_consecutive_pauses', '3');
+
+            CoreRunner::clearChunkedFeedRefreshState($this->configRepo);
+
+            self::assertNull($this->configRepo->get('refresh_chunk:rss_consecutive_pauses'));
+            self::assertNull($this->configRepo->get('refresh_chunk:scraper_consecutive_pauses'));
+        }
+
         public function testStuckQueueSelfHealingTriggeredAtThreePauses(): void
         {
             // Seed 2 consecutive pauses and cursor position

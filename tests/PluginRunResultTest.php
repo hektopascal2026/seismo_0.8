@@ -22,4 +22,19 @@ final class PluginRunResultTest extends TestCase
         $this->assertTrue($r->persistToPluginRunLog);
         $this->assertTrue($r->isThrottleSkipped());
     }
+
+    public function testNonThrottleSkippedIsNotThrottleSkipped(): void
+    {
+        $r = PluginRunResult::skipped('Satellite mode — entry plugins do not run here.');
+
+        $this->assertFalse($r->isThrottleSkipped());
+    }
+
+    public function testWithPersistPreservesThrottleFlag(): void
+    {
+        $r = PluginRunResult::throttleSkipped('Throttled — test.')->withPersist(false);
+
+        $this->assertFalse($r->persistToPluginRunLog);
+        $this->assertTrue($r->isThrottleSkipped());
+    }
 }

@@ -68,9 +68,10 @@ final class CoreRunner
     private const CHUNK_WEB_TIME_BUDGET_SEC = 120;
 
     /**
-     * CLI cron RSS budget: advance multiple chunks per tick when not throttled (mutex-held
-     * whole script). Leave headroom in a 2-minute cron schedule slot for parl press, mail,
-     * plugins, retention.
+     * CLI cron RSS budget: wall-clock seconds for the inner chunked loop per tick.
+     * The whole {@see refresh_cron.php} script holds the ingest mutex longer (RSS +
+     * scraper + parl press + mail + plugins + retention); this cap only bounds how
+     * many RSS chunks one tick advances before yielding the cursor.
      */
     private const CHUNK_CRON_TIME_BUDGET_SEC = 240;
 
@@ -94,6 +95,9 @@ final class CoreRunner
     private const K_SCRAPER_ATTEMPTED_ACC  = 'refresh_chunk:scraper_attempted_acc';
     private const K_SCRAPER_FAILED_ACC    = 'refresh_chunk:scraper_failed_acc';
     private const K_SCRAPER_SKIPPED_ACC   = 'refresh_chunk:scraper_skipped_acc';
+
+    private const K_RSS_CONSECUTIVE_PAUSES     = 'refresh_chunk:rss_consecutive_pauses';
+    private const K_SCRAPER_CONSECUTIVE_PAUSES = 'refresh_chunk:scraper_consecutive_pauses';
 
     public function __construct(
         private FeedItemRepository $feeds,
@@ -478,7 +482,7 @@ final class CoreRunner
 
         // Only count toward "stuck" when the budget expired without finishing a chunk.
         // Normal multi-tick cycles always pause after at least one chunk — that is expected.
-        $key = 'refresh_chunk:' . strtolower($label) . '_consecutive_pauses';
+        $key = ($label === 'RSS') ? self::K_RSS_CONSECUTIVE_PAUSES : self::K_SCRAPER_CONSECUTIVE_PAUSES;
         if ($chunksCompleted > 0) {
             $this->magnituConfig->set($key, '0');
             $consecutive = 0;
@@ -784,6 +788,8 @@ final class CoreRunner
             self::K_SCRAPER_ATTEMPTED_ACC,
             self::K_SCRAPER_FAILED_ACC,
             self::K_SCRAPER_SKIPPED_ACC,
+            self::K_RSS_CONSECUTIVE_PAUSES,
+            self::K_SCRAPER_CONSECUTIVE_PAUSES,
         ] as $key) {
             $config->delete($key);
         }
@@ -850,7 +856,7 @@ final class CoreRunner
         $skipped = $this->getAccInt(self::K_RSS_SKIPPED_ACC);
         $this->zeroRssAccumulators();
         $this->magnituConfig->set(self::K_RSS_AFTER, '0');
-        $this->magnituConfig->set('refresh_chunk:rss_consecutive_pauses', '0');
+        $this->magnituConfig->set(self::K_RSS_CONSECUTIVE_PAUSES, '0');
         $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_RSS, $r, $duration);
@@ -894,7 +900,7 @@ final class CoreRunner
         $skipped = $this->getAccInt(self::K_SCRAPER_SKIPPED_ACC);
         $this->zeroScraperAccumulators();
         $this->magnituConfig->set(self::K_SCRAPER_AFTER, '0');
-        $this->magnituConfig->set('refresh_chunk:scraper_consecutive_pauses', '0');
+        $this->magnituConfig->set(self::K_SCRAPER_CONSECUTIVE_PAUSES, '0');
         $r = PluginRunResult::batchFeeds($items, $att, $fail, $skipped);
         $duration = max(0, (int)(microtime(true) * 1000) - $startMs);
         $this->record(self::ID_SCRAPER, $r, $duration);
@@ -919,6 +925,11 @@ final class CoreRunner
 
         if ($category === '') {
             return PluginRunResult::error('Category is required for targeted RSS refresh.');
+        }
+
+        $throttleSec = self::THROTTLE_SECONDS[$logId] ?? 0;
+        if (!$force && $throttleSec > 0 && $this->isThrottled($logId, $throttleSec)) {
+            return $this->returnCoreThrottled($logId, $throttleSec);
         }
 
         $start = (int)(microtime(true) * 1000);
@@ -987,6 +998,11 @@ final class CoreRunner
             return PluginRunResult::error('Category is required for targeted scraper refresh.');
         }
 
+        $throttleSec = self::THROTTLE_SECONDS[$logId] ?? 0;
+        if (!$force && $throttleSec > 0 && $this->isThrottled($logId, $throttleSec)) {
+            return $this->returnCoreThrottled($logId, $throttleSec);
+        }
+
         $this->backfillScraperFeedsSafely();
 
         $start = (int)(microtime(true) * 1000);
@@ -1010,7 +1026,7 @@ final class CoreRunner
                     }
                     $attempted++;
                     try {
-                        $stats = $this->ingestScraperFeed($feed, false);
+                        $stats = $this->ingestScraperFeed($feed, !$force);
                         $total += $stats->inserted;
                         $rowsSkipped += $stats->skipped;
                         $this->logFeedUpsertSkips('core:scraper:' . $category, $id, $stats);

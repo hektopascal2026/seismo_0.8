@@ -36,13 +36,14 @@ use Seismo\Repository\PluginRunLogRepository;
  * plugins whose last successful run (`ok` or `warn`) in `plugin_run_log` is fresher than that.
  *
  * Throttle skips use {@see PluginRunResult::throttleSkipped()} and are persisted
- * to `plugin_run_log` as `skipped` (visible in Diagnostics; not counted as success). User-initiated refresh paths
- * call with `$force = true` to bypass plugin/core throttles except {@see CoreRunner::ID_MAIL}
- * (Gmail API quota — see {@see CoreRunner::runMail()}).
+ * to `plugin_run_log` as `skipped` (visible in Diagnostics; not counted as success).
+ * User-initiated refresh paths call with `$force = true` to bypass plugin/core
+ * throttles except {@see CoreRunner::ID_MAIL} (Gmail API quota — see
+ * {@see CoreRunner::runMail()}).
  *
- * Rows ARE persisted for every non-throttle outcome (ok, warn, error, skipped-
- * because-satellite, skipped-because-disabled-in-config). Those are the rows
- * diagnostics displays.
+ * Every run outcome is persisted when {@see PluginRunResult::$persistToPluginRunLog}
+ * is true (ok, warn, error, throttle skip, satellite/disabled skip). Chunked
+ * partial batches and some IMAP-not-configured skips opt out of logging.
  *
  * Slice 4: {@see CoreRunner} runs first (RSS/Substack, scraper, IMAP mail),
  * then registered plugins. Same `runAll()` entry point for web + CLI cron.

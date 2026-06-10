@@ -16,6 +16,7 @@ final class PluginRunResult
         public readonly int $count = 0,
         public readonly ?string $message = null,
         public readonly bool $persistToPluginRunLog = true,
+        public readonly bool $fromThrottle = false,
     ) {
     }
 
@@ -81,7 +82,7 @@ final class PluginRunResult
      */
     public static function throttleSkipped(string $message): self
     {
-        return new self('skipped', 0, $message, true);
+        return new self('skipped', 0, $message, true, true);
     }
 
     public static function error(string $message): self
@@ -100,9 +101,7 @@ final class PluginRunResult
      */
     public function isThrottleSkipped(): bool
     {
-        return $this->status === 'skipped'
-            && $this->message !== null
-            && str_contains($this->message, 'Throttled');
+        return $this->fromThrottle;
     }
 
     /**
@@ -115,7 +114,8 @@ final class PluginRunResult
             $this->status,
             $this->count,
             $this->message,
-            $persistToPluginRunLog
+            $persistToPluginRunLog,
+            $this->fromThrottle,
         );
     }
 }

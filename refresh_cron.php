@@ -3,18 +3,21 @@
  * Master Cron for Seismo 0.5.
  *
  * This is the ONLY cron job a shared-host admin needs to register. Suggested
- * mothership VPS entry (every 2 minutes; mutex skips overlapping ticks):
+ * mothership VPS entry (every 5 minutes; mutex skips overlapping ticks when a
+ * prior run is still ingesting — chunked RSS/scraper ticks often run several minutes):
  *
- *   *\/2 * * * *  /usr/bin/php /path/to/seismo/refresh_cron.php
+ *   *\/5 * * * *  /usr/bin/php /path/to/seismo/refresh_cron.php
  *
- * Shared hosts with coarse scheduler granularity may use *\/5 instead.
+ * Faster schedules (e.g. *\/2) are safe but usually no-op on the mutex until the
+ * current tick finishes.
  *
  * The script is a thin shell around RefreshAllService::runAll(). Per-plugin
  * throttling lives inside the service: plugins whose
  * getMinIntervalSeconds() hasn't elapsed since the last successful run (`ok` or `warn`) are
- * skipped silently (stdout only, no DB row). Anything else — success, error,
- * "satellite mode", "disabled in config" — is persisted to plugin_run_log
- * and visible at Settings → Diagnostics (?action=settings&tab=diagnostics).
+ * skipped and logged to plugin_run_log as `skipped` (visible in Diagnostics; does
+ * not count as a successful run). Success, error, and other skip reasons are also
+ * persisted to plugin_run_log and visible at Settings → Diagnostics
+ * (?action=settings&tab=diagnostics).
  *
  * Hard rules:
  *   - CLI only. A browser-triggered run would be a DoS vector; we refuse.
