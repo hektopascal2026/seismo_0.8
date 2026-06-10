@@ -395,5 +395,35 @@ namespace Seismo\Tests {
             self::assertCount(1, $stimmeTimeline);
             self::assertSame(21, (int)$stimmeTimeline[0]['entry_id']);
         }
+
+        public function testEnsurePendingFromGmailIngestCreatesEmailTypeProposals(): void
+        {
+            $subRepo = new EmailSubscriptionRepository($this->pdo);
+
+            $created = $subRepo->ensurePendingFromGmailIngest([
+                [
+                    'from_email' => 'newsletter1@example.com',
+                    'from_name'  => 'Example Newsletter 1',
+                ],
+                [
+                    'from_email' => 'newsletter2@example.com',
+                    'from_name'  => 'Example Newsletter 2',
+                ],
+            ]);
+
+            self::assertSame(2, $created);
+
+            $pending = $subRepo->listPendingForModule('mail', 10, 0);
+            self::assertCount(2, $pending);
+
+            // They should be 'email' type, not 'domain'
+            self::assertSame('email', $pending[0]['match_type']);
+            self::assertSame('newsletter2@example.com', $pending[0]['match_value']);
+            self::assertSame('Example Newsletter 2', $pending[0]['display_name']);
+
+            self::assertSame('email', $pending[1]['match_type']);
+            self::assertSame('newsletter1@example.com', $pending[1]['match_value']);
+            self::assertSame('Example Newsletter 1', $pending[1]['display_name']);
+        }
     }
 }

@@ -519,33 +519,32 @@ final class EmailSubscriptionRepository
 
         $known = $this->listAllIncludingPending(self::MAX_LIMIT, 0);
         $created = 0;
-        $seenDomains = [];
+        $seenEmails = [];
 
         foreach ($ingestRows as $row) {
             $from = strtolower(trim((string)($row['from_email'] ?? '')));
             if ($from === '') {
                 continue;
             }
-            $domain = self::extractDomainFromEmail($from);
-            if ($domain === null || isset($seenDomains[$domain])) {
+            if (isset($seenEmails[$from])) {
                 continue;
             }
-            $seenDomains[$domain] = true;
+            $seenEmails[$from] = true;
 
             if (self::matchesAnyRow($from, $known)) {
                 continue;
             }
 
             $fromName = trim((string)($row['from_name'] ?? ''));
-            $id = $this->insertPendingDomain($domain, $fromName);
+            $id = $this->insertPendingEmail($from, $fromName);
             if ($id <= 0) {
                 continue;
             }
             ++$created;
             $known[] = [
-                'match_type'    => 'domain',
-                'match_value'   => $domain,
-                'display_name'  => self::proposeDisplayName($fromName !== '' ? $fromName : null, $domain),
+                'match_type'    => 'email',
+                'match_value'   => $from,
+                'display_name'  => $fromName !== '' ? $fromName : $from,
                 'auto_detected' => 1,
             ];
         }
@@ -807,13 +806,13 @@ final class EmailSubscriptionRepository
         return $newId;
     }
 
-    private function insertPendingDomain(string $domain, string $fromName): int
+    private function insertPendingEmail(string $email, string $fromName): int
     {
         try {
             return $this->insert([
-                'match_type'    => 'domain',
-                'match_value'   => $domain,
-                'display_name'  => self::proposeDisplayName($fromName !== '' ? $fromName : null, $domain),
+                'match_type'    => 'email',
+                'match_value'   => $email,
+                'display_name'  => $fromName !== '' ? $fromName : $email,
                 'module_scope'  => self::MODULE_MAIL,
                 'auto_detected' => 1,
                 'disabled'      => 0,
@@ -821,7 +820,7 @@ final class EmailSubscriptionRepository
         } catch (\Throwable $e) {
             // Unique (match_type, match_value) — another worker may have inserted first.
             if (strpos($e->getMessage(), 'Duplicate') === false && strpos($e->getMessage(), '1062') === false) {
-                error_log('Seismo email_subscriptions pending insert: ' . $e->getMessage());
+                error_log('Seismo email_subscriptions pending email insert: ' . $e->getMessage());
             }
 
             return 0;
