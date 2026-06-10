@@ -110,7 +110,10 @@ $sourcesQs = 'action=scraper&view=sources';
         </div>
         <?php else: ?>
         <div class="latest-entries-section">
-            <h2 class="section-title">Scraper sources</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+                <h2 class="section-title" style="margin: 0;">Scraper sources</h2>
+                <input type="text" id="scraper-search-input" class="search-input" placeholder="Search sources..." style="max-width: 300px; width: 100%;">
+            </div>
             <p class="admin-intro">Saving a source here wires the matching <code>feeds</code> row automatically so the core scraper picks it up on the next refresh. Use category <code>media</code> for news monitoring shown on <a href="<?= e($basePath) ?>/index.php?action=media&amp;view=sources">Media</a>; general RSS belongs on <a href="<?= e($basePath) ?>/index.php?action=feeds&amp;view=sources">Feeds</a>.</p>
 
             <?php if (!$satellite): ?>
@@ -168,7 +171,7 @@ $sourcesQs = 'action=scraper&view=sources';
             </div>
             <?php endif; ?>
 
-            <table class="data-table">
+            <table class="data-table" id="scraper-sources-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -220,6 +223,29 @@ $sourcesQs = 'action=scraper&view=sources';
                 <?php endif; ?>
                 </tbody>
             </table>
+            <script>
+            (function() {
+                var searchInput = document.getElementById('scraper-search-input');
+                var table = document.getElementById('scraper-sources-table');
+                if (searchInput && table) {
+                    searchInput.addEventListener('input', function() {
+                        var query = this.value.toLowerCase().trim();
+                        var rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(function(row) {
+                            if (row.classList.contains('data-table-empty')) {
+                                return;
+                            }
+                            var text = row.textContent.toLowerCase();
+                            if (text.indexOf(query) !== -1) {
+                                row.style.display = '';
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                    });
+                }
+            })();
+            </script>
         </div>
         <?php endif; ?>
     </div>

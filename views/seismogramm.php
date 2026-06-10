@@ -849,19 +849,23 @@ flowchart LR
                 }
                 var selModeRadio = document.querySelector('input[name="selection_mode"][value="tournament"]');
                 if (selModeRadio) selModeRadio.checked = true;
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) proSelectionCb.checked = false;
                 queryField.style.display = 'block';
                 personaField.style.display = 'none';
             } else if (baseMode === 'Monitor') {
                 applyModulesList(allDefaultModules());
                 if (snippetsCb) snippetsCb.checked = false;
-                if (disregardMagnituCb) disregardMagnituCb.checked = false;
-                if (poolPriorityHighest) poolPriorityHighest.checked = true;
+                if (disregardMagnituCb) disregardMagnituCb.checked = true;
+                if (poolPriorityNewest) poolPriorityNewest.checked = true;
                 if (maxContextSlider) {
                     maxContextSlider.value = '100';
                     if (maxContextVal) maxContextVal.textContent = '100';
                 }
                 var selModeRadioMonitor = document.querySelector('input[name="selection_mode"][value="standard"]');
                 if (selModeRadioMonitor) selModeRadioMonitor.checked = true;
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) proSelectionCb.checked = true;
                 queryField.style.display = 'none';
                 personaField.style.display = 'none';
                 if (watchlistField) watchlistField.style.display = 'block';
@@ -879,6 +883,8 @@ flowchart LR
                 }
                 var selModeRadio = document.querySelector('input[name="selection_mode"][value="relational"]');
                 if (selModeRadio) selModeRadio.checked = true;
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) proSelectionCb.checked = false;
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
             } else {
@@ -892,6 +898,8 @@ flowchart LR
                 }
                 var selModeRadio = document.querySelector('input[name="selection_mode"][value="standard"]');
                 if (selModeRadio) selModeRadio.checked = true;
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) proSelectionCb.checked = false;
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
             }
@@ -1200,9 +1208,9 @@ flowchart LR
                     snippetsCb.checked = (presetName === 'Research');
                 }
                 if (disregardMagnituCb) {
-                    disregardMagnituCb.checked = (presetName === 'Research');
+                    disregardMagnituCb.checked = (presetName === 'Research' || presetName === 'Monitor');
                 }
-                if (presetName === 'Research' && poolPriorityNewest) {
+                if ((presetName === 'Research' || presetName === 'Monitor') && poolPriorityNewest) {
                     poolPriorityNewest.checked = true;
                 } else if (poolPriorityHighest) {
                     poolPriorityHighest.checked = true;
@@ -1216,7 +1224,7 @@ flowchart LR
 
                 var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
                 if (proSelectionCb) {
-                    proSelectionCb.checked = false;
+                    proSelectionCb.checked = (presetName === 'Monitor');
                 }
 
                 var useCacheCb = document.getElementById('seismogramm_use_context_cache');

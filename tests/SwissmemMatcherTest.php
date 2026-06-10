@@ -27,6 +27,8 @@ final class SwissmemMatcherTest extends TestCase
         self::assertSame('Autoneum', $method->invoke(null, 'Autoneum Management AG'));
         self::assertSame('Schindler', $method->invoke(null, 'Schindler Holding SA'));
         self::assertSame('Stadler Rail', $method->invoke(null, 'Stadler Rail AG'));
+        self::assertSame('Stephan SA', $method->invoke(null, 'Stephan SA'));
+        self::assertSame('Stefan AG', $method->invoke(null, 'Stefan AG'));
     }
 
     public function testNormalizationExecutivePrefixes(): void

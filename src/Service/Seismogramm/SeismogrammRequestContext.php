@@ -72,13 +72,9 @@ final class SeismogrammRequestContext
             : ($gatherDefaults['poolPriority'] ?? SeismogrammPresetProfile::defaultPoolPriority($preset));
 
         $selectionMode = null;
-        $proSelectionMode = false;
-        if ($customAdvanced) {
-            $selectionMode = isset($post['selection_mode']) && trim((string)$post['selection_mode']) !== ''
-                ? trim((string)$post['selection_mode'])
-                : null;
-            $proSelectionMode = (string)($post['pro_selection_mode'] ?? '0') === '1';
-        }
+        $proSelectionMode = $customAdvanced
+            ? (string)($post['pro_selection_mode'] ?? '0') === '1'
+            : ($gatherDefaults['proSelectionMode'] ?? false);
 
         $pipelinePreset = SeismogrammPresetProfile::resolvePipelinePreset(
             $presetRaw,

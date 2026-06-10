@@ -260,11 +260,25 @@ final class WatchlistMatcher
             '',
             $term,
         );
-        $term = preg_replace(
+        
+        $stripped = preg_replace(
             '/\s+(AG|SA|GmbH|Ltd\.?|Limited|SNC|S\.A\.|A\.G\.|Group|Group\s+SA|Holding|Holding\s+SA|Holding\s+AG|Management\s+AG|Management|Switzerland|Schweiz)\b/ui',
             '',
             $term,
         );
+
+        $trimmedStripped = trim($stripped);
+        $protectedNames = [
+            'stefan', 'stephan', 'peter', 'michael', 'thomas', 'markus',
+            'andreas', 'christian', 'martin', 'rolf', 'daniel', 'walter',
+            'hans', 'beat', 'urs',
+        ];
+
+        if (in_array(strtolower($trimmedStripped), $protectedNames, true)) {
+            // Keep the original term to avoid over-broad single first name matches
+        } else {
+            $term = $stripped;
+        }
 
         $term = trim($term);
         if (strlen($term) < 3) {

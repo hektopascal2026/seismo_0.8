@@ -790,18 +790,12 @@ final class SeismogrammController
             foreach ($library as &$row) {
                 if (($row['name'] ?? '') === $name) {
                     $found = true;
-                    // If Briefing preset is old and lacks the placeholder, update it.
-                    if (in_array($name, ['Briefing', 'Blindspot'], true)
-                        && strpos($row['content'] ?? '', '{briefingPersona}') === false) {
+                    if (($row['content'] ?? '') !== $content) {
                         $row['content'] = $content;
                         $changed = true;
-                    } elseif ($name === 'Blindspot'
-                        && str_contains($row['content'] ?? '', 'Sekundärquellen (Media / Feeds / News)')) {
-                        $row['content'] = $content;
-                        $changed = true;
-                    } elseif ($name === 'Monitor'
-                        && strpos($row['content'] ?? '', '{watchlist}') === false) {
-                        $row['content'] = $content;
+                    }
+                    if (isset($row['knobs'])) {
+                        unset($row['knobs']);
                         $changed = true;
                     }
                     break;

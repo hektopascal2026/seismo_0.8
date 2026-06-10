@@ -132,7 +132,7 @@ final class SeismogrammPresetProfile
     /**
      * Apply preset gather defaults unless the user opened advanced settings.
      *
-     * @return array{disregardMagnitu: bool, useRecipeSnippets: bool, maxContextFloor: ?int, poolPriority: string}
+     * @return array{disregardMagnitu: bool, useRecipeSnippets: bool, maxContextFloor: ?int, poolPriority: string, proSelectionMode: bool}
      */
     public static function gatherDefaults(string $preset, bool $customAdvanced): array
     {
@@ -142,6 +142,7 @@ final class SeismogrammPresetProfile
                 'useRecipeSnippets' => false,
                 'maxContextFloor'   => null,
                 'poolPriority'      => self::POOL_PRIORITY_HIGHEST,
+                'proSelectionMode'  => false,
             ];
         }
 
@@ -151,12 +152,21 @@ final class SeismogrammPresetProfile
                 'useRecipeSnippets' => true,
                 'maxContextFloor'   => self::RESEARCH_DEFAULT_MAX_CONTEXT,
                 'poolPriority'      => self::POOL_PRIORITY_NEWEST,
+                'proSelectionMode'  => false,
+            ],
+            self::MONITOR => [
+                'disregardMagnitu'  => true,
+                'useRecipeSnippets' => false,
+                'maxContextFloor'   => null,
+                'poolPriority'      => self::POOL_PRIORITY_NEWEST,
+                'proSelectionMode'  => true,
             ],
             default => [
                 'disregardMagnitu'  => false,
                 'useRecipeSnippets' => false,
                 'maxContextFloor'   => null,
                 'poolPriority'      => self::POOL_PRIORITY_HIGHEST,
+                'proSelectionMode'  => false,
             ],
         };
     }

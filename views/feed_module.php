@@ -86,7 +86,10 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
         </div>
         <?php else: ?>
         <div class="latest-entries-section">
-            <h2 class="section-title"><?= e($feedModule->isMedia() ? 'Media sources' : 'Feed sources') ?></h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+                <h2 class="section-title" style="margin: 0;"><?= e($feedModule->isMedia() ? 'Media sources' : 'Feed sources') ?></h2>
+                <input type="text" id="feeds-search-input" class="search-input" placeholder="Search sources..." style="max-width: 300px; width: 100%;">
+            </div>
 
             <?php if ($feedModule->sourcesIntroHtml !== ''): ?>
                 <?= $feedModule->sourcesIntroHtml ?>
@@ -171,7 +174,7 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
             </div>
             <?php endif; ?>
  
-            <table class="data-table">
+            <table class="data-table" id="feeds-sources-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -227,6 +230,29 @@ $emptyItemsMessage = str_replace('{sources_href}', e($sourcesHref), $feedModule-
                 <?php endif; ?>
                 </tbody>
             </table>
+            <script>
+            (function() {
+                var searchInput = document.getElementById('feeds-search-input');
+                var table = document.getElementById('feeds-sources-table');
+                if (searchInput && table) {
+                    searchInput.addEventListener('input', function() {
+                        var query = this.value.toLowerCase().trim();
+                        var rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(function(row) {
+                            if (row.classList.contains('data-table-empty')) {
+                                return;
+                            }
+                            var text = row.textContent.toLowerCase();
+                            if (text.indexOf(query) !== -1) {
+                                row.style.display = '';
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                    });
+                }
+            })();
+            </script>
         </div>
         <?php endif; ?>
     </div>

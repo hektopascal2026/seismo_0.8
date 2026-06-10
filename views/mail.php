@@ -701,8 +701,11 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
             <?php $subscriptionReprocessId = (int)$editRow['id']; require __DIR__ . '/partials/mail_subscription_reprocess.php'; ?>
             <?php endif; ?>
 
-            <h3 class="section-title section-title--compact">Active subscriptions</h3>
-            <table class="data-table">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+                <h3 class="section-title section-title--compact" style="margin: 0;">Active subscriptions</h3>
+                <input type="text" id="subscriptions-search-input" class="search-input" placeholder="Search subscriptions..." style="max-width: 300px; width: 100%;">
+            </div>
+            <table class="data-table" id="active-subscriptions-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -828,6 +831,29 @@ $subscriptionReprocessAction = $mailModule->reprocessAction;
                 <?php endif; ?>
                 </tbody>
             </table>
+            <script>
+            (function() {
+                var searchInput = document.getElementById('subscriptions-search-input');
+                var table = document.getElementById('active-subscriptions-table');
+                if (searchInput && table) {
+                    searchInput.addEventListener('input', function() {
+                        var query = this.value.toLowerCase().trim();
+                        var rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(function(row) {
+                            if (row.classList.contains('data-table-empty')) {
+                                return;
+                            }
+                            var text = row.textContent.toLowerCase();
+                            if (text.indexOf(query) !== -1) {
+                                row.style.display = '';
+                            } else {
+                                row.style.display = 'none';
+                            }
+                        });
+                    });
+                }
+            })();
+            </script>
         </div>
         <?php endif; ?>
     </div>
