@@ -53,7 +53,7 @@ $moduleOptions = [
     .seismogramm-preset-bar {
         display: flex;
         gap: 0.35rem;
-        margin-bottom: 0;
+        margin-bottom: 0.5rem;
         position: relative;
         z-index: 2;
         flex-wrap: wrap;
@@ -62,7 +62,6 @@ $moduleOptions = [
         position: relative;
         display: flex;
         align-items: center;
-        margin-bottom: -0.125rem;
         z-index: 2;
     }
     .seismogramm-preset-btn {
@@ -73,7 +72,6 @@ $moduleOptions = [
         letter-spacing: 0.05em;
         background: #ffffff;
         border: 0.125rem solid #000;
-        border-bottom: none;
         cursor: pointer;
         transition: all 0.1s ease;
     }
@@ -83,7 +81,7 @@ $moduleOptions = [
     .seismogramm-preset-btn.is-active {
         background: var(--seismo-accent, #ffd95a);
         color: #000;
-        border-bottom: 0.125rem solid var(--seismo-accent, #ffd95a);
+        border: 0.125rem solid #000;
         box-shadow: none;
         transform: none;
         position: relative;
@@ -94,13 +92,12 @@ $moduleOptions = [
         color: #fff;
         border: 0.125rem solid #000;
         border-left: none;
-        border-bottom: none;
         padding: 0.5rem 0.5rem;
         cursor: pointer;
         font-weight: bold;
         transition: all 0.1s ease;
         margin-bottom: 0;
-        height: calc(100% - 0.125rem);
+        height: 100%;
         display: flex;
         align-items: center;
         justify-content: center;
