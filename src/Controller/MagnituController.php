@@ -29,6 +29,7 @@ namespace Seismo\Controller;
 use PDOException;
 use Seismo\Http\BearerAuth;
 use Seismo\Core\Magnitu\MagnituEntryContract;
+use Seismo\Core\Magnitu\MagnituSyncHints;
 use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -55,10 +56,10 @@ final class MagnituController
     // GET ?action=magnitu_entries
     //
     // Contract note: `limit` is applied **per family** when `type=all`, not
-    // as a grand total. A request of `limit=500&type=all` can therefore
-    // return up to 2,000 entries (500 × four families including Leg).
-    // Coordinate with Magnitu v3 (`sync.py` / `main.py`). See
-    // `.cursor/rules/magnitu-integration.mdc`.
+    // as a grand total (hard-capped at {@see MagnituExportRepository::MAX_LIMIT}
+    // per family). Default order is newest-first (DESC); incremental sync
+    // must use `order=asc` and drain each family until `sync.by_type.*.drain_complete`.
+    // Coordinate with Magnitu v3 (`sync.py` / `main.py`).
     // ------------------------------------------------------------------
 
     public function entries(): void
@@ -68,32 +69,54 @@ final class MagnituController
             return;
         }
 
-        $since = self::stringParam($_GET['since'] ?? null);
-        $type  = self::stringParam($_GET['type'] ?? 'all') ?? 'all';
-        $limit = self::clampInt($_GET['limit'] ?? 500, 1, MagnituExportRepository::MAX_LIMIT);
+        $since     = self::stringParam($_GET['since'] ?? null);
+        $type      = self::stringParam($_GET['type'] ?? 'all') ?? 'all';
+        $limit     = self::clampInt($_GET['limit'] ?? 500, 1, MagnituExportRepository::MAX_LIMIT);
+        $ascending = MagnituSyncHints::isAscendingOrder(self::stringParam($_GET['order'] ?? null));
 
-        $repo = new MagnituExportRepository(getDbConnection());
-        $entries = [];
+        $repo     = new MagnituExportRepository(getDbConnection());
+        $entries  = [];
+        $syncByType = [];
 
         if ($type === 'all' || $type === 'feed_item') {
-            foreach ($repo->listFeedItemsSince($since, $limit) as $row) {
-                $entries[] = self::shapeFeedItem($row);
+            $shaped = [];
+            foreach ($repo->listFeedItemsSince($since, $limit, MagnituExportRepository::MAX_LIMIT, $ascending) as $row) {
+                $shaped[] = self::shapeFeedItem($row);
             }
+            foreach ($shaped as $row) {
+                $entries[] = $row;
+            }
+            $syncByType['feed_item'] = MagnituSyncHints::forBatch($shaped, $ascending, $limit);
         }
         if ($type === 'all' || $type === 'email') {
-            foreach ($repo->listEmailsSince($since, $limit) as $row) {
-                $entries[] = self::shapeEmail($row);
+            $shaped = [];
+            foreach ($repo->listEmailsSince($since, $limit, MagnituExportRepository::MAX_LIMIT, $ascending) as $row) {
+                $shaped[] = self::shapeEmail($row);
             }
+            foreach ($shaped as $row) {
+                $entries[] = $row;
+            }
+            $syncByType['email'] = MagnituSyncHints::forBatch($shaped, $ascending, $limit);
         }
         if ($type === 'all' || $type === 'lex_item') {
-            foreach ($repo->listLexItemsSince($since, $limit) as $row) {
-                $entries[] = self::shapeLexItem($row);
+            $shaped = [];
+            foreach ($repo->listLexItemsSince($since, $limit, MagnituExportRepository::MAX_LIMIT, $ascending) as $row) {
+                $shaped[] = self::shapeLexItem($row);
             }
+            foreach ($shaped as $row) {
+                $entries[] = $row;
+            }
+            $syncByType['lex_item'] = MagnituSyncHints::forBatch($shaped, $ascending, $limit);
         }
         if ($type === 'all' || $type === 'calendar_event') {
-            foreach ($repo->listCalendarEventsSince($since, $limit) as $row) {
-                $entries[] = self::shapeCalendarEvent($row);
+            $shaped = [];
+            foreach ($repo->listCalendarEventsSince($since, $limit, MagnituExportRepository::MAX_LIMIT, $ascending) as $row) {
+                $shaped[] = self::shapeCalendarEvent($row);
             }
+            foreach ($shaped as $row) {
+                $entries[] = $row;
+            }
+            $syncByType['calendar_event'] = MagnituSyncHints::forBatch($shaped, $ascending, $limit);
         }
 
         self::respondJson([
@@ -101,6 +124,11 @@ final class MagnituController
             'total'   => count($entries),
             'since'   => $since,
             'type'    => $type,
+            'order'   => $ascending ? 'asc' : 'desc',
+            'sync'    => [
+                'limit_per_family' => $limit,
+                'by_type'          => $syncByType,
+            ],
         ]);
     }
 

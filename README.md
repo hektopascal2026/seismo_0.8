@@ -275,6 +275,19 @@ Companion app (separate checkout). Seismo exposes `magnitu_entries`, `magnitu_sc
 
 Each satellite desk has its own `api_key` and training labels in `seismo_<slug>`.
 
+### `magnitu_entries` incremental sync
+
+Default export order is **newest first** (`order=desc`, implicit). `limit` applies **per family** (max 200). If the client advances `since` to the newest row in a full batch while more rows remain in the window, older rows are skipped permanently.
+
+**Safe drain pattern** (Magnitu `sync.py` should follow this):
+
+1. Pull one family at a time: `?action=magnitu_entries&type=feed_item&order=asc&limit=200&since=…`
+2. Repeat until `sync.by_type.feed_item.drain_complete` is true
+3. Set the next `since` to `sync.by_type.feed_item.recommended_next_since`
+4. Repeat for `email`, `lex_item`, `calendar_event`
+
+Entry upserts are idempotent when the same second produces duplicate rows. Response adds top-level `order` and `sync.by_type` bounds (`oldest_published_date`, `newest_published_date`, `recommended_next_since`, `drain_complete`).
+
 ---
 
 ## European Commission Press Corner Ingestion (Option A)

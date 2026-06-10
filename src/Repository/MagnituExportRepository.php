@@ -54,9 +54,13 @@ final class MagnituExportRepository
      * @param ?string $since ISO-8601 or `Y-m-d H:i:s`; NULL means "no lower bound".
      * @return array<int, array<string, mixed>>
      */
-    public function listFeedItemsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
-    {
-        return $this->listFeedItemsQuery($since, $limit, null, $limitCap);
+    public function listFeedItemsSince(
+        ?string $since,
+        int $limit,
+        int $limitCap = self::MAX_LIMIT,
+        bool $ascending = false,
+    ): array {
+        return $this->listFeedItemsQuery($since, $limit, null, $limitCap, $ascending);
     }
 
     /**
@@ -84,8 +88,13 @@ final class MagnituExportRepository
      * @param ?string $moduleScope null = all feed_items; else feeds|media|scraper
      * @return array<int, array<string, mixed>>
      */
-    private function listFeedItemsQuery(?string $since, int $limit, ?string $moduleScope, int $limitCap = self::MAX_LIMIT): array
-    {
+    private function listFeedItemsQuery(
+        ?string $since,
+        int $limit,
+        ?string $moduleScope,
+        int $limitCap = self::MAX_LIMIT,
+        bool $ascending = false,
+    ): array {
         $limit = $this->clampLimit($limit, $limitCap);
         $sql = 'SELECT fi.id, fi.title, fi.description, fi.content, fi.link, fi.author,
                        fi.published_date, fi.cached_at,
@@ -104,7 +113,9 @@ final class MagnituExportRepository
         foreach ($lookback['params'] as $p) {
             $params[] = $p;
         }
-        $sql .= ' ORDER BY fi.published_date DESC LIMIT ' . $limit;
+        $sql .= $ascending
+            ? ' ORDER BY (fi.published_date IS NULL), fi.published_date ASC, fi.id ASC LIMIT ' . $limit
+            : ' ORDER BY fi.published_date DESC, fi.id DESC LIMIT ' . $limit;
 
         return $this->selectOrEmpty($sql, $params);
     }
@@ -147,8 +158,12 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listEmailsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
-    {
+    public function listEmailsSince(
+        ?string $since,
+        int $limit,
+        int $limitCap = self::MAX_LIMIT,
+        bool $ascending = false,
+    ): array {
         $limit = $this->clampLimit($limit, $limitCap);
         $table = entryTable(getEmailTableName());
 
@@ -218,7 +233,9 @@ final class MagnituExportRepository
         } else {
             $sql .= " WHERE {$hiddenClause}{$exportableClause}";
         }
-        $sql .= " ORDER BY e.`{$dateCol}` DESC LIMIT {$limit}";
+        $sql .= $ascending
+            ? " ORDER BY e.`{$dateCol}` ASC, e.id ASC LIMIT {$limit}"
+            : " ORDER BY e.`{$dateCol}` DESC, e.id DESC LIMIT {$limit}";
 
         return $this->selectOrEmpty($sql, $params);
     }
@@ -229,8 +246,12 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listLexItemsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
-    {
+    public function listLexItemsSince(
+        ?string $since,
+        int $limit,
+        int $limitCap = self::MAX_LIMIT,
+        bool $ascending = false,
+    ): array {
         $limit = $this->clampLimit($limit, $limitCap);
         $sql = 'SELECT id, celex, title, description, content, document_date, document_type, eurlex_url, source
                   FROM ' . entryTable('lex_items');
@@ -240,7 +261,9 @@ final class MagnituExportRepository
             $params[] = $since;
             $params[] = $since;
         }
-        $sql .= ' ORDER BY document_date DESC LIMIT ' . $limit;
+        $sql .= $ascending
+            ? ' ORDER BY (document_date IS NULL), document_date ASC, id ASC LIMIT ' . $limit
+            : ' ORDER BY document_date DESC, id DESC LIMIT ' . $limit;
 
         return $this->selectOrEmpty($sql, $params);
     }
@@ -250,8 +273,12 @@ final class MagnituExportRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public function listCalendarEventsSince(?string $since, int $limit, int $limitCap = self::MAX_LIMIT): array
-    {
+    public function listCalendarEventsSince(
+        ?string $since,
+        int $limit,
+        int $limitCap = self::MAX_LIMIT,
+        bool $ascending = false,
+    ): array {
         $limit = $this->clampLimit($limit, $limitCap);
         $table = entryTable('calendar_events');
         $sql   = "SELECT id, source, title, description, content, event_date, event_end_date,
@@ -267,7 +294,9 @@ final class MagnituExportRepository
             $params[] = $since;
             $params[] = $since;
         }
-        $sql .= ' ORDER BY (event_date IS NULL), event_date DESC, id DESC LIMIT ' . $limit;
+        $sql .= $ascending
+            ? ' ORDER BY (event_date IS NULL), event_date ASC, id ASC LIMIT ' . $limit
+            : ' ORDER BY (event_date IS NULL), event_date DESC, id DESC LIMIT ' . $limit;
 
         return $this->selectOrEmpty($sql, $params);
     }
