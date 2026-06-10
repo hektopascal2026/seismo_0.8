@@ -274,6 +274,7 @@ $renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$ren
                                 : '';
                             $calStatusRaw = (string)($calEvent['status'] ?? 'scheduled');
                             $calStatusLabel = ucfirst($calStatusRaw);
+                            $calBusinessNumber = seismo_leg_parl_ch_business_number($calEvent);
                         ?>
                         <div class="entry-card">
                             <div class="entry-header">
@@ -315,6 +316,9 @@ $renderNestedDigestStories      = isset($renderNestedDigestStories) ? (bool)$ren
                                     <?php endif; ?>
                                     <?php if ($calHasUrl): ?>
                                     <a href="<?= htmlspecialchars($calUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch &rarr;</a>
+                                    <?php endif; ?>
+                                    <?php if ($calBusinessNumber !== ''): ?>
+                                        <span class="entry-meta-mono"><?= htmlspecialchars($calBusinessNumber) ?></span>
                                     <?php endif; ?>
                                 </div>
                                 <div class="entry-meta-right">

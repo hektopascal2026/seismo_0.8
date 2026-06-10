@@ -218,6 +218,7 @@ $sourcesQs = 'action=leg&view=sources';
                         if ($hasMore) { $preview .= '...'; }
 
                         $eventUrl = (string)($event['url'] ?? '');
+                        $legBusinessNumber = seismo_leg_parl_ch_business_number($event);
 
                         $legEid = (int)($event['id'] ?? 0);
                         $legScoreRow = ($legEntryScores['calendar_event:' . $legEid] ?? null);
@@ -285,6 +286,9 @@ $sourcesQs = 'action=leg&view=sources';
                                 <?php endif; ?>
                                 <?php if (seismo_is_navigable_url($eventUrl)): ?>
                                     <a href="<?= e($eventUrl) ?>" target="_blank" rel="noopener" class="entry-link">parlament.ch →</a>
+                                <?php endif; ?>
+                                <?php if ($legBusinessNumber !== ''): ?>
+                                    <span class="entry-meta-mono"><?= e($legBusinessNumber) ?></span>
                                 <?php endif; ?>
                             </div>
                             <?php

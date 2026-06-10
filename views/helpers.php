@@ -477,6 +477,23 @@ if (!function_exists('seismo_leg_parl_ch_signal')) {
     }
 }
 
+if (!function_exists('seismo_leg_parl_ch_business_number')) {
+    /**
+     * Curia Vista Geschäftsnummer (e.g. 26.7577) when present in ingest metadata.
+     *
+     * @param array<string, mixed> $event
+     */
+    function seismo_leg_parl_ch_business_number(array $event): string
+    {
+        $raw = seismo_calendar_event_metadata($event)['business_number'] ?? null;
+        if (!is_string($raw) && !is_int($raw) && !is_float($raw)) {
+            return '';
+        }
+
+        return trim((string)$raw);
+    }
+}
+
 if (!function_exists('seismo_council_label')) {
     /**
      * Expand a council code from Parlament.ch into a readable label.
