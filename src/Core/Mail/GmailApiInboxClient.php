@@ -46,6 +46,7 @@ final class GmailApiInboxClient
         $historyTruncated = false;
         if ($storedHistory === '') {
             $messageIds = $this->bootstrapMessageIds($gmail, $max);
+            $historyAdvanceId = $currentHistory;
         } else {
             $batch = $this->historyMessageBatch($gmail, $storedHistory, $max);
             $messageIds       = $batch['message_ids'];
@@ -198,7 +199,7 @@ final class GmailApiInboxClient
 
         if ($messageIdsPerRecord === []) {
             return [
-                'message_ids'           => $this->bootstrapMessageIds($gmail, $max),
+                'message_ids'           => [],
                 'checkpoint_history_id' => null,
                 'truncated'             => false,
             ];

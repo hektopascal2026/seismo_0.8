@@ -37,9 +37,13 @@ final class EmailIngestRepository
     /**
      * Upsert IMAP-fetched rows keyed by non-null `imap_uid` (unique in schema).
      *
+     * When `$persistedImapUids` is provided, it receives the UIDs that were
+     * successfully written (for {@see markSeen} — failed savepoints must stay UNSEEN).
+     *
      * @param list<array<string, mixed>> $rows
+     * @param list<int>|null $persistedImapUids
      */
-    public function upsertImapBatch(array $rows): int
+    public function upsertImapBatch(array $rows, ?array &$persistedImapUids = null): int
     {
         if (isSatellite()) {
             throw new \RuntimeException('EmailIngestRepository::upsertImapBatch must not run on a satellite.');
@@ -102,7 +106,7 @@ final class EmailIngestRepository
                 $row['text_body'],
                 $row['html_body'],
             ];
-        }, $existingImap, 'imap_uid');
+        }, $existingImap, 'imap_uid', $persistedImapUids);
     }
 
     /**
@@ -199,6 +203,7 @@ final class EmailIngestRepository
      * @param callable(array<string, mixed>): list<mixed> $bindRow
      * @param array<string|int, true> $existingIngestKeys Keys already in DB for this batch (skip hosted fetch).
      * @param 'gmail_message_id'|'imap_uid'|null $ingestKeyField Row field used with $existingIngestKeys.
+     * @param list<int>|null $persistedImapUids When set with `imap_uid`, receives UIDs written successfully.
      */
     private function executeBatch(
         string $sql,
@@ -207,6 +212,7 @@ final class EmailIngestRepository
         callable $bindRow,
         array $existingIngestKeys = [],
         ?string $ingestKeyField = null,
+        ?array &$persistedImapUids = null,
     ): int {
         $stmt = $this->pdo->prepare($sql);
         $subs = (new EmailSubscriptionRepository($this->pdo))
@@ -263,6 +269,12 @@ final class EmailIngestRepository
                         $this->pdo->exec('RELEASE SAVEPOINT ' . $savepoint);
                     }
                     ++$n;
+                    if ($persistedImapUids !== null && $ingestKeyField === 'imap_uid') {
+                        $uid = (int)($row['imap_uid'] ?? 0);
+                        if ($uid > 0) {
+                            $persistedImapUids[] = $uid;
+                        }
+                    }
                 } catch (\Throwable $e) {
                     if ($this->pdo->inTransaction()) {
                         try {

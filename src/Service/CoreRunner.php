@@ -458,7 +458,7 @@ final class CoreRunner
         $deadline  = microtime(true) + $budgetSec;
         $chunkItemSum = 0;
         $last         = PluginRunResult::ok(0);
-        $budgetExceeded = false;
+        $chunksCompleted = 0;
         for ($i = 0; $i < self::CHUNK_MAX_LOOPS && microtime(true) < $deadline; $i++) {
             $last = $runOnce($force);
             if ($last->isThrottleSkipped()) {
@@ -468,18 +468,25 @@ final class CoreRunner
                 return $last;
             }
             $chunkItemSum += $last->count;
+            $chunksCompleted++;
             if (microtime(true) >= $deadline) {
-                $budgetExceeded = true;
+                break;
             }
         }
 
         $via = $force ? 'next cron or refresh' : 'next cron tick';
-        
-        // Track consecutive time-budget pauses
+
+        // Only count toward "stuck" when the budget expired without finishing a chunk.
+        // Normal multi-tick cycles always pause after at least one chunk — that is expected.
         $key = 'refresh_chunk:' . strtolower($label) . '_consecutive_pauses';
-        $consecutive = (int)($this->magnituConfig->get($key) ?? '0');
-        $consecutive++;
-        $this->magnituConfig->set($key, (string)$consecutive);
+        if ($chunksCompleted > 0) {
+            $this->magnituConfig->set($key, '0');
+            $consecutive = 0;
+        } else {
+            $consecutive = (int)($this->magnituConfig->get($key) ?? '0');
+            $consecutive++;
+            $this->magnituConfig->set($key, (string)$consecutive);
+        }
 
         if ($consecutive >= 3) {
             $cursorKey = ($label === 'RSS') ? self::K_RSS_AFTER : self::K_SCRAPER_AFTER;
@@ -679,13 +686,11 @@ final class CoreRunner
         }
         $cfg  = $this->loadMailImapConfig();
         $rows = $this->imapMail->fetch($cfg);
-        $n    = $this->emailIngest->upsertImapBatch($rows);
-        if ($n > 0 && $rows !== [] && $this->truthyMailConfig($cfg['mail_mark_seen'] ?? '0')) {
+        $persistedImapUids = [];
+        $n    = $this->emailIngest->upsertImapBatch($rows, $persistedImapUids);
+        if ($persistedImapUids !== [] && $this->truthyMailConfig($cfg['mail_mark_seen'] ?? '0')) {
             try {
-                $this->imapMail->markSeen($cfg, array_map(
-                    static fn (array $row): int => (int)($row['imap_uid'] ?? 0),
-                    $rows
-                ));
+                $this->imapMail->markSeen($cfg, $persistedImapUids);
             } catch (\Throwable $e) {
                 error_log('Seismo core:mail mark seen: ' . $e->getMessage());
             }

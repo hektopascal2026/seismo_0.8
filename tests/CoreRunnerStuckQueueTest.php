@@ -140,6 +140,30 @@ namespace Seismo\Tests {
             self::assertSame('1', $this->configRepo->get('refresh_chunk:rss_consecutive_pauses'));
         }
 
+        public function testBudgetPauseWithChunkProgressResetsConsecutiveCounter(): void
+        {
+            $this->configRepo->set('refresh_chunk:rss_consecutive_pauses', '2');
+
+            $runner = new CoreRunner(
+                $this->feedsRepo,
+                $this->runLogRepo,
+                $this->configRepo,
+                $this->emailIngestRepo
+            );
+
+            $method = new ReflectionMethod(CoreRunner::class, 'runChunkedCoreWithBudget');
+
+            $runOnce = static function (bool $force): PluginRunResult {
+                return PluginRunResult::batchFeeds(1, 1, 0)->withPersist(false);
+            };
+
+            $result = $method->invoke($runner, false, 120, 1, $runOnce, 'RSS');
+
+            self::assertSame('ok', $result->status);
+            self::assertStringContainsString('paused (time budget)', $result->message);
+            self::assertSame('0', $this->configRepo->get('refresh_chunk:rss_consecutive_pauses'));
+        }
+
         public function testStuckQueueSelfHealingTriggeredAtThreePauses(): void
         {
             // Seed 2 consecutive pauses and cursor position
