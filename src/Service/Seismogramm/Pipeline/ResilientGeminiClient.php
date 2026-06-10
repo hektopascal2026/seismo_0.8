@@ -9,11 +9,73 @@ use Seismo\Service\GeminiResearcherException;
 final class ResilientGeminiClient
 {
     private const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+    private const CACHE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/cachedContents';
     private const HTTP_TIMEOUT_TWO_PASS_SECONDS = 90;
+    private const CONTEXT_CACHE_MIN_CHARS = 50_000;
+    private const CONTEXT_CACHE_TTL = '600s';
 
     public int $usagePromptTokens = 0;
     public int $usageOutputTokens = 0;
     public int $usageApiCalls = 0;
+    public bool $contextCacheUsed = false;
+    public ?string $contextCacheName = null;
+
+    /**
+     * Registers shared context (e.g. global fingerprint index) for parallel batch reuse.
+     */
+    public function createContextCache(string $model, string $sharedText, string $apiKey): ?string
+    {
+        $sharedText = trim($sharedText);
+        if ($sharedText === '' || strlen($sharedText) < self::CONTEXT_CACHE_MIN_CHARS) {
+            return null;
+        }
+
+        $normalizedModel = str_starts_with($model, 'models/') ? $model : 'models/' . $model;
+        $url = self::CACHE_API_BASE . '?key=' . rawurlencode($apiKey);
+        $payload = [
+            'model'    => $normalizedModel,
+            'contents' => [
+                [
+                    'role'  => 'user',
+                    'parts' => [['text' => $sharedText]],
+                ],
+            ],
+            'ttl' => self::CONTEXT_CACHE_TTL,
+        ];
+
+        try {
+            $response = $this->postWithRetries($url, $payload, $apiKey, 60);
+            if ($response['status'] !== 200) {
+                error_log('ResilientGeminiClient: context cache create HTTP ' . $response['status']);
+                return null;
+            }
+            $json = json_decode($response['body'], true);
+            if (!is_array($json) || !isset($json['name']) || !is_string($json['name'])) {
+                return null;
+            }
+            $this->contextCacheUsed = true;
+            $this->contextCacheName = $json['name'];
+            error_log('ResilientGeminiClient: context cache created: ' . $json['name']);
+
+            return $json['name'];
+        } catch (\Throwable $e) {
+            error_log('ResilientGeminiClient: context cache failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    public function attachContextCache(array $payload, ?string $cacheName): array
+    {
+        if ($cacheName !== null && $cacheName !== '') {
+            $payload['cachedContent'] = $cacheName;
+        }
+
+        return $payload;
+    }
 
     /**
      * Executes a single POST request to the Gemini API with schema fallback and rate-limit retries.

@@ -7,11 +7,15 @@ namespace Seismo\Service\Seismogramm;
 use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Service\GeminiResearcherException;
 use Seismo\Service\GeminiResearcherResult;
-use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
-use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
+use Seismo\Service\ResearcherEntryGatherer;
+use Seismo\Service\ResearcherGlobalFingerprint;
+use Seismo\Service\ResearcherSourceSelection;
+use Seismo\Service\Seismogramm\Pipeline\Engine\RelationalSelectionEngine;
 use Seismo\Service\Seismogramm\Pipeline\Engine\StandardSelectionEngine;
 use Seismo\Service\Seismogramm\Pipeline\Engine\TournamentSelectionEngine;
-use Seismo\Service\Seismogramm\Pipeline\Engine\RelationalSelectionEngine;
+use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
+use Seismo\Service\Seismogramm\Pipeline\SelectionPipelineContext;
+use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
 use Seismo\Service\Seismogramm\Pipeline\SummaryBriefingEngine;
 
 final class SeismogrammOrchestrator
@@ -23,18 +27,27 @@ final class SeismogrammOrchestrator
     private readonly RelationalSelectionEngine $relationalEngine;
     private readonly SummaryBriefingEngine $summaryEngine;
 
+    /** @var array<string, mixed> */
+    private array $lastPipelineMeta = [];
+
     public function __construct()
     {
         $this->client = new ResilientGeminiClient();
         $this->parser = new SelectionResponseParser();
         $this->selectionEngine = new StandardSelectionEngine($this->client, $this->parser);
         $this->tournamentEngine = new TournamentSelectionEngine($this->client, $this->parser, $this->selectionEngine);
-        $this->relationalEngine = new RelationalSelectionEngine($this->client, $this->parser, $this->selectionEngine);
+        $this->relationalEngine = new RelationalSelectionEngine(
+            $this->client,
+            $this->parser,
+            $this->selectionEngine,
+        );
         $this->summaryEngine = new SummaryBriefingEngine($this->client);
     }
 
     /**
-     * Orchestrates the standard, tournament, or relational selection and summary execution flow.
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
      */
     public function generateBriefing(
         string $apiKey,
@@ -46,30 +59,67 @@ final class SeismogrammOrchestrator
         array $entries,
         array $scoresByKey,
         array $researcherMeta,
-        string $selectionMode = 'standard'
+        string $preset,
+        string $postedSelectionMode,
+        bool $customAdvanced,
+        ?ResearcherSourceSelection $moduleSelection = null,
     ): GeminiResearcherResult {
-        // Step 1: Run selection pass based on mode
-        if ($selectionMode === 'tournament') {
-            $selectedKeys = $this->tournamentEngine->select(
-                $model,
-                $apiKey,
-                $userSystemPrompt,
+        $preset = SeismogrammPresetProfile::normalizePreset($preset);
+        $poolCount = count($entries);
+        $selectionMode = SeismogrammPresetProfile::resolveSelectionMode(
+            $preset,
+            $poolCount,
+            $postedSelectionMode,
+            $customAdvanced,
+        );
+
+        $selectionPool = SeismogrammPresetProfile::filterSelectionPool($preset, $entries);
+
+        $globalFingerprintXml = '';
+        if (SeismogrammPresetProfile::usesGlobalFingerprint($preset, $selectionMode)) {
+            $globalFingerprintXml = ResearcherGlobalFingerprint::buildXml(
                 $entries,
-                $scoresByKey,
-                $researcherMeta,
-                $itemCount,
-                $maxOutputTokens
+                new ResearcherEntryGatherer(),
+                $moduleSelection,
             );
-        } elseif ($selectionMode === 'relational') {
+        }
+
+        $pipelineContext = new SelectionPipelineContext(
+            globalFingerprintXml: $globalFingerprintXml,
+            useNegativeSpace: SeismogrammPresetProfile::usesNegativeSpaceProtocol($selectionMode),
+        );
+
+        $this->lastPipelineMeta = [
+            'preset'              => $preset,
+            'selection_mode'      => $selectionMode,
+            'pool_entry_count'    => $poolCount,
+            'selection_pool_count' => count($selectionPool),
+            'global_fingerprint'  => $globalFingerprintXml !== '',
+        ];
+
+        if ($selectionMode === 'relational') {
             $selectedKeys = $this->relationalEngine->select(
                 $model,
                 $apiKey,
                 $userSystemPrompt,
-                $entries,
+                $selectionPool,
                 $scoresByKey,
                 $researcherMeta,
                 $itemCount,
-                $maxOutputTokens
+                $maxOutputTokens,
+                $pipelineContext,
+            );
+        } elseif ($selectionMode === 'tournament') {
+            $selectedKeys = $this->tournamentEngine->select(
+                $model,
+                $apiKey,
+                $userSystemPrompt,
+                $selectionPool,
+                $scoresByKey,
+                $researcherMeta,
+                $itemCount,
+                $maxOutputTokens,
+                $pipelineContext,
             );
         } else {
             $selectedKeys = $this->selectionEngine->select(
@@ -79,8 +129,14 @@ final class SeismogrammOrchestrator
                 $xmlContext,
                 $itemCount,
                 $maxOutputTokens,
-                $entries
+                $selectionPool,
+                $pipelineContext,
             );
+        }
+
+        $this->lastPipelineMeta['context_cache_used'] = $this->client->contextCacheUsed;
+        if ($this->client->contextCacheName !== null) {
+            $this->lastPipelineMeta['context_cache_name'] = $this->client->contextCacheName;
         }
 
         if ($selectedKeys === []) {
@@ -94,10 +150,8 @@ final class SeismogrammOrchestrator
             $selectedKeys,
         )));
 
-        // Filter XML context dynamically to only contain the selected entries for Pass 2 summary
         $summaryContext = $this->buildSummaryContextForKeys($entries, $scoresByKey, $researcherMeta, $selectedKeys);
 
-        // Step 2: Compile the final Markdown briefing (Pass 2)
         $markdown = $this->summaryEngine->compileBriefing(
             $model,
             $apiKey,
@@ -105,7 +159,7 @@ final class SeismogrammOrchestrator
             $summaryContext,
             $selectedKeys,
             $itemCount,
-            $maxOutputTokens
+            $maxOutputTokens,
         );
 
         $usage = [
@@ -118,18 +172,27 @@ final class SeismogrammOrchestrator
             $markdown,
             $selectedKeys,
             count($selectedKeys) > 0,
-            $usage
+            $usage,
         );
     }
 
+    /** @return array<string, mixed> */
+    public function lastPipelineMeta(): array
+    {
+        return $this->lastPipelineMeta;
+    }
+
     /**
-     * Builds standard XML context snippet containing only the selected keys.
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
+     * @param list<string> $selectedKeys
      */
     private function buildSummaryContextForKeys(
         array $entries,
         array $scoresByKey,
         array $researcherMeta,
-        array $selectedKeys
+        array $selectedKeys,
     ): string {
         $subset = [];
         $selectedKeysSet = array_flip($selectedKeys);

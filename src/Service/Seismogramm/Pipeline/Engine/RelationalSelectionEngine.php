@@ -5,23 +5,26 @@ declare(strict_types=1);
 namespace Seismo\Service\Seismogramm\Pipeline\Engine;
 
 use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
+use Seismo\Service\Seismogramm\Pipeline\SelectionPipelineContext;
 use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
-use Seismo\Service\Seismogramm\SeismogrammContracts;
 
 final class RelationalSelectionEngine
 {
     private readonly TournamentSelectionEngine $tournamentEngine;
 
     public function __construct(
-        private readonly ResilientGeminiClient $client,
-        private readonly SelectionResponseParser $parser,
-        private readonly StandardSelectionEngine $standardEngine
+        ResilientGeminiClient $client,
+        SelectionResponseParser $parser,
+        StandardSelectionEngine $standardEngine,
     ) {
-        $this->tournamentEngine = new TournamentSelectionEngine($this->client, $this->parser, $this->standardEngine);
+        $this->tournamentEngine = new TournamentSelectionEngine($client, $parser, $standardEngine);
     }
 
     /**
-     * Executes relational selection (Blindspot analysis with negative-space protocols).
+     * @param list<array<string, mixed>> $poolEntries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     * @param array<string, mixed> $researcherMeta
+     * @return list<string>
      */
     public function select(
         string $model,
@@ -31,19 +34,25 @@ final class RelationalSelectionEngine
         array $scoresByKey,
         array $researcherMeta,
         int $itemCount,
-        int $configuredMaxTokens
+        int $configuredMaxTokens,
+        SelectionPipelineContext $pipelineContext,
     ): array {
-        $protocolSystemPrompt = $userSystemPrompt . "\n\n" . SeismogrammContracts::RELATIONAL_NEGATIVE_SPACE_PROTOCOL;
+        $relationalContext = new SelectionPipelineContext(
+            globalFingerprintXml: $pipelineContext->globalFingerprintXml,
+            useNegativeSpace: true,
+            contextCacheName: $pipelineContext->contextCacheName,
+        );
 
         return $this->tournamentEngine->select(
             $model,
             $apiKey,
-            $protocolSystemPrompt,
+            $userSystemPrompt,
             $poolEntries,
             $scoresByKey,
             $researcherMeta,
             $itemCount,
-            $configuredMaxTokens
+            $configuredMaxTokens,
+            $relationalContext,
         );
     }
 }

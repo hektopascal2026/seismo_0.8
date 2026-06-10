@@ -47,6 +47,8 @@ PROMPT;
 
     public const DEFAULT_BLINDSPOT_PROMPT = <<<'PROMPT'
 SYSTEM INSTRUCTIONS:
+{briefingPersona}
+
 Du bist ein Intelligence-Analyst spezialisiert auf regulatorische Früherkennung (Regulatory Horizon Scanning). Deine Hauptaufgabe ist es, "Blind Spots" zu identifizieren — also wichtige gesetzgeberische, parlamentarische oder regulatorische Aktivitäten, die in der allgemeinen Medienberichterstattung noch NICHT oder kaum reflektiert werden (Informations-Asymmetrie).
 
 DEINE KERN-LOGIK (BLIND SPOT SUCHE):
@@ -99,23 +101,38 @@ PHASE 2 — SYNTHESE (nur Markdown für SELECTED_ENTRY_KEYS):
 * **[Thematischer Aspekt / Entwicklung]:** [Präzise Beschreibung der Entwicklung aus der Quelle und Bezug zum Suchthema.] *(Quelle: [Name])* (entry_type:entry_id)
 PROMPT;
 
-    public const SELECTION_OUTPUT_CONTRACT = <<<'JSON'
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "used_entry_keys": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "selection_reasoning": {
-      "type": "object",
-      "additionalProperties": { "type": "string" }
-    }
-  },
-  "required": ["used_entry_keys"]
-}
-JSON;
+    public const SELECTION_PASS_OUTPUT_CONTRACT = <<<'CONTRACT'
+SYSTEM DIRECTIVE — GLOBAL ENTRY SELECTION (PASS 1 OF 2):
+The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
+You see the full ENTRIES_DATA pool at once. Pick the best matching entries globally. Prose style is pass 2 only.
+
+{temporalContext}
+
+RULES:
+- ENTRIES_DATA: XML <entry> blocks sorted by Seismo relevance (highest first). Each has <id>entry_type:entry_id</id>.
+- Return JSON with used_entry_keys (required) and selection_reasoning (optional): brief rationale, then up to {maxCoreItems} distinct <id> values, most important first.
+- relevance_score is a prior; a lower-scored entry may win when persona/goal fit is clearly stronger (state why in selection_reasoning).
+- Never invent IDs.
+
+ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
+
+    public const SELECTION_BATCH_OUTPUT_CONTRACT = <<<'CONTRACT'
+SYSTEM DIRECTIVE — TOURNAMENT BATCH SELECTION (PASS 1 OF 2):
+The USER PROMPT above defines inclusion criteria, jurisdictions, and topic focus. Apply it strictly when choosing IDs.
+You see ONE batch of ENTRIES_DATA only (not the full pool). Compare every entry in this batch; pick the strongest matches for the USER PROMPT.
+
+{temporalContext}
+
+RULES:
+- ENTRIES_DATA: XML <entry> blocks for this batch only. Each has <id>entry_type:entry_id</id>.
+- Return JSON with used_entry_keys only: up to {maxCoreItems} distinct <id> values, most important first.
+- Never invent IDs.
+
+ENTRIES_DATA:
+{markdownContext}
+CONTRACT;
 
     public const RELATIONAL_NEGATIVE_SPACE_PROTOCOL = <<<'PROTOCOL'
 CRITICAL TRIAGE — BLIND SPOT / CROSS-MODULE (use GLOBAL POOL INDEX above):
@@ -125,6 +142,32 @@ CRITICAL TRIAGE — BLIND SPOT / CROSS-MODULE (use GLOBAL POOL INDEX above):
 4. Prioritize primary sources with high strategic impact and ZERO topic overlap with the media footprint.
 5. Put these hidden signals first in used_entry_keys when they match the USER PROMPT.
 PROTOCOL;
+
+    public static function temporalContextBlock(): string
+    {
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Zurich'));
+
+        return 'CURRENT CONTEXT:' . "\n"
+            . 'Today is ' . $now->format('l, F j, Y') . ' (Europe/Zurich).';
+    }
+
+    public static function expandSelectionEnvelope(
+        string $contract,
+        int $itemCount,
+        int $selectionTarget,
+        string $xmlContext,
+    ): string {
+        return str_replace(
+            ['{temporalContext}', '{maxCoreItems}', '{markdownContext}', '{itemCount}'],
+            [
+                self::temporalContextBlock(),
+                (string)$selectionTarget,
+                trim($xmlContext),
+                (string)$itemCount,
+            ],
+            $contract,
+        );
+    }
 
     public const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 USER PROMPT DETAILS:

@@ -13,6 +13,8 @@ use Seismo\Service\Seismogramm\SeismogrammContracts;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\MagnituExportRepository;
 use Seismo\Service\ResearcherEntryCardPresenter;
+use Seismo\Service\ResearcherSourceSelection;
+use Seismo\Service\Seismogramm\SeismogrammPresetProfile;
 
 final class SeismogrammController
 {
@@ -89,12 +91,14 @@ final class SeismogrammController
             $pdo = getDbConnection();
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null);
+            $this->applyPresetMaxContextFloor($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
             $meta = array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
                 [
+                    'preset' => $filters['preset'],
                     'markdown_chars' => $gathered['markdownChars'],
                     'context_warning' => $gathered['contextWarning'] ?? null,
                 ]
@@ -137,7 +141,12 @@ final class SeismogrammController
 
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null);
+            $this->applyPresetMaxContextFloor($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
+
+            $preset = $filters['preset'];
+            $customAdvanced = (bool)($filters['customAdvanced'] ?? false);
+            $moduleSelection = $filters['selection'];
 
             $itemCount = $requestContext->parseItemCount($_POST['item_count'] ?? null);
             $systemPrompt = trim((string)($_POST['system_prompt'] ?? ''));
@@ -182,8 +191,14 @@ final class SeismogrammController
                 $entries,
                 $scoresByKey,
                 $gathered,
-                $selectionMode
+                $preset,
+                $selectionMode,
+                $customAdvanced,
+                $moduleSelection instanceof ResearcherSourceSelection ? $moduleSelection : null,
             );
+
+            $pipelineMeta = $orchestrator->lastPipelineMeta();
+            $selectionMode = (string)($pipelineMeta['selection_mode'] ?? $selectionMode);
 
             // Attributed cards HTML
             $entriesHtml = '';
@@ -196,6 +211,7 @@ final class SeismogrammController
 
             $meta = array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
+                $pipelineMeta,
                 [
                     'lookback_days' => $filters['lookbackDays'],
                     'cited_entry_count' => count($result->usedEntryKeys),
@@ -293,6 +309,20 @@ final class SeismogrammController
         echo json_encode(['ok' => true]);
     }
 
+    private function applyPresetMaxContextFloor(
+        PDO $pdo,
+        SeismogrammRequestContext $requestContext,
+        array $filters,
+        mixed $postedMax,
+    ): void {
+        $configRepo = new SystemConfigRepository($pdo);
+        $configuredMax = (int)($configRepo->get('researcher:max_context_entries') ?? '100');
+        $effectiveMax = $requestContext->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
+        if ($effectiveMax > $configuredMax) {
+            $configRepo->set('researcher:max_context_entries', (string)$effectiveMax);
+        }
+    }
+
     private function ensurePresetsSeeded(SystemConfigRepository $config): array
     {
         $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
@@ -311,7 +341,8 @@ final class SeismogrammController
                 if (($row['name'] ?? '') === $name) {
                     $found = true;
                     // If Briefing preset is old and lacks the placeholder, update it.
-                    if ($name === 'Briefing' && strpos($row['content'] ?? '', '{briefingPersona}') === false) {
+                    if (in_array($name, ['Briefing', 'Blindspot'], true)
+                        && strpos($row['content'] ?? '', '{briefingPersona}') === false) {
                         $row['content'] = $content;
                         $changed = true;
                     }

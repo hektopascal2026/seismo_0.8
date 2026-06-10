@@ -27,6 +27,10 @@ final class SeismogrammRequestContext
      */
     public function parseFiltersFromPost(array $post, PDO $pdo): array
     {
+        $preset = SeismogrammPresetProfile::normalizePreset((string)($post['preset'] ?? ''));
+        $customAdvanced = (string)($post['custom_advanced'] ?? '0') === '1';
+        $gatherDefaults = SeismogrammPresetProfile::gatherDefaults($preset, $customAdvanced);
+
         $selection = $this->parseModuleSelection($post['modules'] ?? null);
         $lookbackDays = $this->parseLookbackDays($post['lookback_days'] ?? null);
         $since        = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
@@ -35,8 +39,12 @@ final class SeismogrammRequestContext
         $limit = $this->clampLimit($post['limit'] ?? self::DEFAULT_LIMIT);
 
         $includeImportantBelow = (string)($post['include_important'] ?? '0') === '1';
-        $disregardMagnitu      = (string)($post['disregard_magnitu'] ?? '0') === '1';
-        $useRecipeSnippets     = (string)($post['use_recipe_snippets'] ?? '0') === '1';
+        $disregardMagnitu      = $customAdvanced
+            ? (string)($post['disregard_magnitu'] ?? '0') === '1'
+            : $gatherDefaults['disregardMagnitu'];
+        $useRecipeSnippets     = $customAdvanced
+            ? (string)($post['use_recipe_snippets'] ?? '0') === '1'
+            : $gatherDefaults['useRecipeSnippets'];
         $alertThreshold        = (new SystemConfigRepository($pdo))->getAlertThreshold();
         $scoreFilter           = new ResearcherScoreFilter(
             $alertThreshold,
@@ -51,7 +59,39 @@ final class SeismogrammRequestContext
             'scoreFilter'       => $scoreFilter,
             'selection'         => $selection,
             'useRecipeSnippets' => $useRecipeSnippets,
+            'preset'            => $preset,
+            'customAdvanced'    => $customAdvanced,
+            'gatherDefaults'    => $gatherDefaults,
         ];
+    }
+
+    public function resolveMaxContextEntriesForRequest(array $filters, mixed $postedMax, int $configuredMax): int
+    {
+        if ($filters['customAdvanced'] ?? false) {
+            if ($postedMax !== null && $postedMax !== '') {
+                $v = (int)$postedMax;
+                if ($v >= ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES
+                    && $v <= ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES) {
+                    return $v;
+                }
+            }
+
+            return $configuredMax;
+        }
+
+        $floor = $filters['gatherDefaults']['maxContextFloor'] ?? null;
+        if (is_int($floor) && $floor > $configuredMax) {
+            return min(ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES, $floor);
+        }
+
+        if ($postedMax !== null && $postedMax !== '') {
+            $v = (int)$postedMax;
+            if ($v >= ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES) {
+                return min(ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES, max($configuredMax, $v));
+            }
+        }
+
+        return $configuredMax;
     }
 
     public function parseItemCount(mixed $raw): int
@@ -63,12 +103,13 @@ final class SeismogrammRequestContext
         return in_array($v, self::ALLOWED_ITEM_COUNTS, true) ? $v : self::DEFAULT_ITEM_COUNT;
     }
 
-    public function persistMaxContextEntries(PDO $pdo, mixed $raw): void
+    public function persistMaxContextEntries(PDO $pdo, mixed $raw, array $filters = []): void
     {
         if ($raw === null || $raw === '') {
             return;
         }
-        $v = (int)$raw;
+        $configured = (new ResearcherGeminiContext(new SystemConfigRepository($pdo)))->maxContextEntries();
+        $v = $this->resolveMaxContextEntriesForRequest($filters, $raw, $configured);
         if ($v >= ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES && $v <= ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES) {
             (new SystemConfigRepository($pdo))->set('researcher:max_context_entries', (string)$v);
         }

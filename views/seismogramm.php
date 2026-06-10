@@ -95,6 +95,45 @@ $moduleOptions = [
         justify-content: space-between;
         margin-bottom: 0.75rem;
     }
+    .seismogramm-mode-intro {
+        margin-bottom: 1rem;
+        padding: 0.85rem 1rem;
+        border: 0.125rem solid #000;
+        background: #fafafa;
+        max-width: 40rem;
+    }
+    .seismogramm-mode-intro h3 {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+    .seismogramm-mode-intro p {
+        margin: 0 0 0.5rem;
+        font-size: 0.875rem;
+        line-height: 1.45;
+    }
+    .seismogramm-mode-intro p:last-child {
+        margin-bottom: 0;
+    }
+    .seismogramm-about-panel {
+        max-width: 44rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+    .seismogramm-about-panel h3 {
+        margin: 1.25rem 0 0.5rem;
+        font-size: 1rem;
+    }
+    .seismogramm-about-panel h3:first-child {
+        margin-top: 0;
+    }
+    .seismogramm-about-panel pre {
+        font-size: 0.75rem;
+        overflow-x: auto;
+        padding: 0.75rem;
+        border: 0.125rem solid #000;
+        background: #f4f4f4;
+    }
     </style>
 </head>
 <body>
@@ -121,6 +160,7 @@ $moduleOptions = [
             <span class="view-toggle-label" style="font-weight: 600; margin-right: 0.5rem;">View:</span>
             <button type="button" class="btn btn-primary" id="seismogramm-view-prompt" data-view="prompt" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer;">Prompt</button>
             <button type="button" class="btn btn-secondary" id="seismogramm-view-helper" data-view="helper" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Helper</button>
+            <button type="button" class="btn btn-secondary" id="seismogramm-view-about" data-view="about" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">About</button>
         </div>
 
         <!-- Helper Card -->
@@ -140,12 +180,65 @@ $moduleOptions = [
             </div>
         </div>
 
-        <div class="latest-entries-section">
+        <!-- About panel -->
+        <div id="seismogramm-about-card" class="latest-entries-section seismogramm-about-panel" style="display: none; margin-bottom: 1.5rem;">
+            <div class="admin-form-card">
+                <h2 class="section-title" style="margin-top: 0;">About Seismogramm</h2>
+                <p>Seismogramm runs a two-pass Gemini pipeline: <strong>Pass 1</strong> selects entry keys; <strong>Pass 2</strong> writes the briefing prose for those keys only.</p>
+
+                <h3>Briefing</h3>
+                <p><strong>What:</strong> Executive summary for C-level readers.</p>
+                <p><strong>How:</strong> Magnitu highlights tier by default; single-pass selection on smaller pools, tournament batches when the pool exceeds <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?> items. Persona/goal can override raw score when fit is clearly stronger.</p>
+                <p><strong>Good for:</strong> Weekly desk briefings where relevance matters but strategic fit to your stated persona wins ties.</p>
+
+                <h3>Research</h3>
+                <p><strong>What:</strong> Forensic topic search — needle in a large haystack.</p>
+                <p><strong>How:</strong> Bypasses Magnitu scoring, uses Magnitu snippets, scans up to <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?> items, tournament selection with parallel batches. Global title index is context-cached when large enough.</p>
+                <p><strong>Good for:</strong> “Everything on topic X in the last week” across feeds, mail, lex, and media.</p>
+
+                <h3>Blindspot</h3>
+                <p><strong>What:</strong> Regulatory / parliamentary signals not yet echoed in media.</p>
+                <p><strong>How:</strong> Relational tournament on Lex+Leg primary sources; compares against a global title fingerprint (Media, Feeds, Scraper). Negative-space protocol rejects fuzzy media overlap. Persona/goal filters random regulatory noise.</p>
+                <p><strong>Good for:</strong> Horizon scanning when you need primary-source signals the news cycle has not picked up.</p>
+
+                <h3>Pipeline diagram</h3>
+                <pre>mermaid
+flowchart LR
+    subgraph briefing [Briefing]
+        B1[Pool ≤ 80] --> B2[Standard pass]
+        B3[Pool &gt; 80] --> B4[Tournament + championship]
+    end
+    subgraph research [Research]
+        R1[Large snippet pool] --> R2[Tournament always]
+        R2 --> R3[Context cache on fingerprint]
+    end
+    subgraph blindspot [Blindspot]
+        BL1[Lex/Leg batches] --> BL2[Parallel prelims]
+        BL3[Echo fingerprint] --> BL4[Context cache once]
+        BL4 --> BL2
+        BL2 --> BL5[Championship + persona gate]
+    end
+</pre>
+                <p class="admin-intro" style="margin-top: 0.75rem;">Legacy <code>?action=researcher</code> remains available for manual Standard / Tournament / Relational overrides.</p>
+            </div>
+        </div>
+
+        <div id="seismogramm-mode-intro" class="seismogramm-mode-intro" aria-live="polite">
+            <h3 id="seismogramm-mode-intro-title">Briefing</h3>
+            <p id="seismogramm-mode-intro-what"></p>
+            <p id="seismogramm-mode-intro-how"></p>
+            <p id="seismogramm-mode-intro-good"></p>
+        </div>
+
+        <div class="latest-entries-section" id="seismogramm-form-section">
             <form id="seismogramm-builder-form" class="admin-form-card">
+                <input type="hidden" name="preset" id="seismogramm_preset" value="Briefing">
+                <input type="hidden" name="custom_advanced" id="seismogramm_custom_advanced" value="0">
+                <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 
                 <!-- Briefing Persona Field -->
                 <div class="admin-form-field" id="seismogramm-persona-field" style="margin-bottom: 1.5rem;">
-                    <label for="seismogramm_persona" style="font-weight: 700; margin-bottom: 0.25rem; display:block;">Briefing Persona &amp; Goal</label>
+                    <label for="seismogramm_persona" style="font-weight: 700; margin-bottom: 0.25rem; display:block;">Persona &amp; Goal</label>
                     <textarea id="seismogramm_persona" name="briefing_persona" rows="3" class="search-input" style="width:100%; max-width:40rem;" placeholder="Who are you, for whom are you writing and what's the briefing about?">Du bist ein leitender politischer und wirtschaftlicher Intelligence-Analyst in der Schweiz. Deine Aufgabe ist es, für C-Level-Entscheider (CEOs, Verwaltungsräte) die absolut wichtigsten und strategisch relevantesten Signale aus den vorliegenden Daten herauszufiltern und kompakt aufzubereiten.</textarea>
                 </div>
 
@@ -217,7 +310,7 @@ $moduleOptions = [
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Context Pool</label>
                         <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
-                            <input type="checkbox" name="use_recipe_snippets" value="1" checked>
+                            <input type="checkbox" id="seismogramm_use_recipe_snippets" name="use_recipe_snippets" value="1">
                             Use Magnitu Snippets (200-word passages)
                         </label>
                         <label for="seismogramm_max_context" style="display:block; margin-top:0.5rem; font-size:0.875rem;">Maximum items sent to Gemini: <span id="seismogramm_max_context_val" style="font-weight:700;"><?= $maxContextEntries ?></span></label>
@@ -287,28 +380,88 @@ $moduleOptions = [
 
         var viewPromptBtn = document.getElementById('seismogramm-view-prompt');
         var viewHelperBtn = document.getElementById('seismogramm-view-helper');
+        var viewAboutBtn = document.getElementById('seismogramm-view-about');
         var helperCard = document.getElementById('seismogramm-helper-card');
+        var aboutCard = document.getElementById('seismogramm-about-card');
+        var formSection = document.getElementById('seismogramm-form-section');
+        var modeIntro = document.getElementById('seismogramm-mode-intro');
+        var modeIntroTitle = document.getElementById('seismogramm-mode-intro-title');
+        var modeIntroWhat = document.getElementById('seismogramm-mode-intro-what');
+        var modeIntroHow = document.getElementById('seismogramm-mode-intro-how');
+        var modeIntroGood = document.getElementById('seismogramm-mode-intro-good');
+        var presetInput = document.getElementById('seismogramm_preset');
+        var customAdvancedInput = document.getElementById('seismogramm_custom_advanced');
+        var snippetsCb = document.getElementById('seismogramm_use_recipe_snippets');
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
 
+        var RESEARCH_MAX_CONTEXT = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?>;
+        var TOURNAMENT_THRESHOLD = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?>;
+
+        var modeCopy = {
+            Briefing: {
+                title: 'Briefing',
+                what: 'What: A concise executive briefing on the most important developments for your desk.',
+                how: 'How: Highlights-tier Magnitu scoring by default. Standard selection on smaller pools; switches to tournament batches above ' + TOURNAMENT_THRESHOLD + ' items. Your persona/goal can outrank a higher Magnitu score when fit is clearly better.',
+                good: 'Good for: C-level weekly summaries where strategic fit to your stated goal matters as much as raw alert score.'
+            },
+            Research: {
+                title: 'Research',
+                what: 'What: Forensic topic search across a large text corpus.',
+                how: 'How: Ignores Magnitu tiers, uses Magnitu snippets, scans up to ' + RESEARCH_MAX_CONTEXT + ' items, and always runs tournament selection (parallel batches + championship). Shared title index is context-cached when large enough.',
+                good: 'Good for: Needle-in-haystack queries — “everything on UBS / energy / VAT in the last week”.'
+            },
+            Blindspot: {
+                title: 'Blindspot',
+                what: 'What: Regulatory and parliamentary signals not yet reflected in media.',
+                how: 'How: Relational tournament on Lex+Leg with a global media/feeds/scraper title fingerprint. Entries that overlap media topics are rejected. Your persona/goal filters irrelevant regulatory noise.',
+                good: 'Good for: Horizon scanning when primary sources move before the news cycle catches up.'
+            }
+        };
+
+        function updateModeIntro(presetName) {
+            var copy = modeCopy[presetName] || modeCopy.Briefing;
+            modeIntroTitle.textContent = copy.title;
+            modeIntroWhat.textContent = copy.what;
+            modeIntroHow.textContent = copy.how;
+            modeIntroGood.textContent = copy.good;
+        }
+
         var promptView = 'prompt';
+        function setViewButtonState(activeBtn) {
+            [viewPromptBtn, viewHelperBtn, viewAboutBtn].forEach(function(btn) {
+                if (!btn) return;
+                if (btn === activeBtn) {
+                    btn.classList.remove('btn-secondary');
+                    btn.classList.add('btn-primary');
+                } else {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                }
+            });
+        }
+
         function setPromptView(view) {
             promptView = view;
             if (view === 'helper') {
-                viewPromptBtn.classList.remove('btn-primary');
-                viewPromptBtn.classList.add('btn-secondary');
-                viewHelperBtn.classList.remove('btn-secondary');
-                viewHelperBtn.classList.add('btn-primary');
-                form.style.display = 'none';
+                setViewButtonState(viewHelperBtn);
+                if (formSection) formSection.style.display = 'none';
+                if (modeIntro) modeIntro.style.display = 'none';
                 helperCard.style.display = 'block';
-            } else {
-                viewPromptBtn.classList.remove('btn-secondary');
-                viewPromptBtn.classList.add('btn-primary');
-                viewHelperBtn.classList.remove('btn-primary');
-                viewHelperBtn.classList.add('btn-secondary');
-                form.style.display = 'block';
+                if (aboutCard) aboutCard.style.display = 'none';
+            } else if (view === 'about') {
+                setViewButtonState(viewAboutBtn);
+                if (formSection) formSection.style.display = 'none';
+                if (modeIntro) modeIntro.style.display = 'none';
                 helperCard.style.display = 'none';
+                if (aboutCard) aboutCard.style.display = 'block';
+            } else {
+                setViewButtonState(viewPromptBtn);
+                if (formSection) formSection.style.display = 'block';
+                if (modeIntro) modeIntro.style.display = 'block';
+                helperCard.style.display = 'none';
+                if (aboutCard) aboutCard.style.display = 'none';
             }
         }
         
@@ -317,6 +470,9 @@ $moduleOptions = [
         }
         if (viewHelperBtn) {
             viewHelperBtn.addEventListener('click', function() { setPromptView('helper'); });
+        }
+        if (viewAboutBtn) {
+            viewAboutBtn.addEventListener('click', function() { setPromptView('about'); });
         }
 
         if (helperGenerateBtn) {
@@ -377,59 +533,69 @@ $moduleOptions = [
             });
         }
 
+        function applyPreset(presetName) {
+            activePreset = presetName;
+            if (presetInput) presetInput.value = presetName;
+            updateModeIntro(presetName);
+
+            if (presetName === 'Research') {
+                queryField.style.display = 'block';
+                personaField.style.display = 'none';
+                selectionModeInput.value = 'tournament';
+                if (maxContextSlider) {
+                    maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
+                    if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
+                }
+            } else if (presetName === 'Blindspot') {
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+                selectionModeInput.value = 'relational';
+            } else {
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+                selectionModeInput.value = 'standard';
+            }
+
+            var promptData = presets.find(function(p) { return p.name === presetName; });
+            if (promptData) {
+                systemPromptTa.value = promptData.content;
+            }
+
+            var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
+            sourceCbs.forEach(function(cb) {
+                if (presetName === 'Blindspot') {
+                    cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
+                } else {
+                    cb.checked = true;
+                }
+                var pill = cb.closest('.tag-filter-pill');
+                if (pill) {
+                    pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                }
+            });
+
+            if (!customToggle.checked && snippetsCb) {
+                snippetsCb.checked = (presetName === 'Research');
+            }
+        }
+
         // Preset click handler
         presetBtns.forEach(function(btn) {
             btn.addEventListener('click', function() {
                 presetBtns.forEach(function(b) { b.classList.remove('is-active'); });
                 btn.classList.add('is-active');
-                activePreset = btn.getAttribute('data-preset');
-
-                // Dynamic query text field visibility & selection mode syncing
-                if (activePreset === 'Research') {
-                    queryField.style.display = 'block';
-                    personaField.style.display = 'none';
-                    selectionModeInput.value = 'standard';
-                } else if (activePreset === 'Blindspot') {
-                    queryField.style.display = 'none';
-                    personaField.style.display = 'none';
-                    selectionModeInput.value = 'relational';
-                } else {
-                    queryField.style.display = 'none';
-                    personaField.style.display = 'block';
-                    selectionModeInput.value = 'standard';
-                }
-
-                // Load associated system prompt
-                var promptData = presets.find(function(p) { return p.name === activePreset; });
-                if (promptData) {
-                    systemPromptTa.value = promptData.content;
-                }
-
-                // Preset-driven source checkboxes
-                var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
-                sourceCbs.forEach(function(cb) {
-                    if (activePreset === 'Blindspot') {
-                        cb.checked = (cb.value === 'lex' || cb.value === 'leg' || cb.value === 'media');
-                    } else {
-                        cb.checked = true;
-                    }
-                    var pill = cb.closest('.tag-filter-pill');
-                    if (pill) {
-                        pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                    }
-                });
+                applyPreset(btn.getAttribute('data-preset'));
             });
         });
 
-        // Initialize first prompt content
-        var defaultPrompt = presets.find(function(p) { return p.name === 'Briefing'; });
-        if (defaultPrompt) {
-            systemPromptTa.value = defaultPrompt.content;
-        }
+        applyPreset('Briefing');
 
         // Custom sandbox toggle
         customToggle.addEventListener('change', function() {
             customPanel.style.display = customToggle.checked ? 'block' : 'none';
+            if (customAdvancedInput) {
+                customAdvancedInput.value = customToggle.checked ? '1' : '0';
+            }
         });
 
         // Toggle module pills visually
@@ -450,6 +616,12 @@ $moduleOptions = [
             e.preventDefault();
 
             var formData = new FormData(form);
+            if (presetInput) {
+                formData.set('preset', presetInput.value);
+            }
+            if (customAdvancedInput) {
+                formData.set('custom_advanced', customAdvancedInput.value);
+            }
             var csrfInput = document.querySelector('input[name="_csrf"]');
             if (csrfInput) {
                 formData.set('_csrf', csrfInput.value);
@@ -522,9 +694,11 @@ $moduleOptions = [
                     };
                     
                     var pipelineLabel = est.pipeline || 'standard';
+                    var cacheNote = (data.meta && data.meta.context_cache_used) ? ' · context cache' : '';
+                    var fpNote = (data.meta && data.meta.global_fingerprint) ? ' · global fingerprint' : '';
                     detail.textContent = pipelineLabel.toUpperCase() + ' pipeline · Gemini 3.5 Flash · ' +
                         formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens · ' +
-                        String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's');
+                        String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's') + cacheNote + fpNote;
                     
                     costEstimateEl.appendChild(amount);
                     costEstimateEl.appendChild(detail);

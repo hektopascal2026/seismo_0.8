@@ -10,12 +10,11 @@ Seismogramm is the greenfield rebuild of Seismo's AI briefing and researcher pip
 
 ## Core Presets
 
-1. **Briefing** (Standard selection, all sources):
-   Renders a high-level executive summary summarizing top-priority entries.
-2. **Blindspot** (Relational selection, Lex/Leg/Media sources):
-   Analyzes legislative/parliamentary updates that have no corresponding coverage in media or scraper feeds.
-3. **Research** (Standard selection, custom query query input):
-   Synthesizes entries relating strictly to a search query, bypassing standard score thresholds.
+1. **Briefing** — Standard selection (tournament when pool &gt; 80). Magnitu highlights tier; persona/goal can override score ties. All sources.
+2. **Blindspot** — Relational tournament on Lex+Leg; global title fingerprint (Media/Feeds/Scraper); negative-space protocol; persona required.
+3. **Research** — Tournament always; disregards Magnitu; Magnitu snippets on; pool up to 300; topic query required.
+
+Context caching: shared global fingerprint is uploaded once and referenced by parallel batch requests when large enough (&gt;50k chars).
 
 ## Component Layout
 
