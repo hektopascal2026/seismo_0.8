@@ -144,26 +144,6 @@ $moduleOptions = [
         justify-content: space-between;
         margin-bottom: 0.75rem;
     }
-    .seismogramm-mode-intro {
-        margin-bottom: 1rem;
-        padding: 0.85rem 1rem;
-        border: 0.125rem solid #000;
-        background: #fafafa;
-        max-width: 40rem;
-    }
-    .seismogramm-mode-intro h3 {
-        margin: 0 0 0.35rem;
-        font-size: 1rem;
-        font-weight: 700;
-    }
-    .seismogramm-mode-intro p {
-        margin: 0 0 0.5rem;
-        font-size: 0.875rem;
-        line-height: 1.45;
-    }
-    .seismogramm-mode-intro p:last-child {
-        margin-bottom: 0;
-    }
     .seismogramm-about-panel {
         max-width: 44rem;
         font-size: 0.875rem;
@@ -294,13 +274,6 @@ flowchart LR
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
-        </div>
-
-        <div id="seismogramm-mode-intro" class="seismogramm-mode-intro" aria-live="polite">
-            <h3 id="seismogramm-mode-intro-title">Briefing</h3>
-            <p id="seismogramm-mode-intro-what"></p>
-            <p id="seismogramm-mode-intro-how"></p>
-            <p id="seismogramm-mode-intro-good"></p>
         </div>
 
         <div class="latest-entries-section" id="seismogramm-form-section">
@@ -519,11 +492,6 @@ flowchart LR
         var workbenchCard = document.getElementById('seismogramm-workbench-card');
         var aboutCard = document.getElementById('seismogramm-about-card');
         var formSection = document.getElementById('seismogramm-form-section');
-        var modeIntro = document.getElementById('seismogramm-mode-intro');
-        var modeIntroTitle = document.getElementById('seismogramm-mode-intro-title');
-        var modeIntroWhat = document.getElementById('seismogramm-mode-intro-what');
-        var modeIntroHow = document.getElementById('seismogramm-mode-intro-how');
-        var modeIntroGood = document.getElementById('seismogramm-mode-intro-good');
         var presetInput = document.getElementById('seismogramm_preset');
         var customAdvancedInput = document.getElementById('seismogramm_custom_advanced');
         var snippetsCb = document.getElementById('seismogramm_use_recipe_snippets');
@@ -541,7 +509,6 @@ flowchart LR
         var activeBaseMode = 'Briefing';
 
         var RESEARCH_MAX_CONTEXT = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?>;
-        var TOURNAMENT_THRESHOLD = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?>;
         var BLINDSPOT_DEFAULT_MODULES = ['lex_ch', 'leg', 'media', 'newsletter'];
         var lexPill = document.getElementById('seismogramm-lex-pill');
         var lexInput = document.getElementById('seismogramm-lex-input');
@@ -591,27 +558,6 @@ flowchart LR
         function allModulesExceptMem() {
             return ['feeds', 'media', 'email', 'newsletter', 'scraper', 'leg', 'lex'];
         }
-
-        var modeCopy = {
-            Briefing: {
-                title: 'Briefing',
-                what: 'What: A concise executive briefing on the most important developments for your desk.',
-                how: 'How: Highlights-tier Magnitu scoring by default. Standard selection on smaller pools; switches to tournament batches above ' + TOURNAMENT_THRESHOLD + ' items. Your persona/goal can outrank a higher Magnitu score when fit is clearly better.',
-                good: 'Good for: C-level weekly summaries where strategic fit to your stated goal matters as much as raw alert score.'
-            },
-            Research: {
-                title: 'Research',
-                what: 'What: Forensic topic search across a large text corpus.',
-                how: 'How: Ignores Magnitu tiers, uses Magnitu snippets, scans up to ' + RESEARCH_MAX_CONTEXT + ' items with newest-first cap ordering. Tournament selection when the pool exceeds ~35 items; smaller pools use one selection pass.',
-                good: 'Good for: Needle-in-haystack queries — “everything on UBS / energy / VAT in the last week”.'
-            },
-            Blindspot: {
-                title: 'Blindspot',
-                what: 'What: Swiss Fedlex and parliamentary signals not yet reflected in media or newsletters.',
-                how: 'How: Relational tournament on CH Lex+Leg with a global Media/Newsletter title fingerprint (Feeds/Scraper optional). Entries that overlap echo topics are rejected. Your persona/goal filters irrelevant regulatory noise.',
-                good: 'Good for: Horizon scanning when primary sources move before the news cycle and digest mail catch up.'
-            }
-        };
 
         function isReservedPreset(name) {
             return RESERVED_PRESETS.indexOf(name) !== -1;
@@ -806,19 +752,6 @@ flowchart LR
             attachPresetBtnListeners();
         }
 
-        function updateModeIntro(presetName) {
-            var copy = modeCopy[presetName] || {
-                title: presetName,
-                what: 'Custom Preset Workbench mode: configured with user knobs and custom prompt.',
-                how: 'How: Uses custom Deep selection, relevance and pool settings.',
-                good: 'Good for: Specific desks or custom compliance flows.'
-            };
-            modeIntroTitle.textContent = copy.title;
-            modeIntroWhat.textContent = copy.what;
-            modeIntroHow.textContent = copy.how;
-            modeIntroGood.textContent = copy.good;
-        }
-
         var promptView = 'prompt';
         function setViewButtonState(activeBtn) {
             [viewPromptBtn, viewWorkbenchBtn, viewAboutBtn].forEach(function(btn) {
@@ -840,7 +773,6 @@ flowchart LR
             if (view === 'workbench') {
                 setViewButtonState(viewWorkbenchBtn);
                 if (formSection) formSection.style.display = 'block';
-                if (modeIntro) modeIntro.style.display = 'block';
                 workbenchCard.style.display = 'block';
                 if (aboutCard) aboutCard.style.display = 'none';
 
@@ -853,13 +785,11 @@ flowchart LR
             } else if (view === 'about') {
                 setViewButtonState(viewAboutBtn);
                 if (formSection) formSection.style.display = 'none';
-                if (modeIntro) modeIntro.style.display = 'none';
                 workbenchCard.style.display = 'none';
                 if (aboutCard) aboutCard.style.display = 'block';
             } else {
                 setViewButtonState(viewPromptBtn);
                 if (formSection) formSection.style.display = 'block';
-                if (modeIntro) modeIntro.style.display = 'block';
                 workbenchCard.style.display = 'none';
                 if (aboutCard) aboutCard.style.display = 'none';
             }
@@ -1089,7 +1019,6 @@ flowchart LR
             applyingPreset = true;
             activePreset = presetName;
             if (presetInput) presetInput.value = presetName;
-            updateModeIntro(presetName);
 
             var promptData = presets.find(function(p) { return p.name === presetName; });
             if (!promptData) {
