@@ -274,8 +274,9 @@ flowchart LR
                     <div class="tag-filter-section">
                         <div class="tag-filter-list">
                             <?php foreach ($moduleOptions as $mod): ?>
-                            <label class="tag-filter-pill tag-filter-pill-active tag-filter-pill--<?= e($mod['key']) ?>">
-                                <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>" checked class="seismogramm-module-cb">
+                            <?php $modChecked = $mod['key'] !== 'mem'; ?>
+                            <label class="tag-filter-pill<?= $modChecked ? ' tag-filter-pill-active' : '' ?> tag-filter-pill--<?= e($mod['key']) ?>">
+                                <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $modChecked ? ' checked' : '' ?> class="seismogramm-module-cb">
                                 <span><?= e($mod['label']) ?></span>
                             </label>
                             <?php endforeach; ?>
@@ -607,7 +608,7 @@ flowchart LR
                 if (presetName === 'Blindspot') {
                     cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
                 } else {
-                    cb.checked = true;
+                    cb.checked = cb.value !== 'mem';
                 }
                 var pill = cb.closest('.tag-filter-pill');
                 if (pill) {
