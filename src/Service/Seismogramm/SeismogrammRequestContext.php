@@ -61,6 +61,15 @@ final class SeismogrammRequestContext
             ? SeismogrammPresetProfile::normalizePoolPriority((string)($post['pool_priority'] ?? ''))
             : ($gatherDefaults['poolPriority'] ?? SeismogrammPresetProfile::defaultPoolPriority($preset));
 
+        $selectionMode = null;
+        $proSelectionMode = false;
+        if ($customAdvanced) {
+            $selectionMode = isset($post['selection_mode']) && trim((string)$post['selection_mode']) !== ''
+                ? trim((string)$post['selection_mode'])
+                : null;
+            $proSelectionMode = (string)($post['pro_selection_mode'] ?? '0') === '1';
+        }
+
         return [
             'since'             => $since,
             'limit'             => $limit,
@@ -73,6 +82,8 @@ final class SeismogrammRequestContext
             'preset'            => $preset,
             'customAdvanced'    => $customAdvanced,
             'gatherDefaults'    => $gatherDefaults,
+            'selectionMode'     => $selectionMode,
+            'proSelectionMode'  => $proSelectionMode,
         ];
     }
 

@@ -170,27 +170,55 @@ $moduleOptions = [
         <?php endif; ?>
 
         <!-- Preset Selection Bar -->
-        <div class="seismogramm-preset-bar">
-            <button type="button" class="seismogramm-preset-btn is-active" data-preset="Briefing">Briefing</button>
-            <button type="button" class="seismogramm-preset-btn" data-preset="Blindspot">Blindspot</button>
-            <button type="button" class="seismogramm-preset-btn" data-preset="Research">Research</button>
+        <div class="seismogramm-preset-bar" style="flex-wrap: wrap;">
+            <?php foreach ($savedPrompts as $sp): ?>
+                <?php $isDefault = in_array($sp['name'], ['Briefing', 'Blindspot', 'Research'], true); ?>
+                <div class="preset-btn-wrap" style="position: relative; display: flex; align-items: center; margin-right: 0.5rem; margin-bottom: 0.5rem;">
+                    <button type="button" class="seismogramm-preset-btn<?= $sp['name'] === 'Briefing' ? ' is-active' : '' ?>"
+                            data-preset="<?= e($sp['name']) ?>"
+                            data-id="<?= e($sp['id']) ?>"
+                            style="border-top-right-radius: <?= $isDefault ? 'inherit' : '0' ?>; border-bottom-right-radius: <?= $isDefault ? 'inherit' : '0' ?>;">
+                        <?= e($sp['name']) ?>
+                    </button>
+                    <?php if (!$isDefault): ?>
+                        <button type="button" class="seismogramm-preset-delete-btn"
+                                data-id="<?= e($sp['id']) ?>"
+                                data-name="<?= e($sp['name']) ?>"
+                                title="Delete preset"
+                                style="background: #ef4444; color: #fff; border: 0.125rem solid #000; border-left: none; padding: 0.75rem 0.5rem; cursor: pointer; box-shadow: 0.125rem 0.125rem 0 #000; font-weight: bold; border-top-right-radius: 4px; border-bottom-right-radius: 4px; transition: all 0.1s ease;">
+                            &times;
+                        </button>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
         </div>
 
         <!-- View Toggle Bar -->
         <div class="view-toggle view-toggle-bar" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
             <span class="view-toggle-label" style="font-weight: 600; margin-right: 0.5rem;">View:</span>
             <button type="button" class="btn btn-primary" id="seismogramm-view-prompt" data-view="prompt" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer;">Prompt</button>
-            <button type="button" class="btn btn-secondary" id="seismogramm-view-helper" data-view="helper" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Helper</button>
+            <button type="button" class="btn btn-secondary" id="seismogramm-view-workbench" data-view="workbench" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">Workbench</button>
             <button type="button" class="btn btn-secondary" id="seismogramm-view-about" data-view="about" style="font-family: var(--font-header, inherit); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.8rem; border: 0.125rem solid #000; box-shadow: 0.125rem 0.125rem 0 #000; cursor: pointer; margin-left: 0.5rem;">About</button>
         </div>
 
-        <!-- Helper Card -->
-        <div id="seismogramm-helper-card" class="latest-entries-section" style="display: none; margin-bottom: 1.5rem;">
+        <!-- Workbench Card (Prompt Generator) -->
+        <div id="seismogramm-workbench-card" class="latest-entries-section" style="display: none; margin-bottom: 1.5rem;">
             <div class="admin-form-card">
+                <div class="admin-form-field" style="margin-bottom: 1rem;">
+                    <label for="seismogramm_helper_base_mode" style="display:block; margin-bottom:0.5rem; font-weight:600;">Base Mode Style</label>
+                    <p class="admin-intro" style="margin:0 0 0.5rem; font-size: 0.875rem;">
+                        Select the base preset that matches your query style. This will automatically pre-configure the recommended settings.
+                    </p>
+                    <select id="seismogramm_helper_base_mode" class="search-input" style="width:auto; margin-bottom: 0.75rem;">
+                        <option value="Briefing">Briefing</option>
+                        <option value="Blindspot">Blindspot</option>
+                        <option value="Research">Research</option>
+                    </select>
+                </div>
                 <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                     <label for="seismogramm_helper_intent" style="display:block; margin-bottom:0.5rem; font-weight:600;">What should this prompt focus on?</label>
                     <p class="admin-intro" style="margin:0 0 0.5rem; font-size: 0.875rem;">
-                        Rough notes are enough. Gemini drafts a full prompt in the style of your default.
+                        Rough notes are enough. Gemini drafts a full prompt in the style of the selected Base Mode.
                     </p>
                     <textarea id="seismogramm_helper_intent" rows="5" class="search-input" style="width:100%; max-width:40rem; margin-bottom: 0.75rem;" placeholder="e.g. Swiss energy regulation and grid policy; prefer Lex and Leg; exclude consumer news."></textarea>
                     <div>
@@ -352,13 +380,42 @@ flowchart LR
                             Experimental: context-cache global title index (large pools only; requires fingerprint &gt;50k chars)
                         </label>
                     </div>
+
+                    <div class="admin-form-field" style="margin-bottom: 1.5rem;">
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Deep Selection</label>
+                        <p class="admin-intro" style="margin:0 0 0.5rem; font-size:0.8125rem; opacity:0.85;">
+                            How pass 1 chooses entries before the briefing is written. Pro selection is independent (model choice).
+                        </p>
+                        <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
+                            <input type="radio" name="selection_mode" value="standard" checked>
+                            <strong>Standard</strong> — one global selection pass (sends full capped pool in a single pass).
+                        </label>
+                        <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
+                            <input type="radio" name="selection_mode" value="tournament">
+                            <strong>Tournament</strong> — parallel batch prelims + final shortlist (splits pool into batches of ~35).
+                        </label>
+                        <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
+                            <input type="radio" name="selection_mode" value="relational">
+                            <strong>Blind spot / cross-module</strong> — relational tournament + fingerprint asymmetry rules (Lex/Leg primary sources vs Media/Feeds).
+                        </label>
+                        <label style="display:block; margin-top:0.75rem; font-weight:normal;">
+                            <input type="checkbox" id="seismogramm_pro_selection_mode" name="pro_selection_mode" value="1">
+                            Use gemini-3.1-pro-preview for entry selection
+                        </label>
+                    </div>
                 </div>
+
+                <!-- Proactive Validation Warning Banner -->
+                <div id="seismogramm-validation-warning" class="message message-warning" style="display: none; margin-bottom: 1rem;"></div>
 
                 <!-- Context Warning Banner -->
                 <div id="seismogramm-context-warning" class="message message-warning" style="display: none; margin-bottom: 1rem;"></div>
 
-                <div class="admin-form-actions">
+                <div class="admin-form-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <button type="submit" class="btn btn-success" id="seismogramm-generate-btn" <?= $geminiConfigured ? '' : ' disabled' ?>>Generate briefing</button>
+                    <button type="button" class="btn btn-secondary" id="seismogramm-save-preset-btn" style="display: none;">Save Preset</button>
+                    <button type="button" class="btn btn-secondary" id="seismogramm-save-new-preset-btn">Save as New...</button>
+                    <span id="seismogramm-save-msg" class="message" style="margin: 0; display: none;" role="status" aria-live="polite"></span>
                 </div>
             </form>
         </div>
@@ -387,7 +444,6 @@ flowchart LR
             <p class="admin-intro">Citations parsed from generated summary (validation cards):</p>
             <div id="seismogramm-sources-cards"></div>
         </div>
-
         <div style="display:none;"><?= $csrfField ?></div>
     </div>
 
@@ -396,6 +452,7 @@ flowchart LR
     (function() {
         var presets = <?= json_encode($savedPrompts, JSON_UNESCAPED_UNICODE) ?>;
         var activePreset = 'Briefing';
+        var activePresetId = '<?= e($initialActivePromptTabId) ?>';
         
         var presetBtns = document.querySelectorAll('.seismogramm-preset-btn');
         var queryField = document.getElementById('seismogramm-query-field');
@@ -405,6 +462,9 @@ flowchart LR
         var systemPromptTa = document.getElementById('seismogramm_system_prompt');
         var form = document.getElementById('seismogramm-builder-form');
         var generateBtn = document.getElementById('seismogramm-generate-btn');
+        var savePresetBtn = document.getElementById('seismogramm-save-preset-btn');
+        var saveNewPresetBtn = document.getElementById('seismogramm-save-new-preset-btn');
+        var saveMsg = document.getElementById('seismogramm-save-msg');
         var out = document.getElementById('seismogramm-output');
         var errEl = document.getElementById('seismogramm-output-error');
         var rateLimitRetryEl = document.getElementById('seismogramm-rate-limit-retry');
@@ -414,13 +474,13 @@ flowchart LR
         var sourcesCards = document.getElementById('seismogramm-sources-cards');
         var copyBtn = document.getElementById('seismogramm-copy-btn');
         var placeholder = document.getElementById('seismogramm-placeholder');
-         var costEstimateEl = document.getElementById('seismogramm-cost-estimate');
+        var costEstimateEl = document.getElementById('seismogramm-cost-estimate');
         var lastBriefingText = '';
 
         var viewPromptBtn = document.getElementById('seismogramm-view-prompt');
-        var viewHelperBtn = document.getElementById('seismogramm-view-helper');
+        var viewWorkbenchBtn = document.getElementById('seismogramm-view-workbench');
         var viewAboutBtn = document.getElementById('seismogramm-view-about');
-        var helperCard = document.getElementById('seismogramm-helper-card');
+        var workbenchCard = document.getElementById('seismogramm-workbench-card');
         var aboutCard = document.getElementById('seismogramm-about-card');
         var formSection = document.getElementById('seismogramm-form-section');
         var modeIntro = document.getElementById('seismogramm-mode-intro');
@@ -440,6 +500,7 @@ flowchart LR
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
+        var helperBaseModeSelect = document.getElementById('seismogramm_helper_base_mode');
 
         var RESEARCH_MAX_CONTEXT = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?>;
         var TOURNAMENT_THRESHOLD = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?>;
@@ -466,7 +527,12 @@ flowchart LR
         };
 
         function updateModeIntro(presetName) {
-            var copy = modeCopy[presetName] || modeCopy.Briefing;
+            var copy = modeCopy[presetName] || {
+                title: presetName,
+                what: 'Custom Preset Workbench mode: configured with user knobs and custom prompt.',
+                how: 'How: Uses custom Deep selection, relevance and pool settings.',
+                good: 'Good for: Specific desks or custom compliance flows.'
+            };
             modeIntroTitle.textContent = copy.title;
             modeIntroWhat.textContent = copy.what;
             modeIntroHow.textContent = copy.how;
@@ -475,7 +541,7 @@ flowchart LR
 
         var promptView = 'prompt';
         function setViewButtonState(activeBtn) {
-            [viewPromptBtn, viewHelperBtn, viewAboutBtn].forEach(function(btn) {
+            [viewPromptBtn, viewWorkbenchBtn, viewAboutBtn].forEach(function(btn) {
                 if (!btn) return;
                 if (btn === activeBtn) {
                     btn.classList.remove('btn-secondary');
@@ -489,23 +555,30 @@ flowchart LR
 
         function setPromptView(view) {
             promptView = view;
-            if (view === 'helper') {
-                setViewButtonState(viewHelperBtn);
-                if (formSection) formSection.style.display = 'none';
-                if (modeIntro) modeIntro.style.display = 'none';
-                helperCard.style.display = 'block';
+            if (view === 'workbench') {
+                setViewButtonState(viewWorkbenchBtn);
+                if (formSection) formSection.style.display = 'block';
+                if (modeIntro) modeIntro.style.display = 'block';
+                workbenchCard.style.display = 'block';
                 if (aboutCard) aboutCard.style.display = 'none';
+
+                // Automatically reveal and check advanced knobs when in Workbench view
+                customToggle.checked = true;
+                customPanel.style.display = 'block';
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = '1';
+                }
             } else if (view === 'about') {
                 setViewButtonState(viewAboutBtn);
                 if (formSection) formSection.style.display = 'none';
                 if (modeIntro) modeIntro.style.display = 'none';
-                helperCard.style.display = 'none';
+                workbenchCard.style.display = 'none';
                 if (aboutCard) aboutCard.style.display = 'block';
             } else {
                 setViewButtonState(viewPromptBtn);
                 if (formSection) formSection.style.display = 'block';
                 if (modeIntro) modeIntro.style.display = 'block';
-                helperCard.style.display = 'none';
+                workbenchCard.style.display = 'none';
                 if (aboutCard) aboutCard.style.display = 'none';
             }
         }
@@ -513,16 +586,80 @@ flowchart LR
         if (viewPromptBtn) {
             viewPromptBtn.addEventListener('click', function() { setPromptView('prompt'); });
         }
-        if (viewHelperBtn) {
-            viewHelperBtn.addEventListener('click', function() { setPromptView('helper'); });
+        if (viewWorkbenchBtn) {
+            viewWorkbenchBtn.addEventListener('click', function() { setPromptView('workbench'); });
         }
         if (viewAboutBtn) {
             viewAboutBtn.addEventListener('click', function() { setPromptView('about'); });
         }
 
+        function applyBaseModeKnobs(baseMode) {
+            var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
+            if (baseMode === 'Research') {
+                sourceCbs.forEach(function(cb) {
+                    cb.checked = cb.value !== 'mem';
+                    var pill = cb.closest('.tag-filter-pill');
+                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                });
+                if (snippetsCb) snippetsCb.checked = true;
+                if (disregardMagnituCb) disregardMagnituCb.checked = true;
+                if (poolPriorityNewest) poolPriorityNewest.checked = true;
+                if (maxContextSlider) {
+                    maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
+                    if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
+                }
+                var selModeRadio = document.querySelector('input[name="selection_mode"][value="tournament"]');
+                if (selModeRadio) selModeRadio.checked = true;
+                queryField.style.display = 'block';
+                personaField.style.display = 'none';
+            } else if (baseMode === 'Blindspot') {
+                sourceCbs.forEach(function(cb) {
+                    cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
+                    var pill = cb.closest('.tag-filter-pill');
+                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                });
+                if (snippetsCb) snippetsCb.checked = false;
+                if (disregardMagnituCb) disregardMagnituCb.checked = false;
+                if (poolPriorityHighest) poolPriorityHighest.checked = true;
+                if (maxContextSlider) {
+                    maxContextSlider.value = '100';
+                    if (maxContextVal) maxContextVal.textContent = '100';
+                }
+                var selModeRadio = document.querySelector('input[name="selection_mode"][value="relational"]');
+                if (selModeRadio) selModeRadio.checked = true;
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+            } else {
+                sourceCbs.forEach(function(cb) {
+                    cb.checked = cb.value !== 'mem';
+                    var pill = cb.closest('.tag-filter-pill');
+                    if (pill) pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                });
+                if (snippetsCb) snippetsCb.checked = false;
+                if (disregardMagnituCb) disregardMagnituCb.checked = false;
+                if (poolPriorityHighest) poolPriorityHighest.checked = true;
+                if (maxContextSlider) {
+                    maxContextSlider.value = '100';
+                    if (maxContextVal) maxContextVal.textContent = '100';
+                }
+                var selModeRadio = document.querySelector('input[name="selection_mode"][value="standard"]');
+                if (selModeRadio) selModeRadio.checked = true;
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+            }
+            validateKnobs();
+        }
+
+        if (helperBaseModeSelect) {
+            helperBaseModeSelect.addEventListener('change', function() {
+                applyBaseModeKnobs(helperBaseModeSelect.value);
+            });
+        }
+
         if (helperGenerateBtn) {
             helperGenerateBtn.addEventListener('click', function() {
                 var intent = helperIntentTa.value.trim();
+                var baseMode = helperBaseModeSelect ? helperBaseModeSelect.value : 'Briefing';
                 if (!intent) {
                     helperMsg.textContent = 'Please enter what this prompt should focus on.';
                     helperMsg.className = 'message message-warning';
@@ -537,6 +674,7 @@ flowchart LR
                 
                 var formData = new FormData();
                 formData.append('intent', intent);
+                formData.append('base_mode', baseMode);
                 var csrfInput = document.querySelector('input[name="_csrf"]');
                 if (csrfInput) {
                     formData.append('_csrf', csrfInput.value);
@@ -578,67 +716,341 @@ flowchart LR
             });
         }
 
+        function validateKnobs() {
+            var warnings = [];
+            var relationalChecked = document.querySelector('input[name="selection_mode"][value="relational"]:checked');
+            if (relationalChecked) {
+                var lexChecked = document.querySelector('.seismogramm-module-cb[value="lex"]').checked;
+                var legChecked = document.querySelector('.seismogramm-module-cb[value="leg"]').checked;
+                if (!lexChecked && !legChecked) {
+                    warnings.push('Relational mode requires primary sources (Lex or Leg) to compare against media echo. Please check Lex or Leg source.');
+                }
+            }
+
+            var snippetsChecked = snippetsCb ? snippetsCb.checked : false;
+            var maxContextValInt = maxContextSlider ? parseInt(maxContextSlider.value, 10) : 0;
+            if (!snippetsChecked && maxContextValInt > 100) {
+                warnings.push('Sending more than 100 full articles without snippets may exceed Gemini\'s input limit or cause rate limits. Consider checking "Use Magnitu Snippets" or reducing maximum items.');
+            }
+
+            var warningBox = document.getElementById('seismogramm-validation-warning');
+            if (warningBox) {
+                if (warnings.length > 0) {
+                    warningBox.innerHTML = warnings.join('<br>');
+                    warningBox.style.display = 'block';
+                } else {
+                    warningBox.style.display = 'none';
+                    warningBox.innerHTML = '';
+                }
+            }
+        }
+
+        document.querySelectorAll('.seismogramm-module-cb, input[name="selection_mode"], #seismogramm_use_recipe_snippets, #seismogramm_max_context').forEach(function(el) {
+            el.addEventListener('change', validateKnobs);
+        });
+        if (maxContextSlider) {
+            maxContextSlider.addEventListener('input', validateKnobs);
+        }
+
+        function getKnobsData() {
+            var modules = [];
+            document.querySelectorAll('.seismogramm-module-cb:checked').forEach(function(cb) {
+                modules.push(cb.value);
+            });
+
+            var lookback = document.getElementById('seismogramm_lookback') ? document.getElementById('seismogramm_lookback').value : '7';
+            var itemCount = document.getElementById('seismogramm_item_count') ? document.getElementById('seismogramm_item_count').value : '5';
+            
+            var includeImportant = document.querySelector('input[name="include_important"]') ? document.querySelector('input[name="include_important"]').checked : false;
+            var disregardMagnitu = disregardMagnituCb ? disregardMagnituCb.checked : false;
+            
+            var poolPriority = document.querySelector('input[name="pool_priority"]:checked') ? document.querySelector('input[name="pool_priority"]:checked').value : 'highest';
+            
+            var useRecipeSnippets = snippetsCb ? snippetsCb.checked : false;
+            var maxContextEntries = maxContextSlider ? maxContextSlider.value : '100';
+            var useContextCache = document.getElementById('seismogramm_use_context_cache') ? document.getElementById('seismogramm_use_context_cache').checked : false;
+            
+            var selectionMode = document.querySelector('input[name="selection_mode"]:checked') ? document.querySelector('input[name="selection_mode"]:checked').value : 'standard';
+            var proSelectionMode = document.getElementById('seismogramm_pro_selection_mode') ? document.getElementById('seismogramm_pro_selection_mode').checked : false;
+            
+            var persona = personaInput ? personaInput.value : '';
+
+            return {
+                modules: modules,
+                lookback_days: parseInt(lookback, 10),
+                item_count: parseInt(itemCount, 10),
+                include_important: includeImportant,
+                disregard_magnitu: disregardMagnitu,
+                pool_priority: poolPriority,
+                use_recipe_snippets: useRecipeSnippets,
+                max_context_entries: parseInt(maxContextEntries, 10),
+                use_context_cache: useContextCache,
+                selection_mode: selectionMode,
+                pro_selection_mode: proSelectionMode,
+                persona: persona
+            };
+        }
+
         function applyPreset(presetName) {
             activePreset = presetName;
             if (presetInput) presetInput.value = presetName;
             updateModeIntro(presetName);
 
-            if (presetName === 'Research') {
-                queryField.style.display = 'block';
-                personaField.style.display = 'none';
-                if (maxContextSlider) {
-                    maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
-                    if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
-                }
-            } else if (presetName === 'Blindspot') {
-                queryField.style.display = 'none';
-                personaField.style.display = 'block';
-            } else {
-                queryField.style.display = 'none';
-                personaField.style.display = 'block';
-            }
-
             var promptData = presets.find(function(p) { return p.name === presetName; });
-            if (promptData) {
-                systemPromptTa.value = promptData.content;
+            if (!promptData) return;
+
+            activePresetId = promptData.id;
+            systemPromptTa.value = promptData.content;
+
+            var isDefault = ['Briefing', 'Blindspot', 'Research'].indexOf(presetName) !== -1;
+            if (savePresetBtn) {
+                savePresetBtn.style.display = isDefault ? 'none' : 'inline-block';
             }
 
-            var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
-            sourceCbs.forEach(function(cb) {
-                if (presetName === 'Blindspot') {
-                    cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
+            if (promptData.knobs) {
+                var k = promptData.knobs;
+                
+                // Modules
+                var modules = k.modules || [];
+                var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
+                sourceCbs.forEach(function(cb) {
+                    cb.checked = modules.indexOf(cb.value) !== -1;
+                    var pill = cb.closest('.tag-filter-pill');
+                    if (pill) {
+                        pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                    }
+                });
+
+                // Lookback
+                var lookback = document.getElementById('seismogramm_lookback');
+                if (lookback && k.lookback_days) {
+                    lookback.value = String(k.lookback_days);
+                }
+
+                // Item Count
+                var itemCountSel = document.getElementById('seismogramm_item_count');
+                if (itemCountSel && k.item_count) {
+                    itemCountSel.value = String(k.item_count);
+                }
+
+                // Relevance Scoring
+                var includeImportant = document.querySelector('input[name="include_important"]');
+                if (includeImportant) {
+                    includeImportant.checked = !!k.include_important;
+                }
+                if (disregardMagnituCb) {
+                    disregardMagnituCb.checked = !!k.disregard_magnitu;
+                }
+
+                // Pool Priority
+                if (k.pool_priority === 'newest' && poolPriorityNewest) {
+                    poolPriorityNewest.checked = true;
+                } else if (poolPriorityHighest) {
+                    poolPriorityHighest.checked = true;
+                }
+
+                // Snippets
+                if (snippetsCb) {
+                    snippetsCb.checked = !!k.use_recipe_snippets;
+                }
+
+                // Max Context
+                if (maxContextSlider) {
+                    maxContextSlider.value = String(k.max_context_entries || 100);
+                    if (maxContextVal) maxContextVal.textContent = String(k.max_context_entries || 100);
+                }
+
+                // Context Cache
+                var useCacheCb = document.getElementById('seismogramm_use_context_cache');
+                if (useCacheCb) {
+                    useCacheCb.checked = !!k.use_context_cache;
+                }
+
+                // Selection Mode
+                var selModeRadio = document.querySelector('input[name="selection_mode"][value="' + (k.selection_mode || 'standard') + '"]');
+                if (selModeRadio) {
+                    selModeRadio.checked = true;
+                }
+
+                // Pro Selection
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) {
+                    proSelectionCb.checked = !!k.pro_selection_mode;
+                }
+                
+                customToggle.checked = true;
+                customPanel.style.display = 'block';
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = '1';
+                }
+                
+                queryField.style.display = 'none';
+                personaField.style.display = 'block';
+                if (personaInput && k.persona) {
+                    personaInput.value = k.persona;
+                }
+            } else {
+                // Default Preset defaults
+                if (presetName === 'Research') {
+                    queryField.style.display = 'block';
+                    personaField.style.display = 'none';
+                    if (maxContextSlider) {
+                        maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
+                        if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
+                    }
                 } else {
-                    cb.checked = cb.value !== 'mem';
+                    queryField.style.display = 'none';
+                    personaField.style.display = 'block';
                 }
-                var pill = cb.closest('.tag-filter-pill');
-                if (pill) {
-                    pill.classList.toggle('tag-filter-pill-active', cb.checked);
-                }
-            });
 
-            if (snippetsCb) {
-                snippetsCb.checked = (presetName === 'Research');
+                var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
+                sourceCbs.forEach(function(cb) {
+                    if (presetName === 'Blindspot') {
+                        cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
+                    } else {
+                        cb.checked = cb.value !== 'mem';
+                    }
+                    var pill = cb.closest('.tag-filter-pill');
+                    if (pill) {
+                        pill.classList.toggle('tag-filter-pill-active', cb.checked);
+                    }
+                });
+
+                if (snippetsCb) {
+                    snippetsCb.checked = (presetName === 'Research');
+                }
+                if (disregardMagnituCb) {
+                    disregardMagnituCb.checked = (presetName === 'Research');
+                }
+                if (presetName === 'Research' && poolPriorityNewest) {
+                    poolPriorityNewest.checked = true;
+                } else if (poolPriorityHighest) {
+                    poolPriorityHighest.checked = true;
+                }
+
+                var standardSelMode = (presetName === 'Research') ? 'tournament' : ((presetName === 'Blindspot') ? 'relational' : 'standard');
+                var selModeRadio = document.querySelector('input[name="selection_mode"][value="' + standardSelMode + '"]');
+                if (selModeRadio) {
+                    selModeRadio.checked = true;
+                }
+
+                var proSelectionCb = document.getElementById('seismogramm_pro_selection_mode');
+                if (proSelectionCb) {
+                    proSelectionCb.checked = false;
+                }
+
+                var useCacheCb = document.getElementById('seismogramm_use_context_cache');
+                if (useCacheCb) {
+                    useCacheCb.checked = false;
+                }
             }
-            if (disregardMagnituCb) {
-                disregardMagnituCb.checked = (presetName === 'Research');
-            }
-            if (presetName === 'Research' && poolPriorityNewest) {
-                poolPriorityNewest.checked = true;
-            } else if (poolPriorityHighest) {
-                poolPriorityHighest.checked = true;
-            }
+            validateKnobs();
         }
 
         // Preset click handler
-        presetBtns.forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                presetBtns.forEach(function(b) { b.classList.remove('is-active'); });
-                btn.classList.add('is-active');
-                applyPreset(btn.getAttribute('data-preset'));
+        function attachPresetBtnListeners() {
+            document.querySelectorAll('.seismogramm-preset-btn').forEach(function(btn) {
+                btn.onclick = function() {
+                    document.querySelectorAll('.seismogramm-preset-btn').forEach(function(b) { b.classList.remove('is-active'); });
+                    btn.classList.add('is-active');
+                    applyPreset(btn.getAttribute('data-preset'));
+                };
             });
-        });
 
-        applyPreset('Briefing');
+            document.querySelectorAll('.seismogramm-preset-delete-btn').forEach(function(btn) {
+                btn.onclick = function(e) {
+                    e.stopPropagation();
+                    var name = btn.getAttribute('data-name');
+                    var id = btn.getAttribute('data-id');
+                    if (confirm('Are you sure you want to delete preset "' + name + '"?')) {
+                        var formData = new FormData();
+                        formData.append('id', id);
+                        var csrfInput = document.querySelector('input[name="_csrf"]');
+                        if (csrfInput) {
+                            formData.append('_csrf', csrfInput.value);
+                        }
+
+                        fetch('index.php?action=delete_seismogramm_prompt', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            if (!data.ok) throw new Error(data.error || 'Failed to delete preset');
+                            // Reload page to reflect changes
+                            window.location.reload();
+                        })
+                        .catch(function(err) {
+                            alert(err.message);
+                        });
+                    }
+                };
+            });
+        }
+
+        attachPresetBtnListeners();
+
+        function savePresetAction(isNew) {
+            var name = activePreset;
+            var id = isNew ? '' : activePresetId;
+
+            if (isNew || ['Briefing', 'Blindspot', 'Research'].indexOf(name) !== -1) {
+                var enteredName = prompt('Enter a name for the new preset:');
+                if (!enteredName) return;
+                name = enteredName.trim();
+                if (name === '') return;
+                if (['Briefing', 'Blindspot', 'Research'].indexOf(name) !== -1) {
+                    alert('Cannot use reserved preset names (Briefing, Blindspot, Research).');
+                    return;
+                }
+                id = '';
+            }
+
+            var content = systemPromptTa.value;
+            var knobs = getKnobsData();
+
+            saveMsg.textContent = 'Saving preset...';
+            saveMsg.className = 'message message-info';
+            saveMsg.style.display = 'inline-block';
+
+            var formData = new FormData();
+            formData.append('name', name);
+            formData.append('content', content);
+            formData.append('id', id);
+            formData.append('knobs', JSON.stringify(knobs));
+
+            var csrfInput = document.querySelector('input[name="_csrf"]');
+            if (csrfInput) {
+                formData.append('_csrf', csrfInput.value);
+            }
+
+            fetch('index.php?action=save_seismogramm_prompt', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) throw new Error(data.error || 'Failed to save preset');
+                saveMsg.textContent = 'Preset saved successfully!';
+                saveMsg.className = 'message message-success';
+                setTimeout(function() {
+                    saveMsg.style.display = 'none';
+                    // Reload to update dynamic preset bar
+                    window.location.reload();
+                }, 1500);
+            })
+            .catch(function(err) {
+                saveMsg.textContent = err.message;
+                saveMsg.className = 'message message-error';
+            });
+        }
+
+        if (savePresetBtn) {
+            savePresetBtn.addEventListener('click', function() { savePresetAction(false); });
+        }
+        if (saveNewPresetBtn) {
+            saveNewPresetBtn.addEventListener('click', function() { savePresetAction(true); });
+        }
 
         // Custom sandbox toggle
         customToggle.addEventListener('change', function() {

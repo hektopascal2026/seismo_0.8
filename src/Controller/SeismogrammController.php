@@ -220,6 +220,8 @@ final class SeismogrammController
                 $preset,
                 $useContextCache,
                 $moduleSelection instanceof ResearcherSourceSelection ? $moduleSelection : null,
+                $filters['selectionMode'] ?? null,
+                (bool)($filters['proSelectionMode'] ?? false)
             );
 
             $pipelineMeta = $orchestrator->lastPipelineMeta();
@@ -312,8 +314,15 @@ final class SeismogrammController
 
         try {
             $intent = trim((string)($_POST['intent'] ?? ''));
+            $baseMode = trim((string)($_POST['base_mode'] ?? 'Briefing'));
             $config = new SystemConfigRepository(getDbConnection());
-            $style = SeismogrammContracts::DEFAULT_BRIEFING_PROMPT;
+            
+            $style = match ($baseMode) {
+                'Blindspot' => SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT,
+                'Research' => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
+                default => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
+            };
+            
             $helper = new \Seismo\Service\ResearcherPromptHelperService($config);
             $prompt = $helper->reformulate($intent, $style);
             
@@ -333,13 +342,158 @@ final class SeismogrammController
     public function savePromptLibrary(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => true]);
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $name = trim((string)($_POST['name'] ?? ''));
+            $content = trim((string)($_POST['content'] ?? ''));
+            $id = trim((string)($_POST['id'] ?? ''));
+            $knobsJson = trim((string)($_POST['knobs'] ?? ''));
+
+            if ($name === '') {
+                throw new \InvalidArgumentException('Preset name is required.');
+            }
+
+            if (in_array($name, ['Briefing', 'Blindspot', 'Research'], true)) {
+                throw new \InvalidArgumentException('The default presets cannot be overwritten.');
+            }
+
+            $knobs = [];
+            if ($knobsJson !== '') {
+                $decoded = json_decode($knobsJson, true);
+                if (is_array($decoded)) {
+                    $knobs = $decoded;
+                }
+            }
+
+            $pdo = getDbConnection();
+            $config = new SystemConfigRepository($pdo);
+            $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
+            $library = is_array($raw) ? $raw : [];
+
+            $foundIndex = -1;
+            if ($id !== '') {
+                foreach ($library as $idx => $row) {
+                    if (($row['id'] ?? '') === $id) {
+                        $foundIndex = $idx;
+                        break;
+                    }
+                }
+            } else {
+                foreach ($library as $idx => $row) {
+                    if (($row['name'] ?? '') === $name) {
+                        $foundIndex = $idx;
+                        break;
+                    }
+                }
+            }
+
+            if ($foundIndex !== -1) {
+                $rowName = $library[$foundIndex]['name'] ?? '';
+                if (in_array($rowName, ['Briefing', 'Blindspot', 'Research'], true)) {
+                    throw new \InvalidArgumentException('The default presets cannot be overwritten.');
+                }
+                $library[$foundIndex]['name'] = $name;
+                $library[$foundIndex]['content'] = $content;
+                $library[$foundIndex]['knobs'] = $knobs;
+                $library[$foundIndex]['is_custom'] = true;
+            } else {
+                $newId = bin2hex(random_bytes(8));
+                $library[] = [
+                    'id' => $newId,
+                    'name' => $name,
+                    'content' => $content,
+                    'is_custom' => true,
+                    'knobs' => $knobs
+                ];
+            }
+
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+
+            echo json_encode(['ok' => true, 'presets' => $library], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo savePromptLibrary error: ' . $e->getMessage());
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     public function deletePromptLibrary(): void
     {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => true]);
+        header('Cache-Control: no-store');
+
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'POST required'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (!CsrfToken::verifyRequest(false)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid CSRF token. Reload the page.'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+
+        try {
+            $id = trim((string)($_POST['id'] ?? ''));
+            if ($id === '') {
+                throw new \InvalidArgumentException('Preset ID is required.');
+            }
+
+            $pdo = getDbConnection();
+            $config = new SystemConfigRepository($pdo);
+            $raw = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
+            $library = is_array($raw) ? $raw : [];
+
+            $toDeleteIndex = -1;
+            foreach ($library as $idx => $row) {
+                if (($row['id'] ?? '') === $id) {
+                    $toDeleteIndex = $idx;
+                    break;
+                }
+            }
+
+            if ($toDeleteIndex === -1) {
+                throw new \InvalidArgumentException('Preset not found.');
+            }
+
+            $rowName = $library[$toDeleteIndex]['name'] ?? '';
+            if (in_array($rowName, ['Briefing', 'Blindspot', 'Research'], true)) {
+                throw new \InvalidArgumentException('The default presets cannot be deleted.');
+            }
+
+            unset($library[$toDeleteIndex]);
+            $library = array_values($library);
+
+            $config->setJson(self::CONFIG_KEY_PROMPT_LIBRARY, $library);
+
+            echo json_encode(['ok' => true, 'presets' => $library], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            error_log('Seismo deletePromptLibrary error: ' . $e->getMessage());
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     /**

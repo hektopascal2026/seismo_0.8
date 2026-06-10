@@ -55,21 +55,35 @@ final class SeismogrammOrchestrator
         string $preset,
         bool $useContextCache = false,
         ?ResearcherSourceSelection $moduleSelection = null,
+        ?string $customSelectionMode = null,
+        bool $proSelectionMode = false,
     ): GeminiResearcherResult {
-        $preset = SeismogrammPresetProfile::normalizePreset($preset);
         $poolCount = count($entries);
-        $selectionMode = SeismogrammPresetProfile::resolveSelectionMode($preset, $poolCount);
+        $selectionMode = $customSelectionMode ?? SeismogrammPresetProfile::resolveSelectionMode($preset, $poolCount);
+        if (!in_array($selectionMode, ['standard', 'tournament', 'relational'], true)) {
+            $selectionMode = SeismogrammPresetProfile::resolveSelectionMode($preset, $poolCount);
+        }
 
-        $selectionPool = SeismogrammPresetProfile::filterSelectionPool($preset, $entries);
+        $selectionPool = $entries;
+        if ($selectionMode === 'relational') {
+            $selectionPool = array_values(array_filter(
+                $entries,
+                static fn(array $e): bool => in_array(
+                    (string)($e['entry_type'] ?? ''),
+                    ['lex_item', 'calendar_event'],
+                    true,
+                ),
+            ));
+        }
 
-        if ($preset === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
+        if ($selectionMode === 'relational' && $selectionPool === []) {
             throw GeminiResearcherException::badResponse(
-                'Blindspot requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
+                'Relational mode requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
             );
         }
 
         $globalFingerprintXml = '';
-        if (SeismogrammPresetProfile::usesGlobalFingerprint($preset, $selectionMode)) {
+        if ($selectionMode === 'relational') {
             $globalFingerprintXml = ResearcherGlobalFingerprint::buildXml(
                 $this->filterFingerprintEntries($entries, $moduleSelection),
                 new ResearcherEntryGatherer(),
@@ -83,9 +97,12 @@ final class SeismogrammOrchestrator
             useContextCache: $useContextCache,
         );
 
+        $selectionModel = $proSelectionMode ? 'gemini-3.1-pro-preview' : $model;
+
         $this->lastPipelineMeta = [
             'preset'              => $preset,
             'selection_mode'      => $selectionMode,
+            'selection_model'     => $selectionModel,
             'pool_entry_count'    => $poolCount,
             'selection_pool_count' => count($selectionPool),
             'global_fingerprint'  => $globalFingerprintXml !== '',
@@ -93,7 +110,7 @@ final class SeismogrammOrchestrator
 
         if ($selectionMode === 'relational') {
             $selectedKeys = $this->tournamentEngine->select(
-                $model,
+                $selectionModel,
                 $apiKey,
                 $userSystemPrompt,
                 $selectionPool,
@@ -105,7 +122,7 @@ final class SeismogrammOrchestrator
             );
         } elseif ($selectionMode === 'tournament') {
             $selectedKeys = $this->tournamentEngine->select(
-                $model,
+                $selectionModel,
                 $apiKey,
                 $userSystemPrompt,
                 $selectionPool,
@@ -117,7 +134,7 @@ final class SeismogrammOrchestrator
             );
         } else {
             $selectedKeys = $this->selectionEngine->select(
-                $model,
+                $selectionModel,
                 $apiKey,
                 $userSystemPrompt,
                 $xmlContext,
