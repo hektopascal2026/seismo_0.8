@@ -78,7 +78,7 @@ final class SeismogrammOrchestrator
 
         if ($selectionMode === 'relational' && $selectionPool === []) {
             throw GeminiResearcherException::badResponse(
-                'Relational mode requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
+                'Relational mode requires CH Lex (Fedlex) or Leg entries in the gathered pool. Enable CH Lex and Leg sources and widen the lookback window.',
             );
         }
 
@@ -278,7 +278,7 @@ final class SeismogrammOrchestrator
             static function (array $e) use ($gatherer, $selection): bool {
                 $bucket = $gatherer->moduleBucketForEntry($e, $selection);
 
-                return in_array($bucket, ['media', 'feeds', 'scraper'], true);
+                return in_array($bucket, ['media', 'newsletter', 'feeds', 'scraper', 'email'], true);
             },
         ));
     }

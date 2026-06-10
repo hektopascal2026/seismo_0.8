@@ -338,7 +338,7 @@ final class SeismogrammRequestContext
             isset($picked['newsletter']),
             isset($picked['lex']),
             isset($picked['leg']),
-            false, // lexCh
+            isset($picked['lex_ch']),
             isset($picked['mem'])
         );
     }

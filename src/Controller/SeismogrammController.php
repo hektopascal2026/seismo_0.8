@@ -102,7 +102,7 @@ final class SeismogrammController
             );
             if ($filters['preset'] === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
                 throw GeminiResearcherException::badResponse(
-                    'Blindspot requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
+                    'Blindspot requires CH Lex (Fedlex) or Leg entries in the gathered pool. Enable CH Lex and Leg sources and widen the lookback window.',
                 );
             }
 
@@ -650,6 +650,10 @@ final class SeismogrammController
                     // If Briefing preset is old and lacks the placeholder, update it.
                     if (in_array($name, ['Briefing', 'Blindspot'], true)
                         && strpos($row['content'] ?? '', '{briefingPersona}') === false) {
+                        $row['content'] = $content;
+                        $changed = true;
+                    } elseif ($name === 'Blindspot'
+                        && str_contains($row['content'] ?? '', 'Sekundärquellen (Media / Feeds / News)')) {
                         $row['content'] = $content;
                         $changed = true;
                     }
