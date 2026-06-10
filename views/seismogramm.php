@@ -14,6 +14,7 @@
  * @var list<int> $itemCountOptions
  * @var float $alertThreshold
  * @var int $maxContextEntries
+ * @var string $defaultWatchlistContent
  */
 
 declare(strict_types=1);
@@ -36,7 +37,6 @@ $moduleOptions = [
     ['key' => 'scraper', 'label' => 'Scraper'],
     ['key' => 'lex', 'label' => 'Lex'],
     ['key' => 'leg', 'label' => 'Leg'],
-    ['key' => 'mem', 'label' => 'Mem'],
 ];
 ?>
 <!DOCTYPE html>
@@ -196,6 +196,7 @@ $moduleOptions = [
                         <option value="Briefing">Briefing</option>
                         <option value="Blindspot">Blindspot</option>
                         <option value="Research">Research</option>
+                        <option value="Monitor">Monitor</option>
                     </select>
                 </div>
                 <div class="admin-form-field" style="margin-bottom: 1.5rem;">
@@ -233,6 +234,11 @@ $moduleOptions = [
                 <p><strong>How:</strong> Relational tournament on CH Lex+Leg primary sources; compares against a global title fingerprint from enabled echo sources (Media and Newsletter by default). Negative-space protocol rejects fuzzy overlap. Persona/goal filters random regulatory noise.</p>
                 <p><strong>Good for:</strong> Horizon scanning when Fedlex or parliament moves before the news cycle and digest mail catch up.</p>
 
+                <h3>Monitor</h3>
+                <p><strong>What:</strong> Cross-reference your watchlist (people and organisations) against gathered items — who was mentioned and what did they say?</p>
+                <p><strong>How:</strong> Regex pre-filter on the entry pool, then two-pass Gemini with mandatory watchlist verification. Ships with the Swissmem directory as the default list; paste your own one-per-line list anytime. If nothing matches, the report says so — no invented hits.</p>
+                <p><strong>Good for:</strong> Industry association monitors, supplier/customer tracking, board-member mentions, or any fixed entity list you need to scan across feeds, mail, and media.</p>
+
                 <h3>Pipeline diagram</h3>
                 <pre>mermaid
 flowchart LR
@@ -257,7 +263,7 @@ flowchart LR
         <!-- Preset Selection Bar -->
         <div class="seismogramm-preset-bar" id="seismogramm-preset-bar">
             <?php foreach ($savedPrompts as $sp): ?>
-                <?php $isDefault = in_array($sp['name'], ['Briefing', 'Blindspot', 'Research'], true); ?>
+                <?php $isDefault = in_array($sp['name'], ['Briefing', 'Blindspot', 'Research', 'Monitor'], true); ?>
                 <div class="preset-btn-wrap">
                     <button type="button" class="seismogramm-preset-btn"
                             data-preset="<?= e($sp['name']) ?>"
@@ -295,6 +301,15 @@ flowchart LR
                     <input type="text" id="seismogramm_query" name="research_query" class="search-input" style="width:100%; max-width:40rem;" placeholder="e.g. interest rates, UBS, Swiss energy policy...">
                 </div>
 
+                <!-- Monitor Watchlist Field -->
+                <div class="admin-form-field" id="seismogramm-watchlist-field" style="display: none; margin-bottom: 1.5rem;">
+                    <label for="seismogramm_watchlist" style="font-weight: 700; margin-bottom: 0.25rem; display:block;">Watchlist (people &amp; organisations)</label>
+                    <p class="admin-intro" style="margin:0 0 0.5rem; font-size: 0.875rem;">
+                        One entry per line. Format: <code>Name | Company</code>, <code>Company</code>, or plain names. Default loads the Swissmem directory.
+                    </p>
+                    <textarea id="seismogramm_watchlist" name="watchlist" rows="8" class="search-input" style="width:100%; max-width:40rem; font-family: ui-monospace, monospace; font-size: 0.8125rem;"><?= e($defaultWatchlistContent) ?></textarea>
+                </div>
+
                 <!-- Basic parameters -->
                 <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                     <label style="margin-bottom:0.5rem; display:block;">Included Sources</label>
@@ -307,9 +322,8 @@ flowchart LR
                                 <span id="seismogramm-lex-label">Lex</span>
                             </label>
                             <?php else: ?>
-                            <?php $modChecked = $mod['key'] !== 'mem'; ?>
-                            <label class="tag-filter-pill<?= $modChecked ? ' tag-filter-pill-active' : '' ?> tag-filter-pill--<?= e($mod['key']) ?>">
-                                <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>"<?= $modChecked ? ' checked' : '' ?> class="seismogramm-module-cb">
+                            <label class="tag-filter-pill tag-filter-pill-active tag-filter-pill--<?= e($mod['key']) ?>">
+                                <input type="checkbox" name="modules[]" value="<?= e($mod['key']) ?>" checked class="seismogramm-module-cb">
                                 <span><?= e($mod['label']) ?></span>
                             </label>
                             <?php endif; ?>
@@ -469,7 +483,8 @@ flowchart LR
         var generateBtn = document.getElementById('seismogramm-generate-btn');
         var savePresetBtn = document.getElementById('seismogramm-save-preset-btn');
         var saveMsg = document.getElementById('seismogramm-save-msg');
-        var RESERVED_PRESETS = ['Briefing', 'Blindspot', 'Research'];
+        var RESERVED_PRESETS = ['Briefing', 'Blindspot', 'Research', 'Monitor'];
+        var DEFAULT_WATCHLIST_CONTENT = <?= json_encode($defaultWatchlistContent, JSON_UNESCAPED_UNICODE) ?>;
         var briefingPreviewGenerated = false;
         var presetSettingsDirty = false;
         var baselineSettingsJson = '';
@@ -500,6 +515,8 @@ flowchart LR
         var poolPriorityNewest = document.getElementById('seismogramm_pool_priority_newest');
         var queryInput = document.getElementById('seismogramm_query');
         var personaInput = document.getElementById('seismogramm_persona');
+        var watchlistField = document.getElementById('seismogramm-watchlist-field');
+        var watchlistInput = document.getElementById('seismogramm_watchlist');
         var pendingRetryCap = null;
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
@@ -555,7 +572,7 @@ flowchart LR
             }
         }
 
-        function allModulesExceptMem() {
+        function allDefaultModules() {
             return ['feeds', 'media', 'email', 'newsletter', 'scraper', 'leg', 'lex'];
         }
 
@@ -573,6 +590,9 @@ flowchart LR
             }
             if (content && content.indexOf('{researchQuery}') !== -1) {
                 return 'query';
+            }
+            if (content && content.indexOf('{watchlist}') !== -1) {
+                return 'watchlist';
             }
             return 'persona';
         }
@@ -633,12 +653,23 @@ flowchart LR
             if (mode === 'query') {
                 queryField.style.display = 'block';
                 personaField.style.display = 'none';
+                if (watchlistField) watchlistField.style.display = 'none';
                 if (queryInput) {
                     queryInput.value = (knobs && typeof knobs.research_query === 'string') ? knobs.research_query : '';
+                }
+            } else if (mode === 'watchlist') {
+                queryField.style.display = 'none';
+                personaField.style.display = 'none';
+                if (watchlistField) watchlistField.style.display = 'block';
+                if (watchlistInput) {
+                    watchlistInput.value = (knobs && typeof knobs.watchlist === 'string')
+                        ? knobs.watchlist
+                        : DEFAULT_WATCHLIST_CONTENT;
                 }
             } else {
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
+                if (watchlistField) watchlistField.style.display = 'none';
                 if (personaInput) {
                     personaInput.value = (knobs && typeof knobs.persona === 'string') ? knobs.persona : '';
                 }
@@ -808,7 +839,7 @@ flowchart LR
         function applyBaseModeKnobs(baseMode) {
             var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
             if (baseMode === 'Research') {
-                applyModulesList(allModulesExceptMem());
+                applyModulesList(allDefaultModules());
                 if (snippetsCb) snippetsCb.checked = true;
                 if (disregardMagnituCb) disregardMagnituCb.checked = true;
                 if (poolPriorityNewest) poolPriorityNewest.checked = true;
@@ -820,6 +851,23 @@ flowchart LR
                 if (selModeRadio) selModeRadio.checked = true;
                 queryField.style.display = 'block';
                 personaField.style.display = 'none';
+            } else if (baseMode === 'Monitor') {
+                applyModulesList(allDefaultModules());
+                if (snippetsCb) snippetsCb.checked = false;
+                if (disregardMagnituCb) disregardMagnituCb.checked = false;
+                if (poolPriorityHighest) poolPriorityHighest.checked = true;
+                if (maxContextSlider) {
+                    maxContextSlider.value = '100';
+                    if (maxContextVal) maxContextVal.textContent = '100';
+                }
+                var selModeRadioMonitor = document.querySelector('input[name="selection_mode"][value="standard"]');
+                if (selModeRadioMonitor) selModeRadioMonitor.checked = true;
+                queryField.style.display = 'none';
+                personaField.style.display = 'none';
+                if (watchlistField) watchlistField.style.display = 'block';
+                if (watchlistInput && !watchlistInput.value.trim()) {
+                    watchlistInput.value = DEFAULT_WATCHLIST_CONTENT;
+                }
             } else if (baseMode === 'Blindspot') {
                 applyModulesList(BLINDSPOT_DEFAULT_MODULES);
                 if (snippetsCb) snippetsCb.checked = false;
@@ -834,7 +882,7 @@ flowchart LR
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
             } else {
-                applyModulesList(allModulesExceptMem());
+                applyModulesList(allDefaultModules());
                 if (snippetsCb) snippetsCb.checked = false;
                 if (disregardMagnituCb) disregardMagnituCb.checked = false;
                 if (poolPriorityHighest) poolPriorityHighest.checked = true;
@@ -994,6 +1042,7 @@ flowchart LR
             
             var persona = personaInput ? personaInput.value : '';
             var researchQuery = queryInput ? queryInput.value : '';
+            var watchlist = watchlistInput ? watchlistInput.value : '';
             var fieldMode = inferFieldModeFromPrompt(systemPromptTa ? systemPromptTa.value : '', null);
 
             return {
@@ -1010,6 +1059,7 @@ flowchart LR
                 pro_selection_mode: proSelectionMode,
                 persona: persona,
                 research_query: researchQuery,
+                watchlist: watchlist,
                 field_mode: fieldMode,
                 base_mode: resolvePipelinePresetName()
             };
@@ -1115,13 +1165,22 @@ flowchart LR
                 if (presetName === 'Research') {
                     queryField.style.display = 'block';
                     personaField.style.display = 'none';
+                    if (watchlistField) watchlistField.style.display = 'none';
                     if (maxContextSlider) {
                         maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
                         if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
                     }
+                } else if (presetName === 'Monitor') {
+                    queryField.style.display = 'none';
+                    personaField.style.display = 'none';
+                    if (watchlistField) watchlistField.style.display = 'block';
+                    if (watchlistInput && !watchlistInput.value.trim()) {
+                        watchlistInput.value = DEFAULT_WATCHLIST_CONTENT;
+                    }
                 } else {
                     queryField.style.display = 'none';
                     personaField.style.display = 'block';
+                    if (watchlistField) watchlistField.style.display = 'none';
                 }
 
                 var sourceCbs = document.querySelectorAll('.seismogramm-module-cb');
@@ -1129,7 +1188,7 @@ flowchart LR
                     if (presetName === 'Blindspot') {
                         cb.checked = ['lex', 'leg', 'media', 'feeds', 'scraper'].indexOf(cb.value) !== -1;
                     } else {
-                        cb.checked = cb.value !== 'mem';
+                        cb.checked = true;
                     }
                     var pill = cb.closest('.tag-filter-pill');
                     if (pill) {
@@ -1251,7 +1310,7 @@ flowchart LR
                 name = enteredName.trim();
                 if (name === '') return;
                 if (isReservedPreset(name)) {
-                    alert('Cannot use reserved preset names (Briefing, Blindspot, Research).');
+                    alert('Cannot use reserved preset names (Briefing, Blindspot, Research, Monitor).');
                     return;
                 }
                 id = '';
@@ -1359,6 +1418,8 @@ flowchart LR
                 selectLabel = 'Pass 1: tournament selection across the corpus';
             } else if (presetName === 'Blindspot') {
                 selectLabel = 'Pass 1: relational selection (Lex/Leg vs media echo)';
+            } else if (presetName === 'Monitor') {
+                selectLabel = 'Pass 1: verifying watchlist mentions';
             }
             return [
                 { id: 'prepare', label: 'Gathering and capping entry pool' },
@@ -1530,11 +1591,16 @@ flowchart LR
             return content.indexOf('{briefingPersona}') !== -1;
         }
 
+        function promptNeedsWatchlist(content) {
+            return content.indexOf('{watchlist}') !== -1;
+        }
+
         function validateBeforeGenerate() {
             var presetName = presetInput ? presetInput.value : 'Briefing';
             var promptContent = systemPromptTa ? systemPromptTa.value : '';
             var needsQuery = presetName === 'Research' || promptNeedsQuery(promptContent);
             var needsPersona = presetName === 'Briefing' || presetName === 'Blindspot' || promptNeedsPersona(promptContent);
+            var needsWatchlist = presetName === 'Monitor' || promptNeedsWatchlist(promptContent);
 
             if (needsQuery) {
                 var query = queryInput ? queryInput.value.trim() : '';
@@ -1548,6 +1614,14 @@ flowchart LR
                 var persona = personaInput ? personaInput.value.trim() : '';
                 if (!persona) {
                     errEl.textContent = 'This prompt requires a persona/goal.';
+                    errEl.style.display = 'block';
+                    return false;
+                }
+            }
+            if (needsWatchlist) {
+                var watchlist = watchlistInput ? watchlistInput.value.trim() : '';
+                if (!watchlist) {
+                    errEl.textContent = 'Monitor requires a watchlist with at least one person or organisation.';
                     errEl.style.display = 'block';
                     return false;
                 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use PHPUnit\Framework\TestCase;
 use Seismo\Util\SwissmemMatcher;
+use Seismo\Util\WatchlistMatcher;
 
 final class SwissmemMatcherTest extends TestCase
 {
@@ -18,7 +19,7 @@ final class SwissmemMatcherTest extends TestCase
 
     public function testNormalizationCompanySuffixes(): void
     {
-        $method = new ReflectionMethod(SwissmemMatcher::class, 'normalizeTerm');
+        $method = new ReflectionMethod(WatchlistMatcher::class, 'normalizeTerm');
         $method->setAccessible(true);
 
         self::assertSame('ABB', $method->invoke(null, 'ABB Schweiz AG'));
@@ -30,7 +31,7 @@ final class SwissmemMatcherTest extends TestCase
 
     public function testNormalizationExecutivePrefixes(): void
     {
-        $method = new ReflectionMethod(SwissmemMatcher::class, 'normalizeTerm');
+        $method = new ReflectionMethod(WatchlistMatcher::class, 'normalizeTerm');
         $method->setAccessible(true);
 
         self::assertSame('Stefan Brupbacher', $method->invoke(null, 'Dr. Stefan Brupbacher'));

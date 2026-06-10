@@ -12,6 +12,7 @@ final class SeismogrammPresetProfile
     public const BRIEFING  = 'Briefing';
     public const BLINDSPOT = 'Blindspot';
     public const RESEARCH  = 'Research';
+    public const MONITOR   = 'Monitor';
 
     /** Switch Briefing to tournament when the capped pool exceeds this count. */
     public const TOURNAMENT_POOL_THRESHOLD = 80;
@@ -24,7 +25,7 @@ final class SeismogrammPresetProfile
     public static function normalizePreset(string $raw): string
     {
         $raw = trim($raw);
-        if (in_array($raw, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH], true)) {
+        if (in_array($raw, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH, self::MONITOR], true)) {
             return $raw;
         }
 
@@ -42,7 +43,7 @@ final class SeismogrammPresetProfile
         bool $disregardMagnitu = false,
         bool $useRecipeSnippets = false,
     ): string {
-        if (in_array($presetRaw, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH], true)) {
+        if (in_array($presetRaw, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH, self::MONITOR], true)) {
             return $presetRaw;
         }
 
@@ -55,7 +56,7 @@ final class SeismogrammPresetProfile
         }
 
         $posted = trim((string)$postedBaseMode);
-        if (in_array($posted, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH], true)) {
+        if (in_array($posted, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH, self::MONITOR], true)) {
             return $posted;
         }
 

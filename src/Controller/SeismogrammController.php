@@ -16,6 +16,7 @@ use Seismo\Repository\MagnituExportRepository;
 use Seismo\Service\ResearcherEntryCardPresenter;
 use Seismo\Service\ResearcherSourceSelection;
 use Seismo\Service\Seismogramm\SeismogrammPresetProfile;
+use Seismo\Util\WatchlistMatcher;
 
 final class SeismogrammController
 {
@@ -25,7 +26,7 @@ final class SeismogrammController
     private const LEGACY_PROMPT_LIBRARY_KEY = 'ai_researcher_prompts';
 
     /** @var list<string> */
-    private const BUILTIN_PRESET_NAMES = ['Briefing', 'Blindspot', 'Research'];
+    private const BUILTIN_PRESET_NAMES = ['Briefing', 'Blindspot', 'Research', 'Monitor'];
 
     public function show(): void
     {
@@ -72,6 +73,7 @@ final class SeismogrammController
         }
 
         $alertThresholdPct = (int)round($alertThreshold * 100);
+        $defaultWatchlistContent = WatchlistMatcher::builtInSwissmemPlaintext();
 
         require_once SEISMO_ROOT . '/views/helpers.php';
         require SEISMO_ROOT . '/views/seismogramm.php';
@@ -121,6 +123,9 @@ final class SeismogrammController
                     'selection_pool_count' => count($selectionPool),
                     'markdown_chars' => $gathered['markdownChars'],
                     'context_warning' => $gathered['contextWarning'] ?? null,
+                    'watchlist_term_count' => (int)($gathered['watchlist_term_count'] ?? 0),
+                    'watchlist_filtered_out' => (int)($gathered['watchlist_filtered_out'] ?? 0),
+                    'entries_eligible_before_watchlist' => (int)($gathered['entriesEligibleBeforeWatchlist'] ?? 0),
                 ]
             );
 
@@ -189,6 +194,7 @@ final class SeismogrammController
             $systemPrompt = $this->resolveSystemPrompt($config, (string)$filters['preset'], $customAdvanced, $_POST);
             $researchQuery = trim((string)($_POST['research_query'] ?? ''));
             $briefingPersona = trim((string)($_POST['briefing_persona'] ?? ''));
+            $watchlistContent = trim((string)($filters['watchlistContent'] ?? ($_POST['watchlist'] ?? '')));
 
             if ($researchQuery !== '') {
                 $systemPrompt = str_replace('{researchQuery}', $researchQuery, $systemPrompt);
@@ -198,7 +204,18 @@ final class SeismogrammController
                 $systemPrompt = str_replace('{briefingPersona}', $briefingPersona, $systemPrompt);
             }
 
-            $this->validateResolvedPrompt($pipelinePreset, $systemPrompt);
+            if (str_contains($systemPrompt, '{watchlist}')) {
+                if ($watchlistContent === '' && $pipelinePreset === SeismogrammPresetProfile::MONITOR) {
+                    $watchlistContent = WatchlistMatcher::builtInSwissmemPlaintext();
+                }
+                $systemPrompt = str_replace(
+                    '{watchlist}',
+                    WatchlistMatcher::truncateForPrompt($watchlistContent),
+                    $systemPrompt,
+                );
+            }
+
+            $this->validateResolvedPrompt($pipelinePreset, $systemPrompt, $watchlistContent);
 
             $model = $config->get('gemini:model') ?? 'gemini-3.5-flash';
             $maxOutputTokens = (int)($config->get('gemini:max_output_tokens') ?? '65536');
@@ -210,6 +227,33 @@ final class SeismogrammController
             $xmlContext = $gathered['markdown'];
 
             if ($entries === []) {
+                if ($pipelinePreset === SeismogrammPresetProfile::MONITOR) {
+                    $meta = SeismogrammPipelineMeta::enrich(array_merge(
+                        $requestContext->contextCapMetaFromGathered($gathered),
+                        $this->rateLimitMetaFromCapContext($capContext),
+                        [
+                            'preset'            => $pipelinePreset,
+                            'preset_name'       => $preset,
+                            'lookback_days'     => $filters['lookbackDays'],
+                            'cited_entry_count' => 0,
+                            'used_entry_keys'   => [],
+                            'watchlist_empty'   => true,
+                            'watchlist_term_count' => (int)($gathered['watchlist_term_count'] ?? 0),
+                            'watchlist_filtered_out' => (int)($gathered['watchlist_filtered_out'] ?? 0),
+                        ],
+                    ));
+
+                    echo json_encode([
+                        'ok' => true,
+                        'text' => SeismogrammContracts::MONITOR_EMPTY_REPORT_MARKDOWN,
+                        'meta' => $meta,
+                        'entries_html' => '',
+                        'cost_estimate' => null,
+                    ], JSON_UNESCAPED_UNICODE);
+
+                    return;
+                }
+
                 http_response_code(400);
                 echo json_encode(['ok' => false, 'error' => 'No entries matched your filters.']);
                 return;
@@ -333,6 +377,7 @@ final class SeismogrammController
             $style = match ($baseMode) {
                 'Blindspot' => SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT,
                 'Research' => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
+                'Monitor' => SeismogrammContracts::DEFAULT_MONITOR_PROMPT,
                 default => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
             };
             
@@ -383,7 +428,7 @@ final class SeismogrammController
                 throw new \InvalidArgumentException('Preset name is required.');
             }
 
-            if (in_array($name, ['Briefing', 'Blindspot', 'Research'], true)) {
+            if (in_array($name, self::BUILTIN_PRESET_NAMES, true)) {
                 throw new \InvalidArgumentException('The default presets cannot be overwritten.');
             }
 
@@ -503,7 +548,7 @@ final class SeismogrammController
             }
 
             $rowName = $library[$toDeleteIndex]['name'] ?? '';
-            if (in_array($rowName, ['Briefing', 'Blindspot', 'Research'], true)) {
+            if (in_array($rowName, self::BUILTIN_PRESET_NAMES, true)) {
                 throw new \InvalidArgumentException('The default presets cannot be deleted.');
             }
 
@@ -584,12 +629,16 @@ final class SeismogrammController
         return match (SeismogrammPresetProfile::normalizePreset($preset)) {
             SeismogrammPresetProfile::BLINDSPOT => SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT,
             SeismogrammPresetProfile::RESEARCH => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
+            SeismogrammPresetProfile::MONITOR => SeismogrammContracts::DEFAULT_MONITOR_PROMPT,
             default => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
         };
     }
 
-    private function validateResolvedPrompt(string $pipelinePreset, string $systemPrompt): void
-    {
+    private function validateResolvedPrompt(
+        string $pipelinePreset,
+        string $systemPrompt,
+        string $watchlistContent = '',
+    ): void {
         $pipeline = SeismogrammPresetProfile::normalizePreset($pipelinePreset);
 
         if ($pipeline === SeismogrammPresetProfile::RESEARCH && str_contains($systemPrompt, '{researchQuery}')) {
@@ -599,6 +648,21 @@ final class SeismogrammController
         if (in_array($pipeline, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT], true)
             && str_contains($systemPrompt, '{briefingPersona}')) {
             throw new GeminiResearcherException('This preset requires a persona/goal.', 400);
+        }
+
+        if ($pipeline === SeismogrammPresetProfile::MONITOR) {
+            if (str_contains($systemPrompt, '{watchlist}')) {
+                throw new GeminiResearcherException('Monitor requires a watchlist.', 400);
+            }
+            if ($watchlistContent === '') {
+                throw new GeminiResearcherException('Monitor requires a watchlist with at least one person or entity.', 400);
+            }
+            if (WatchlistMatcher::fromContent($watchlistContent)->termCount() < 1) {
+                throw new GeminiResearcherException(
+                    'Monitor watchlist could not be parsed. Use one entry per line (Name | Company or Company).',
+                    400,
+                );
+            }
         }
     }
 
@@ -705,6 +769,7 @@ final class SeismogrammController
             'Briefing' => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
             'Blindspot' => SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT,
             'Research' => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
+            'Monitor' => SeismogrammContracts::DEFAULT_MONITOR_PROMPT,
         ];
 
         $changed = $library !== (is_array($raw) ? array_values($raw) : []);
@@ -732,6 +797,10 @@ final class SeismogrammController
                         $changed = true;
                     } elseif ($name === 'Blindspot'
                         && str_contains($row['content'] ?? '', 'Sekundärquellen (Media / Feeds / News)')) {
+                        $row['content'] = $content;
+                        $changed = true;
+                    } elseif ($name === 'Monitor'
+                        && strpos($row['content'] ?? '', '{watchlist}') === false) {
                         $row['content'] = $content;
                         $changed = true;
                     }

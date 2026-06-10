@@ -80,6 +80,11 @@ final class GeminiResearcherSelectionProfileResolver
             return true;
         }
 
+        if (str_contains($text, 'watchlist monitor')
+            && str_contains($text, 'watchlist')) {
+            return true;
+        }
+
         return str_contains($text, 'verification')
             && (str_contains($text, 'must mention') || str_contains($text, 'in the text'));
     }

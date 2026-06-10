@@ -92,6 +92,19 @@ final class SeismogrammPresetProfileTest extends TestCase
     {
         self::assertFalse(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::RESEARCH));
         self::assertTrue(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::BRIEFING));
+        self::assertTrue(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::MONITOR));
+    }
+
+    public function testMonitorNormalizesAndUsesStandardSelection(): void
+    {
+        self::assertSame(
+            SeismogrammPresetProfile::MONITOR,
+            SeismogrammPresetProfile::normalizePreset('Monitor'),
+        );
+        self::assertSame(
+            'standard',
+            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::MONITOR, 40),
+        );
     }
 
     public function testResolvePipelinePresetUsesReservedName(): void

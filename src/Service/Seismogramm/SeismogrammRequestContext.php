@@ -15,6 +15,7 @@ use Seismo\Service\ResearcherGeminiContext;
 use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Service\ResearcherModuleGuard;
 use Seismo\Core\MagnituScoreBands;
+use Seismo\Util\WatchlistMatcher;
 
 final class SeismogrammRequestContext
 {
@@ -33,7 +34,12 @@ final class SeismogrammRequestContext
         $presetRaw = trim((string)($post['preset'] ?? ''));
         $preset = SeismogrammPresetProfile::normalizePreset($presetRaw);
         $customAdvanced = (string)($post['custom_advanced'] ?? '0') === '1';
-        if (!$customAdvanced && !in_array($presetRaw, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT, SeismogrammPresetProfile::RESEARCH], true)) {
+        if (!$customAdvanced && !in_array($presetRaw, [
+            SeismogrammPresetProfile::BRIEFING,
+            SeismogrammPresetProfile::BLINDSPOT,
+            SeismogrammPresetProfile::RESEARCH,
+            SeismogrammPresetProfile::MONITOR,
+        ], true)) {
             $customAdvanced = true;
         }
         $gatherDefaults = SeismogrammPresetProfile::gatherDefaults($preset, $customAdvanced);
@@ -82,6 +88,20 @@ final class SeismogrammRequestContext
             $useRecipeSnippets,
         );
 
+        $watchlistContent = trim((string)($post['watchlist'] ?? ''));
+        $watchlistMatcher = null;
+        if ($pipelinePreset === SeismogrammPresetProfile::MONITOR) {
+            if ($watchlistContent === '') {
+                $watchlistContent = WatchlistMatcher::builtInSwissmemPlaintext();
+            }
+            if ($watchlistContent !== '') {
+                $builtIn = WatchlistMatcher::builtInSwissmemPlaintext();
+                $watchlistMatcher = ($builtIn !== '' && trim($watchlistContent) === trim($builtIn))
+                    ? WatchlistMatcher::fromBuiltInSwissmemFile()
+                    : WatchlistMatcher::fromContent($watchlistContent);
+            }
+        }
+
         return [
             'since'             => $since,
             'limit'             => $limit,
@@ -98,6 +118,8 @@ final class SeismogrammRequestContext
             'gatherDefaults'    => $gatherDefaults,
             'selectionMode'     => $selectionMode,
             'proSelectionMode'  => $proSelectionMode,
+            'watchlistContent'  => $watchlistContent,
+            'watchlistMatcher'  => $watchlistMatcher,
         ];
     }
 
@@ -235,6 +257,17 @@ final class SeismogrammRequestContext
         $poolPriority = (string)($filters['poolPriority'] ?? SeismogrammPresetProfile::POOL_PRIORITY_HIGHEST);
         $this->sortEntriesForPoolPriority($gatherer, $entries, $scoresByKey, $poolPriority);
         $entries = $gatherer->filterByModuleSelection($entries, $filters['selection']);
+        $entriesEligibleBeforeWatchlist = count($entries);
+        $watchlistFilteredOut = 0;
+        $matcher = $filters['watchlistMatcher'] ?? null;
+        if ($matcher instanceof WatchlistMatcher) {
+            $before = count($entries);
+            $entries = array_values(array_filter(
+                $entries,
+                static fn(array $entry): bool => $matcher->matchesShapedEntry($entry),
+            ));
+            $watchlistFilteredOut = max(0, $before - count($entries));
+        }
 
         $geminiContext = new ResearcherGeminiContext(new SystemConfigRepository($pdo));
         $maxCap = (int)($filters['maxContextEntries'] ?? $geminiContext->maxContextEntries());
@@ -308,6 +341,9 @@ final class SeismogrammRequestContext
             'gatherStats'       => $gatherer->lastGatherStats(),
             'contextTruncated'         => $contextTruncated,
             'entriesEligibleBeforeCap' => $entriesEligibleBeforeCap,
+            'entriesEligibleBeforeWatchlist' => $entriesEligibleBeforeWatchlist,
+            'watchlist_filtered_out' => $watchlistFilteredOut,
+            'watchlist_term_count' => $matcher instanceof WatchlistMatcher ? $matcher->termCount() : 0,
             'maxContextEntries'        => $maxCap,
             'formatterMeta'            => $gatherMeta,
             'entry_body_max_chars'     => $entryBodyMaxChars,
