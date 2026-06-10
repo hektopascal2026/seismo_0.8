@@ -128,6 +128,7 @@ You see ONE batch of ENTRIES_DATA only (not the full pool). Compare every entry 
 RULES:
 - ENTRIES_DATA: XML <entry> blocks for this batch only. Each has <id>entry_type:entry_id</id>.
 - Return JSON with used_entry_keys only: up to {maxCoreItems} distinct <id> values, most important first.
+- relevance_score is a prior; a lower-scored entry may win when persona/goal fit is clearly stronger.
 - Never invent IDs.
 
 ENTRIES_DATA:

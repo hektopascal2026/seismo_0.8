@@ -41,6 +41,7 @@ final class RelationalSelectionEngine
             globalFingerprintXml: $pipelineContext->globalFingerprintXml,
             useNegativeSpace: true,
             contextCacheName: $pipelineContext->contextCacheName,
+            useContextCache: $pipelineContext->useContextCache,
         );
 
         return $this->tournamentEngine->select(

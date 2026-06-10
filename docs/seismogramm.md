@@ -10,11 +10,13 @@ Seismogramm is the greenfield rebuild of Seismo's AI briefing and researcher pip
 
 ## Core Presets
 
-1. **Briefing** — Standard selection (tournament when pool &gt; 80). Magnitu highlights tier; persona/goal can override score ties. All sources.
+1. **Briefing** — Standard selection (tournament when pool &gt; 80). Magnitu highlights tier; persona/goal can override score ties in every selection pass. All sources.
 2. **Blindspot** — Relational tournament on Lex+Leg; global title fingerprint (Media/Feeds/Scraper); negative-space protocol; persona required.
-3. **Research** — Tournament always; disregards Magnitu; Magnitu snippets on; pool up to 300; topic query required.
+3. **Research** — Tournament when pool &gt; ~35 (batch size); disregards Magnitu; Magnitu snippets on; pool up to 300 per request; newest-first cap ordering by default; topic query required.
 
-Context caching: shared global fingerprint is uploaded once and referenced by parallel batch requests when large enough (&gt;50k chars).
+**Advanced — cap ordering:** Prioritize highest (Magnitu relevance) or newest (published date) within each source module when the context cap trims the pool. Defaults: Briefing and Blindspot → highest; Research → newest.
+
+Context caching (experimental, advanced settings only): optional checkbox uploads the global title fingerprint once and references it from parallel batch requests when the fingerprint exceeds 50k characters.
 
 ## Component Layout
 

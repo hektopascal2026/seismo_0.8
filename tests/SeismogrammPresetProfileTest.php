@@ -46,11 +46,32 @@ final class SeismogrammPresetProfileTest extends TestCase
         self::assertCount(2, $filtered);
     }
 
+    public function testBlindspotReturnsEmptyWhenNoPrimarySources(): void
+    {
+        $entries = [
+            ['entry_type' => 'feed_item', 'entry_id' => '1'],
+            ['entry_type' => 'email', 'entry_id' => '2'],
+        ];
+        $filtered = SeismogrammPresetProfile::filterSelectionPool(SeismogrammPresetProfile::BLINDSPOT, $entries);
+        self::assertSame([], $filtered);
+    }
+
     public function testResearchGatherDefaultsBypassMagnituAndEnableSnippets(): void
     {
         $defaults = SeismogrammPresetProfile::gatherDefaults(SeismogrammPresetProfile::RESEARCH, false);
         self::assertTrue($defaults['disregardMagnitu']);
         self::assertTrue($defaults['useRecipeSnippets']);
         self::assertSame(300, $defaults['maxContextFloor']);
+        self::assertSame(SeismogrammPresetProfile::POOL_PRIORITY_NEWEST, $defaults['poolPriority']);
+    }
+
+    public function testBriefingDefaultsToHighestPoolPriority(): void
+    {
+        $defaults = SeismogrammPresetProfile::gatherDefaults(SeismogrammPresetProfile::BRIEFING, false);
+        self::assertSame(SeismogrammPresetProfile::POOL_PRIORITY_HIGHEST, $defaults['poolPriority']);
+        self::assertSame(
+            SeismogrammPresetProfile::POOL_PRIORITY_HIGHEST,
+            SeismogrammPresetProfile::defaultPoolPriority(SeismogrammPresetProfile::BLINDSPOT),
+        );
     }
 }

@@ -193,7 +193,7 @@ $moduleOptions = [
 
                 <h3>Research</h3>
                 <p><strong>What:</strong> Forensic topic search — needle in a large haystack.</p>
-                <p><strong>How:</strong> Bypasses Magnitu scoring, uses Magnitu snippets, scans up to <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?> items, tournament selection with parallel batches. Global title index is context-cached when large enough.</p>
+                <p><strong>How:</strong> Bypasses Magnitu scoring, uses Magnitu snippets, scans up to <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?> items. Tournament selection (parallel batches + championship) when the pool exceeds the batch size (~35); smaller pools use a single selection pass.</p>
                 <p><strong>Good for:</strong> “Everything on topic X in the last week” across feeds, mail, lex, and media.</p>
 
                 <h3>Blindspot</h3>
@@ -209,13 +209,12 @@ flowchart LR
         B3[Pool &gt; 80] --> B4[Tournament + championship]
     end
     subgraph research [Research]
-        R1[Large snippet pool] --> R2[Tournament always]
-        R2 --> R3[Context cache on fingerprint]
+        R1[Large snippet pool] --> R2[Pool &gt; ~35 batches]
+        R2 --> R3[Championship pass]
     end
     subgraph blindspot [Blindspot]
         BL1[Lex/Leg batches] --> BL2[Parallel prelims]
-        BL3[Echo fingerprint] --> BL4[Context cache once]
-        BL4 --> BL2
+        BL3[Echo fingerprint] --> BL2
         BL2 --> BL5[Championship + persona gate]
     end
 </pre>
@@ -309,12 +308,27 @@ flowchart LR
 
                     <div class="admin-form-field" style="margin-bottom: 1.5rem;">
                         <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Context Pool</label>
+                        <fieldset style="border:0; padding:0; margin:0 0 0.75rem;">
+                            <legend style="font-weight:600; margin-bottom:0.35rem;">Cap ordering (within each source module)</legend>
+                            <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
+                                <input type="radio" name="pool_priority" value="highest" id="seismogramm_pool_priority_highest" checked>
+                                Prioritize highest Magnitu relevance
+                            </label>
+                            <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
+                                <input type="radio" name="pool_priority" value="newest" id="seismogramm_pool_priority_newest">
+                                Prioritize newest (published date)
+                            </label>
+                        </fieldset>
                         <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
                             <input type="checkbox" id="seismogramm_use_recipe_snippets" name="use_recipe_snippets" value="1">
                             Use Magnitu Snippets (200-word passages)
                         </label>
                         <label for="seismogramm_max_context" style="display:block; margin-top:0.5rem; font-size:0.875rem;">Maximum items sent to Gemini: <span id="seismogramm_max_context_val" style="font-weight:700;"><?= $maxContextEntries ?></span></label>
                         <input type="range" id="seismogramm_max_context" name="max_context_entries" min="20" max="500" value="<?= $maxContextEntries ?>" class="search-input" style="width:100%; max-width:20rem;">
+                        <label style="display:block; margin-top:0.75rem; font-weight:normal;">
+                            <input type="checkbox" id="seismogramm_use_context_cache" name="use_context_cache" value="1">
+                            Experimental: context-cache global title index (large pools only; requires fingerprint &gt;50k chars)
+                        </label>
                     </div>
                 </div>
 
@@ -392,6 +406,8 @@ flowchart LR
         var presetInput = document.getElementById('seismogramm_preset');
         var customAdvancedInput = document.getElementById('seismogramm_custom_advanced');
         var snippetsCb = document.getElementById('seismogramm_use_recipe_snippets');
+        var poolPriorityHighest = document.getElementById('seismogramm_pool_priority_highest');
+        var poolPriorityNewest = document.getElementById('seismogramm_pool_priority_newest');
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
@@ -409,7 +425,7 @@ flowchart LR
             Research: {
                 title: 'Research',
                 what: 'What: Forensic topic search across a large text corpus.',
-                how: 'How: Ignores Magnitu tiers, uses Magnitu snippets, scans up to ' + RESEARCH_MAX_CONTEXT + ' items, and always runs tournament selection (parallel batches + championship). Shared title index is context-cached when large enough.',
+                how: 'How: Ignores Magnitu tiers, uses Magnitu snippets, scans up to ' + RESEARCH_MAX_CONTEXT + ' items with newest-first cap ordering. Tournament selection when the pool exceeds ~35 items; smaller pools use one selection pass.',
                 good: 'Good for: Needle-in-haystack queries — “everything on UBS / energy / VAT in the last week”.'
             },
             Blindspot: {
@@ -576,6 +592,13 @@ flowchart LR
 
             if (!customToggle.checked && snippetsCb) {
                 snippetsCb.checked = (presetName === 'Research');
+            }
+            if (!customToggle.checked) {
+                if (presetName === 'Research' && poolPriorityNewest) {
+                    poolPriorityNewest.checked = true;
+                } else if (poolPriorityHighest) {
+                    poolPriorityHighest.checked = true;
+                }
             }
         }
 

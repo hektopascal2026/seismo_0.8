@@ -46,13 +46,16 @@ final class TournamentSelectionEngine
         }
 
         $cacheName = $this->resolveContextCache($model, $apiKey, $pipelineContext);
+        if ($cacheName !== null && $cacheName !== '') {
+            $pipelineContext->contextCacheName = $cacheName;
+        }
 
         if ($batchCount === 1) {
             $formatter = new MarkdownResearcherFormatter();
             $xmlContext = $formatter->format(
                 $poolEntries,
                 $scoresByKey,
-                $researcherMeta,
+                $this->metaForEntries($researcherMeta, $poolEntries),
                 true,
                 MarkdownResearcherFormatter::FORMAT_XML,
             );
@@ -76,7 +79,7 @@ final class TournamentSelectionEngine
             $xmlContext = $formatter->format(
                 $batch,
                 $scoresByKey,
-                $researcherMeta,
+                $this->metaForEntries($researcherMeta, $batch),
                 true,
                 MarkdownResearcherFormatter::FORMAT_XML,
             );
@@ -166,7 +169,7 @@ final class TournamentSelectionEngine
         $championContext = $formatter->format(
             $finalistEntries,
             $scoresByKey,
-            $researcherMeta,
+            $this->metaForEntries($researcherMeta, $finalistEntries),
             true,
             MarkdownResearcherFormatter::FORMAT_XML,
         );
@@ -183,12 +186,29 @@ final class TournamentSelectionEngine
         );
     }
 
+    /**
+     * @param array<string, mixed> $baseMeta
+     * @param list<array<string, mixed>> $entries
+     * @return array<string, mixed>
+     */
+    private function metaForEntries(array $baseMeta, array $entries): array
+    {
+        $meta = $baseMeta;
+        $meta['entry_body_max_chars'] = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(count($entries));
+
+        return $meta;
+    }
+
     private function resolveContextCache(
         string $model,
         string $apiKey,
         SelectionPipelineContext $pipelineContext,
     ): ?string {
-        if ($pipelineContext->contextCacheName !== null) {
+        if (!$pipelineContext->useContextCache) {
+            return null;
+        }
+
+        if ($pipelineContext->contextCacheName !== null && $pipelineContext->contextCacheName !== '') {
             return $pipelineContext->contextCacheName;
         }
 

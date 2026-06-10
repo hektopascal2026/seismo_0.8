@@ -18,6 +18,9 @@ final class SeismogrammPresetProfile
 
     public const RESEARCH_DEFAULT_MAX_CONTEXT = 300;
 
+    public const POOL_PRIORITY_HIGHEST = 'highest';
+    public const POOL_PRIORITY_NEWEST  = 'newest';
+
     public static function normalizePreset(string $raw): string
     {
         $raw = trim($raw);
@@ -75,7 +78,7 @@ final class SeismogrammPresetProfile
             return $entries;
         }
 
-        $primary = array_values(array_filter(
+        return array_values(array_filter(
             $entries,
             static fn(array $e): bool => in_array(
                 (string)($e['entry_type'] ?? ''),
@@ -83,14 +86,26 @@ final class SeismogrammPresetProfile
                 true,
             ),
         ));
+    }
 
-        return $primary !== [] ? $primary : $entries;
+    public static function defaultPoolPriority(string $preset): string
+    {
+        return $preset === self::RESEARCH
+            ? self::POOL_PRIORITY_NEWEST
+            : self::POOL_PRIORITY_HIGHEST;
+    }
+
+    public static function normalizePoolPriority(string $raw): string
+    {
+        return $raw === self::POOL_PRIORITY_NEWEST
+            ? self::POOL_PRIORITY_NEWEST
+            : self::POOL_PRIORITY_HIGHEST;
     }
 
     /**
      * Apply preset gather defaults unless the user opened advanced settings.
      *
-     * @return array{disregardMagnitu: bool, useRecipeSnippets: bool, maxContextFloor: ?int}
+     * @return array{disregardMagnitu: bool, useRecipeSnippets: bool, maxContextFloor: ?int, poolPriority: string}
      */
     public static function gatherDefaults(string $preset, bool $customAdvanced): array
     {
@@ -99,6 +114,7 @@ final class SeismogrammPresetProfile
                 'disregardMagnitu'  => false,
                 'useRecipeSnippets' => false,
                 'maxContextFloor'   => null,
+                'poolPriority'      => self::POOL_PRIORITY_HIGHEST,
             ];
         }
 
@@ -107,11 +123,13 @@ final class SeismogrammPresetProfile
                 'disregardMagnitu'  => true,
                 'useRecipeSnippets' => true,
                 'maxContextFloor'   => self::RESEARCH_DEFAULT_MAX_CONTEXT,
+                'poolPriority'      => self::POOL_PRIORITY_NEWEST,
             ],
             default => [
                 'disregardMagnitu'  => false,
                 'useRecipeSnippets' => false,
                 'maxContextFloor'   => null,
+                'poolPriority'      => self::POOL_PRIORITY_HIGHEST,
             ],
         };
     }

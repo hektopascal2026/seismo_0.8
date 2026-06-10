@@ -49,6 +49,10 @@ final class ResearcherGeminiContext
 
     public const RATE_LIMIT_BATCH_PAUSE_SECONDS = 8;
 
+    public const POOL_PRIORITY_HIGHEST = 'highest';
+
+    public const POOL_PRIORITY_NEWEST = 'newest';
+
     public function __construct(
         private readonly SystemConfigRepository $config,
     ) {
@@ -158,7 +162,9 @@ final class ResearcherGeminiContext
         array $scoresByKey,
         ResearcherEntryGatherer $gatherer,
         ResearcherSourceSelection $selection,
+        string $poolPriority = self::POOL_PRIORITY_HIGHEST,
     ): array {
+        $poolPriority = self::normalizePoolPriority($poolPriority);
         $entries = $gatherer->filterByModuleSelection($entries, $selection);
         if ($entries === []) {
             return ['entries' => [], 'truncated' => 0, 'stratified' => false];
@@ -191,6 +197,12 @@ final class ResearcherGeminiContext
         }
 
         if (count($buckets) <= 1) {
+            usort($eligible, static fn(array $a, array $b): int => self::compareEntriesByPoolPriority(
+                $a,
+                $b,
+                $scoresByKey,
+                $poolPriority,
+            ));
             $plain = self::capEntryList($eligible, $max);
 
             return [
@@ -201,17 +213,15 @@ final class ResearcherGeminiContext
         }
 
         foreach ($buckets as &$bucketEntries) {
-            usort($bucketEntries, static function (array $a, array $b) use ($scoresByKey): int {
-                $ka = ($a['entry_type'] ?? '') . ':' . ($a['entry_id'] ?? '');
-                $kb = ($b['entry_type'] ?? '') . ':' . ($b['entry_id'] ?? '');
-                $sa = (float)($scoresByKey[$ka]['relevance_score'] ?? 0);
-                $sb = (float)($scoresByKey[$kb]['relevance_score'] ?? 0);
-                if ($sa !== $sb) {
-                    return $sb <=> $sa;
-                }
-
-                return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
-            });
+            usort(
+                $bucketEntries,
+                static fn(array $a, array $b): int => self::compareEntriesByPoolPriority(
+                    $a,
+                    $b,
+                    $scoresByKey,
+                    $poolPriority,
+                ),
+            );
         }
         unset($bucketEntries);
 
@@ -242,40 +252,74 @@ final class ResearcherGeminiContext
                     $remaining[] = $list[$i];
                 }
             }
-            usort($remaining, static function (array $a, array $b) use ($scoresByKey): int {
-                $ka = ($a['entry_type'] ?? '') . ':' . ($a['entry_id'] ?? '');
-                $kb = ($b['entry_type'] ?? '') . ':' . ($b['entry_id'] ?? '');
-                $sa = (float)($scoresByKey[$ka]['relevance_score'] ?? 0);
-                $sb = (float)($scoresByKey[$kb]['relevance_score'] ?? 0);
-                if ($sa !== $sb) {
-                    return $sb <=> $sa;
-                }
-
-                return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
-            });
+            usort(
+                $remaining,
+                static fn(array $a, array $b): int => self::compareEntriesByPoolPriority(
+                    $a,
+                    $b,
+                    $scoresByKey,
+                    $poolPriority,
+                ),
+            );
             $need = $max - count($picked);
             if ($need > 0 && $remaining !== []) {
                 $picked = array_merge($picked, array_slice($remaining, 0, $need));
             }
         }
 
-        usort($picked, static function (array $a, array $b) use ($scoresByKey): int {
-            $ka = ($a['entry_type'] ?? '') . ':' . ($a['entry_id'] ?? '');
-            $kb = ($b['entry_type'] ?? '') . ':' . ($b['entry_id'] ?? '');
-            $sa = (float)($scoresByKey[$ka]['relevance_score'] ?? 0);
-            $sb = (float)($scoresByKey[$kb]['relevance_score'] ?? 0);
-            if ($sa !== $sb) {
-                return $sb <=> $sa;
-            }
-
-            return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
-        });
+        usort(
+            $picked,
+            static fn(array $a, array $b): int => self::compareEntriesByPoolPriority(
+                $a,
+                $b,
+                $scoresByKey,
+                $poolPriority,
+            ),
+        );
 
         return [
             'entries'    => $picked,
             'truncated'  => count($entries) - count($picked),
             'stratified' => true,
         ];
+    }
+
+    public static function normalizePoolPriority(string $raw): string
+    {
+        return $raw === self::POOL_PRIORITY_NEWEST
+            ? self::POOL_PRIORITY_NEWEST
+            : self::POOL_PRIORITY_HIGHEST;
+    }
+
+    /**
+     * @param array<string, mixed> $a
+     * @param array<string, mixed> $b
+     * @param array<string, array<string, mixed>> $scoresByKey
+     */
+    public static function compareEntriesByPoolPriority(
+        array $a,
+        array $b,
+        array $scoresByKey,
+        string $poolPriority,
+    ): int {
+        $poolPriority = self::normalizePoolPriority($poolPriority);
+
+        if ($poolPriority === self::POOL_PRIORITY_NEWEST) {
+            $tb = ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
+            if ($tb !== 0) {
+                return $tb;
+            }
+        }
+
+        $ka = ($a['entry_type'] ?? '') . ':' . ($a['entry_id'] ?? '');
+        $kb = ($b['entry_type'] ?? '') . ':' . ($b['entry_id'] ?? '');
+        $sa = (float)($scoresByKey[$ka]['relevance_score'] ?? 0);
+        $sb = (float)($scoresByKey[$kb]['relevance_score'] ?? 0);
+        if ($sa !== $sb) {
+            return $sb <=> $sa;
+        }
+
+        return ResearcherLookback::entrySortTimestamp($b) <=> ResearcherLookback::entrySortTimestamp($a);
     }
 
     /**

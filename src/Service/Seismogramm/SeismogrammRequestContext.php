@@ -52,6 +52,12 @@ final class SeismogrammRequestContext
             $disregardMagnitu,
         );
 
+        $useContextCache = $customAdvanced
+            && (string)($post['use_context_cache'] ?? '0') === '1';
+        $poolPriority = $customAdvanced
+            ? SeismogrammPresetProfile::normalizePoolPriority((string)($post['pool_priority'] ?? ''))
+            : ($gatherDefaults['poolPriority'] ?? SeismogrammPresetProfile::defaultPoolPriority($preset));
+
         return [
             'since'             => $since,
             'limit'             => $limit,
@@ -59,10 +65,20 @@ final class SeismogrammRequestContext
             'scoreFilter'       => $scoreFilter,
             'selection'         => $selection,
             'useRecipeSnippets' => $useRecipeSnippets,
+            'useContextCache'   => $useContextCache,
+            'poolPriority'      => $poolPriority,
             'preset'            => $preset,
             'customAdvanced'    => $customAdvanced,
             'gatherDefaults'    => $gatherDefaults,
         ];
+    }
+
+    public function formatterMetaForEntryCount(array $baseMeta, int $entryCount): array
+    {
+        $meta = $baseMeta;
+        $meta['entry_body_max_chars'] = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars($entryCount);
+
+        return $meta;
     }
 
     public function resolveMaxContextEntriesForRequest(array $filters, mixed $postedMax, int $configuredMax): int
@@ -105,6 +121,9 @@ final class SeismogrammRequestContext
 
     public function persistMaxContextEntries(PDO $pdo, mixed $raw, array $filters = []): void
     {
+        if (!($filters['customAdvanced'] ?? false)) {
+            return;
+        }
         if ($raw === null || $raw === '') {
             return;
         }
@@ -126,16 +145,20 @@ final class SeismogrammRequestContext
             null,
             $filters['scoreFilter'],
         );
-        $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+        $poolPriority = (string)($filters['poolPriority'] ?? SeismogrammPresetProfile::POOL_PRIORITY_HIGHEST);
+        $this->sortEntriesForPoolPriority($gatherer, $entries, $scoresByKey, $poolPriority);
         $entries = $gatherer->filterByModuleSelection($entries, $filters['selection']);
 
         $geminiContext = new ResearcherGeminiContext(new SystemConfigRepository($pdo));
+        $maxCap = (int)($filters['maxContextEntries'] ?? $geminiContext->maxContextEntries());
         $entriesEligibleBeforeCap = count($entries);
-        $capped        = $geminiContext->capEntriesForModules(
+        $capped        = ResearcherGeminiContext::capEntryListStratified(
             $entries,
+            $maxCap,
             $scoresByKey,
             $gatherer,
             $filters['selection'],
+            $poolPriority,
         );
         $entries          = $capped['entries'];
         $contextTruncated = $capped['truncated'];
@@ -177,12 +200,12 @@ final class SeismogrammRequestContext
                 . $contextTruncated . ' additional '
                 . ($contextTruncated === 1 ? 'entry was' : 'entries were')
                 . ' omitted (cap '
-                . $geminiContext->maxContextEntries()
+                . $maxCap
                 . ', '
                 . $entriesEligibleBeforeCap . ' eligible before cap'
                 . ($stratifiedCap
-                    ? '; fair share per enabled source module, then relevance'
-                    : '; highest relevance, then newest')
+                    ? '; fair share per enabled source module, then ' . $this->describePoolPriority($poolPriority)
+                    : '; ' . $this->describePoolPriority($poolPriority))
                 . ').';
             $contextWarning = $contextWarning !== null
                 ? $contextWarning . ' ' . $capNote
@@ -198,7 +221,8 @@ final class SeismogrammRequestContext
             'gatherStats'       => $gatherer->lastGatherStats(),
             'contextTruncated'         => $contextTruncated,
             'entriesEligibleBeforeCap' => $entriesEligibleBeforeCap,
-            'maxContextEntries'        => $geminiContext->maxContextEntries(),
+            'maxContextEntries'        => $maxCap,
+            'formatterMeta'            => $gatherMeta,
             'entry_body_max_chars'     => $entryBodyMaxChars,
         ];
     }
@@ -262,6 +286,32 @@ final class SeismogrammRequestContext
         }
         $max = 2000; // MagnituExportRepository::BRIEFING_MAX_LIMIT
         return min($v, $max);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, array<string, mixed>> $scoresByKey
+     */
+    private function sortEntriesForPoolPriority(
+        ResearcherEntryGatherer $gatherer,
+        array &$entries,
+        array $scoresByKey,
+        string $poolPriority,
+    ): void {
+        if ($poolPriority === SeismogrammPresetProfile::POOL_PRIORITY_NEWEST) {
+            $gatherer->sortByPublishedDateDesc($entries);
+
+            return;
+        }
+
+        $gatherer->sortByRelevanceDesc($entries, $scoresByKey);
+    }
+
+    private function describePoolPriority(string $poolPriority): string
+    {
+        return $poolPriority === SeismogrammPresetProfile::POOL_PRIORITY_NEWEST
+            ? 'newest first (then relevance)'
+            : 'highest relevance, then newest';
     }
 
     private function contextSizeWarning(int $chars): ?string

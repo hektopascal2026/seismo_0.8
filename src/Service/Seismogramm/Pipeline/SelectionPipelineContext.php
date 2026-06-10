@@ -13,6 +13,7 @@ final class SelectionPipelineContext
         public readonly string $globalFingerprintXml = '',
         public readonly bool $useNegativeSpace = false,
         public ?string $contextCacheName = null,
+        public readonly bool $useContextCache = false,
     ) {
     }
 

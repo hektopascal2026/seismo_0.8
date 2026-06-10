@@ -47,7 +47,7 @@ final class SeismogrammOrchestrator
     /**
      * @param list<array<string, mixed>> $entries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $researcherMeta
+     * @param array<string, mixed> $formatterMeta  Gather meta for {@see MarkdownResearcherFormatter::format}.
      */
     public function generateBriefing(
         string $apiKey,
@@ -58,10 +58,11 @@ final class SeismogrammOrchestrator
         int $maxOutputTokens,
         array $entries,
         array $scoresByKey,
-        array $researcherMeta,
+        array $formatterMeta,
         string $preset,
         string $postedSelectionMode,
         bool $customAdvanced,
+        bool $useContextCache = false,
         ?ResearcherSourceSelection $moduleSelection = null,
     ): GeminiResearcherResult {
         $preset = SeismogrammPresetProfile::normalizePreset($preset);
@@ -75,6 +76,12 @@ final class SeismogrammOrchestrator
 
         $selectionPool = SeismogrammPresetProfile::filterSelectionPool($preset, $entries);
 
+        if ($preset === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
+            throw GeminiResearcherException::badResponse(
+                'Blindspot requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
+            );
+        }
+
         $globalFingerprintXml = '';
         if (SeismogrammPresetProfile::usesGlobalFingerprint($preset, $selectionMode)) {
             $globalFingerprintXml = ResearcherGlobalFingerprint::buildXml(
@@ -87,6 +94,7 @@ final class SeismogrammOrchestrator
         $pipelineContext = new SelectionPipelineContext(
             globalFingerprintXml: $globalFingerprintXml,
             useNegativeSpace: SeismogrammPresetProfile::usesNegativeSpaceProtocol($selectionMode),
+            useContextCache: $useContextCache,
         );
 
         $this->lastPipelineMeta = [
@@ -104,7 +112,7 @@ final class SeismogrammOrchestrator
                 $userSystemPrompt,
                 $selectionPool,
                 $scoresByKey,
-                $researcherMeta,
+                $formatterMeta,
                 $itemCount,
                 $maxOutputTokens,
                 $pipelineContext,
@@ -116,7 +124,7 @@ final class SeismogrammOrchestrator
                 $userSystemPrompt,
                 $selectionPool,
                 $scoresByKey,
-                $researcherMeta,
+                $formatterMeta,
                 $itemCount,
                 $maxOutputTokens,
                 $pipelineContext,
@@ -150,7 +158,7 @@ final class SeismogrammOrchestrator
             $selectedKeys,
         )));
 
-        $summaryContext = $this->buildSummaryContextForKeys($entries, $scoresByKey, $researcherMeta, $selectedKeys);
+        $summaryContext = $this->buildSummaryContextForKeys($entries, $scoresByKey, $formatterMeta, $selectedKeys);
 
         $markdown = $this->summaryEngine->compileBriefing(
             $model,
@@ -185,13 +193,13 @@ final class SeismogrammOrchestrator
     /**
      * @param list<array<string, mixed>> $entries
      * @param array<string, array<string, mixed>> $scoresByKey
-     * @param array<string, mixed> $researcherMeta
+     * @param array<string, mixed> $formatterMeta
      * @param list<string> $selectedKeys
      */
     private function buildSummaryContextForKeys(
         array $entries,
         array $scoresByKey,
-        array $researcherMeta,
+        array $formatterMeta,
         array $selectedKeys,
     ): string {
         $subset = [];
@@ -209,7 +217,8 @@ final class SeismogrammOrchestrator
             );
         }
 
-        $meta = $researcherMeta;
+        $meta = $formatterMeta;
+        $meta['entry_body_max_chars'] = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(count($subset));
         $meta['total'] = count($subset);
         $meta['selected'] = count($selectedKeys);
 

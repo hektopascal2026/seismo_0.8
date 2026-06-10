@@ -91,7 +91,7 @@ final class SeismogrammController
             $pdo = getDbConnection();
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $this->applyPresetMaxContextFloor($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $filters['maxContextEntries'] = $this->resolveEffectiveMaxContext($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
@@ -141,7 +141,7 @@ final class SeismogrammController
 
             $requestContext = new SeismogrammRequestContext();
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
-            $this->applyPresetMaxContextFloor($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
+            $filters['maxContextEntries'] = $this->resolveEffectiveMaxContext($pdo, $requestContext, $filters, $_POST['max_context_entries'] ?? null);
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $preset = $filters['preset'];
@@ -179,6 +179,8 @@ final class SeismogrammController
             }
 
             $selectionMode = trim((string)($_POST['selection_mode'] ?? 'standard'));
+            $formatterMeta = $gathered['formatterMeta'] ?? [];
+            $useContextCache = (bool)($filters['useContextCache'] ?? false);
 
             $orchestrator = new SeismogrammOrchestrator();
             $result = $orchestrator->generateBriefing(
@@ -190,10 +192,11 @@ final class SeismogrammController
                 $maxOutputTokens,
                 $entries,
                 $scoresByKey,
-                $gathered,
+                $formatterMeta,
                 $preset,
                 $selectionMode,
                 $customAdvanced,
+                $useContextCache,
                 $moduleSelection instanceof ResearcherSourceSelection ? $moduleSelection : null,
             );
 
@@ -309,18 +312,16 @@ final class SeismogrammController
         echo json_encode(['ok' => true]);
     }
 
-    private function applyPresetMaxContextFloor(
+    private function resolveEffectiveMaxContext(
         PDO $pdo,
         SeismogrammRequestContext $requestContext,
         array $filters,
         mixed $postedMax,
-    ): void {
+    ): int {
         $configRepo = new SystemConfigRepository($pdo);
         $configuredMax = (int)($configRepo->get('researcher:max_context_entries') ?? '100');
-        $effectiveMax = $requestContext->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
-        if ($effectiveMax > $configuredMax) {
-            $configRepo->set('researcher:max_context_entries', (string)$effectiveMax);
-        }
+
+        return $requestContext->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
     }
 
     private function ensurePresetsSeeded(SystemConfigRepository $config): array
