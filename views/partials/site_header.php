@@ -171,7 +171,6 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <?php endif; ?>
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
             <a href="<?= e($basePath) ?>/index.php?action=seismogramm" class="nav-link<?= $activeNav === 'seismogramm' ? ' active' : '' ?>">Seismogramm</a>
-            <a href="<?= e($basePath) ?>/index.php?action=researcher" class="nav-link<?= $activeNav === 'researcher' ? ' active' : '' ?>">Researcher</a>
             <a href="<?= e($basePath) ?>/index.php?action=label" class="nav-link<?= $activeNav === 'label' ? ' active' : '' ?>">Label</a>
             <?php if (!isSatellite()): ?>
             <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>

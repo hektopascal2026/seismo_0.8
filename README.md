@@ -1,4 +1,4 @@
-# Seismo 0.9.1
+# Seismo 0.9.2
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.9.2** | **Deprecate Researcher, Seismogramm Preset Workbench Knobs** — Full deprecation of legacy Researcher and removal from navigation menu. Exposes full array of knobs (Context cache toggle, relevance filtering, Magnitu snippets, max items sent) inside the Seismogramm Preset Workbench. Dynamic modes support (Briefing / Research / Blindspot) for prompt generation with custom preset save/delete management. |
 | **0.9.1** | **Seismogramm Rebuild & Redesigned Preset GUI** — Greenfield AI briefing pipeline under `?action=seismogramm`, featuring a clean preset-driven GUI (Briefing, Blindspot, Research presets), default/custom toggle switch, dynamic query inputs, and referenced validation cards. |
 | **0.9.0** | **Email Ingestion Modernization, Relational Schema Migration, & Throttle Bypass** — Upgrades ingestion parsing and sanitization to standard libraries (`zbateson/mail-mime-parser`, `masterminds/html5`, `symfony/dom-crawler`, `symfony/html-sanitizer`). Normalizes layout split configurations into fully relational database schemas (`newsletter_sender`, `newsletter_template`, `template_rule`), and adds manual throttle bypass for immediate UI-initiated mail fetches. |
 | **0.8.7** | **Centralized Backup Dashboard & SQL Streaming Export** — Adds the new Backup Settings tab, centralizing the existing JSON source configuration exports and imports, and introducing a new, memory-safe SQL streaming exporter for full database backups. |
@@ -112,8 +113,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 |--------|---------|
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
-| `?action=researcher` | AI Researcher — Gemini executive researcher, per-desk prompt library + default prompt (mothership + satellites; local Magnitu scores on satellites) |
-| `?action=seismogramm` | Seismogramm — preset briefing builder (Briefing / Blindspot / Research); greenfield two-pass pipeline (`docs/seismogramm.md`) |
+| `?action=seismogramm` | Seismogramm — Preset Workbench and briefing builder (Briefing / Blindspot / Research); greenfield two-pass pipeline (`docs/seismogramm.md`) |
 | `?action=feeds` / `media` / `newsletter` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Newsletter** = IMAP/Gmail digests (split from Mail); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics, backups |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |

@@ -192,10 +192,8 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
 
                 <!-- VI. Seismogramm -->
                 <section class="settings-section about-card dashboard-section">
-                    <h2>VI. Seismogramm — preset Gemini briefing (v0.9.1)</h2>
-                    <p class="about-lede">v0.9.1 introduces <strong>Seismogramm</strong> (<code>?action=seismogramm</code>): a greenfield rebuild of Seismo&rsquo;s two-pass Gemini pipeline. Instead of stacking Standard, Tournament, and Relational modes behind one legacy form, desks pick a <strong>preset</strong> that encodes the right selection strategy, context cap, and source mix for the job.</p>
-
-                    <p>The legacy <code>?action=researcher</code> route remains for manual overrides (Deep selection, Pro pass 1, full prompt library). Seismogramm is the recommended path for daily briefings.</p>
+                    <h2>VI. Seismogramm — preset Gemini briefing (v0.9.2)</h2>
+                    <p class="about-lede">v0.9.2 fully deprecates the legacy <strong>Researcher</strong> tool. Instead of stacking Standard, Tournament, and Relational modes behind a complex checkbox matrix, desks now exclusively use <strong>Seismogramm</strong> (<code>?action=seismogramm</code>) to select a <strong>preset</strong> (Briefing, Blindspot, or Research) that encodes the selection strategy, context cap, and source mix. The Seismogramm Preset Workbench serves as the interactive prompt playground and knob configurator.</p>
 
                     <h3 class="about-subheading">Presets</h3>
                     <div class="table-responsive">
@@ -266,8 +264,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=seismogramm</code> &mdash; <strong>recommended</strong> preset briefing builder (Briefing / Blindspot / Research); decomposed two-pass pipeline, referenced validation cards, per-phase cost telemetry. See <strong>§ VI</strong>.</li>
-                        <li><code>?action=researcher</code> &mdash; legacy Gemini executive researcher with filters, per-desk prompt library, <strong>Deep selection</strong> (Standard / Tournament / Blind spot cross-module), optional Pro selection (<code>gemini-3.1-pro-preview</code> pass 1), post-run Flash cost estimate, and source-card attribution (mothership and path satellites). Split newsletter child stories are cited individually, not as parent digest blobs.</li>
+                        <li><code>?action=seismogramm</code> &mdash; <strong>recommended</strong> preset briefing builder (Briefing / Blindspot / Research); decomposed two-pass pipeline, referenced validation cards, per-phase cost telemetry. Includes the Preset Workbench for configuring custom persona prompts and context options. See <strong>§ VI</strong>.</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
@@ -711,31 +708,49 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era XII: Seismogramm &mdash; Gemini Pipeline Refactor</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
-                        <h3>v0.9.1 &mdash; Seismogramm Rebuild, Preset Profiles, &amp; Decomposed Selection Pipeline</h3>
+                        <h3>v0.9.2 &mdash; Deprecation of Legacy Researcher, Seismogramm Preset Workbench Knobs &amp; Presets Cleanup</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> By v0.8.4 the legacy AI Researcher had accumulated every selection mode behind one form: Standard, Tournament, Blind spot / cross-module, optional Pro pass 1, verification auto-detection, batch recovery, and a growing meta schema. Each new desk workflow required operators to understand implementation details that belonged in code, not in a checkbox matrix. v0.9.1 extracts the Gemini two-pass contract into <strong>Seismogramm</strong> &mdash; a greenfield service layer under <code>?action=seismogramm</code> with three opinionated presets (Briefing, Blindspot, Research), a redesigned GUI, and hard layer boundaries (controller &rarr; request context &rarr; orchestrator &rarr; engines). Legacy <code>?action=researcher</code> is frozen for power users; Seismogramm becomes the default briefing path.</p>
+                            <p><strong>Rationale:</strong> With the release of Seismogramm in v0.9.1, maintaining the legacy monolithic AI Researcher view, controllers, and services created redundant codebase surface area. In v0.9.2, the legacy Researcher is fully deprecated and removed from the site navigation menu. The Seismogramm Preset Workbench is established as the primary playground, exposing a complete knob array (context caching, custom limits, pool sizing) alongside the prompt generator, mode styling selections (Briefing / Research / Blindspot), and custom preset lifecycle management.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>v0.9.1 &mdash; Greenfield route &amp; GUI:</strong> New <code>SeismogrammController</code> and <code>views/seismogramm.php</code> with preset bar, live mode intro, in-page <strong>About</strong> panel (pipeline diagram), Default/Custom advanced toggle, dynamic persona (Briefing/Blindspot) and research query fields, prepare/generate AJAX flow, and referenced source validation cards below the summary.</li>
-                                <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> encodes per-mode gather rules, tournament thresholds (~80 Briefing, ~35 Research batches), Magnitu disregard/snippet flags, relational Blindspot sourcing, and default pool-cap ordering (highest for Briefing/Blindspot, newest for Research). Operators pick intent, not engine names.</li>
-                                <li><strong>v0.9.1 &mdash; Request context &amp; per-request caps:</strong> <code>SeismogrammRequestContext</code> parses POST into a typed context; Research enforces a 300-entry floor per request without mutating global <code>seismogramm:max_context_entries</code>. Advanced slider persists only when Custom is expanded.</li>
-                                <li><strong>v0.9.1 &mdash; Orchestrator decomposition:</strong> <code>SeismogrammOrchestrator</code> coordinates gather, global title fingerprint (Blindspot media echo index), engine dispatch, and pass 2. Selection lives in <code>StandardSelectionEngine</code> and <code>TournamentSelectionEngine</code> (relational negative-space flag); prose in <code>SummaryBriefingEngine</code> with XML filtered to <code>used_entry_keys</code> only.</li>
-                                <li><strong>v0.9.1 &mdash; ResilientGeminiClient:</strong> Parallel cURL tournament batches, structured JSON schemas, formatter meta for snippets, experimental context-cache uploads when fingerprint &gt; 50k chars (advanced checkbox only), and <strong>by_phase</strong> usage reporting (<code>selection</code>, <code>summary</code>, <code>context_cache</code>).</li>
-                                <li><strong>v0.9.1 &mdash; Blindspot integrity:</strong> Strict Lex/Leg primary pool &mdash; no silent fallback to the full timeline when legislation sources are empty (clear HTTP 400). Global fingerprint compares primary titles against Media/Feeds/Scraper; negative-space protocol rejects fuzzy echo overlap. Persona gate filters regulatory noise.</li>
-                                <li><strong>v0.9.1 &mdash; Research forensic mode:</strong> Disregards Magnitu scoring, enables Magnitu snippets, scans up to 300 items with newest-first cap ordering by default, tournament when pool exceeds batch size. Topic query required; 429 rate limits fail fast (no automatic shrink).</li>
-                                <li><strong>v0.9.1 &mdash; Resilience trilogy (P1&ndash;P3):</strong> One sequential retry per failed tournament batch; user-initiated 429 retry with halved cap on Briefing/Blindspot; <code>SeismogrammPipelineMeta</code> with preset-native <code>normalize()</code>, cost estimate, <code>meta_summary_line</code>, and preset-aware loading steps in the UI (not legacy <code>GeminiResearcherGenerationMeta</code>).</li>
-                                <li><strong>v0.9.1 &mdash; Desk defaults:</strong> Mem module pill off by default; advanced pool-ordering radios; persona can break Magnitu score ties in Briefing tournament passes.</li>
-                                <li><strong>v0.9.1 &mdash; Documentation:</strong> Operator and architecture notes in <code>docs/seismogramm.md</code>; PHPUnit coverage for presets, pipeline meta, request cap, and selection parser.</li>
+                                <li><strong>v0.9.2 &mdash; Legacy Researcher Deprecation:</strong> Removed legacy researcher routes, controllers, templates, and header navigation menu items.</li>
+                                <li><strong>v0.9.2 &mdash; Preset Workbench Knobs:</strong> Integrated full configuration knobs (Context Cache toggle, Relevance scoring threshold filters, Magnitu Snippets toggle, Max items sent slider) directly into the Seismogramm builder form.</li>
+                                <li><strong>v0.9.2 &mdash; Mode-Styled Prompt Playground:</strong> Enabled operators to select a base style (Briefing / Research / Blindspot) on top of custom prompts to automatically generate context-optimized instructions.</li>
+                                <li><strong>v0.9.2 &mdash; Custom Preset Management:</strong> Added support for naming, saving, and deleting custom configurations dynamically with individual delete (X) targets directly in the presets bar.</li>
                             </ul>
                         </div>
 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Splitting the monolithic <code>GeminiResearcherService</code> into Seismogramm engines duplicated some gather/format paths temporarily but restored hard MVC boundaries: no SQL outside repositories, no selection logic in views, and preset behaviour testable without driving the legacy form. Pass 2 summary batching (legacy proactive/reactive multi-call when output truncates) is explicitly deferred &mdash; Seismogramm already sends a small key subset to pass 2 (typically 5&ndash;15 entries). Automatic 429 pool shrink without user consent was rejected; Briefing and Blindspot expose an explicit retry button instead. Satellites inherit the same Seismogramm routes and read mothership entries; Magnitu scores remain local per desk.</p>
+                            <p>Removing the legacy codebase sections simplified dependency graph checks but required migrating any active custom default researcher prompts to the Seismogramm system-config model structures. Fully separating preset deletions prevents unintended loss of standard system configurations.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era XIIb -->
+                    <div class="timeline-era-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-ai">Era XII-a: Seismogramm Launch</span>
+                            <span class="era-date">June 2026</span>
+                        </div>
+                        <h3>v0.9.1 &mdash; Seismogramm Rebuild, Preset Profiles, &amp; Decomposed Selection Pipeline</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> By v0.8.4 the legacy AI Researcher had accumulated every selection mode behind one form. v0.9.1 extracts the Gemini two-pass contract into <strong>Seismogramm</strong> &mdash; a greenfield service layer under <code>?action=seismogramm</code> with three opinionated presets (Briefing, Blindspot, Research), a redesigned GUI, and hard layer boundaries (controller &rarr; request context &rarr; orchestrator &rarr; engines).</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.9.1 &mdash; Greenfield route &amp; GUI:</strong> New <code>SeismogrammController</code> and <code>views/seismogramm.php</code> with preset bar, live mode intro, in-page <strong>About</strong> panel, Default/Custom advanced toggle, dynamic persona (Briefing/Blindspot) and research query fields, and referenced source validation cards.</li>
+                                <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> encodes per-mode gather rules, tournament thresholds (~80 Briefing, ~35 Research batches), Magnitu disregard/snippet flags, relational Blindspot sourcing, and default pool-cap ordering.</li>
+                                <li><strong>v0.9.1 &mdash; Request context &amp; per-request caps:</strong> <code>SeismogrammRequestContext</code> parses POST into a typed context; Research enforces a 300-entry floor per request without mutating global <code>seismogramm:max_context_entries</code>.</li>
+                                <li><strong>v0.9.1 &mdash; Orchestrator decomposition:</strong> <code>SeismogrammOrchestrator</code> coordinates gather, global title fingerprint, engine dispatch, and pass 2. Selection lives in <code>StandardSelectionEngine</code> and <code>TournamentSelectionEngine</code> (relational negative-space flag); prose in <code>SummaryBriefingEngine</code> with XML filtered to <code>used_entry_keys</code> only.</li>
+                                <li><strong>v0.9.1 &mdash; ResilientGeminiClient:</strong> Parallel cURL tournament batches, structured JSON schemas, formatter meta for snippets, experimental context-cache uploads, and <strong>by_phase</strong> usage reporting.</li>
+                                </ul>
                         </div>
                     </div>
                 </div>
