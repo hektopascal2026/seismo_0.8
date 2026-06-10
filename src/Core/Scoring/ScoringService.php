@@ -31,6 +31,7 @@ namespace Seismo\Core\Scoring;
 use PDO;
 use PDOException;
 use Seismo\Core\Mail\EmailListingBoilerplateStripper;
+use Seismo\Core\Magnitu\MagnituEntryContract;
 use Seismo\Repository\EmailSubscriptionRepository;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -60,7 +61,7 @@ final class ScoringService
             return ['feed_items' => 0, 'lex_items' => 0, 'emails' => 0, 'calendar_events' => 0];
         }
 
-        $version = (int)($recipe['version'] ?? 0);
+        $version = self::resolveRecipeVersion($recipe);
 
         return [
             'feed_items'      => $this->rescoreFeedItems($recipe, $version),
@@ -78,8 +79,7 @@ final class ScoringService
         $rows = $this->scores->getUnscoredFeedItems(self::BATCH_LIMIT, $version);
         $done = 0;
         foreach ($rows as $row) {
-            $st = (string)($row['source_type'] ?? 'rss');
-            $sourceType = in_array($st, ['substack', 'scraper'], true) ? $st : 'rss';
+            $sourceType = MagnituEntryContract::feedSourceType((string)($row['source_type'] ?? 'rss'));
             $body = (string)(($row['content'] !== null && $row['content'] !== '')
                 ? $row['content']
                 : ($row['description'] ?? ''));
@@ -173,7 +173,7 @@ final class ScoringService
             if ($body === '') {
                 $body = (string)($row['event_type'] ?? '');
             }
-            $sourceType = 'calendar_' . (string)($row['source'] ?? 'unknown');
+            $sourceType = MagnituEntryContract::legSourceType((string)($row['source'] ?? ''));
             $result = RecipeScorer::score($recipe, (string)($row['title'] ?? ''), $body, $sourceType);
             if ($result === null) {
                 continue;
@@ -255,6 +255,11 @@ final class ScoringService
             return null;
         }
 
+        $configVersion = (int)$systemConfig->get('recipe_version');
+        if ((int)($recipe['version'] ?? 0) <= 0 && $configVersion > 0) {
+            $recipe['version'] = $configVersion;
+        }
+
         $maxRounds = max(1, min($maxRounds, 50));
         $scorer    = new self($entryScores);
         $totals    = ['feed_items' => 0, 'lex_items' => 0, 'emails' => 0, 'calendar_events' => 0];
@@ -286,5 +291,21 @@ final class ScoringService
             new EntryScoreRepository($pdo),
             $maxRounds,
         );
+    }
+
+    /**
+     * Active recipe version for unscored lookups — prefers embedded JSON `version`,
+     * else optional `configRecipeVersion` from system_config.
+     *
+     * @param array<string, mixed> $recipe
+     */
+    public static function resolveRecipeVersion(array $recipe, int $configRecipeVersion = 0): int
+    {
+        $jsonVersion = (int)($recipe['version'] ?? 0);
+        if ($jsonVersion > 0) {
+            return $jsonVersion;
+        }
+
+        return $configRecipeVersion > 0 ? $configRecipeVersion : 0;
     }
 }

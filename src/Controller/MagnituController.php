@@ -28,6 +28,7 @@ namespace Seismo\Controller;
 
 use PDOException;
 use Seismo\Http\BearerAuth;
+use Seismo\Core\Magnitu\MagnituEntryContract;
 use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\EntryScoreRepository;
 use Seismo\Repository\SystemConfigRepository;
@@ -146,10 +147,12 @@ final class MagnituController
                 $explanation = $score['explanation'];
             }
             try {
+                $relevance = (float)($score['relevance_score'] ?? 0);
+                $relevance = max(0.0, min(1.0, $relevance));
                 $result = $repo->upsertMagnituScore(
                     $entryType,
                     $entryId,
-                    (float)($score['relevance_score'] ?? 0),
+                    $relevance,
                     isset($score['predicted_label']) ? (string)$score['predicted_label'] : null,
                     $explanation,
                     $modelVersion,
@@ -200,16 +203,18 @@ final class MagnituController
                 self::respondJson(['error' => 'Invalid recipe JSON'], 400);
                 return;
             }
+            $nextVersion = isset($input['version'])
+                ? (int)$input['version']
+                : ((int)$config->get('recipe_version')) + 1;
+            $input['version'] = $nextVersion;
+
             $json = json_encode($input, JSON_UNESCAPED_UNICODE);
             if ($json === false) {
                 self::respondJson(['error' => 'Recipe JSON could not be re-encoded'], 400);
                 return;
             }
             $config->set('recipe_json', $json);
-            $nextVersion = isset($input['version'])
-                ? (string)(int)$input['version']
-                : (string)(((int)$config->get('recipe_version')) + 1);
-            $config->set('recipe_version', $nextVersion);
+            $config->set('recipe_version', (string)$nextVersion);
             $config->set('last_sync_at', gmdate('Y-m-d H:i:s'));
 
             $scorer = new ScoringService(new EntryScoreRepository($pdo));
@@ -529,7 +534,7 @@ final class MagnituController
             'fetched_at'      => $row['fetched_at'] ?? null,
             'source_name'     => $sourceName,
             'source_category' => (string)($row['event_type'] ?? 'Leg'),
-            'source_type'     => 'leg_' . ($source !== '' ? preg_replace('/[^a-z0-9_]+/i', '_', $source) : 'parliament'),
+            'source_type'     => MagnituEntryContract::legSourceType($source),
         ];
     }
 

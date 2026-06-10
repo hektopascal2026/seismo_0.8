@@ -181,6 +181,7 @@ final class RecipeScorer
         if (!$hadRecipeKeywordHit && $maxScore === 0.0 && in_array('noise', $classes, true)) {
             $predictedLabel = 'noise';
             $maxProb        = (float)($probabilities['noise'] ?? $maxProb);
+            $relevance      = 0.0;
         }
 
         usort($topFeatures, static fn ($a, $b) => abs($b['weight']) <=> abs($a['weight']));

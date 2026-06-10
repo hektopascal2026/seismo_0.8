@@ -178,6 +178,8 @@ final class MagnituExportRepository
         $htmlBodyCol = $this->pickColumn($cols, ['html_body', 'body_html']);
         $fromEmailCol = $this->pickColumn($cols, ['from_email', 'from_addr']);
         $fromNameExpr = in_array('from_name', $cols, true) ? 'e.from_name' : "''";
+        $derivedSel   = in_array('derived_title', $cols, true) ? 'e.derived_title' : "'' AS derived_title";
+        $metaSel      = in_array('metadata', $cols, true) ? 'e.metadata' : 'NULL AS metadata';
 
         if ($textBodyCol === null || $htmlBodyCol === null || $fromEmailCol === null) {
             return [];
@@ -185,11 +187,13 @@ final class MagnituExportRepository
 
         $sql = "SELECT e.id,
                        e.subject,
+                       {$derivedSel},
                        e.`{$fromEmailCol}` AS from_email,
                        {$fromNameExpr}     AS from_name,
                        e.`{$textBodyCol}`  AS text_body,
                        e.`{$htmlBodyCol}`  AS html_body,
                        e.`{$dateCol}`      AS entry_date,
+                       {$metaSel},
                        COALESCE(st.tag, 'unclassified') AS sender_tag
                   FROM {$table} e
              LEFT JOIN " . entryTable('sender_tags') . " st
@@ -201,9 +205,16 @@ final class MagnituExportRepository
         $exportableClause = in_array('parent_email_id', $cols, true)
             ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
             : '';
+        $ingestCol = $this->pickColumn($cols, ['created_at', 'date_received']);
         if ($since !== null && $since !== '') {
-            $sql .= " WHERE {$hiddenClause}{$exportableClause} AND e.`{$dateCol}` >= ?";
-            $params[] = $since;
+            if ($ingestCol !== null && $ingestCol !== $dateCol) {
+                $sql .= " WHERE {$hiddenClause}{$exportableClause} AND (e.`{$dateCol}` >= ? OR e.`{$ingestCol}` >= ?)";
+                $params[] = $since;
+                $params[] = $since;
+            } else {
+                $sql .= " WHERE {$hiddenClause}{$exportableClause} AND e.`{$dateCol}` >= ?";
+                $params[] = $since;
+            }
         } else {
             $sql .= " WHERE {$hiddenClause}{$exportableClause}";
         }
@@ -225,7 +236,8 @@ final class MagnituExportRepository
                   FROM ' . entryTable('lex_items');
         $params = [];
         if ($since !== null && $since !== '') {
-            $sql .= ' WHERE document_date >= ?';
+            $sql .= ' WHERE (document_date >= ? OR fetched_at >= ?)';
+            $params[] = $since;
             $params[] = $since;
         }
         $sql .= ' ORDER BY document_date DESC LIMIT ' . $limit;
@@ -250,7 +262,7 @@ final class MagnituExportRepository
         if ($since !== null && $since !== '') {
             $sql .= ' AND (
                 (event_date IS NOT NULL AND event_date >= DATE(?))
-                OR (event_date IS NULL AND fetched_at >= ?)
+                OR fetched_at >= ?
             )';
             $params[] = $since;
             $params[] = $since;
@@ -362,9 +374,16 @@ final class MagnituExportRepository
             ? ' AND ' . EmailDigestExportPolicy::sqlExportableEmail('e')
             : '';
         $sql .= $hiddenClause . $exportableClause;
+        $ingestCol = $this->pickColumn($cols, ['created_at', 'date_received']);
         if ($since !== null && $since !== '') {
-            $sql .= " AND e.`{$dateCol}` >= ?";
-            $params[] = $since;
+            if ($ingestCol !== null && $ingestCol !== $dateCol) {
+                $sql .= " AND (e.`{$dateCol}` >= ? OR e.`{$ingestCol}` >= ?)";
+                $params[] = $since;
+                $params[] = $since;
+            } else {
+                $sql .= " AND e.`{$dateCol}` >= ?";
+                $params[] = $since;
+            }
         }
 
         return $this->selectOrEmpty($sql, $params);
@@ -388,7 +407,8 @@ final class MagnituExportRepository
                  WHERE id IN (' . $placeholders . ')';
         $params = $ids;
         if ($since !== null && $since !== '') {
-            $sql .= ' AND document_date >= ?';
+            $sql .= ' AND (document_date >= ? OR fetched_at >= ?)';
+            $params[] = $since;
             $params[] = $since;
         }
 
@@ -417,7 +437,7 @@ final class MagnituExportRepository
         if ($since !== null && $since !== '') {
             $sql .= ' AND (
                 (event_date IS NOT NULL AND event_date >= DATE(?))
-                OR (event_date IS NULL AND fetched_at >= ?)
+                OR fetched_at >= ?
             )';
             $params[] = $since;
             $params[] = $since;

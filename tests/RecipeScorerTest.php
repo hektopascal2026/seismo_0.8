@@ -57,6 +57,7 @@ final class RecipeScorerTest extends TestCase
         $this->assertNotNull($result);
         $this->assertSame('noise', $result['predicted_label']);
         $this->assertSame('noise', $result['explanation']['prediction']);
+        $this->assertSame(0.0, (float)$result['relevance_score']);
     }
 
     public function testSourceWeightWithoutKeywordsStillClassifies(): void
