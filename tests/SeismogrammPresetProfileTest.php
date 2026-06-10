@@ -93,4 +93,40 @@ final class SeismogrammPresetProfileTest extends TestCase
         self::assertFalse(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::RESEARCH));
         self::assertTrue(SeismogrammPresetProfile::allowsRateLimitUserRetry(SeismogrammPresetProfile::BRIEFING));
     }
+
+    public function testResolvePipelinePresetUsesReservedName(): void
+    {
+        self::assertSame(
+            SeismogrammPresetProfile::BLINDSPOT,
+            SeismogrammPresetProfile::resolvePipelinePreset('Blindspot', null, 'standard'),
+        );
+    }
+
+    public function testResolvePipelinePresetUsesPostedBaseModeForCustomName(): void
+    {
+        self::assertSame(
+            SeismogrammPresetProfile::BLINDSPOT,
+            SeismogrammPresetProfile::resolvePipelinePreset('Swiss VAT desk', 'Blindspot', 'standard'),
+        );
+        self::assertSame(
+            SeismogrammPresetProfile::BLINDSPOT,
+            SeismogrammPresetProfile::resolvePipelinePreset('Swiss VAT desk', 'Briefing', 'relational'),
+        );
+    }
+
+    public function testResolvePipelinePresetInfersBlindspotFromRelationalMode(): void
+    {
+        self::assertSame(
+            SeismogrammPresetProfile::BLINDSPOT,
+            SeismogrammPresetProfile::resolvePipelinePreset('Custom desk', null, 'relational'),
+        );
+    }
+
+    public function testResolvePipelinePresetInfersResearchFromTournamentAndSnippets(): void
+    {
+        self::assertSame(
+            SeismogrammPresetProfile::RESEARCH,
+            SeismogrammPresetProfile::resolvePipelinePreset('Topic scan', null, 'tournament', false, true),
+        );
+    }
 }

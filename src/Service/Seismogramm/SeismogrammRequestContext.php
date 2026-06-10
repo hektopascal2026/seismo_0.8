@@ -74,6 +74,14 @@ final class SeismogrammRequestContext
             $proSelectionMode = (string)($post['pro_selection_mode'] ?? '0') === '1';
         }
 
+        $pipelinePreset = SeismogrammPresetProfile::resolvePipelinePreset(
+            $presetRaw,
+            isset($post['base_mode']) ? (string)$post['base_mode'] : null,
+            $selectionMode,
+            $disregardMagnitu,
+            $useRecipeSnippets,
+        );
+
         return [
             'since'             => $since,
             'limit'             => $limit,
@@ -84,6 +92,8 @@ final class SeismogrammRequestContext
             'useContextCache'   => $useContextCache,
             'poolPriority'      => $poolPriority,
             'preset'            => $preset,
+            'presetRaw'         => $presetRaw,
+            'pipelinePreset'    => $pipelinePreset,
             'customAdvanced'    => $customAdvanced,
             'gatherDefaults'    => $gatherDefaults,
             'selectionMode'     => $selectionMode,

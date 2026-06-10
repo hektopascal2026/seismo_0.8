@@ -31,6 +31,37 @@ final class SeismogrammPresetProfile
         return self::BRIEFING;
     }
 
+    /**
+     * Effective Briefing / Blindspot / Research behavior for pipeline steps.
+     * Custom preset names normalize to Briefing for library lookup; this restores the intended mode.
+     */
+    public static function resolvePipelinePreset(
+        string $presetRaw,
+        ?string $postedBaseMode,
+        ?string $selectionMode,
+        bool $disregardMagnitu = false,
+        bool $useRecipeSnippets = false,
+    ): string {
+        if (in_array($presetRaw, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH], true)) {
+            return $presetRaw;
+        }
+
+        if ($selectionMode === 'relational') {
+            return self::BLINDSPOT;
+        }
+
+        if ($selectionMode === 'tournament' && ($disregardMagnitu || $useRecipeSnippets)) {
+            return self::RESEARCH;
+        }
+
+        $posted = trim((string)$postedBaseMode);
+        if (in_array($posted, [self::BRIEFING, self::BLINDSPOT, self::RESEARCH], true)) {
+            return $posted;
+        }
+
+        return self::BRIEFING;
+    }
+
     public static function resolveSelectionMode(string $preset, int $poolCount): string
     {
         if ($preset === self::BLINDSPOT) {

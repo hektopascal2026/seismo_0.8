@@ -96,11 +96,12 @@ final class SeismogrammController
             $filters = $capContext['filters'];
 
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
+            $pipelinePreset = (string)($filters['pipelinePreset'] ?? $filters['preset']);
             $selectionPool = SeismogrammPresetProfile::filterSelectionPool(
-                (string)$filters['preset'],
+                $pipelinePreset,
                 $gathered['entries'],
             );
-            if ($filters['preset'] === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
+            if ($pipelinePreset === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
                 throw GeminiResearcherException::badResponse(
                     'Blindspot requires CH Lex (Fedlex) or Leg entries in the gathered pool. Enable CH Lex and Leg sources and widen the lookback window.',
                 );
@@ -109,7 +110,8 @@ final class SeismogrammController
             $meta = array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
                 [
-                    'preset' => $filters['preset'],
+                    'preset' => $pipelinePreset,
+                    'preset_name' => (string)($filters['presetRaw'] ?? $filters['preset']),
                     'selection_pool_count' => count($selectionPool),
                     'markdown_chars' => $gathered['markdownChars'],
                     'context_warning' => $gathered['contextWarning'] ?? null,
@@ -145,6 +147,7 @@ final class SeismogrammController
         }
 
         $preset = SeismogrammPresetProfile::BRIEFING;
+        $pipelinePreset = $preset;
         $capContext = [
             'filters'               => [],
             'original_cap'          => 0,
@@ -169,12 +172,13 @@ final class SeismogrammController
             $filters = $capContext['filters'];
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
-            $preset = $filters['preset'];
+            $preset = (string)($filters['presetRaw'] ?? $filters['preset']);
+            $pipelinePreset = (string)($filters['pipelinePreset'] ?? $filters['preset']);
             $customAdvanced = (bool)($filters['customAdvanced'] ?? false);
             $moduleSelection = $filters['selection'];
 
             $itemCount = $requestContext->parseItemCount($_POST['item_count'] ?? null);
-            $systemPrompt = $this->resolveSystemPrompt($config, $preset, $customAdvanced, $_POST);
+            $systemPrompt = $this->resolveSystemPrompt($config, (string)$filters['preset'], $customAdvanced, $_POST);
             $researchQuery = trim((string)($_POST['research_query'] ?? ''));
             $briefingPersona = trim((string)($_POST['briefing_persona'] ?? ''));
 
@@ -186,7 +190,7 @@ final class SeismogrammController
                 $systemPrompt = str_replace('{briefingPersona}', $briefingPersona, $systemPrompt);
             }
 
-            $this->validateResolvedPrompt($preset, $systemPrompt);
+            $this->validateResolvedPrompt($pipelinePreset, $systemPrompt);
 
             $model = $config->get('gemini:model') ?? 'gemini-3.5-flash';
             $maxOutputTokens = (int)($config->get('gemini:max_output_tokens') ?? '65536');
@@ -217,7 +221,7 @@ final class SeismogrammController
                 $entries,
                 $scoresByKey,
                 $formatterMeta,
-                $preset,
+                $pipelinePreset,
                 $useContextCache,
                 $moduleSelection instanceof ResearcherSourceSelection ? $moduleSelection : null,
                 $filters['selectionMode'] ?? null,
@@ -243,7 +247,8 @@ final class SeismogrammController
                 $pipelineMeta,
                 $this->rateLimitMetaFromCapContext($capContext),
                 [
-                    'preset'            => $preset,
+                    'preset'            => $pipelinePreset,
+                    'preset_name'       => $preset,
                     'lookback_days'     => $filters['lookbackDays'],
                     'cited_entry_count' => count($result->usedEntryKeys),
                     'used_entry_keys'   => $result->usedEntryKeys,
@@ -267,13 +272,13 @@ final class SeismogrammController
             http_response_code($status);
             $payload = [
                 'ok'    => false,
-                'error' => $this->formatRateLimitErrorMessage($e, $preset),
+                'error' => $this->formatRateLimitErrorMessage($e, $pipelinePreset),
             ];
             if ($e->isRateLimitExceeded()) {
                 $payload = array_merge(
                     $payload,
                     $this->rateLimitFailureExtras(
-                        $preset,
+                        $pipelinePreset,
                         (int)($capContext['effective_cap'] ?? 0),
                         $requestContext,
                     ),
@@ -506,10 +511,10 @@ final class SeismogrammController
         array $filters,
         array $post,
     ): array {
-        $preset = (string)($filters['preset'] ?? SeismogrammPresetProfile::BRIEFING);
+        $pipelinePreset = (string)($filters['pipelinePreset'] ?? $filters['preset'] ?? SeismogrammPresetProfile::BRIEFING);
         $retryPosted = $requestContext->isRateLimitUserRetryPosted($post);
 
-        if ($retryPosted && !SeismogrammPresetProfile::allowsRateLimitUserRetry($preset)) {
+        if ($retryPosted && !SeismogrammPresetProfile::allowsRateLimitUserRetry($pipelinePreset)) {
             throw new GeminiResearcherException(
                 'Smaller-pool retry is not available for Research. Shorten the lookback window, reduce sources, or wait a few minutes.',
                 400,
@@ -526,7 +531,7 @@ final class SeismogrammController
             $filters,
             $configuredMax,
             $post['max_context_entries'] ?? null,
-            $retryPosted && SeismogrammPresetProfile::allowsRateLimitUserRetry($preset),
+            $retryPosted && SeismogrammPresetProfile::allowsRateLimitUserRetry($pipelinePreset),
             $postedRetryCap,
         );
     }

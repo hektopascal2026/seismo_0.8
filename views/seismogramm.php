@@ -306,6 +306,7 @@ flowchart LR
         <div class="latest-entries-section" id="seismogramm-form-section">
             <form id="seismogramm-builder-form" class="admin-form-card">
                 <input type="hidden" name="preset" id="seismogramm_preset" value="Briefing">
+                <input type="hidden" name="base_mode" id="seismogramm_base_mode" value="Briefing">
                 <input type="hidden" name="custom_advanced" id="seismogramm_custom_advanced" value="0">
                 <input type="hidden" name="limit" value="<?= (int)$defaultLimit ?>">
                 
@@ -536,6 +537,8 @@ flowchart LR
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
         var helperBaseModeSelect = document.getElementById('seismogramm_helper_base_mode');
+        var baseModeInput = document.getElementById('seismogramm_base_mode');
+        var activeBaseMode = 'Briefing';
 
         var RESEARCH_MAX_CONTEXT = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::RESEARCH_DEFAULT_MAX_CONTEXT ?>;
         var TOURNAMENT_THRESHOLD = <?= (int)\Seismo\Service\Seismogramm\SeismogrammPresetProfile::TOURNAMENT_POOL_THRESHOLD ?>;
@@ -626,6 +629,58 @@ flowchart LR
                 return 'query';
             }
             return 'persona';
+        }
+
+        function inferBaseModeFromKnobs(knobs) {
+            if (!knobs) {
+                return 'Briefing';
+            }
+            if (knobs.selection_mode === 'relational') {
+                return 'Blindspot';
+            }
+            if (knobs.selection_mode === 'tournament' && (knobs.disregard_magnitu || knobs.use_recipe_snippets)) {
+                return 'Research';
+            }
+            if (knobs.field_mode === 'query') {
+                return 'Research';
+            }
+            if (knobs.base_mode && isReservedPreset(knobs.base_mode)) {
+                return knobs.base_mode;
+            }
+            return 'Briefing';
+        }
+
+        function setActiveBaseMode(mode) {
+            if (!isReservedPreset(mode)) {
+                mode = 'Briefing';
+            }
+            activeBaseMode = mode;
+            if (baseModeInput) {
+                baseModeInput.value = mode;
+            }
+            if (helperBaseModeSelect) {
+                helperBaseModeSelect.value = mode;
+            }
+        }
+
+        function resolvePipelinePresetName() {
+            if (isReservedPreset(activePreset)) {
+                return activePreset;
+            }
+            return activeBaseMode;
+        }
+
+        function syncPipelineBaseModeFromKnobs() {
+            if (isReservedPreset(activePreset) || applyingPreset) {
+                return;
+            }
+            var selectionEl = document.querySelector('input[name="selection_mode"]:checked');
+            setActiveBaseMode(inferBaseModeFromKnobs({
+                selection_mode: selectionEl ? selectionEl.value : 'standard',
+                disregard_magnitu: disregardMagnituCb ? disregardMagnituCb.checked : false,
+                use_recipe_snippets: snippetsCb ? snippetsCb.checked : false,
+                field_mode: inferFieldModeFromPrompt(systemPromptTa.value, null)
+            }));
         }
 
         function applyFieldMode(mode, knobs) {
@@ -862,6 +917,7 @@ flowchart LR
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
             }
+            setActiveBaseMode(baseMode);
             validateKnobs();
         }
 
@@ -911,6 +967,7 @@ flowchart LR
                     if (customAdvancedInput) {
                         customAdvancedInput.value = '1';
                     }
+                    setActiveBaseMode(baseMode);
                     applyFieldMode(inferFieldModeFromPrompt(data.prompt, null), null);
                     helperMsg.textContent = 'Prompt drafted. Adjust settings, generate a preview briefing, then save as a new preset.';
                     helperMsg.className = 'message message-success';
@@ -969,11 +1026,16 @@ flowchart LR
             }
         }
 
-        document.querySelectorAll('.seismogramm-module-cb, input[name="selection_mode"], #seismogramm_use_recipe_snippets, #seismogramm_max_context').forEach(function(el) {
-            el.addEventListener('change', validateKnobs);
+        function onKnobSettingChange() {
+            syncPipelineBaseModeFromKnobs();
+            validateKnobs();
+        }
+
+        document.querySelectorAll('.seismogramm-module-cb, input[name="selection_mode"], #seismogramm_use_recipe_snippets, #seismogramm_disregard_magnitu, #seismogramm_max_context').forEach(function(el) {
+            el.addEventListener('change', onKnobSettingChange);
         });
         if (maxContextSlider) {
-            maxContextSlider.addEventListener('input', validateKnobs);
+            maxContextSlider.addEventListener('input', onKnobSettingChange);
         }
 
         function getKnobsData() {
@@ -1001,6 +1063,8 @@ flowchart LR
             var proSelectionMode = document.getElementById('seismogramm_pro_selection_mode') ? document.getElementById('seismogramm_pro_selection_mode').checked : false;
             
             var persona = personaInput ? personaInput.value : '';
+            var researchQuery = queryInput ? queryInput.value : '';
+            var fieldMode = inferFieldModeFromPrompt(systemPromptTa ? systemPromptTa.value : '', null);
 
             return {
                 modules: modules,
@@ -1014,25 +1078,27 @@ flowchart LR
                 use_context_cache: useContextCache,
                 selection_mode: selectionMode,
                 pro_selection_mode: proSelectionMode,
-                persona: persona
+                persona: persona,
+                research_query: researchQuery,
+                field_mode: fieldMode,
+                base_mode: resolvePipelinePresetName()
             };
         }
 
         function applyPreset(presetName) {
+            applyingPreset = true;
             activePreset = presetName;
             if (presetInput) presetInput.value = presetName;
             updateModeIntro(presetName);
 
             var promptData = presets.find(function(p) { return p.name === presetName; });
-            if (!promptData) return;
-
-            activePresetId = promptData.id;
-            systemPromptTa.value = promptData.content;
-
-            var isDefault = ['Briefing', 'Blindspot', 'Research'].indexOf(presetName) !== -1;
-            if (savePresetBtn) {
-                savePresetBtn.style.display = isDefault ? 'none' : 'inline-block';
+            if (!promptData) {
+                applyingPreset = false;
+                return;
             }
+
+            activePresetId = promptData.id || '';
+            systemPromptTa.value = promptData.content;
 
             if (promptData.knobs) {
                 var k = promptData.knobs;
@@ -1103,13 +1169,19 @@ flowchart LR
                 if (customAdvancedInput) {
                     customAdvancedInput.value = '1';
                 }
-                
-                queryField.style.display = 'none';
-                personaField.style.display = 'block';
-                if (personaInput && k.persona) {
-                    personaInput.value = k.persona;
+
+                setActiveBaseMode(inferBaseModeFromKnobs(k));
+                applyFieldMode(inferFieldModeFromPrompt(promptData.content, k), k);
+            } else if (!isReservedPreset(presetName)) {
+                customToggle.checked = true;
+                customPanel.style.display = 'block';
+                if (customAdvancedInput) {
+                    customAdvancedInput.value = '1';
                 }
+                setActiveBaseMode(inferBaseModeFromKnobs(null));
+                applyFieldMode(inferFieldModeFromPrompt(promptData.content, null), null);
             } else {
+                setActiveBaseMode(presetName);
                 // Default Preset defaults
                 if (presetName === 'Research') {
                     queryField.style.display = 'block';
@@ -1166,6 +1238,7 @@ flowchart LR
             }
             validateKnobs();
             applyingPreset = false;
+            updateSavePresetButton();
         }
 
         function selectPreset(presetName, keepPreviewState) {
@@ -1627,6 +1700,8 @@ flowchart LR
                 return;
             }
 
+            syncPipelineBaseModeFromKnobs();
+
             var formData = new FormData(form);
             if (presetInput) {
                 formData.set('preset', presetInput.value);
@@ -1638,6 +1713,7 @@ flowchart LR
             if (activePresetId && isCustomPresetActive()) {
                 formData.set('preset_id', activePresetId);
             }
+            formData.set('base_mode', resolvePipelinePresetName());
             formData.set('rate_limit_user_retry', withRateLimitRetry ? '1' : '0');
             if (withRateLimitRetry && pendingRetryCap) {
                 formData.set('rate_limit_retry_cap', String(pendingRetryCap));
@@ -1658,7 +1734,7 @@ flowchart LR
                 costEstimateEl.innerHTML = '';
             }
             sourcesSection.style.display = 'none';
-            showProcessingStatus(presetInput ? presetInput.value : 'Briefing', withRateLimitRetry);
+            showProcessingStatus(resolvePipelinePresetName(), withRateLimitRetry);
             generateBtn.disabled = true;
             if (rateLimitRetryBtn) {
                 rateLimitRetryBtn.disabled = true;
