@@ -93,6 +93,7 @@ final class TournamentSelectionEngine
                 $researcherMeta,
                 $userSystemPrompt,
                 $itemCount,
+                $batchCount,
                 $configuredMaxTokens,
                 $model,
                 $pipelineContext,
@@ -108,15 +109,16 @@ final class TournamentSelectionEngine
         foreach ($responses as $jobId => $res) {
             $index = (int)str_replace('batch_', '', $jobId);
             $batchEntries = $batches[$index] ?? [];
-            $survivorsCount = max(1, min(3, count($batchEntries)));
+            $survivorsCount = $this->survivorsPerBatch($itemCount, $batchCount, count($batchEntries));
             $batchNumber = $index + 1;
 
             $keys = $this->keysFromBatchResponse($res, $batchEntries, $survivorsCount);
             $needsRetry = $res['status'] !== 200 || $keys === [];
 
             if ($needsRetry) {
-                $reason = $res['status'] !== 200
-                    ? 'HTTP ' . (int)$res['status']
+                $httpStatus = (int)$res['status'];
+                $reason = $httpStatus !== 200
+                    ? 'HTTP ' . $httpStatus
                     : 'Selection batch returned no used_entry_keys.';
                 $payload = $jobs[$jobId] ?? null;
                 $retryKeys = is_array($payload)
@@ -136,14 +138,16 @@ final class TournamentSelectionEngine
                     $keys = $retryKeys;
                 } else {
                     $this->noteBatchOutcome($batchNumber, $reason, false);
+                    if ($httpStatus === 429) {
+                        $this->lastBatchRecoveryMeta['selection_batch_rate_limited'] = true;
+                    }
                 }
             }
 
             foreach ($keys as $k) {
-                $norm = strtolower(trim($k));
-                if ($norm !== '' && !isset($seen[$norm])) {
-                    $seen[$norm] = true;
-                    $mergedKeys[] = $norm;
+                if ($k !== '' && !isset($seen[$k])) {
+                    $seen[$k] = true;
+                    $mergedKeys[] = $k;
                 }
             }
         }
@@ -195,6 +199,7 @@ final class TournamentSelectionEngine
         array $researcherMeta,
         string $userSystemPrompt,
         int $itemCount,
+        int $batchCount,
         int $configuredMaxTokens,
         string $model,
         SelectionPipelineContext $pipelineContext,
@@ -208,7 +213,7 @@ final class TournamentSelectionEngine
             true,
             MarkdownResearcherFormatter::FORMAT_XML,
         );
-        $survivorsCount = max(1, min(3, count($batch)));
+        $survivorsCount = $this->survivorsPerBatch($itemCount, $batchCount, count($batch));
 
         $envelope = SeismogrammContracts::expandSelectionEnvelope(
             SeismogrammContracts::SELECTION_BATCH_OUTPUT_CONTRACT,
@@ -305,9 +310,19 @@ final class TournamentSelectionEngine
                 'TournamentSelectionEngine: batch ' . $batchNumber
                 . ' retry failed: ' . $e->getMessage(),
             );
+            if ($e instanceof \Seismo\Service\GeminiResearcherException && $e->isRateLimitExceeded()) {
+                $this->lastBatchRecoveryMeta['selection_batch_rate_limited'] = true;
+            }
 
             return [];
         }
+    }
+
+    private function survivorsPerBatch(int $itemCount, int $batchCount, int $batchSize): int
+    {
+        $target = (int)ceil($itemCount / max(1, $batchCount)) + 1;
+
+        return max(1, min($batchSize, max(3, $target)));
     }
 
     private function noteBatchOutcome(int $batchNumber, string $reason, bool $recovered): void
@@ -334,7 +349,9 @@ final class TournamentSelectionEngine
     {
         $errors = $this->lastBatchRecoveryMeta['selection_batch_errors'] ?? [];
         if (!is_array($errors) || $errors === []) {
-            $this->lastBatchRecoveryMeta = [];
+            if (empty($this->lastBatchRecoveryMeta['selection_batch_rate_limited'])) {
+                $this->lastBatchRecoveryMeta = [];
+            }
 
             return;
         }

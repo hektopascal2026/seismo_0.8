@@ -26,8 +26,7 @@ SeismogrammController
  └── SeismogrammOrchestrator
       ├── ResilientGeminiClient (cURL parallel calls, retries, schemas)
       ├── StandardSelectionEngine
-      ├── TournamentSelectionEngine
-      ├── RelationalSelectionEngine
+      ├── TournamentSelectionEngine (relational mode = negative-space flag)
       └── SummaryBriefingEngine
 ```
 
@@ -74,4 +73,4 @@ Planned work stays preset-native — no port of legacy `GeminiResearcherGenerati
 
 - `GeminiResearcherGenerationMeta::normalize()` — legacy schema (`selection_profile`, `pro_selection_mode`, inferred `selection_strategy`); contradicts preset-first Seismogramm.
 - Automatic orchestrator 429 shrink (legacy re-gathers at 50 entries without user consent).
-- Global fingerprint wiring — **already implemented** in `SeismogrammOrchestrator`.
+- Global fingerprint wiring — **Blindspot only** (media/feeds/scraper title index) in `SeismogrammOrchestrator`.

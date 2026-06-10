@@ -11,7 +11,7 @@ final class SeismogrammPresetProfileTest extends TestCase
     {
         self::assertSame(
             'relational',
-            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BLINDSPOT, 50, 'standard', false),
+            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BLINDSPOT, 50),
         );
     }
 
@@ -19,7 +19,7 @@ final class SeismogrammPresetProfileTest extends TestCase
     {
         self::assertSame(
             'tournament',
-            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::RESEARCH, 10, 'standard', false),
+            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::RESEARCH, 10),
         );
     }
 
@@ -27,11 +27,24 @@ final class SeismogrammPresetProfileTest extends TestCase
     {
         self::assertSame(
             'tournament',
-            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BRIEFING, 120, 'standard', false),
+            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BRIEFING, 120),
         );
         self::assertSame(
             'standard',
-            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BRIEFING, 40, 'standard', false),
+            SeismogrammPresetProfile::resolveSelectionMode(SeismogrammPresetProfile::BRIEFING, 40),
+        );
+    }
+
+    public function testGlobalFingerprintIsBlindspotOnly(): void
+    {
+        self::assertTrue(
+            SeismogrammPresetProfile::usesGlobalFingerprint(SeismogrammPresetProfile::BLINDSPOT, 'relational'),
+        );
+        self::assertFalse(
+            SeismogrammPresetProfile::usesGlobalFingerprint(SeismogrammPresetProfile::BRIEFING, 'tournament'),
+        );
+        self::assertFalse(
+            SeismogrammPresetProfile::usesGlobalFingerprint(SeismogrammPresetProfile::RESEARCH, 'tournament'),
         );
     }
 

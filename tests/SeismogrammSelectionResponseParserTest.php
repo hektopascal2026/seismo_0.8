@@ -33,4 +33,17 @@ final class SeismogrammSelectionResponseParserTest extends TestCase
 
         self::assertSame(['feed_item:42'], $keys);
     }
+
+    public function testRejectsPhantomKeysFromJson(): void
+    {
+        $parser = new SelectionResponseParser();
+        $entries = [
+            ['entry_type' => 'feed_item', 'entry_id' => '42'],
+        ];
+
+        $raw = '{"used_entry_keys":["feed_item:42","feed_item:999"]}';
+        $keys = $parser->parseSelectionResponse($raw, $entries, 5);
+
+        self::assertSame(['feed_item:42'], $keys);
+    }
 }

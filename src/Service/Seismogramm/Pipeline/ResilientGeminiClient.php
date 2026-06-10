@@ -313,11 +313,22 @@ final class ResilientGeminiClient
             $err = curl_error($ch);
             curl_close($ch);
 
-            // Retry on HTTP 429 (Too Many Requests) or HTTP 503 (Service Unavailable)
-            if (($status === 429 || $status === 503) && $attempts < $maxAttempts) {
-                $sleep = $status === 429 ? 12 : 3;
-                error_log(sprintf('ResilientGeminiClient: received HTTP %d. Sleep %ds and retry (Attempt %d/%d)', $status, $sleep, $attempts, $maxAttempts));
-                sleep($sleep);
+            if ($status === 429 && $attempts < 2) {
+                error_log(sprintf(
+                    'ResilientGeminiClient: received HTTP 429. Sleep 2s and retry once (Attempt %d/2)',
+                    $attempts,
+                ));
+                sleep(2);
+                continue;
+            }
+
+            if ($status === 503 && $attempts < $maxAttempts) {
+                error_log(sprintf(
+                    'ResilientGeminiClient: received HTTP 503. Sleep 3s and retry (Attempt %d/%d)',
+                    $attempts,
+                    $maxAttempts,
+                ));
+                sleep(3);
                 continue;
             }
 

@@ -25,4 +25,24 @@ final class SeismogrammRequestContextCapTest extends TestCase
         self::assertSame(50, $applied['effective_cap']);
         self::assertSame(50, $applied['filters']['maxContextEntries']);
     }
+
+    public function testApplyContextCapHonorsPostedRetryCap(): void
+    {
+        $ctx = new SeismogrammRequestContext();
+        $filters = ['preset' => 'Briefing', 'customAdvanced' => false, 'gatherDefaults' => []];
+        $applied = $ctx->applyContextCapForRequest($filters, 100, null, true, 25);
+
+        self::assertSame(100, $applied['original_cap']);
+        self::assertSame(25, $applied['effective_cap']);
+        self::assertSame(25, $applied['filters']['maxContextEntries']);
+    }
+
+    public function testApplyContextCapIgnoresInvalidPostedRetryCap(): void
+    {
+        $ctx = new SeismogrammRequestContext();
+        $filters = ['preset' => 'Briefing', 'customAdvanced' => false, 'gatherDefaults' => []];
+        $applied = $ctx->applyContextCapForRequest($filters, 100, null, true, 100);
+
+        self::assertSame(50, $applied['effective_cap']);
+    }
 }

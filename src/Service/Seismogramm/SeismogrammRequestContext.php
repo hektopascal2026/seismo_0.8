@@ -18,6 +18,9 @@ use Seismo\Core\MagnituScoreBands;
 
 final class SeismogrammRequestContext
 {
+    public const CONFIG_KEY_MAX_CONTEXT = 'seismogramm:max_context_entries';
+    public const LEGACY_CONFIG_KEY_MAX_CONTEXT = 'researcher:max_context_entries';
+
     private const DEFAULT_LIMIT = 200;
     private const ALLOWED_ITEM_COUNTS = [5, 7, 10, 12, 15];
     private const DEFAULT_ITEM_COUNT = 5;
@@ -125,17 +128,37 @@ final class SeismogrammRequestContext
     /**
      * @return array{filters: array<string, mixed>, original_cap: int, effective_cap: int, rate_limit_user_retry: bool}
      */
+    public function readMaxContextEntries(SystemConfigRepository $configRepo): int
+    {
+        $value = $configRepo->get(self::CONFIG_KEY_MAX_CONTEXT);
+        if ($value !== null && $value !== '') {
+            return (int)$value;
+        }
+
+        $legacy = (int)($configRepo->get(self::LEGACY_CONFIG_KEY_MAX_CONTEXT) ?? '100');
+        $configRepo->set(self::CONFIG_KEY_MAX_CONTEXT, (string)$legacy);
+
+        return $legacy;
+    }
+
     public function applyContextCapForRequest(
         array $filters,
         int $configuredMax,
         mixed $postedMax,
         bool $rateLimitUserRetry,
+        ?int $postedRetryCap = null,
     ): array {
         $originalCap = $this->resolveMaxContextEntriesForRequest($filters, $postedMax, $configuredMax);
         $effectiveCap = $originalCap;
 
         if ($rateLimitUserRetry) {
-            $effectiveCap = $this->halveContextCap($originalCap);
+            if ($postedRetryCap !== null
+                && $postedRetryCap >= ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES
+                && $postedRetryCap < $originalCap) {
+                $effectiveCap = $postedRetryCap;
+            } else {
+                $effectiveCap = $this->halveContextCap($originalCap);
+            }
         }
 
         $filters['maxContextEntries'] = $effectiveCap;
@@ -165,10 +188,11 @@ final class SeismogrammRequestContext
         if ($raw === null || $raw === '') {
             return;
         }
-        $configured = (new ResearcherGeminiContext(new SystemConfigRepository($pdo)))->maxContextEntries();
+        $configRepo = new SystemConfigRepository($pdo);
+        $configured = $this->readMaxContextEntries($configRepo);
         $v = $this->resolveMaxContextEntriesForRequest($filters, $raw, $configured);
         if ($v >= ResearcherGeminiContext::MIN_MAX_CONTEXT_ENTRIES && $v <= ResearcherGeminiContext::MAX_MAX_CONTEXT_ENTRIES) {
-            (new SystemConfigRepository($pdo))->set('researcher:max_context_entries', (string)$v);
+            $configRepo->set(self::CONFIG_KEY_MAX_CONTEXT, (string)$v);
         }
     }
 

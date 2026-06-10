@@ -60,7 +60,7 @@ final class SeismogrammController
             $pdo = getDbConnection();
             $configRepo = new SystemConfigRepository($pdo);
             $alertThreshold = $configRepo->getAlertThreshold();
-            $maxContextEntries = (int)($configRepo->get('researcher:max_context_entries') ?? '100');
+            $maxContextEntries = (new SeismogrammRequestContext())->readMaxContextEntries($configRepo);
         } catch (\Throwable $e) {
             error_log('Seismo SeismogrammController show config error: ' . $e->getMessage());
         }
@@ -94,13 +94,23 @@ final class SeismogrammController
             $filters = $requestContext->parseFiltersFromPost($_POST, $pdo);
             $capContext = $this->resolveCapContext($pdo, $requestContext, $filters, $_POST);
             $filters = $capContext['filters'];
-            $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $gathered = $requestContext->gatherContext($pdo, $filters, false);
+            $selectionPool = SeismogrammPresetProfile::filterSelectionPool(
+                (string)$filters['preset'],
+                $gathered['entries'],
+            );
+            if ($filters['preset'] === SeismogrammPresetProfile::BLINDSPOT && $selectionPool === []) {
+                throw GeminiResearcherException::badResponse(
+                    'Blindspot requires Lex or Leg entries in the gathered pool. Enable Lex and Leg sources and widen the lookback window.',
+                );
+            }
+
             $meta = array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
                 [
                     'preset' => $filters['preset'],
+                    'selection_pool_count' => count($selectionPool),
                     'markdown_chars' => $gathered['markdownChars'],
                     'context_warning' => $gathered['contextWarning'] ?? null,
                 ]
@@ -134,7 +144,7 @@ final class SeismogrammController
             return;
         }
 
-        $presetForError = SeismogrammPresetProfile::BRIEFING;
+        $preset = SeismogrammPresetProfile::BRIEFING;
         $capContext = [
             'filters'               => [],
             'original_cap'          => 0,
@@ -160,24 +170,23 @@ final class SeismogrammController
             $requestContext->persistMaxContextEntries($pdo, $_POST['max_context_entries'] ?? null, $filters);
 
             $preset = $filters['preset'];
-            $presetForError = $preset;
             $customAdvanced = (bool)($filters['customAdvanced'] ?? false);
             $moduleSelection = $filters['selection'];
 
             $itemCount = $requestContext->parseItemCount($_POST['item_count'] ?? null);
-            $systemPrompt = trim((string)($_POST['system_prompt'] ?? ''));
+            $systemPrompt = $this->resolveSystemPrompt($config, $preset, $customAdvanced, $_POST);
             $researchQuery = trim((string)($_POST['research_query'] ?? ''));
             $briefingPersona = trim((string)($_POST['briefing_persona'] ?? ''));
 
-            // Inject the research query into the prompt if present
             if ($researchQuery !== '') {
                 $systemPrompt = str_replace('{researchQuery}', $researchQuery, $systemPrompt);
             }
 
-            // Inject the briefing persona into the prompt if present
             if ($briefingPersona !== '') {
                 $systemPrompt = str_replace('{briefingPersona}', $briefingPersona, $systemPrompt);
             }
+
+            $this->validateResolvedPrompt($preset, $systemPrompt);
 
             $model = $config->get('gemini:model') ?? 'gemini-3.5-flash';
             $maxOutputTokens = (int)($config->get('gemini:max_output_tokens') ?? '65536');
@@ -194,7 +203,6 @@ final class SeismogrammController
                 return;
             }
 
-            $selectionMode = trim((string)($_POST['selection_mode'] ?? 'standard'));
             $formatterMeta = $gathered['formatterMeta'] ?? [];
             $useContextCache = (bool)($filters['useContextCache'] ?? false);
 
@@ -210,14 +218,12 @@ final class SeismogrammController
                 $scoresByKey,
                 $formatterMeta,
                 $preset,
-                $selectionMode,
-                $customAdvanced,
                 $useContextCache,
                 $moduleSelection instanceof ResearcherSourceSelection ? $moduleSelection : null,
             );
 
             $pipelineMeta = $orchestrator->lastPipelineMeta();
-            $selectionMode = (string)($pipelineMeta['selection_mode'] ?? $selectionMode);
+            $selectionMode = (string)($pipelineMeta['selection_mode'] ?? 'standard');
 
             // Attributed cards HTML
             $entriesHtml = '';
@@ -259,13 +265,13 @@ final class SeismogrammController
             http_response_code($status);
             $payload = [
                 'ok'    => false,
-                'error' => $this->formatRateLimitErrorMessage($e, $presetForError),
+                'error' => $this->formatRateLimitErrorMessage($e, $preset),
             ];
             if ($e->isRateLimitExceeded()) {
                 $payload = array_merge(
                     $payload,
                     $this->rateLimitFailureExtras(
-                        $presetForError,
+                        $preset,
                         (int)($capContext['effective_cap'] ?? 0),
                         $requestContext,
                     ),
@@ -356,14 +362,57 @@ final class SeismogrammController
         }
 
         $configRepo = new SystemConfigRepository($pdo);
-        $configuredMax = (int)($configRepo->get('researcher:max_context_entries') ?? '100');
+        $configuredMax = $requestContext->readMaxContextEntries($configRepo);
+        $postedRetryCap = isset($post['rate_limit_retry_cap']) && $post['rate_limit_retry_cap'] !== ''
+            ? (int)$post['rate_limit_retry_cap']
+            : null;
 
         return $requestContext->applyContextCapForRequest(
             $filters,
             $configuredMax,
             $post['max_context_entries'] ?? null,
             $retryPosted && SeismogrammPresetProfile::allowsRateLimitUserRetry($preset),
+            $postedRetryCap,
         );
+    }
+
+    private function resolveSystemPrompt(
+        SystemConfigRepository $config,
+        string $preset,
+        bool $customAdvanced,
+        array $post,
+    ): string {
+        if ($customAdvanced) {
+            return trim((string)($post['system_prompt'] ?? ''));
+        }
+
+        $library = $config->getJson(self::CONFIG_KEY_PROMPT_LIBRARY, []);
+        if (is_array($library)) {
+            foreach ($library as $row) {
+                if (($row['name'] ?? '') === $preset) {
+                    return trim((string)($row['content'] ?? ''));
+                }
+            }
+        }
+
+        return match (SeismogrammPresetProfile::normalizePreset($preset)) {
+            SeismogrammPresetProfile::BLINDSPOT => SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT,
+            SeismogrammPresetProfile::RESEARCH => SeismogrammContracts::DEFAULT_RESEARCH_PROMPT,
+            default => SeismogrammContracts::DEFAULT_BRIEFING_PROMPT,
+        };
+    }
+
+    private function validateResolvedPrompt(string $preset, string $systemPrompt): void
+    {
+        if (str_contains($systemPrompt, '{researchQuery}')) {
+            throw new GeminiResearcherException('Research requires a topic query.', 400);
+        }
+
+        $preset = SeismogrammPresetProfile::normalizePreset($preset);
+        if (in_array($preset, [SeismogrammPresetProfile::BRIEFING, SeismogrammPresetProfile::BLINDSPOT], true)
+            && str_contains($systemPrompt, '{briefingPersona}')) {
+            throw new GeminiResearcherException('This preset requires a persona/goal.', 400);
+        }
     }
 
     /**

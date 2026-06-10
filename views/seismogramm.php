@@ -322,7 +322,7 @@ flowchart LR
                             Include secondary news (scores below <?= (int)$alertThresholdPct ?>%)
                         </label>
                         <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
-                            <input type="checkbox" name="disregard_magnitu" value="1">
+                            <input type="checkbox" id="seismogramm_disregard_magnitu" name="disregard_magnitu" value="1">
                             Bypass relevance scoring (expert mode)
                         </label>
                     </div>
@@ -352,9 +352,6 @@ flowchart LR
                         </label>
                     </div>
                 </div>
-
-                <!-- Selection mode hidden input -->
-                <input type="hidden" name="selection_mode" id="seismogramm_selection_mode" value="standard">
 
                 <!-- Context Warning Banner -->
                 <div id="seismogramm-context-warning" class="message message-warning" style="display: none; margin-bottom: 1rem;"></div>
@@ -402,7 +399,6 @@ flowchart LR
         var presetBtns = document.querySelectorAll('.seismogramm-preset-btn');
         var queryField = document.getElementById('seismogramm-query-field');
         var personaField = document.getElementById('seismogramm-persona-field');
-        var selectionModeInput = document.getElementById('seismogramm_selection_mode');
         var customToggle = document.getElementById('seismogramm-custom-toggle');
         var customPanel = document.getElementById('seismogramm-custom-panel');
         var systemPromptTa = document.getElementById('seismogramm_system_prompt');
@@ -434,8 +430,12 @@ flowchart LR
         var presetInput = document.getElementById('seismogramm_preset');
         var customAdvancedInput = document.getElementById('seismogramm_custom_advanced');
         var snippetsCb = document.getElementById('seismogramm_use_recipe_snippets');
+        var disregardMagnituCb = document.getElementById('seismogramm_disregard_magnitu');
         var poolPriorityHighest = document.getElementById('seismogramm_pool_priority_highest');
         var poolPriorityNewest = document.getElementById('seismogramm_pool_priority_newest');
+        var queryInput = document.getElementById('seismogramm_query');
+        var personaInput = document.getElementById('seismogramm_persona');
+        var pendingRetryCap = null;
         var helperIntentTa = document.getElementById('seismogramm_helper_intent');
         var helperGenerateBtn = document.getElementById('seismogramm-helper-generate-btn');
         var helperMsg = document.getElementById('seismogramm-helper-msg');
@@ -585,7 +585,6 @@ flowchart LR
             if (presetName === 'Research') {
                 queryField.style.display = 'block';
                 personaField.style.display = 'none';
-                selectionModeInput.value = 'tournament';
                 if (maxContextSlider) {
                     maxContextSlider.value = String(RESEARCH_MAX_CONTEXT);
                     if (maxContextVal) maxContextVal.textContent = String(RESEARCH_MAX_CONTEXT);
@@ -593,11 +592,9 @@ flowchart LR
             } else if (presetName === 'Blindspot') {
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
-                selectionModeInput.value = 'relational';
             } else {
                 queryField.style.display = 'none';
                 personaField.style.display = 'block';
-                selectionModeInput.value = 'standard';
             }
 
             var promptData = presets.find(function(p) { return p.name === presetName; });
@@ -618,15 +615,16 @@ flowchart LR
                 }
             });
 
-            if (!customToggle.checked && snippetsCb) {
+            if (snippetsCb) {
                 snippetsCb.checked = (presetName === 'Research');
             }
-            if (!customToggle.checked) {
-                if (presetName === 'Research' && poolPriorityNewest) {
-                    poolPriorityNewest.checked = true;
-                } else if (poolPriorityHighest) {
-                    poolPriorityHighest.checked = true;
-                }
+            if (disregardMagnituCb) {
+                disregardMagnituCb.checked = (presetName === 'Research');
+            }
+            if (presetName === 'Research' && poolPriorityNewest) {
+                poolPriorityNewest.checked = true;
+            } else if (poolPriorityHighest) {
+                poolPriorityHighest.checked = true;
             }
         }
 
@@ -806,6 +804,7 @@ flowchart LR
         }
 
         function hideRateLimitRetry() {
+            pendingRetryCap = null;
             if (rateLimitRetryEl) {
                 rateLimitRetryEl.style.display = 'none';
             }
@@ -817,16 +816,39 @@ flowchart LR
         function showRateLimitRetry(payload) {
             hideRateLimitRetry();
             if (!payload || !payload.rate_limit_retry_available || !rateLimitRetryEl || !rateLimitRetryBtn) {
-                return;
+                return false;
             }
             if (rateLimitRetryMsg) {
                 rateLimitRetryMsg.textContent = payload.error || 'Gemini rate limit exceeded.';
             }
             var cap = payload.rate_limit_retry_cap;
+            pendingRetryCap = cap || null;
             rateLimitRetryBtn.textContent = cap
                 ? 'Retry with smaller pool (cap ' + cap + ' items)'
                 : 'Retry with smaller pool';
             rateLimitRetryEl.style.display = 'block';
+            return true;
+        }
+
+        function validateBeforeGenerate() {
+            var presetName = presetInput ? presetInput.value : 'Briefing';
+            if (presetName === 'Research') {
+                var query = queryInput ? queryInput.value.trim() : '';
+                if (!query) {
+                    errEl.textContent = 'Research requires a topic query.';
+                    errEl.style.display = 'block';
+                    return false;
+                }
+            }
+            if (presetName === 'Briefing' || presetName === 'Blindspot') {
+                var persona = personaInput ? personaInput.value.trim() : '';
+                if (!persona) {
+                    errEl.textContent = 'This preset requires a persona/goal.';
+                    errEl.style.display = 'block';
+                    return false;
+                }
+            }
+            return true;
         }
 
         function renderGenerateSuccess(data) {
@@ -897,6 +919,10 @@ flowchart LR
         }
 
         function runGenerate(withRateLimitRetry) {
+            if (!withRateLimitRetry && !validateBeforeGenerate()) {
+                return;
+            }
+
             var formData = new FormData(form);
             if (presetInput) {
                 formData.set('preset', presetInput.value);
@@ -905,6 +931,9 @@ flowchart LR
                 formData.set('custom_advanced', customAdvancedInput.value);
             }
             formData.set('rate_limit_user_retry', withRateLimitRetry ? '1' : '0');
+            if (withRateLimitRetry && pendingRetryCap) {
+                formData.set('rate_limit_retry_cap', String(pendingRetryCap));
+            }
             var csrfInput = document.querySelector('input[name="_csrf"]');
             if (csrfInput) {
                 formData.set('_csrf', csrfInput.value);
@@ -974,9 +1003,13 @@ flowchart LR
                 if (placeholder) {
                     out.appendChild(placeholder);
                 }
-                errEl.textContent = err.message;
-                errEl.style.display = 'block';
-                showRateLimitRetry(err.seismogrammResponse);
+                var retryShown = showRateLimitRetry(err.seismogrammResponse);
+                if (!retryShown) {
+                    errEl.textContent = err.message;
+                    errEl.style.display = 'block';
+                } else {
+                    errEl.style.display = 'none';
+                }
             });
         }
 

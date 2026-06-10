@@ -31,22 +31,14 @@ final class SeismogrammPresetProfile
         return self::BRIEFING;
     }
 
-    public static function resolveSelectionMode(
-        string $preset,
-        int $poolCount,
-        string $postedMode,
-        bool $customAdvanced,
-    ): string {
+    public static function resolveSelectionMode(string $preset, int $poolCount): string
+    {
         if ($preset === self::BLINDSPOT) {
             return 'relational';
         }
 
         if ($preset === self::RESEARCH) {
             return 'tournament';
-        }
-
-        if ($customAdvanced && in_array($postedMode, ['standard', 'tournament', 'relational'], true)) {
-            return $postedMode;
         }
 
         if ($poolCount > self::TOURNAMENT_POOL_THRESHOLD) {
@@ -58,9 +50,7 @@ final class SeismogrammPresetProfile
 
     public static function usesGlobalFingerprint(string $preset, string $selectionMode): bool
     {
-        return $preset === self::BLINDSPOT
-            || $selectionMode === 'tournament'
-            || $selectionMode === 'relational';
+        return $preset === self::BLINDSPOT;
     }
 
     public static function usesNegativeSpaceProtocol(string $selectionMode): bool

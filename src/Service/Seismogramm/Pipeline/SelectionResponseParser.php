@@ -24,34 +24,25 @@ final class SelectionResponseParser
             return [];
         }
 
-        // 1. Try lenient JSON parsing first
+        $valid = $this->validKeysForEntries($entries);
+
         $parsed = LenientJsonParser::parseObject($rawText);
         if (is_array($parsed) && isset($parsed['used_entry_keys']) && is_array($parsed['used_entry_keys'])) {
-            $keys = [];
-            foreach ($parsed['used_entry_keys'] as $k) {
-                $kStr = strtolower(trim((string)$k));
-                if ($kStr !== '') {
-                    $keys[] = $kStr;
-                }
-            }
+            $keys = $this->filterValidKeys($parsed['used_entry_keys'], $valid, $maxKeys);
             if ($keys !== []) {
-                return array_slice($keys, 0, $maxKeys);
+                return $keys;
             }
         }
 
-        // 2. Fall back to regex inference (inferUsedEntryKeysFromResearcher pattern)
-        return $this->inferUsedEntryKeys($rawText, $entries, $maxKeys);
+        return $this->inferUsedEntryKeys($rawText, $valid, $maxKeys);
     }
 
     /**
-     * Parse type:id mentions from raw text (fallback when JSON parsing fails).
+     * @param list<array<string, mixed>> $entries
+     * @return array<string, true>
      */
-    private function inferUsedEntryKeys(string $text, array $entries, int $maxKeys): array
+    private function validKeysForEntries(array $entries): array
     {
-        if ($text === '' || $entries === [] || $maxKeys < 1) {
-            return [];
-        }
-
         $valid = [];
         foreach ($entries as $e) {
             $type = (string)($e['entry_type'] ?? '');
@@ -61,7 +52,44 @@ final class SelectionResponseParser
             }
         }
 
-        if ($valid === []) {
+        return $valid;
+    }
+
+    /**
+     * @param list<mixed> $rawKeys
+     * @param array<string, true> $valid
+     * @return list<string>
+     */
+    private function filterValidKeys(array $rawKeys, array $valid, int $maxKeys): array
+    {
+        if ($valid === [] || $maxKeys < 1) {
+            return [];
+        }
+
+        $found = [];
+        foreach ($rawKeys as $k) {
+            $key = strtolower(trim((string)$k));
+            if ($key === '' || !isset($valid[$key])) {
+                continue;
+            }
+            if (!in_array($key, $found, true)) {
+                $found[] = $key;
+            }
+            if (count($found) >= $maxKeys) {
+                break;
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * @param array<string, true> $valid
+     * @return list<string>
+     */
+    private function inferUsedEntryKeys(string $text, array $valid, int $maxKeys): array
+    {
+        if ($text === '' || $valid === [] || $maxKeys < 1) {
             return [];
         }
 

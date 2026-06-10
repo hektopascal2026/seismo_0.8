@@ -10,7 +10,6 @@ use Seismo\Service\GeminiResearcherResult;
 use Seismo\Service\ResearcherEntryGatherer;
 use Seismo\Service\ResearcherGlobalFingerprint;
 use Seismo\Service\ResearcherSourceSelection;
-use Seismo\Service\Seismogramm\Pipeline\Engine\RelationalSelectionEngine;
 use Seismo\Service\Seismogramm\Pipeline\Engine\StandardSelectionEngine;
 use Seismo\Service\Seismogramm\Pipeline\Engine\TournamentSelectionEngine;
 use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
@@ -24,7 +23,6 @@ final class SeismogrammOrchestrator
     private readonly SelectionResponseParser $parser;
     private readonly StandardSelectionEngine $selectionEngine;
     private readonly TournamentSelectionEngine $tournamentEngine;
-    private readonly RelationalSelectionEngine $relationalEngine;
     private readonly SummaryBriefingEngine $summaryEngine;
 
     /** @var array<string, mixed> */
@@ -36,7 +34,6 @@ final class SeismogrammOrchestrator
         $this->parser = new SelectionResponseParser();
         $this->selectionEngine = new StandardSelectionEngine($this->client, $this->parser);
         $this->tournamentEngine = new TournamentSelectionEngine($this->client, $this->parser, $this->selectionEngine);
-        $this->relationalEngine = new RelationalSelectionEngine($this->tournamentEngine);
         $this->summaryEngine = new SummaryBriefingEngine($this->client);
     }
 
@@ -56,19 +53,12 @@ final class SeismogrammOrchestrator
         array $scoresByKey,
         array $formatterMeta,
         string $preset,
-        string $postedSelectionMode,
-        bool $customAdvanced,
         bool $useContextCache = false,
         ?ResearcherSourceSelection $moduleSelection = null,
     ): GeminiResearcherResult {
         $preset = SeismogrammPresetProfile::normalizePreset($preset);
         $poolCount = count($entries);
-        $selectionMode = SeismogrammPresetProfile::resolveSelectionMode(
-            $preset,
-            $poolCount,
-            $postedSelectionMode,
-            $customAdvanced,
-        );
+        $selectionMode = SeismogrammPresetProfile::resolveSelectionMode($preset, $poolCount);
 
         $selectionPool = SeismogrammPresetProfile::filterSelectionPool($preset, $entries);
 
@@ -81,7 +71,7 @@ final class SeismogrammOrchestrator
         $globalFingerprintXml = '';
         if (SeismogrammPresetProfile::usesGlobalFingerprint($preset, $selectionMode)) {
             $globalFingerprintXml = ResearcherGlobalFingerprint::buildXml(
-                $entries,
+                $this->filterFingerprintEntries($entries, $moduleSelection),
                 new ResearcherEntryGatherer(),
                 $moduleSelection,
             );
@@ -102,7 +92,7 @@ final class SeismogrammOrchestrator
         ];
 
         if ($selectionMode === 'relational') {
-            $selectedKeys = $this->relationalEngine->select(
+            $selectedKeys = $this->tournamentEngine->select(
                 $model,
                 $apiKey,
                 $userSystemPrompt,
@@ -151,24 +141,29 @@ final class SeismogrammOrchestrator
         }
 
         if ($selectedKeys === []) {
+            $recoveryMeta = $this->tournamentEngine->lastBatchRecoveryMeta();
+            if (!empty($recoveryMeta['selection_batch_rate_limited'])) {
+                throw GeminiResearcherException::fromHttpStatus(429);
+            }
+
             throw GeminiResearcherException::badResponse(
                 'Pass 1 selection returned no entry keys. Try a smaller pool, a different preset, or adjust your prompt.',
             );
         }
 
-        $selectedKeys = array_values(array_unique(array_map(
-            static fn(string $key): string => strtolower(trim($key)),
-            $selectedKeys,
-        )));
-
-        $summaryContext = $this->buildSummaryContextForKeys($entries, $scoresByKey, $formatterMeta, $selectedKeys);
+        $summaryBuild = $this->buildSummaryContextForKeys($entries, $scoresByKey, $formatterMeta, $selectedKeys);
+        $matchedKeys = $summaryBuild['matchedKeys'];
+        $dropped = count($selectedKeys) - count($matchedKeys);
+        if ($dropped > 0) {
+            $this->lastPipelineMeta['selection_keys_dropped'] = $dropped;
+        }
 
         $markdown = $this->summaryEngine->compileBriefing(
             $model,
             $apiKey,
             $userSystemPrompt,
-            $summaryContext,
-            $selectedKeys,
+            $summaryBuild['xml'],
+            $matchedKeys,
             $itemCount,
             $maxOutputTokens,
         );
@@ -177,8 +172,8 @@ final class SeismogrammOrchestrator
 
         return new GeminiResearcherResult(
             $markdown,
-            $selectedKeys,
-            count($selectedKeys) > 0,
+            $matchedKeys,
+            count($matchedKeys) > 0,
             $usage,
         );
     }
@@ -194,19 +189,22 @@ final class SeismogrammOrchestrator
      * @param array<string, array<string, mixed>> $scoresByKey
      * @param array<string, mixed> $formatterMeta
      * @param list<string> $selectedKeys
+     * @return array{xml: string, matchedKeys: list<string>}
      */
     private function buildSummaryContextForKeys(
         array $entries,
         array $scoresByKey,
         array $formatterMeta,
         array $selectedKeys,
-    ): string {
+    ): array {
         $subset = [];
+        $matchedKeys = [];
         $selectedKeysSet = array_flip($selectedKeys);
         foreach ($entries as $e) {
             $key = strtolower((string)($e['entry_type'] ?? '') . ':' . (string)($e['entry_id'] ?? ''));
             if (isset($selectedKeysSet[$key])) {
                 $subset[] = $e;
+                $matchedKeys[] = $key;
             }
         }
 
@@ -219,14 +217,52 @@ final class SeismogrammOrchestrator
         $meta = $formatterMeta;
         $meta['entry_body_max_chars'] = MarkdownResearcherFormatter::dynamicEntryBodyMaxChars(count($subset));
         $meta['total'] = count($subset);
-        $meta['selected'] = count($selectedKeys);
+        $meta['selected'] = count($matchedKeys);
 
-        return MarkdownResearcherFormatter::format(
-            $subset,
-            $scoresByKey,
-            $meta,
+        return [
+            'xml' => MarkdownResearcherFormatter::format(
+                $subset,
+                $scoresByKey,
+                $meta,
+                true,
+                MarkdownResearcherFormatter::FORMAT_XML,
+            ),
+            'matchedKeys' => $matchedKeys,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @return list<array<string, mixed>>
+     */
+    private function filterFingerprintEntries(
+        array $entries,
+        ?ResearcherSourceSelection $moduleSelection,
+    ): array {
+        if ($entries === []) {
+            return [];
+        }
+
+        $gatherer = new ResearcherEntryGatherer();
+        $selection = $moduleSelection ?? ResearcherSourceSelection::forModules(
             true,
-            MarkdownResearcherFormatter::FORMAT_XML,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
         );
+
+        return array_values(array_filter(
+            $entries,
+            static function (array $e) use ($gatherer, $selection): bool {
+                $bucket = $gatherer->moduleBucketForEntry($e, $selection);
+
+                return in_array($bucket, ['media', 'feeds', 'scraper'], true);
+            },
+        ));
     }
 }
