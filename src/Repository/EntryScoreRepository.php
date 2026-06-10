@@ -21,7 +21,6 @@ namespace Seismo\Repository;
 use PDO;
 use PDOException;
 use Seismo\Core\Mail\EmailDigestExportPolicy;
-use Seismo\Util\PdoMysqlDiagnostics;
 
 final class EntryScoreRepository
 {

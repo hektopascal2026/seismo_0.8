@@ -3,8 +3,8 @@
  * Recipe rescore cron for all path satellites (mothership CLI only).
  *
  * Reads Settings → Satellites registry (`satellites_registry`) and runs
- * {@see \Seismo\Core\Scoring\ScoringService::rescoreStoredRecipeRounds()} on each
- * desk scores DB. New desks are picked up automatically — no per-slug cron lines.
+ * {@see bin/seismo-satellite-rescore.php} per desk so {@see entryTable()} resolves
+ * entry sources in {@see SEISMO_ENTRIES_DB} while scores live in each desk DB.
  *
  * Suggested VPS entry (every 5 minutes, alongside refresh_cron.php):
  *
@@ -24,7 +24,6 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/bootstrap.php';
 
-use Seismo\Core\Scoring\ScoringService;
 use Seismo\Repository\CronMutexRepository;
 
 if (isSatellite()) {
@@ -74,7 +73,10 @@ if ($registry === []) {
 $log('[seismo] satellite rescore @ ' . gmdate('Y-m-d\TH:i:s\Z') . ' — ' . count($registry) . " desk(s)\n");
 $log('[seismo] log file: ' . $logPath . "\n");
 
-$errors = 0;
+$phpBin     = PHP_BINARY;
+$rescoreBin = SEISMO_ROOT . '/bin/seismo-satellite-rescore.php';
+$errors     = 0;
+
 foreach ($registry as $sat) {
     if (!is_array($sat)) {
         continue;
@@ -88,62 +90,27 @@ foreach ($registry as $sat) {
         continue;
     }
 
-    $scoresDb = trim((string)($sat['db_name'] ?? ''));
-    if ($scoresDb === '') {
-        $scoresDb = 'seismo_' . $slug;
+    $cmd = escapeshellarg($phpBin) . ' ' . escapeshellarg($rescoreBin) . ' ' . escapeshellarg($slug);
+    $output = [];
+    $code   = 0;
+    exec($cmd . ' 2>&1', $output, $code);
+
+    foreach ($output as $line) {
+        $log(rtrim($line, "\r\n") . "\n", $code !== 0 && $code !== 2);
     }
 
-    try {
-        $deskPdo = seismoPdoForScoresCatalog($scoresDb);
-    } catch (\Throwable $e) {
-        $errors++;
-        $log("[seismo] desk {$slug} ({$scoresDb}): connect failed — " . $e->getMessage() . "\n", true);
-        continue;
-    }
-
-    try {
-        $result = ScoringService::rescoreStoredRecipeRounds($deskPdo);
-    } catch (\Throwable $e) {
-        $errors++;
-        $log("[seismo] desk {$slug}: rescore failed — " . $e->getMessage() . "\n", true);
-        continue;
-    }
-
-    try {
-        $scoresOrphans = (new \Seismo\Repository\EntryScoreRepository($deskPdo))->pruneOrphans();
-        $favsOrphans = (new \Seismo\Repository\EntryFavouriteRepository($deskPdo))->pruneOrphans();
-        $labelsOrphans = (new \Seismo\Repository\MagnituLabelRepository($deskPdo))->pruneOrphans();
-        if ($scoresOrphans > 0 || $favsOrphans > 0 || $labelsOrphans > 0) {
-            $log(sprintf(
-                "[seismo] desk %s: pruned orphans (scores: %d, favourites: %d, labels: %d)\n",
-                $slug,
-                $scoresOrphans,
-                $favsOrphans,
-                $labelsOrphans
-            ));
+    if ($code === 2) {
+        $scoresDb = trim((string)($sat['db_name'] ?? ''));
+        if ($scoresDb === '') {
+            $scoresDb = 'seismo_' . $slug;
         }
-    } catch (\Throwable $e) {
-        $log("[seismo] desk {$slug}: pruning orphans failed — " . $e->getMessage() . "\n", true);
-    }
-
-    if ($result === null) {
         $log("[seismo] desk {$slug} ({$scoresDb}): no recipe_json — skipped\n");
         continue;
     }
 
-    $c     = $result['counts'];
-    $total = $c['feed_items'] + $c['lex_items'] + $c['emails'] + $c['calendar_events'];
-    $log(sprintf(
-        "[seismo] desk %s (%s): %d scored in %d pass(es) (feeds %d, lex %d, mail %d, leg %d)\n",
-        $slug,
-        $scoresDb,
-        $total,
-        (int)$result['rounds'],
-        $c['feed_items'],
-        $c['lex_items'],
-        $c['emails'],
-        $c['calendar_events'],
-    ));
+    if ($code !== 0) {
+        $errors++;
+    }
 }
 
 exit($errors > 0 ? 1 : 0);
