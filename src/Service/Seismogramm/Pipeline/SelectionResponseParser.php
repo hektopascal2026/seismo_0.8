@@ -24,24 +24,19 @@ final class SelectionResponseParser
             return [];
         }
 
-        // 1. Try Lenient JSON Parsing first
-        try {
-            $parsed = LenientJsonParser::parse($rawText);
-            if (is_array($parsed) && isset($parsed['used_entry_keys']) && is_array($parsed['used_entry_keys'])) {
-                $keys = [];
-                foreach ($parsed['used_entry_keys'] as $k) {
-                    $kStr = strtolower(trim((string)$k));
-                    if ($kStr !== '') {
-                        $keys[] = $kStr;
-                    }
-                }
-                if ($keys !== []) {
-                    return array_slice($keys, 0, $maxKeys);
+        // 1. Try lenient JSON parsing first
+        $parsed = LenientJsonParser::parseObject($rawText);
+        if (is_array($parsed) && isset($parsed['used_entry_keys']) && is_array($parsed['used_entry_keys'])) {
+            $keys = [];
+            foreach ($parsed['used_entry_keys'] as $k) {
+                $kStr = strtolower(trim((string)$k));
+                if ($kStr !== '') {
+                    $keys[] = $kStr;
                 }
             }
-        } catch (\Throwable $e) {
-            // Log & proceed to regex fallback
-            error_log('SelectionResponseParser: JSON parse failed, falling back to regex: ' . $e->getMessage());
+            if ($keys !== []) {
+                return array_slice($keys, 0, $maxKeys);
+            }
         }
 
         // 2. Fall back to regex inference (inferUsedEntryKeysFromResearcher pattern)
@@ -62,7 +57,7 @@ final class SelectionResponseParser
             $type = (string)($e['entry_type'] ?? '');
             $id   = (string)($e['entry_id'] ?? '');
             if ($type !== '' && $id !== '' && ctype_digit($id)) {
-                $valid[$type . ':' . $id] = true;
+                $valid[strtolower($type . ':' . $id)] = true;
             }
         }
 

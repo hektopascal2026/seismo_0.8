@@ -117,6 +117,15 @@ PROMPT;
 }
 JSON;
 
+    public const RELATIONAL_NEGATIVE_SPACE_PROTOCOL = <<<'PROTOCOL'
+CRITICAL TRIAGE — BLIND SPOT / CROSS-MODULE (use GLOBAL POOL INDEX above):
+1. Build a "media footprint" from all items where module is media, feeds, or scraper (titles only in the fingerprint).
+2. Review primary regulatory sources (module lex or leg).
+3. Exclude legal/calendar rows whose topics clearly appear in the media footprint titles.
+4. Prioritize primary sources with high strategic impact and ZERO topic overlap with the media footprint.
+5. Put these hidden signals first in used_entry_keys when they match the USER PROMPT.
+PROTOCOL;
+
     public const SUMMARY_OUTPUT_CONTRACT = <<<'CONTRACT'
 USER PROMPT DETAILS:
 Today is {temporalContext}.

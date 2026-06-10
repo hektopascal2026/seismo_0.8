@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Seismo\Service\Seismogramm;
 
+use Seismo\Formatter\MarkdownResearcherFormatter;
+use Seismo\Service\GeminiResearcherException;
 use Seismo\Service\GeminiResearcherResult;
 use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
 use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
@@ -82,12 +84,15 @@ final class SeismogrammOrchestrator
         }
 
         if ($selectedKeys === []) {
-            // Re-attempt selection or fallback to top-priority entries by score
-            $selectedKeys = array_map(
-                fn($e) => $e['entry_type'] . ':' . $e['entry_id'],
-                array_slice($entries, 0, min($itemCount, count($entries)))
+            throw GeminiResearcherException::badResponse(
+                'Pass 1 selection returned no entry keys. Try a smaller pool, a different preset, or adjust your prompt.',
             );
         }
+
+        $selectedKeys = array_values(array_unique(array_map(
+            static fn(string $key): string => strtolower(trim($key)),
+            $selectedKeys,
+        )));
 
         // Filter XML context dynamically to only contain the selected entries for Pass 2 summary
         $summaryContext = $this->buildSummaryContextForKeys($entries, $scoresByKey, $researcherMeta, $selectedKeys);
@@ -129,22 +134,28 @@ final class SeismogrammOrchestrator
         $subset = [];
         $selectedKeysSet = array_flip($selectedKeys);
         foreach ($entries as $e) {
-            $key = $e['entry_type'] . ':' . $e['entry_id'];
+            $key = strtolower((string)($e['entry_type'] ?? '') . ':' . (string)($e['entry_id'] ?? ''));
             if (isset($selectedKeysSet[$key])) {
                 $subset[] = $e;
             }
         }
 
         if ($subset === []) {
-            $subset = array_slice($entries, 0, count($selectedKeys));
+            throw GeminiResearcherException::badResponse(
+                'Selected entry keys could not be matched to the gathered pool.',
+            );
         }
 
         $meta = $researcherMeta;
         $meta['total'] = count($subset);
         $meta['selected'] = count($selectedKeys);
 
-        // Render subset to XML
-        $formatter = new \Seismo\Formatter\MarkdownResearcherFormatter();
-        return $formatter->format($subset, $scoresByKey, $meta, true);
+        return MarkdownResearcherFormatter::format(
+            $subset,
+            $scoresByKey,
+            $meta,
+            true,
+            MarkdownResearcherFormatter::FORMAT_XML,
+        );
     }
 }

@@ -6,6 +6,7 @@ namespace Seismo\Controller;
 
 use PDO;
 use Seismo\Repository\SystemConfigRepository;
+use Seismo\Service\GeminiResearcherException;
 use Seismo\Service\Seismogramm\SeismogrammRequestContext;
 use Seismo\Service\Seismogramm\SeismogrammOrchestrator;
 use Seismo\Service\Seismogramm\SeismogrammContracts;
@@ -225,6 +226,9 @@ final class SeismogrammController
                 'entries_html' => $entriesHtml,
                 'cost_estimate' => $costEstimate,
             ], JSON_UNESCAPED_UNICODE);
+        } catch (GeminiResearcherException $e) {
+            http_response_code($e->httpStatus ?? 400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             error_log('SeismogrammController generate error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             http_response_code(500);

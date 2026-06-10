@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Seismo\Service\Seismogramm\Pipeline\Engine;
 
+use Seismo\Formatter\MarkdownResearcherFormatter;
 use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
 use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
 use Seismo\Service\Seismogramm\Pipeline\TokenBudgeteer;
@@ -42,16 +43,28 @@ final class TournamentSelectionEngine
 
         if ($batchCount === 1) {
             // Fall back to standard selection if it fits in one batch
-            $formatter = new \Seismo\Formatter\MarkdownResearcherFormatter();
-            $xmlContext = $formatter->format($poolEntries, $scoresByKey, $researcherMeta, true);
+            $formatter = new MarkdownResearcherFormatter();
+            $xmlContext = $formatter->format(
+                $poolEntries,
+                $scoresByKey,
+                $researcherMeta,
+                true,
+                MarkdownResearcherFormatter::FORMAT_XML,
+            );
             return $this->standardEngine->select($model, $apiKey, $userSystemPrompt, $xmlContext, $itemCount, $configuredMaxTokens, $poolEntries);
         }
 
         $jobs = [];
-        $formatter = new \Seismo\Formatter\MarkdownResearcherFormatter();
+        $formatter = new MarkdownResearcherFormatter();
 
         foreach ($batches as $index => $batch) {
-            $xmlContext = $formatter->format($batch, $scoresByKey, $researcherMeta, true);
+            $xmlContext = $formatter->format(
+                $batch,
+                $scoresByKey,
+                $researcherMeta,
+                true,
+                MarkdownResearcherFormatter::FORMAT_XML,
+            );
             $survivorsCount = max(1, min(3, count($batch))); // Cap survivors per batch
 
             $directive = str_replace(
@@ -73,7 +86,7 @@ final class TournamentSelectionEngine
                         ['text' => $userSystemPrompt . "\n\n" . $directive]
                     ]
                 ],
-                'generationConfig' => [
+                'generationConfig' => TokenBudgeteer::applyGemini35Thinking([
                     'responseMimeType' => 'application/json',
                     'responseSchema' => [
                         'type' => 'object',
@@ -86,8 +99,7 @@ final class TournamentSelectionEngine
                         'required' => ['used_entry_keys']
                     ],
                     'maxOutputTokens' => TokenBudgeteer::resolveTournamentBatchSelectionTokenBudget($survivorsCount, $configuredMaxTokens, $model),
-                    'temperature' => 0.0,
-                ]
+                ], 'selection', $model),
             ];
 
             $jobs['batch_' . $index] = $payload;
@@ -115,7 +127,7 @@ final class TournamentSelectionEngine
                 $norm = strtolower(trim($k));
                 if ($norm !== '' && !isset($seen[$norm])) {
                     $seen[$norm] = true;
-                    $mergedKeys[] = $k;
+                    $mergedKeys[] = $norm;
                 }
             }
         }
@@ -126,15 +138,24 @@ final class TournamentSelectionEngine
 
         // Championship pass over the merged finalist survivors
         $finalistEntries = [];
-        $mergedKeysSet = array_flip($mergedKeys);
+        $mergedKeysSet = array_flip(array_map(
+            static fn(string $key): string => strtolower(trim($key)),
+            $mergedKeys,
+        ));
         foreach ($poolEntries as $e) {
-            $key = $e['entry_type'] . ':' . $e['entry_id'];
+            $key = strtolower((string)($e['entry_type'] ?? '') . ':' . (string)($e['entry_id'] ?? ''));
             if (isset($mergedKeysSet[$key])) {
                 $finalistEntries[] = $e;
             }
         }
 
-        $championContext = $formatter->format($finalistEntries, $scoresByKey, $researcherMeta, true);
+        $championContext = $formatter->format(
+            $finalistEntries,
+            $scoresByKey,
+            $researcherMeta,
+            true,
+            MarkdownResearcherFormatter::FORMAT_XML,
+        );
         return $this->standardEngine->select(
             $model,
             $apiKey,

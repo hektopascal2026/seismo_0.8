@@ -33,8 +33,7 @@ final class RelationalSelectionEngine
         int $itemCount,
         int $configuredMaxTokens
     ): array {
-        // Append negative space protocol to system instruction
-        $protocolSystemPrompt = $userSystemPrompt . "\n\n" . SeismogrammContracts::DEFAULT_BLINDSPOT_PROMPT;
+        $protocolSystemPrompt = $userSystemPrompt . "\n\n" . SeismogrammContracts::RELATIONAL_NEGATIVE_SPACE_PROTOCOL;
 
         return $this->tournamentEngine->select(
             $model,

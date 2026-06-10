@@ -42,10 +42,9 @@ final class SummaryBriefingEngine
                     ['text' => $userSystemPrompt . "\n\n" . $directive]
                 ]
             ],
-            'generationConfig' => [
+            'generationConfig' => TokenBudgeteer::applyGemini35Thinking([
                 'maxOutputTokens' => TokenBudgeteer::resolveOutputTokenBudget(count($selectedKeys), $configuredMaxTokens, $model),
-                'temperature' => 0.0,
-            ]
+            ], 'summary', $model),
         ];
 
         $response = $this->client->postPayloadWithSchemaFallback($model, $payload, $apiKey, 'summary');

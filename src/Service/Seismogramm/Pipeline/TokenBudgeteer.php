@@ -79,4 +79,22 @@ final class TokenBudgeteer
 
         return min($configuredMax, max(1024, $visible));
     }
+
+    /**
+     * Applies Gemini 3.5 thinking levels (no temperature — matches legacy Researcher payloads).
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    public static function applyGemini35Thinking(array $config, string $phase, string $model): array
+    {
+        if (!self::usesGemini35Family($model)) {
+            return $config;
+        }
+
+        $level = $phase === 'selection' ? 'LOW' : 'MINIMAL';
+        $config['thinkingConfig'] = ['thinkingLevel' => $level];
+
+        return $config;
+    }
 }

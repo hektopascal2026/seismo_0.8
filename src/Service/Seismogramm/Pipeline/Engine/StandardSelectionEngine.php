@@ -48,12 +48,11 @@ final class StandardSelectionEngine
                     ['text' => $userSystemPrompt . "\n\n" . $directive]
                 ]
             ],
-            'generationConfig' => [
+            'generationConfig' => TokenBudgeteer::applyGemini35Thinking([
                 'responseMimeType' => 'application/json',
                 'responseSchema' => json_decode(SeismogrammContracts::SELECTION_OUTPUT_CONTRACT, true),
                 'maxOutputTokens' => TokenBudgeteer::resolveSelectionPassTokenBudget($itemCount, $configuredMaxTokens, $model),
-                'temperature' => 0.0,
-            ]
+            ], 'selection', $model),
         ];
 
         // Ensure Schema isn't empty/malformed
