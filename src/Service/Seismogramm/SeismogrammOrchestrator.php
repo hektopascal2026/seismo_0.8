@@ -36,11 +36,7 @@ final class SeismogrammOrchestrator
         $this->parser = new SelectionResponseParser();
         $this->selectionEngine = new StandardSelectionEngine($this->client, $this->parser);
         $this->tournamentEngine = new TournamentSelectionEngine($this->client, $this->parser, $this->selectionEngine);
-        $this->relationalEngine = new RelationalSelectionEngine(
-            $this->client,
-            $this->parser,
-            $this->selectionEngine,
-        );
+        $this->relationalEngine = new RelationalSelectionEngine($this->tournamentEngine);
         $this->summaryEngine = new SummaryBriefingEngine($this->client);
     }
 
@@ -147,6 +143,13 @@ final class SeismogrammOrchestrator
             $this->lastPipelineMeta['context_cache_name'] = $this->client->contextCacheName;
         }
 
+        if (in_array($selectionMode, ['tournament', 'relational'], true)) {
+            $this->lastPipelineMeta = array_merge(
+                $this->lastPipelineMeta,
+                $this->tournamentEngine->lastBatchRecoveryMeta(),
+            );
+        }
+
         if ($selectedKeys === []) {
             throw GeminiResearcherException::badResponse(
                 'Pass 1 selection returned no entry keys. Try a smaller pool, a different preset, or adjust your prompt.',
@@ -187,7 +190,7 @@ final class SeismogrammOrchestrator
     /** @return array<string, mixed> */
     public function lastPipelineMeta(): array
     {
-        return $this->lastPipelineMeta;
+        return SeismogrammPipelineMeta::enrich($this->lastPipelineMeta);
     }
 
     /**

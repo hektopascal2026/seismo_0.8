@@ -4,20 +4,13 @@ declare(strict_types=1);
 
 namespace Seismo\Service\Seismogramm\Pipeline\Engine;
 
-use Seismo\Service\Seismogramm\Pipeline\ResilientGeminiClient;
 use Seismo\Service\Seismogramm\Pipeline\SelectionPipelineContext;
-use Seismo\Service\Seismogramm\Pipeline\SelectionResponseParser;
 
 final class RelationalSelectionEngine
 {
-    private readonly TournamentSelectionEngine $tournamentEngine;
-
     public function __construct(
-        ResilientGeminiClient $client,
-        SelectionResponseParser $parser,
-        StandardSelectionEngine $standardEngine,
+        private readonly TournamentSelectionEngine $tournamentEngine,
     ) {
-        $this->tournamentEngine = new TournamentSelectionEngine($client, $parser, $standardEngine);
     }
 
     /**

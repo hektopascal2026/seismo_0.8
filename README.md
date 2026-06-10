@@ -79,6 +79,14 @@ On `?action=researcher`, **More settings → Deep selection** chooses how pass 1
 
 Optional **Pro selection** runs pass 1 on `gemini-3.1-pro-preview`; pass 2 stays on `gemini-3.5-flash`. Verification-style system prompts trigger stricter pass-1 contracts automatically. Implementation detail: `docs/ai-researcher.md`.
 
+### Seismogramm (`?action=seismogramm`)
+
+Preset-driven greenfield pipeline (**Briefing**, **Blindspot**, **Research**) — separate from legacy Researcher. Architecture and presets: `docs/seismogramm.md`.
+
+**Deferred (possible later):** Pass 2 **summary batching** (proactive/reactive multi-call summary when Gemini truncates output). Legacy Researcher batches pass 2 at 8+ cited items. Seismogramm currently uses a single pass 2 over the selected subset (typically 5–15 entries). Add only if truncation shows up in production.
+
+**Planned next:** Conservative tournament batch recovery, user-initiated 429 retry (Briefing/Blindspot only), per-phase token telemetry, and a slim Seismogramm meta line — see **Roadmap** in `docs/seismogramm.md`.
+
 ---
 
 ## Quick start
@@ -105,6 +113,7 @@ See **[Path satellites](#path-satellites)** below for the full walkthrough. Shor
 | `?action=index` | Dashboard timeline |
 | `?action=filter` | Filter page — module/source pills, preview filtered entries |
 | `?action=researcher` | AI Researcher — Gemini executive researcher, per-desk prompt library + default prompt (mothership + satellites; local Magnitu scores on satellites) |
+| `?action=seismogramm` | Seismogramm — preset briefing builder (Briefing / Blindspot / Research); greenfield two-pass pipeline (`docs/seismogramm.md`) |
 | `?action=feeds` / `media` / `newsletter` / `scraper` / `mail` / `lex` / `leg` | Module admin (mothership only). **Media** = news monitoring (thin RSS + hydration); **Newsletter** = IMAP/Gmail digests (split from Mail); **Feeds** = general RSS/Substack/Parl. press |
 | `?action=settings` | Magnitu keys, mail OAuth, retention, satellites, diagnostics, backups |
 | `?action=settings&tab=satellite` | Register path satellites before provisioning |

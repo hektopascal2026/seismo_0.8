@@ -725,6 +725,16 @@ flowchart LR
                     
                     costEstimateEl.appendChild(amount);
                     costEstimateEl.appendChild(detail);
+
+                    if (data.meta && data.meta.meta_summary_line) {
+                        var metaLine = document.createElement('p');
+                        metaLine.style.margin = '0.35rem 0 0';
+                        metaLine.style.fontSize = '0.75rem';
+                        metaLine.style.opacity = '0.9';
+                        metaLine.textContent = String(data.meta.meta_summary_line);
+                        costEstimateEl.appendChild(metaLine);
+                    }
+
                     costEstimateEl.style.display = 'block';
                 }
 
