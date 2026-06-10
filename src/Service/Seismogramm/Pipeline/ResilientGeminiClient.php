@@ -20,6 +20,9 @@ final class ResilientGeminiClient
     public bool $contextCacheUsed = false;
     public ?string $contextCacheName = null;
 
+    /** @var array<string, array{prompt_tokens: int, output_tokens: int, api_calls: int}> */
+    private array $usageByPhase = [];
+
     /**
      * Registers shared context (e.g. global fingerprint index) for parallel batch reuse.
      */
@@ -55,6 +58,7 @@ final class ResilientGeminiClient
             }
             $this->contextCacheUsed = true;
             $this->contextCacheName = $json['name'];
+            $this->recordUsage($json, 'context_cache');
             error_log('ResilientGeminiClient: context cache created: ' . $json['name']);
 
             return $json['name'];
@@ -116,21 +120,66 @@ final class ResilientGeminiClient
             throw new GeminiResearcherException('Gemini API returned invalid JSON in ' . $phase . ' phase.');
         }
 
-        $this->recordUsage($data);
+        $this->recordUsage($data, $phase);
 
         return $data;
     }
 
-    private function recordUsage(array $json): void
+    /**
+     * @return array{
+     *     prompt_tokens: int,
+     *     output_tokens: int,
+     *     api_calls: int,
+     *     by_phase: array<string, array{prompt_tokens: int, output_tokens: int, api_calls: int}>
+     * }
+     */
+    public function usageReport(): array
     {
+        return [
+            'prompt_tokens' => $this->usagePromptTokens,
+            'output_tokens' => $this->usageOutputTokens,
+            'api_calls'     => $this->usageApiCalls,
+            'by_phase'      => $this->usageByPhase,
+        ];
+    }
+
+    private function recordUsage(array $json, string $phase = 'selection'): void
+    {
+        $phase = $this->normalizeUsagePhase($phase);
+        $promptDelta = 0;
+        $outputDelta = 0;
+
         $usage = $json['usageMetadata'] ?? null;
-        if (!is_array($usage)) {
-            return;
+        if (is_array($usage)) {
+            $promptDelta = max(0, (int)($usage['promptTokenCount'] ?? 0));
+            $outputDelta = max(0, (int)($usage['candidatesTokenCount'] ?? 0))
+                + max(0, (int)($usage['thoughtsTokenCount'] ?? 0));
+            $this->usagePromptTokens += $promptDelta;
+            $this->usageOutputTokens += $outputDelta;
         }
-        $this->usagePromptTokens += max(0, (int)($usage['promptTokenCount'] ?? 0));
-        $this->usageOutputTokens += max(0, (int)($usage['candidatesTokenCount'] ?? 0))
-            + max(0, (int)($usage['thoughtsTokenCount'] ?? 0));
+
         $this->usageApiCalls++;
+
+        if (!isset($this->usageByPhase[$phase])) {
+            $this->usageByPhase[$phase] = [
+                'prompt_tokens' => 0,
+                'output_tokens' => 0,
+                'api_calls'     => 0,
+            ];
+        }
+
+        $this->usageByPhase[$phase]['prompt_tokens'] += $promptDelta;
+        $this->usageByPhase[$phase]['output_tokens'] += $outputDelta;
+        $this->usageByPhase[$phase]['api_calls']++;
+    }
+
+    private function normalizeUsagePhase(string $phase): string
+    {
+        return match ($phase) {
+            'summary'       => 'summary',
+            'context_cache' => 'context_cache',
+            default         => 'selection',
+        };
     }
 
     /**
@@ -156,7 +205,7 @@ final class ResilientGeminiClient
                     if ($res['status'] === 200) {
                         $data = json_decode($res['body'], true);
                         if (is_array($data)) {
-                            $this->recordUsage($data);
+                            $this->recordUsage($data, 'selection');
                         }
                     }
                 } catch (\Throwable $e) {
@@ -217,7 +266,7 @@ final class ResilientGeminiClient
             if ($status === 200 && $raw !== false && $raw !== '') {
                 $data = json_decode($raw, true);
                 if (is_array($data)) {
-                    $this->recordUsage($data);
+                    $this->recordUsage($data, 'selection');
                 }
             }
 

@@ -4,23 +4,81 @@ declare(strict_types=1);
 
 namespace Seismo\Service\Seismogramm;
 
+use Seismo\Service\GeminiResearcherFlashPricing;
+
 /**
  * Preset-native API meta for Seismogramm generate responses.
  */
 final class SeismogrammPipelineMeta
 {
+    public const META_VERSION = 1;
+
     /**
      * @param array<string, mixed> $meta
      * @return array<string, mixed>
      */
     public static function enrich(array $meta): array
     {
+        $meta = self::normalize($meta);
         $line = self::formatSummaryLine($meta);
         if ($line !== '') {
             $meta['meta_summary_line'] = $line;
         }
 
         return $meta;
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     * @return array<string, mixed>
+     */
+    public static function normalize(array $meta): array
+    {
+        $meta['generation_meta_version'] = self::META_VERSION;
+        $meta['pipeline_name'] = 'two_pass';
+
+        if (!isset($meta['selection_strategy']) || !is_string($meta['selection_strategy'])) {
+            $meta['selection_strategy'] = self::inferSelectionStrategy($meta);
+        }
+
+        if (!isset($meta['summary_strategy'])) {
+            $meta['summary_strategy'] = 'monolithic_single_pass';
+        }
+
+        return $meta;
+    }
+
+    /**
+     * @param array<string, mixed> $usage
+     * @return array<string, mixed>|null
+     */
+    public static function buildCostEstimate(array $usage, string $selectionMode): ?array
+    {
+        $promptTokens = (int)($usage['prompt_tokens'] ?? 0);
+        $outputTokens = (int)($usage['output_tokens'] ?? 0);
+        if ($promptTokens < 1 && $outputTokens < 1) {
+            return null;
+        }
+
+        $usd = GeminiResearcherFlashPricing::estimateStandardUsd($promptTokens, $outputTokens);
+
+        $estimate = [
+            'pipeline'              => $selectionMode,
+            'pricing_tier'          => GeminiResearcherFlashPricing::TIER_STANDARD,
+            'model_priced'          => 'gemini-3.5-flash',
+            'prompt_tokens'         => $promptTokens,
+            'output_tokens'         => $outputTokens,
+            'api_calls'             => (int)($usage['api_calls'] ?? 0),
+            'estimated_usd'         => round($usd, 6),
+            'estimated_usd_display' => GeminiResearcherFlashPricing::formatUsd($usd),
+            'disclaimer'            => 'Rough estimate from API usageMetadata; Standard Flash list prices.',
+        ];
+
+        if (isset($usage['by_phase']) && is_array($usage['by_phase']) && $usage['by_phase'] !== []) {
+            $estimate['by_phase'] = $usage['by_phase'];
+        }
+
+        return $estimate;
     }
 
     /**
@@ -111,5 +169,17 @@ final class SeismogrammPipelineMeta
         return $count === 1
             ? '1 tournament batch recovered after retry'
             : $count . ' tournament batches recovered after retry';
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    private static function inferSelectionStrategy(array $meta): string
+    {
+        return match ((string)($meta['selection_mode'] ?? 'standard')) {
+            'relational' => 'relational_tournament',
+            'tournament' => 'tournament_parallel_batches',
+            default      => 'global_single_pass',
+        };
     }
 }

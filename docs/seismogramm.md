@@ -60,11 +60,11 @@ Planned work stays preset-native — no port of legacy `GeminiResearcherGenerati
 - **Briefing / Blindspot:** Warning panel + **Retry with smaller pool** button after HTTP 429 (user must click).
 - **Retry:** POST `rate_limit_user_retry=1` → halved `maxContextEntries` (floor 20). Meta: `rate_limit_user_retry`, `rate_limit_retry_original_cap`, `meta_summary_line` note.
 
-### P3 — Observability (one PR)
+### P3 — Observability ✅
 
-- **`by_phase` usage** on `ResilientGeminiClient` (`selection`, `summary`, optional `context_cache`) — folded into `cost_estimate` and meta.
-- **`SeismogrammPipelineMeta`** (new, small): builds `meta_summary_line` + stable API fields from `preset`, `selection_mode`, pool counts, strategies, recovery/429 flags — **not** legacy `normalize()`.
-- **UI:** Preset-aware loading steps (timer-based, like Researcher) + meta summary line under the cost estimate.
+- **`by_phase` usage** on `ResilientGeminiClient` (`selection`, `summary`, `context_cache`) — in `gemini_usage` and `cost_estimate.by_phase`.
+- **`SeismogrammPipelineMeta`:** `normalize()` + `meta_summary_line` + `buildCostEstimate()` — preset-native, not legacy `GeminiResearcherGenerationMeta`.
+- **UI:** Preset-aware loading steps during generate; meta summary line and per-phase token hints under the cost estimate.
 
 ### Deferred
 

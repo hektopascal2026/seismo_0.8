@@ -228,6 +228,8 @@ final class SeismogrammController
                 }
             }
 
+            $usage = $result->usage;
+
             $meta = SeismogrammPipelineMeta::enrich(array_merge(
                 $requestContext->contextCapMetaFromGathered($gathered),
                 $pipelineMeta,
@@ -237,24 +239,13 @@ final class SeismogrammController
                     'lookback_days'     => $filters['lookbackDays'],
                     'cited_entry_count' => count($result->usedEntryKeys),
                     'used_entry_keys'   => $result->usedEntryKeys,
+                    'gemini_usage'      => $usage,
                 ],
             ));
 
-            $usage = $result->usage;
-            $costEstimate = null;
-            if ($usage !== []) {
-                $promptTokens = $usage['prompt_tokens'] ?? 0;
-                $outputTokens = $usage['output_tokens'] ?? 0;
-                $apiCalls     = $usage['api_calls'] ?? 0;
-                $usd = \Seismo\Service\GeminiResearcherFlashPricing::estimateStandardUsd($promptTokens, $outputTokens);
-                $costEstimate = [
-                    'pipeline' => $selectionMode,
-                    'prompt_tokens' => $promptTokens,
-                    'output_tokens' => $outputTokens,
-                    'api_calls' => $apiCalls,
-                    'estimated_usd_display' => \Seismo\Service\GeminiResearcherFlashPricing::formatUsd($usd),
-                ];
-            }
+            $costEstimate = $usage !== []
+                ? SeismogrammPipelineMeta::buildCostEstimate($usage, $selectionMode)
+                : null;
 
             echo json_encode([
                 'ok' => true,

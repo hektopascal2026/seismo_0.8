@@ -51,4 +51,34 @@ final class SeismogrammPipelineMetaTest extends TestCase
             ]),
         );
     }
+
+    public function testNormalizeAddsPresetNativeFields(): void
+    {
+        $meta = SeismogrammPipelineMeta::normalize([
+            'preset' => 'Research',
+            'selection_mode' => 'tournament',
+        ]);
+
+        self::assertSame(1, $meta['generation_meta_version']);
+        self::assertSame('two_pass', $meta['pipeline_name']);
+        self::assertSame('tournament_parallel_batches', $meta['selection_strategy']);
+    }
+
+    public function testBuildCostEstimateIncludesByPhase(): void
+    {
+        $estimate = SeismogrammPipelineMeta::buildCostEstimate([
+            'prompt_tokens' => 1000,
+            'output_tokens' => 200,
+            'api_calls' => 4,
+            'by_phase' => [
+                'selection' => ['prompt_tokens' => 800, 'output_tokens' => 50, 'api_calls' => 3],
+                'summary' => ['prompt_tokens' => 200, 'output_tokens' => 150, 'api_calls' => 1],
+            ],
+        ], 'tournament');
+
+        self::assertNotNull($estimate);
+        self::assertSame('tournament', $estimate['pipeline']);
+        self::assertArrayHasKey('by_phase', $estimate);
+        self::assertSame(800, $estimate['by_phase']['selection']['prompt_tokens']);
+    }
 }

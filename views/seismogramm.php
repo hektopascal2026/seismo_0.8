@@ -71,6 +71,27 @@ $moduleOptions = [
     .seismogramm-preset-btn:hover {
         background: #eee;
     }
+    .seismogramm-output-status__lead {
+        margin: 0 0 0.5rem;
+        font-weight: 600;
+    }
+    .seismogramm-output-status__steps {
+        list-style: none;
+        margin: 0.5rem 0 0;
+        padding: 0;
+    }
+    .seismogramm-output-status__step {
+        padding: 0.3rem 0;
+        color: var(--text-muted, #6b7280);
+    }
+    .seismogramm-output-status__step.is-active {
+        color: inherit;
+        font-weight: 600;
+    }
+    .seismogramm-output-status__step.is-done::before {
+        content: '\2713  ';
+        color: var(--seismo-accent, #2563eb);
+    }
     .seismogramm-preset-btn.is-active {
         background: var(--seismo-accent, #000);
         color: #fff;
@@ -640,6 +661,143 @@ flowchart LR
         });
 
         var warningEl = document.getElementById('seismogramm-context-warning');
+        var statusTimerIds = [];
+
+        function statusStepsForPreset(presetName) {
+            var selectLabel = 'Pass 1: selecting briefing entries';
+            if (presetName === 'Research') {
+                selectLabel = 'Pass 1: tournament selection across the corpus';
+            } else if (presetName === 'Blindspot') {
+                selectLabel = 'Pass 1: relational selection (Lex/Leg vs media echo)';
+            }
+            return [
+                { id: 'prepare', label: 'Gathering and capping entry pool' },
+                { id: 'select', label: selectLabel },
+                { id: 'write', label: 'Pass 2: writing briefing prose' },
+                { id: 'cards', label: 'Preparing citation validation cards' }
+            ];
+        }
+
+        function clearStatusTimers() {
+            statusTimerIds.forEach(function(id) { clearTimeout(id); });
+            statusTimerIds = [];
+        }
+
+        function scheduleStatus(delayMs, stepId) {
+            statusTimerIds.push(setTimeout(function() { setActiveStatusStep(stepId); }, delayMs));
+        }
+
+        function setStatusStepLabel(stepId, label) {
+            var list = document.getElementById('seismogramm-status-steps');
+            if (!list) return;
+            var li = list.querySelector('.seismogramm-output-status__step[data-step="' + stepId + '"]');
+            if (li) li.textContent = label;
+        }
+
+        function setActiveStatusStep(stepId) {
+            var list = document.getElementById('seismogramm-status-steps');
+            if (!list) return;
+            var found = false;
+            list.querySelectorAll('.seismogramm-output-status__step').forEach(function(li) {
+                var id = li.getAttribute('data-step');
+                if (id === stepId) {
+                    li.classList.add('is-active');
+                    li.classList.remove('is-done');
+                    found = true;
+                    var leadText = document.getElementById('seismogramm-status-lead-text');
+                    if (leadText) leadText.textContent = li.textContent;
+                } else if (!found) {
+                    li.classList.remove('is-active');
+                    li.classList.add('is-done');
+                } else {
+                    li.classList.remove('is-active', 'is-done');
+                }
+            });
+        }
+
+        function applyStatusEntryCount(entryCount) {
+            var n = parseInt(entryCount, 10);
+            if (isNaN(n) || n < 0) return;
+            var entryWord = n === 1 ? 'entry' : 'entries';
+            if (n === 0) {
+                setStatusStepLabel('prepare', 'No entries matched your filters');
+                setActiveStatusStep('prepare');
+                return;
+            }
+            setStatusStepLabel('prepare', 'Prepared ' + n + ' ' + entryWord + ' for Gemini');
+            setStatusStepLabel('select', 'Pass 1: selecting from ' + n + ' ' + entryWord);
+            setActiveStatusStep('select');
+        }
+
+        function hideProcessingStatus() {
+            clearStatusTimers();
+            out.removeAttribute('aria-busy');
+            var status = document.getElementById('seismogramm-output-status');
+            if (status) status.remove();
+        }
+
+        function showProcessingStatus(presetName, rateLimitRetry) {
+            hideProcessingStatus();
+            out.setAttribute('aria-busy', 'true');
+            out.innerHTML = '';
+
+            var wrap = document.createElement('div');
+            wrap.id = 'seismogramm-output-status';
+            wrap.className = 'seismogramm-output-status';
+
+            var lead = document.createElement('p');
+            lead.className = 'seismogramm-output-status__lead';
+            var leadText = document.createElement('span');
+            leadText.id = 'seismogramm-status-lead-text';
+            leadText.textContent = rateLimitRetry
+                ? 'Retrying with a smaller entry pool...'
+                : statusStepsForPreset(presetName)[0].label;
+            lead.appendChild(leadText);
+
+            var dots = document.createElement('span');
+            dots.className = 'loading-dots';
+            dots.setAttribute('aria-hidden', 'true');
+            dots.innerHTML = '<span class="loading-dots-char">.</span>'
+                + '<span class="loading-dots-char">.</span>'
+                + '<span class="loading-dots-char">.</span>';
+            lead.appendChild(document.createTextNode(' '));
+            lead.appendChild(dots);
+
+            var list = document.createElement('ol');
+            list.id = 'seismogramm-status-steps';
+            list.className = 'seismogramm-output-status__steps';
+            statusStepsForPreset(presetName).forEach(function(step, idx) {
+                var li = document.createElement('li');
+                li.className = 'seismogramm-output-status__step' + (idx === 0 ? ' is-active' : '');
+                li.setAttribute('data-step', step.id);
+                li.textContent = step.label;
+                list.appendChild(li);
+            });
+
+            wrap.appendChild(lead);
+            wrap.appendChild(list);
+            out.appendChild(wrap);
+
+            setActiveStatusStep('prepare');
+            scheduleStatus(400, 'prepare');
+            scheduleStatus(1800, 'select');
+            if (presetName === 'Research' || presetName === 'Blindspot') {
+                scheduleStatus(9000, 'write');
+                scheduleStatus(24000, 'cards');
+            } else {
+                scheduleStatus(5500, 'write');
+                scheduleStatus(14000, 'cards');
+            }
+        }
+
+        function formatPhaseTokens(phase) {
+            if (!phase) return '';
+            return formatInt(phase.prompt_tokens) + '+' + formatInt(phase.output_tokens);
+        }
+
+        function formatInt(n) {
+            return parseInt(n, 10).toLocaleString();
+        }
 
         function parseJsonResponse(r) {
             return r.json().then(function(data) {
@@ -672,6 +830,7 @@ flowchart LR
         }
 
         function renderGenerateSuccess(data) {
+            hideProcessingStatus();
             hideRateLimitRetry();
             lastBriefingText = data.text;
             out.style.whiteSpace = 'pre-wrap';
@@ -693,16 +852,28 @@ flowchart LR
                 detail.style.opacity = '0.9';
                 detail.style.fontSize = '0.75rem';
 
-                var formatInt = function(n) {
-                    return parseInt(n, 10).toLocaleString();
-                };
-
                 var pipelineLabel = est.pipeline || 'standard';
                 var cacheNote = (data.meta && data.meta.context_cache_used) ? ' · context cache' : '';
                 var fpNote = (data.meta && data.meta.global_fingerprint) ? ' · global fingerprint' : '';
+                var phaseNote = '';
+                if (est.by_phase) {
+                    var phaseParts = [];
+                    if (est.by_phase.selection) {
+                        phaseParts.push('sel ' + formatPhaseTokens(est.by_phase.selection));
+                    }
+                    if (est.by_phase.summary) {
+                        phaseParts.push('sum ' + formatPhaseTokens(est.by_phase.summary));
+                    }
+                    if (est.by_phase.context_cache) {
+                        phaseParts.push('cache ' + formatInt(est.by_phase.context_cache.api_calls || 0) + ' call(s)');
+                    }
+                    if (phaseParts.length) {
+                        phaseNote = ' · ' + phaseParts.join(' · ');
+                    }
+                }
                 detail.textContent = pipelineLabel.toUpperCase() + ' pipeline · Gemini 3.5 Flash · ' +
                     formatInt(est.prompt_tokens) + ' input + ' + formatInt(est.output_tokens) + ' output tokens · ' +
-                    String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's') + cacheNote + fpNote;
+                    String(est.api_calls || 0) + ' API call' + (est.api_calls === 1 ? '' : 's') + phaseNote + cacheNote + fpNote;
 
                 costEstimateEl.appendChild(amount);
                 costEstimateEl.appendChild(detail);
@@ -750,9 +921,7 @@ flowchart LR
                 costEstimateEl.innerHTML = '';
             }
             sourcesSection.style.display = 'none';
-            out.innerHTML = '<p class="admin-intro">' + (withRateLimitRetry
-                ? 'Retrying with a smaller entry pool...'
-                : 'Generating briefing... Please wait.') + '</p>';
+            showProcessingStatus(presetInput ? presetInput.value : 'Briefing', withRateLimitRetry);
             generateBtn.disabled = true;
             if (rateLimitRetryBtn) {
                 rateLimitRetryBtn.disabled = true;
@@ -773,6 +942,9 @@ flowchart LR
                 if (res.data.meta && res.data.meta.context_warning && warningEl) {
                     warningEl.textContent = res.data.meta.context_warning;
                     warningEl.style.display = 'block';
+                }
+                if (res.data.meta && res.data.meta.entries_sent_to_gemini !== undefined) {
+                    applyStatusEntryCount(res.data.meta.entries_sent_to_gemini);
                 }
 
                 return fetch('<?= $generateUrl ?>', {
@@ -797,6 +969,7 @@ flowchart LR
                 if (rateLimitRetryBtn) {
                     rateLimitRetryBtn.disabled = false;
                 }
+                hideProcessingStatus();
                 out.innerHTML = '';
                 if (placeholder) {
                     out.appendChild(placeholder);

@@ -173,11 +173,7 @@ final class SeismogrammOrchestrator
             $maxOutputTokens,
         );
 
-        $usage = [
-            'prompt_tokens' => $this->client->usagePromptTokens,
-            'output_tokens' => $this->client->usageOutputTokens,
-            'api_calls'     => $this->client->usageApiCalls,
-        ];
+        $usage = $this->client->usageReport();
 
         return new GeminiResearcherResult(
             $markdown,
