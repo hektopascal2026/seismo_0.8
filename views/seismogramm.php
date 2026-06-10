@@ -394,15 +394,15 @@ flowchart LR
                         </p>
                         <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
                             <input type="radio" name="selection_mode" value="standard" checked>
-                            <strong>Standard</strong> — one global selection pass (sends full capped pool in a single pass).
+                            <strong>Standard</strong> — one global selection pass (sends full capped pool in a single pass). Good for verifying specific body-text details in small-to-medium pools, but may overflow context limits with very large datasets.
                         </label>
                         <label style="display:block; margin-bottom:0.35rem; font-weight:normal;">
                             <input type="radio" name="selection_mode" value="tournament">
-                            <strong>Tournament</strong> — parallel batch prelims + final shortlist (splits pool into batches of ~35).
+                            <strong>Tournament</strong> — parallel batch prelims + final shortlist (splits pool into batches of ~35). Good for scanning massive document pools without hitting context limits, but may miss cross-batch relational patterns with isolated groups.
                         </label>
                         <label style="display:block; margin-bottom:0.5rem; font-weight:normal;">
                             <input type="radio" name="selection_mode" value="relational">
-                            <strong>Blind spot / cross-module</strong> — relational tournament + fingerprint asymmetry rules (CH Lex/Leg primary sources vs Media/Newsletter echo).
+                            <strong>Blind spot / cross-module</strong> — relational tournament + fingerprint asymmetry rules (CH Lex/Leg primary sources vs Media/Newsletter echo). Good for detecting quiet primary source alerts before they hit mainstream news, but may increase token cost with complex cross-referencing.
                         </label>
                         <label style="display:block; margin-top:0.75rem; font-weight:normal;">
                             <input type="checkbox" id="seismogramm_pro_selection_mode" name="pro_selection_mode" value="1">

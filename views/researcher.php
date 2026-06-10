@@ -320,7 +320,7 @@ $moduleOptions = [
                             <strong>Standard</strong> — one global selection pass (best for Swissmem-style body verification prompts).
                         </label>
                         <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Sends the full capped pool in a single pass. Keeps full entry text visible together — recommended for prompts that must verify company names in the article body.
+                            Sends the full capped pool in a single pass. Keeps full entry text visible together — recommended for prompts that must verify company names in the article body. Good for verifying specific body-text details in small-to-medium pools, but may overflow context limits with very large datasets.
                         </p>
 
                         <label style="display:block; margin-bottom:0.5rem; user-select:none;">
@@ -328,7 +328,7 @@ $moduleOptions = [
                             <strong>Tournament</strong> — parallel batch prelims + final shortlist.
                         </label>
                         <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            Splits the pool into batches of about 35 items, picks the top 3 per batch in parallel, then a championship pass. Includes a lightweight global title index. Recommended for large pools (100+).
+                            Splits the pool into batches of about 35 items, picks the top 3 per batch in parallel, then a championship pass. Includes a lightweight global title index. Recommended for large pools (100+). Good for scanning massive document pools without hitting context limits, but may miss cross-batch relational patterns with isolated groups.
                         </p>
 
                         <label style="display:block; margin-bottom:0.5rem; user-select:none;">
@@ -336,7 +336,7 @@ $moduleOptions = [
                             <strong>Blind spot / cross-module</strong> — tournament + global index + asymmetry rules.
                         </label>
                         <p class="admin-intro" style="margin:0 0 0.75rem 1.5rem; font-size:0.8125rem; opacity:0.85; line-height: 1.4;">
-                            For prompts that find primary sources (Lex/Leg) with little or no echo in Media/Feeds. Every batch sees all titles/modules; pass 1 returns keys only to avoid truncation.
+                            For prompts that find primary sources (Lex/Leg) with little or no echo in Media/Feeds. Every batch sees all titles/modules; pass 1 returns keys only to avoid truncation. Good for detecting quiet primary source alerts before they hit mainstream news, but may increase token cost with complex cross-referencing.
                         </p>
 
                         <p class="admin-intro" id="researcher-verification-hint" style="margin:0 0 0.75rem; font-size:0.8125rem; opacity:0.9; display:none; line-height:1.4;" hidden>
