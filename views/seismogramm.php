@@ -197,7 +197,7 @@ $moduleOptions = [
         <?php endif; ?>
 
         <!-- View Toggle Bar -->
-        <nav class="settings-tabs" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1.5rem; user-select: none;">
+        <nav class="settings-tabs" id="seismogramm-prompt-view-toggle" style="margin-bottom: 1rem; user-select: none; border-bottom: none; padding-bottom: 0;">
             <a href="#" id="seismogramm-view-prompt" data-view="prompt" class="active">Prompt</a>
             <a href="#" id="seismogramm-view-workbench" data-view="workbench">Workbench</a>
             <a href="#" id="seismogramm-view-about" data-view="about">About</a>
