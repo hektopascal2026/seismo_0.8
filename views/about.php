@@ -556,203 +556,93 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         </div>
                     </div>
 
-                    <!-- Era VII -->
+                    <!-- Era VII: Brutalist Styling & Newsletter Desk Split -->
                     <div class="timeline-era-card">
                         <div class="era-meta-row">
-                            <span class="era-badge era-badge-design">Era VII: The Brutalist Design Revolution</span>
-                            <span class="era-date">May 2026</span>
+                            <span class="era-badge era-badge-design">Era VII: Brutalist Styling &amp; Newsletter split</span>
+                            <span class="era-date">May – June 2026</span>
                         </div>
-                        <h3>v0.7.9 – v0.8.0 &mdash; High-Contrast Styling &amp; Typography</h3>
+                        <h3>v0.8.0 &ndash; v0.8.7 &mdash; New Styling, Newsletter Module, Story-Level Digests &amp; Backups</h3>
                         
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> As Seismo expanded from a chronological aggregator to an intelligence cockpit, reading efficiency became critical. The team completely refactored the visual layout to introduce a high-contrast Brutalist theme. This layout leverages geometric spacing, precise Outfit and Space Mono fonts, and zero-radius form boundaries to increase readability and streamline dashboard navigation.</p>
+                            <p><strong>Rationale:</strong> The 0.8 series focused on visual refinement and advanced email integration. The dashboard transitioned to a premium high-contrast Brutalist theme with Outfit typography to improve scanning efficiency. Concurrently, high-volume email newsletters were split out from standard mail into a specialized Newsletter module, complete with AI-powered multi-story digest splitting and backups.</p>
                         </div>
  
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>v0.8.0 &mdash; Premium Outfit Typography:</strong> Loaded the beautiful geometric Outfit font stack globally, updating the main sidebar, menu layouts, and action headers to prioritize visual scanning.</li>
-                                <li><strong>v0.7.9 &mdash; Brutalist Design Overhaul:</strong> Refactored the core CSS styles into a high-contrast design system. Replaced rounded UI cards with clean black-bordered layouts, sharp 90-degree tactile interactive shapes, and interactive 3D pressed actions.</li>
-                                <li><strong>Tactile Navigation Drawer:</strong> Streamlined the primary header into responsive, spaced-out tactile buttons.</li>
-                                <li><strong>Cache-Busting Versions:</strong> Integrated a global cache-busting version parameter (`SEISMO_VERSION`) to CSS/JS link elements to avoid browser rendering lags on production updates.</li>
+                                <li><strong>v0.8.0 &mdash; New Styling &amp; Typography:</strong> Global rollout of the geometric Outfit font stack paired with high-contrast, black-bordered Brutalist containers, sharp 90-degree interactive controls, and 3D hover actions.</li>
+                                <li><strong>v0.8.3 &mdash; Newsletter Module:</strong> Split IMAP/Gmail digests from normal alerts into <code>?action=newsletter</code> using <code>email_subscriptions.module_scope</code> (migration 027) with custom peach timeline pills.</li>
+                                <li><strong>v0.8.4 &mdash; AI Digest Story Splitter:</strong> Fan-out of multi-story digests into distinct child <code>emails</code> rows (migration 028), using Gemini to analyze layout structure and preview story cards.</li>
+                                <li><strong>v0.8.5 &mdash; Subject-based multi-newsletter routing:</strong> Relaxed subscription sender constraints to support multiple distinct digest configurations from a single address via subject line patterns.</li>
+                                <li><strong>v0.8.6 &mdash; Auto-Linkified timeline cards:</strong> Client-side formatting upgrades segmenting double-newlines into paragraphs and linkifying URL strings without altering underlying database records.</li>
+                                <li><strong>v0.8.7 &mdash; Backup settings panel:</strong> New Backup tab centralizing source JSON config exports/imports and memory-safe database SQL streaming.</li>
                             </ul>
                         </div>
  
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Using a pure Brutalist design meant avoiding standard UI library dependencies (like Tailwind or Bootstrap). We chose native CSS custom properties to manage layout tokens, keeping asset sizes extremely light and loading fast on thin shared hosting sockets.</p>
+                            <p>Story-level splitting required hiding parent scores and rows on Highlights and export lists while keeping them grouped in the Mail/Newsletter admin screens. Styling custom layouts manually bypassed third-party CSS dependencies but required mapping CSS custom property variables cleanly to ensure satellites load without asset conflicts.</p>
                         </div>
                     </div>
 
-                    <!-- Era VIII -->
+                    <!-- Era VIII: Ingestion Modernization & Relational Migration -->
                     <div class="timeline-era-card">
                         <div class="era-meta-row">
-                            <span class="era-badge era-badge-intelligence">Era VIII: Advanced Selection &amp; UX</span>
-                            <span class="era-date">June 2026</span>
-                        </div>
-                        <h3>v0.8.1 – v0.8.2 &mdash; Tournament Selection &amp; Cost Estimation</h3>
-                        
-                        <div class="era-narrative">
-                            <p><strong>Rationale:</strong> Summarizing hundreds of active feed items required a smarter way to select candidates without exceeding single-call context bounds or incurring prohibitive costs. The team built a dual-pass tournament selection engine and added real-time cost transparency. We also refined the Researcher layout to hide advanced configurations under collapsible settings panels.</p>
-                        </div>
- 
-                        <div class="era-changes">
-                            <h4>Key Milestones & Inventions</h4>
-                            <ul>
-                                <li><strong>v0.8.2 &mdash; Dual-Pass Tournament Selection:</strong> Added tournament and Pro modes. The system runs parallel batch preliminaries (filtering candidates) before compiling a final championship summary, expanding the pool limit beyond previous boundaries.</li>
-                                <li><strong>v0.8.2 &mdash; Gemini Cost Calculator:</strong> Uses `usageMetadata` to compute a rough USD estimate after each researcher run, linking directly to Google AI Studio spend metrics.</li>
-                                <li><strong>v0.8.1 &mdash; Compact Settings Workspace:</strong> Redesigned the Researcher builder form. Placed complex parameters in an expand/collapse toggle ("More settings") and replaced numeric text fields with compact range sliders.</li>
-                                <li><strong>v0.8.1 &mdash; Default Prompt Protection:</strong> Hardened the active workspace to completely prevent users from editing, overwriting, or deleting the default system prompt, preserving baseline recovery paths.</li>
-                            </ul>
-                        </div>
- 
-                        <div class="era-technical-depth">
-                            <strong>Architectural Trade-offs:</strong>
-                            <p>Managing large batches in the tournament mode meant running serial HTTP API calls. To maintain browser responsiveness, we optimized the chunk size and raised the default output token limit to 65k to prevent selection truncations during the championship pass.</p>
-                        </div>
-                    </div>
-
-                    <!-- Era IX -->
-                    <div class="timeline-era-card">
-                        <div class="era-meta-row">
-                            <span class="era-badge era-badge-intelligence">Era IX: Newsletter Desk Split</span>
-                            <span class="era-date">June 2026</span>
-                        </div>
-                        <h3>v0.8.3 &mdash; Newsletter Module</h3>
-
-                        <div class="era-narrative">
-                            <p><strong>Rationale:</strong> Digest newsletters and transactional mail shared one Mail admin surface and the same peach timeline pills, making it hard to operate EP TODAY-style digests separately from alerts and press-office traffic. The team split IMAP/Gmail subscriptions into Mail and Newsletter modules without duplicating ingest or the <code>emails</code> table.</p>
-                        </div>
-
-                        <div class="era-changes">
-                            <h4>Key Milestones & Inventions</h4>
-                            <ul>
-                                <li><strong>v0.8.3 &mdash; Newsletter admin tab:</strong> New <code>?action=newsletter</code> module (nav after Media) with Items and Sources, mirroring the Media/Feeds partition pattern via <code>email_subscriptions.module_scope</code> (migration 027).</li>
-                                <li><strong>v0.8.3 &mdash; Move to Newsletter:</strong> One-click promotion from Mail → Sources; reverse <strong>Move to Mail</strong> on Newsletter → Sources. Unknown-domain Gmail proposals stay on Mail only (0.8.5 adds newsletter <em>type</em> detection on Newsletter).</li>
-                                <li><strong>v0.8.3 &mdash; Timeline &amp; filters:</strong> Newsletter cards use <code>#d3716d</code> source pills; separate Mail and Newsletter rows on the filter page; newsletter items remain visible on the main timeline.</li>
-                                <li><strong>v0.8.3 &mdash; AI Researcher:</strong> Replaced the single Email source toggle with separate <strong>Mail</strong> and <strong>Newsletter</strong> module picks.</li>
-                            </ul>
-                        </div>
-
-                        <div class="era-technical-depth">
-                            <strong>Architectural Trade-offs:</strong>
-                            <p>Partitioning is application-layer only: <code>entry_type</code> stays <code>email</code> for scoring, favourites, and Magnitu. One <code>refresh_mail_ingest</code> cron path still fetches all Gmail/IMAP mail; module scope affects admin lists, timeline pill colour, and filter semantics — not storage or ingest volume.</p>
-                        </div>
-                    </div>
-
-                    <!-- Era X -->
-                    <div class="timeline-era-card">
-                        <div class="era-meta-row">
-                            <span class="era-badge era-badge-ai">Era X: Story-Level Intelligence</span>
-                            <span class="era-date">June 2026</span>
-                        </div>
-                        <h3>v0.8.4 &ndash; v0.8.7 &mdash; Digest Stories, Multi-Newsletter Routing, Card Readability, &amp; Centralized Backups</h3>
-
-                        <div class="era-narrative">
-                            <p><strong>Rationale:</strong> v0.8.4 to v0.8.6 focused on digest splitting, email subscriptions, and visual timeline card linkification. v0.8.7 centralizes data safety with a new Backup settings tab, allowing JSON source exports/imports and dynamic, memory-safe SQL database backups to be performed directly from the dashboard.</p>
-                        </div>
-
-                        <div class="era-changes">
-                            <h4>Key Milestones & Inventions</h4>
-                            <ul>
-                                <li><strong>v0.8.7 &mdash; Centralized Backup Dashboard &amp; SQL Streaming Export:</strong> Introduces the new <strong>Backup</strong> Settings tab, centralizing the existing JSON source configuration exports and imports, and adding a new, memory-safe SQL streaming exporter for full database backups.</li>
-                                <li><strong>v0.8.6 &mdash; Styled Timeline Cards &amp; Auto-Linkification:</strong> Expanded feed, substack, scraper, and email cards in the UI automatically segment double-newlines into readable paragraph blocks and convert raw text URLs to clickable anchor links with truncated display names, leaving all raw data models and ML scoring/Magnitu exports 100% clean and untouched.</li>
-                                <li><strong>v0.8.5 &mdash; Subject-based subscriptions:</strong> Migration 029 relaxes the sender unique key to <code>(match_type, match_value, subject_filter, module_scope)</code> and stores <code>emails.email_subscription_id</code> at ingest. Timeline filters, reprocess, and AI sample fetch are subscription-scoped.</li>
-                                <li><strong>v0.8.5 &mdash; New newsletter types:</strong> After a sender is confirmed on Mail and moved to Newsletter, Gmail ingest proposes extra rows when an inbox subject does not match any configured filter — same review table pattern as Mail&rsquo;s <strong>New senders</strong>, with proposed subject filter and display name (e.g. Politpuls vs Stimme der Wirtschaft).</li>
-                                <li><strong>v0.8.5 &mdash; Two-step desk model:</strong> Mail = sender/domain discovery; Newsletter = product/type configuration (subject filter + per-layout split config).</li>
-                                <li><strong>v0.8.4 &mdash; AI Split Configurator:</strong> Newsletter → Sources runs offline Gemini analysis on recent samples, dry-runs <code>digest_split_config</code>, and previews story cards before save. <strong>Apply Split Config</strong> triggers <code>EmailSubscriptionReprocessService</code> so stored digests re-split without waiting for new mail.</li>
-                                <li><strong>v0.8.4 &mdash; Child <code>emails</code> rows:</strong> <code>EmailDigestSplitterService</code> + <code>splitAndIngestStories()</code> insert per-story children with <code>parent_email_id</code> (migration 028). Handles TYPO3/punkt4 table cells, MJML layouts, merged title/body rows, and deduplicated MSO/compat HTML repeats.</li>
-                                <li><strong>v0.8.4 &mdash; Export policy:</strong> <code>EmailDigestExportPolicy</code> hides parent digest scores/rows on Highlights, Magnitu export, Researcher gather, and recipe rescoring when visible children exist. Mail/Newsletter admin keeps the parent card with nested <code>child_stories</code> and per-child scores.</li>
-                                <li><strong>v0.8.4 &mdash; Deep selection modes:</strong> Replaced the tournament checkbox with <strong>Standard</strong>, <strong>Tournament</strong>, and <strong>Blind spot / cross-module</strong> (relational). Pass 1 can use a global title fingerprint, keys-only JSON, and optional <strong>Pro selection</strong> on <code>gemini-3.1-pro-preview</code>.</li>
-                                <li><strong>v0.8.4 &mdash; Selection hardening:</strong> Truncation retries, failed tournament-batch recovery (halved sub-batches / minimal-thinking retry), verification-heavy prompt auto-detection, stricter selection-failure reporting, and improved pass 2 batching for long briefings.</li>
-                            </ul>
-                        </div>
-
-                        <div class="era-technical-depth">
-                            <strong>Architectural Trade-offs:</strong>
-                            <p>Child digest rows still reuse <code>entry_type = email</code>; export paths hide parents when children exist. Product routing is deterministic: <code>findBestMatchingSubscription()</code> at ingest/display, with <code>email_subscription_id</code> as the fast path for admin filters. Newsletter-type auto-detect intentionally does <em>not</em> replace Mail domain discovery — it only runs when at least one confirmed <code>module_scope = newsletter</code> row already matches the sender. Subject-prefix proposals use inbox subject structure (text before <code>:</code>, em dash, etc.), not runtime Gemini.</p>
-                        </div>
-                    </div>
-
-                    <!-- Era XI -->
-                    <div class="timeline-era-card">
-                        <div class="era-meta-row">
-                            <span class="era-badge era-badge-powerhouse">Era XI: Ingestion Modernization &amp; Relational Migration</span>
+                            <span class="era-badge era-badge-powerhouse">Era VIII: Ingestion Modernization</span>
                             <span class="era-date">June 2026</span>
                         </div>
                         <h3>v0.9.0 &mdash; Modern Ingestion Libraries, Relational Schemas, &amp; Throttle Bypass</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> Maintaining custom MIME parsers, legacy HTML sanitizers, and JSON-based configurations became an operational bottleneck. To establish a robust, modern baseline, the email pipeline was refactored to use standard Symfony and Masterminds components, subscription routing was migrated to fully normalized relational tables, and manual refresh controls were equipped with throttle bypass logic for real-time responsiveness.</p>
+                            <p><strong>Rationale:</strong> Maintaining custom HTML sanitizers, parser helpers, and JSON split configurations created operational complexity. In v0.9.0, Seismo's parsing was refactored onto standard Symfony and Masterminds components, config maps were fully normalized into relational schemas, and manual refresh controls were equipped with throttle bypass options.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>v0.9.0 &mdash; Standard Library Transition:</strong> Replaced legacy parsing and sanitization blocks with <code>zbateson/mail-mime-parser</code>, <code>masterminds/html5</code>, <code>symfony/dom-crawler</code>, and <code>symfony/html-sanitizer</code>, improving parsing robustness for complex multipart HTML emails and standardizing HTML sanitization.</li>
-                                <li><strong>v0.9.0 &mdash; Normalized Relational Schema:</strong> Replaced JSON split configs with fully normalized database relationships across <code>newsletter_sender</code>, <code>newsletter_template</code>, and <code>template_rule</code> tables.</li>
-                                <li><strong>v0.9.0 &mdash; Manual Throttle Bypass:</strong> Updated the core ingest runner to accept a <code>$bypassThrottle</code> flag, allowing explicit "Refresh Mail" clicks in the user interface to execute immediately rather than being blocked by cron schedule guards.</li>
-                                <li><strong>v0.9.0 &mdash; AJAX Refresh Banner Persistence:</strong> Fixed UI refresh feedback by ensuring success messages are correctly persisted across page reloads during AJAX-based updates.</li>
+                                <li><strong>v0.9.0 &mdash; Standard Library Transition:</strong> Integrated <code>zbateson/mail-mime-parser</code>, <code>masterminds/html5</code>, and <code>symfony/html-sanitizer</code> to replace legacy manual parsers.</li>
+                                <li><strong>v0.9.0 &mdash; Normalized Relational Schema:</strong> Migrated newsletter templates and split rules into fully normalized SQL database relationships.</li>
+                                <li><strong>v0.9.0 &mdash; Manual Throttle Bypass:</strong> Enabled explicit "Refresh" button requests to execute immediately, ignoring background cron guard window limits.</li>
                             </ul>
                         </div>
 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Migrating from schema-less JSON configs to strict foreign-key relations required detailed data migrations but eliminated parser ambiguity. Adopting external Symfony/Masterminds dependencies increased composer package footprints but significantly reduced custom codebase maintenance.</p>
+                            <p>Migrating JSON split rules into strict foreign key relations required detailed database migration passes, but eliminated parser configuration mismatch errors.</p>
                         </div>
                     </div>
 
-                    <!-- Era XII -->
+                    <!-- Era IX: Seismogramm Rebuild & Researcher Deprecation -->
                     <div class="timeline-era-card current-version-card">
                         <div class="era-meta-row">
-                            <span class="era-badge era-badge-ai">Era XII: Seismogramm &mdash; Gemini Pipeline Refactor</span>
+                            <span class="era-badge era-badge-ai">Era IX: Seismogramm &mdash; Gemini Pipeline Refactor</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
                         <h3>v0.9.2 &mdash; Deprecation of Legacy Researcher, Seismogramm Preset Workbench Knobs &amp; Presets Cleanup</h3>
 
                         <div class="era-narrative">
-                            <p><strong>Rationale:</strong> With the release of Seismogramm in v0.9.1, maintaining the legacy monolithic AI Researcher view, controllers, and services created redundant codebase surface area. In v0.9.2, the legacy Researcher is fully deprecated and removed from the site navigation menu. The Seismogramm Preset Workbench is established as the primary playground, exposing a complete knob array (context caching, custom limits, pool sizing) alongside the prompt generator, mode styling selections (Briefing / Research / Blindspot), and custom preset lifecycle management.</p>
+                            <p><strong>Rationale:</strong> The legacy AI Researcher page accumulated standard, tournament, and cross-module relational modes behind a dense checkbox interface, creating maintenance friction. v0.9.1 introduced <strong>Seismogramm</strong>: a greenfield two-pass briefing pipeline. v0.9.2 completes this transition by deprecating the legacy Researcher view and fully integrating configuration knobs (context caching, relevance threshold sliders, and mode-styled prompt generation presets) directly into the Seismogramm Preset Workbench.</p>
                         </div>
 
                         <div class="era-changes">
                             <h4>Key Milestones & Inventions</h4>
                             <ul>
-                                <li><strong>v0.9.2 &mdash; Legacy Researcher Deprecation:</strong> Removed legacy researcher routes, controllers, templates, and header navigation menu items.</li>
-                                <li><strong>v0.9.2 &mdash; Preset Workbench Knobs:</strong> Integrated full configuration knobs (Context Cache toggle, Relevance scoring threshold filters, Magnitu Snippets toggle, Max items sent slider) directly into the Seismogramm builder form.</li>
-                                <li><strong>v0.9.2 &mdash; Mode-Styled Prompt Playground:</strong> Enabled operators to select a base style (Briefing / Research / Blindspot) on top of custom prompts to automatically generate context-optimized instructions.</li>
-                                <li><strong>v0.9.2 &mdash; Custom Preset Management:</strong> Added support for naming, saving, and deleting custom configurations dynamically with individual delete (X) targets directly in the presets bar.</li>
+                                <li><strong>v0.9.2 &mdash; Legacy Researcher Deprecation:</strong> Removed legacy researcher routes, views, controllers, and navigation menu links.</li>
+                                <li><strong>v0.9.2 &mdash; Preset Workbench Knobs:</strong> Brought full configuration sliders, Magnitu snippets toggles, and Context Cache controls directly to the Seismogramm builder page.</li>
+                                <li><strong>v0.9.2 &mdash; Mode-Styled Prompt Playground:</strong> Prompt generator creates adapted instructions styled on top of selected base modes (Briefing / Research / Blindspot).</li>
+                                <li><strong>v0.9.2 &mdash; Custom Preset Management:</strong> Standard configurations are protected, while custom user presets can be named, saved, and individually deleted using interactive tag controls.</li>
+                                <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> manages gathering rules and tournament thresholds (~80 Briefing, ~35 Research batches) without exposing engine settings to users.</li>
+                                <li><strong>v0.9.1 &mdash; Decomposed Pipeline Engines:</strong> Segregated logic into <code>SeismogrammOrchestrator</code>, <code>StandardSelectionEngine</code>, <code>TournamentSelectionEngine</code>, <code>SummaryBriefingEngine</code>, and <code>ResilientGeminiClient</code>.</li>
                             </ul>
                         </div>
 
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
-                            <p>Removing the legacy codebase sections simplified dependency graph checks but required migrating any active custom default researcher prompts to the Seismogramm system-config model structures. Fully separating preset deletions prevents unintended loss of standard system configurations.</p>
+                            <p>Removing the legacy code blocks simplified the codebase but required migrating any active custom default researcher prompts to the Seismogramm system-config model structures. Fully separating preset deletions prevents unintended loss of standard system configurations.</p>
                         </div>
                     </div>
-
-                    <!-- Era XIIb -->
-                    <div class="timeline-era-card">
-                        <div class="era-meta-row">
-                            <span class="era-badge era-badge-ai">Era XII-a: Seismogramm Launch</span>
-                            <span class="era-date">June 2026</span>
-                        </div>
-                        <h3>v0.9.1 &mdash; Seismogramm Rebuild, Preset Profiles, &amp; Decomposed Selection Pipeline</h3>
-
-                        <div class="era-narrative">
-                            <p><strong>Rationale:</strong> By v0.8.4 the legacy AI Researcher had accumulated every selection mode behind one form. v0.9.1 extracts the Gemini two-pass contract into <strong>Seismogramm</strong> &mdash; a greenfield service layer under <code>?action=seismogramm</code> with three opinionated presets (Briefing, Blindspot, Research), a redesigned GUI, and hard layer boundaries (controller &rarr; request context &rarr; orchestrator &rarr; engines).</p>
-                        </div>
-
-                        <div class="era-changes">
-                            <h4>Key Milestones & Inventions</h4>
-                            <ul>
-                                <li><strong>v0.9.1 &mdash; Greenfield route &amp; GUI:</strong> New <code>SeismogrammController</code> and <code>views/seismogramm.php</code> with preset bar, live mode intro, in-page <strong>About</strong> panel, Default/Custom advanced toggle, dynamic persona (Briefing/Blindspot) and research query fields, and referenced source validation cards.</li>
-                                <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> encodes per-mode gather rules, tournament thresholds (~80 Briefing, ~35 Research batches), Magnitu disregard/snippet flags, relational Blindspot sourcing, and default pool-cap ordering.</li>
-                                <li><strong>v0.9.1 &mdash; Request context &amp; per-request caps:</strong> <code>SeismogrammRequestContext</code> parses POST into a typed context; Research enforces a 300-entry floor per request without mutating global <code>seismogramm:max_context_entries</code>.</li>
-                                <li><strong>v0.9.1 &mdash; Orchestrator decomposition:</strong> <code>SeismogrammOrchestrator</code> coordinates gather, global title fingerprint, engine dispatch, and pass 2. Selection lives in <code>StandardSelectionEngine</code> and <code>TournamentSelectionEngine</code> (relational negative-space flag); prose in <code>SummaryBriefingEngine</code> with XML filtered to <code>used_entry_keys</code> only.</li>
-                                <li><strong>v0.9.1 &mdash; ResilientGeminiClient:</strong> Parallel cURL tournament batches, structured JSON schemas, formatter meta for snippets, experimental context-cache uploads, and <strong>by_phase</strong> usage reporting.</li>
-                                </ul>
-                        </div>
-                    </div>
+                </div>
                 </div>
 
                 <!-- Versioning Proposal Section -->
