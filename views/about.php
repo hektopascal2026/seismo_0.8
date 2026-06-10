@@ -190,13 +190,72 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <p style="margin-top: 0.75rem;"><strong>Satellite</strong> instances are secondary installs on the same MySQL server that <em>read</em> those entry tables from the mothership database. Each satellite keeps its own scores, labels, and <code>system_config</code> so you can run separate Magnitu profiles (e.g. topic-focused relevance) without duplicating ingestion.</p>
                 </section>
 
-                <!-- VI. Operations & machine-readable exports -->
+                <!-- VI. Seismogramm -->
                 <section class="settings-section about-card dashboard-section">
-                    <h2>VI. Operations &amp; machine-readable exports</h2>
+                    <h2>VI. Seismogramm — preset Gemini briefing (v0.9.1)</h2>
+                    <p class="about-lede">v0.9.1 introduces <strong>Seismogramm</strong> (<code>?action=seismogramm</code>): a greenfield rebuild of Seismo&rsquo;s two-pass Gemini pipeline. Instead of stacking Standard, Tournament, and Relational modes behind one legacy form, desks pick a <strong>preset</strong> that encodes the right selection strategy, context cap, and source mix for the job.</p>
+
+                    <p>The legacy <code>?action=researcher</code> route remains for manual overrides (Deep selection, Pro pass 1, full prompt library). Seismogramm is the recommended path for daily briefings.</p>
+
+                    <h3 class="about-subheading">Presets</h3>
+                    <div class="table-responsive">
+                        <table class="styleguide-table">
+                            <thead>
+                                <tr>
+                                    <th>Preset</th>
+                                    <th>Purpose</th>
+                                    <th>Selection behaviour</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Briefing</strong></td>
+                                    <td>C-level executive summary from Magnitu highlights</td>
+                                    <td>Standard pass on smaller pools; <strong>tournament</strong> (parallel batches + championship) when the pool exceeds ~80 items. Persona/goal can break Magnitu score ties.</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Blindspot</strong></td>
+                                    <td>Lex/Leg signals not yet echoed in media</td>
+                                    <td><strong>Relational tournament</strong> on Lex+Leg only; global title fingerprint from Media/Feeds/Scraper; negative-space protocol rejects fuzzy media overlap. Persona required.</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Research</strong></td>
+                                    <td>Forensic topic search across a large haystack</td>
+                                    <td>Disregards Magnitu scoring; Magnitu <strong>snippets</strong> on; pool up to 300 per request; <strong>newest-first</strong> cap ordering by default; tournament when pool exceeds batch size (~35).</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h3 class="about-subheading">Decomposed pipeline</h3>
+                    <p>Monolithic researcher logic was split into a thin controller, request context, and orchestrator with dedicated engines:</p>
+                    <ul>
+                        <li><code>SeismogrammRequestContext</code> &mdash; parses preset, modules, lookback, per-request context cap, and advanced flags (pool ordering, experimental context cache).</li>
+                        <li><code>SeismogrammOrchestrator</code> &mdash; gathers entries, builds the global title fingerprint (Blindspot), routes to the correct selection engine, then runs pass 2.</li>
+                        <li><code>StandardSelectionEngine</code> / <code>TournamentSelectionEngine</code> &mdash; pass 1 JSON key selection; relational mode drives Blindspot negative-space checks.</li>
+                        <li><code>SummaryBriefingEngine</code> &mdash; pass 2 Markdown on a <strong>filtered XML subset</strong> (only <code>used_entry_keys</code>), cutting input tokens.</li>
+                        <li><code>ResilientGeminiClient</code> &mdash; parallel cURL batches, structured response schemas, retries, and <strong>by_phase</strong> usage telemetry (<code>selection</code>, <code>summary</code>, <code>context_cache</code>).</li>
+                    </ul>
+
+                    <h3 class="about-subheading">GUI &amp; resilience</h3>
+                    <ul>
+                        <li>Preset bar with live mode intro; <strong>About</strong> panel documents each preset and a pipeline diagram.</li>
+                        <li><strong>Default / Custom</strong> toggle: advanced settings (context cap slider, pool ordering, experimental context-cache checkbox) stay hidden until expanded.</li>
+                        <li>Dynamic fields: persona for Briefing/Blindspot; research topic query for Research.</li>
+                        <li>Referenced source cards parsed from the summary for validation.</li>
+                        <li><strong>P1</strong> tournament batch recovery (one sequential retry per failed batch); <strong>P2</strong> user-initiated 429 retry with halved cap (Briefing/Blindspot; Research fails fast); <strong>P3</strong> preset-aware loading steps and <code>SeismogrammPipelineMeta</code> cost/meta line.</li>
+                        <li>Mem module pill <strong>off by default</strong>; Blindspot uses a strict Lex/Leg pool (no silent fallback to the full timeline).</li>
+                    </ul>
+                    <p class="meta-text">Implementation detail: <code>docs/seismogramm.md</code>. In-app help: Seismogramm &rarr; <strong>About</strong>.</p>
+                </section>
+
+                <!-- VII. Operations & machine-readable exports -->
+                <section class="settings-section about-card dashboard-section">
+                    <h2>VII. Operations &amp; machine-readable exports</h2>
                     <div class="about-grid">
                         <div class="about-grid-item">
                             <strong>Refresh &amp; cron</strong>
-                            <p>All paths use the same ingest pipeline (<code>RefreshAllService::runAll()</code>). How often each source actually hits its upstream differs — see <strong>§ VIII</strong> below (including <strong>chunked</strong> RSS/scraper and the <strong>cron overlap lock</strong>).</p>
+                            <p>All paths use the same ingest pipeline (<code>RefreshAllService::runAll()</code>). How often each source actually hits its upstream differs — see <strong>§ IX</strong> below (including <strong>chunked</strong> RSS/scraper and the <strong>cron overlap lock</strong>).</p>
                         </div>
                         <div class="about-grid-item">
                             <strong>Retention</strong>
@@ -207,17 +266,17 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <h3 class="about-subheading">Machine-readable exports (LLM &amp; automation)</h3>
                     <p>Downstream tools authenticate with a <strong>Bearer</strong> token sent as <code>Authorization: Bearer …</code> (or the documented query/body fallback). Use these for researchers, n8n, Raycast, or custom scripts:</p>
                     <ul>
-                        <li><code>?action=seismogramm</code> &mdash; in-app Seismogramm briefing builder with simplified preset selection (Briefing, Blindspot, Research) and dynamic query filters.</li>
-                        <li><code>?action=researcher</code> &mdash; in-app Gemini executive researcher with filters, per-desk prompt library, <strong>Deep selection</strong> (Standard / Tournament / Blind spot cross-module), optional Pro selection (<code>gemini-3.1-pro-preview</code> pass 1), post-run Flash cost estimate, and source-card attribution (mothership and path satellites). Split newsletter child stories are cited individually, not as parent digest blobs.</li>
+                        <li><code>?action=seismogramm</code> &mdash; <strong>recommended</strong> preset briefing builder (Briefing / Blindspot / Research); decomposed two-pass pipeline, referenced validation cards, per-phase cost telemetry. See <strong>§ VI</strong>.</li>
+                        <li><code>?action=researcher</code> &mdash; legacy Gemini executive researcher with filters, per-desk prompt library, <strong>Deep selection</strong> (Standard / Tournament / Blind spot cross-module), optional Pro selection (<code>gemini-3.1-pro-preview</code> pass 1), post-run Flash cost estimate, and source-card attribution (mothership and path satellites). Split newsletter child stories are cited individually, not as parent digest blobs.</li>
                         <li><code>?action=export_researcher</code> &mdash; Markdown digest for a time window; suited to LLM context and daily summaries.</li>
                         <li><code>?action=export_entries</code> &mdash; JSON export of entries with score metadata for pipelines that need structured rows.</li>
                     </ul>
                     <p class="meta-text"><strong>Security:</strong> the <code>export:api_key</code> in Settings is <strong>read-only</strong> for these actions. It must not reuse the Magnitu write <code>api_key</code>; the server rejects the write key on export routes by design.</p>
                 </section>
 
-                <!-- VII. Operational health & row counts -->
+                <!-- VIII. Operational health & row counts -->
                 <section class="settings-section about-card dashboard-section">
-                    <h2>VII. Operational health &amp; row counts</h2>
+                    <h2>VIII. Operational health &amp; row counts</h2>
 
                     <h3 class="about-subheading">System requirements</h3>
                     <ul>
@@ -260,9 +319,9 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     <?php endif; ?>
                 </section>
 
-                <!-- VIII. Refresh overview -->
+                <!-- IX. Refresh overview -->
                 <section class="settings-section about-card dashboard-section" id="about-refresh">
-                    <h2>VIII. Refresh: cron, timeline, and Diagnostics</h2>
+                    <h2>IX. Refresh: cron, timeline, and Diagnostics</h2>
                     <p class="about-lede">Everything passes through the same service, but <strong>throttles</strong>, <strong>force</strong>, and <strong>Lex</strong> handling differ. Use this table as the mental model.</p>
 
                     <?php if ($satellite): ?>
@@ -619,10 +678,10 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                     </div>
 
                     <!-- Era XI -->
-                    <div class="timeline-era-card current-version-card">
+                    <div class="timeline-era-card">
                         <div class="era-meta-row">
                             <span class="era-badge era-badge-powerhouse">Era XI: Ingestion Modernization &amp; Relational Migration</span>
-                            <span class="era-date">June 2026 (Current)</span>
+                            <span class="era-date">June 2026</span>
                         </div>
                         <h3>v0.9.0 &mdash; Modern Ingestion Libraries, Relational Schemas, &amp; Throttle Bypass</h3>
 
@@ -643,6 +702,40 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="era-technical-depth">
                             <strong>Architectural Trade-offs:</strong>
                             <p>Migrating from schema-less JSON configs to strict foreign-key relations required detailed data migrations but eliminated parser ambiguity. Adopting external Symfony/Masterminds dependencies increased composer package footprints but significantly reduced custom codebase maintenance.</p>
+                        </div>
+                    </div>
+
+                    <!-- Era XII -->
+                    <div class="timeline-era-card current-version-card">
+                        <div class="era-meta-row">
+                            <span class="era-badge era-badge-ai">Era XII: Seismogramm &mdash; Gemini Pipeline Refactor</span>
+                            <span class="era-date">June 2026 (Current)</span>
+                        </div>
+                        <h3>v0.9.1 &mdash; Seismogramm Rebuild, Preset Profiles, &amp; Decomposed Selection Pipeline</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> By v0.8.4 the legacy AI Researcher had accumulated every selection mode behind one form: Standard, Tournament, Blind spot / cross-module, optional Pro pass 1, verification auto-detection, batch recovery, and a growing meta schema. Each new desk workflow required operators to understand implementation details that belonged in code, not in a checkbox matrix. v0.9.1 extracts the Gemini two-pass contract into <strong>Seismogramm</strong> &mdash; a greenfield service layer under <code>?action=seismogramm</code> with three opinionated presets (Briefing, Blindspot, Research), a redesigned GUI, and hard layer boundaries (controller &rarr; request context &rarr; orchestrator &rarr; engines). Legacy <code>?action=researcher</code> is frozen for power users; Seismogramm becomes the default briefing path.</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.9.1 &mdash; Greenfield route &amp; GUI:</strong> New <code>SeismogrammController</code> and <code>views/seismogramm.php</code> with preset bar, live mode intro, in-page <strong>About</strong> panel (pipeline diagram), Default/Custom advanced toggle, dynamic persona (Briefing/Blindspot) and research query fields, prepare/generate AJAX flow, and referenced source validation cards below the summary.</li>
+                                <li><strong>v0.9.1 &mdash; Preset profiles:</strong> <code>SeismogrammPresetProfile</code> encodes per-mode gather rules, tournament thresholds (~80 Briefing, ~35 Research batches), Magnitu disregard/snippet flags, relational Blindspot sourcing, and default pool-cap ordering (highest for Briefing/Blindspot, newest for Research). Operators pick intent, not engine names.</li>
+                                <li><strong>v0.9.1 &mdash; Request context &amp; per-request caps:</strong> <code>SeismogrammRequestContext</code> parses POST into a typed context; Research enforces a 300-entry floor per request without mutating global <code>seismogramm:max_context_entries</code>. Advanced slider persists only when Custom is expanded.</li>
+                                <li><strong>v0.9.1 &mdash; Orchestrator decomposition:</strong> <code>SeismogrammOrchestrator</code> coordinates gather, global title fingerprint (Blindspot media echo index), engine dispatch, and pass 2. Selection lives in <code>StandardSelectionEngine</code> and <code>TournamentSelectionEngine</code> (relational negative-space flag); prose in <code>SummaryBriefingEngine</code> with XML filtered to <code>used_entry_keys</code> only.</li>
+                                <li><strong>v0.9.1 &mdash; ResilientGeminiClient:</strong> Parallel cURL tournament batches, structured JSON schemas, formatter meta for snippets, experimental context-cache uploads when fingerprint &gt; 50k chars (advanced checkbox only), and <strong>by_phase</strong> usage reporting (<code>selection</code>, <code>summary</code>, <code>context_cache</code>).</li>
+                                <li><strong>v0.9.1 &mdash; Blindspot integrity:</strong> Strict Lex/Leg primary pool &mdash; no silent fallback to the full timeline when legislation sources are empty (clear HTTP 400). Global fingerprint compares primary titles against Media/Feeds/Scraper; negative-space protocol rejects fuzzy echo overlap. Persona gate filters regulatory noise.</li>
+                                <li><strong>v0.9.1 &mdash; Research forensic mode:</strong> Disregards Magnitu scoring, enables Magnitu snippets, scans up to 300 items with newest-first cap ordering by default, tournament when pool exceeds batch size. Topic query required; 429 rate limits fail fast (no automatic shrink).</li>
+                                <li><strong>v0.9.1 &mdash; Resilience trilogy (P1&ndash;P3):</strong> One sequential retry per failed tournament batch; user-initiated 429 retry with halved cap on Briefing/Blindspot; <code>SeismogrammPipelineMeta</code> with preset-native <code>normalize()</code>, cost estimate, <code>meta_summary_line</code>, and preset-aware loading steps in the UI (not legacy <code>GeminiResearcherGenerationMeta</code>).</li>
+                                <li><strong>v0.9.1 &mdash; Desk defaults:</strong> Mem module pill off by default; advanced pool-ordering radios; persona can break Magnitu score ties in Briefing tournament passes.</li>
+                                <li><strong>v0.9.1 &mdash; Documentation:</strong> Operator and architecture notes in <code>docs/seismogramm.md</code>; PHPUnit coverage for presets, pipeline meta, request cap, and selection parser.</li>
+                            </ul>
+                        </div>
+
+                        <div class="era-technical-depth">
+                            <strong>Architectural Trade-offs:</strong>
+                            <p>Splitting the monolithic <code>GeminiResearcherService</code> into Seismogramm engines duplicated some gather/format paths temporarily but restored hard MVC boundaries: no SQL outside repositories, no selection logic in views, and preset behaviour testable without driving the legacy form. Pass 2 summary batching (legacy proactive/reactive multi-call when output truncates) is explicitly deferred &mdash; Seismogramm already sends a small key subset to pass 2 (typically 5&ndash;15 entries). Automatic 429 pool shrink without user consent was rejected; Briefing and Blindspot expose an explicit retry button instead. Satellites inherit the same Seismogramm routes and read mothership entries; Magnitu scores remain local per desk.</p>
                         </div>
                     </div>
                 </div>
@@ -728,7 +821,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.9.0</strong>, signifying it is in active pre-1.0.0 bootstrapping. Modernized email ingestion, normalized relational routing schemas, and throttle bypasses represent the latest milestone; we recommend freezing the 0.x line once these paths complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.9.1</strong>, signifying it is in active pre-1.0.0 bootstrapping. The Seismogramm Gemini pipeline refactor (preset profiles, decomposed orchestrator, resilience telemetry) is the latest milestone alongside v0.9.0 ingestion modernization; we recommend freezing the 0.x line once Seismogramm and relational mail routing complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.
