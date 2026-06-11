@@ -81,23 +81,51 @@ final class RetentionPredicates
             );
         }
 
+        $activeDbs = [];
+        if (!isSatellite()) {
+            foreach (seismoSatellitesRegistry() as $sat) {
+                if (($sat['status'] ?? '') === 'active' && !empty($sat['db_name'])) {
+                    $activeDbs[] = (string)$sat['db_name'];
+                }
+            }
+        }
+
         $fragments = [];
         foreach (array_unique($tokens) as $token) {
             switch ($token) {
                 case RetentionService::KEEP_FAVOURITED:
-                    $fragments[] = "EXISTS (SELECT 1 FROM entry_favourites ef "
-                                 . "WHERE ef.entry_type = '{$entryType}' AND ef.entry_id = t.id)";
+                    $sub = "EXISTS (SELECT 1 FROM entry_favourites ef "
+                         . "WHERE ef.entry_type = '{$entryType}' AND ef.entry_id = t.id)";
+                    foreach ($activeDbs as $db) {
+                        $quotedDb = '`' . str_replace('`', '``', $db) . '`';
+                        $sub .= " OR EXISTS (SELECT 1 FROM {$quotedDb}.entry_favourites ef "
+                              . "WHERE ef.entry_type = '{$entryType}' AND ef.entry_id = t.id)";
+                    }
+                    $fragments[] = '(' . $sub . ')';
                     break;
 
                 case RetentionService::KEEP_HIGH_SCORE:
-                    $fragments[] = "EXISTS (SELECT 1 FROM entry_scores es "
-                                 . "WHERE es.entry_type = '{$entryType}' AND es.entry_id = t.id "
-                                 . "AND es.predicted_label IN ('investigation_lead','important'))";
+                    $sub = "EXISTS (SELECT 1 FROM entry_scores es "
+                         . "WHERE es.entry_type = '{$entryType}' AND es.entry_id = t.id "
+                         . "AND es.predicted_label IN ('investigation_lead','important'))";
+                    foreach ($activeDbs as $db) {
+                        $quotedDb = '`' . str_replace('`', '``', $db) . '`';
+                        $sub .= " OR EXISTS (SELECT 1 FROM {$quotedDb}.entry_scores es "
+                              . "WHERE es.entry_type = '{$entryType}' AND es.entry_id = t.id "
+                              . "AND es.predicted_label IN ('investigation_lead','important'))";
+                    }
+                    $fragments[] = '(' . $sub . ')';
                     break;
 
                 case RetentionService::KEEP_LABELLED:
-                    $fragments[] = "EXISTS (SELECT 1 FROM magnitu_labels ml "
-                                 . "WHERE ml.entry_type = '{$entryType}' AND ml.entry_id = t.id)";
+                    $sub = "EXISTS (SELECT 1 FROM magnitu_labels ml "
+                         . "WHERE ml.entry_type = '{$entryType}' AND ml.entry_id = t.id)";
+                    foreach ($activeDbs as $db) {
+                        $quotedDb = '`' . str_replace('`', '``', $db) . '`';
+                        $sub .= " OR EXISTS (SELECT 1 FROM {$quotedDb}.magnitu_labels ml "
+                              . "WHERE ml.entry_type = '{$entryType}' AND ml.entry_id = t.id)";
+                    }
+                    $fragments[] = '(' . $sub . ')';
                     break;
 
                 // Unknown tokens are ignored (forward-compat).
