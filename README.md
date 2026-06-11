@@ -1,5 +1,7 @@
 # Seismo 0.9.4
 
+> **FROZEN** — this repository is archived at tag `v0.8-final`. Development continues in [`seismo_1.0`](https://github.com/hektopascal2026/seismo_1.0).
+
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
 Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker daemons). One web app plus **`refresh_cron.php`** for production ingest on the mothership.
