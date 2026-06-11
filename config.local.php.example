@@ -29,11 +29,6 @@ define('SEISMO_ENTRIES_DB', 'seismo');
 // define('DB_PORT', '3306'); // optional — omit to use the driver default (3306)
 
 /**
- * Optional — protect Settings → Feed diagnostics with ?key= on the URL.
- */
-// define('FEED_DIAGNOSTIC_KEY', 'generate-a-long-random-string');
-
-/**
  * Optional — override remote refresh secret (normally stored in mothership system_config
  * via Settings → Satellites; auto-created when you add a desk).
  */

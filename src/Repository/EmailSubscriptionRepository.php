@@ -437,16 +437,6 @@ final class EmailSubscriptionRepository
     }
 
     /**
-     * @deprecated Use {@see listPendingForModule()}.
-     *
-     * @return list<array<string, mixed>>
-     */
-    public function listPending(int $limit, int $offset): array
-    {
-        return $this->listPendingForModule(self::MODULE_MAIL, $limit, $offset);
-    }
-
-    /**
      * @return list<array<string, mixed>>
      */
     public function listAll(int $limit, int $offset): array

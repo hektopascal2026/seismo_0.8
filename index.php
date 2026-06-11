@@ -1,6 +1,6 @@
 <?php
 /**
- * Seismo 0.5 front controller.
+ * Seismo front controller.
  *
  * Kept thin on purpose. All it does is:
  *   - bootstrap the app,
