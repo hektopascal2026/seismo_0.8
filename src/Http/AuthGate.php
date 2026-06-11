@@ -137,6 +137,9 @@ final class AuthGate
         if (!self::isEnabled()) {
             return;
         }
+        if ($action === '') {
+            $action = 'index';
+        }
         if (isset(self::PUBLIC_ACTIONS[$action])) {
             return;
         }
