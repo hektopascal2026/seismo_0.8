@@ -54,6 +54,8 @@ final class AuthGate
         'seismogramm_prompt_helper' => true,
         'label'                => true,
         'label_save'           => true,
+        'refresh_all'          => true,
+        'refresh_remote'       => true,
         'toggle_favourite'     => true,
         'hide_entry'           => true,
     ];
