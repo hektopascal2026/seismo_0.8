@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace Seismo\Controller;
 
+use Seismo\Http\AuthGate;
 use Seismo\Http\CsrfToken;
 use Seismo\Repository\EntryRepository;
 use Seismo\Core\Scoring\ScoringService;
@@ -295,10 +296,14 @@ final class DashboardController
     }
 
     /**
-     * Timeline + filter pages: show Refresh when mothership refresh is possible.
+     * Timeline + filter pages: show Refresh when ingest refresh is possible.
+     * When session auth is on, only logged-in admins see the button (matches AuthGate).
      */
     private static function shouldShowTimelineRefresh(): bool
     {
+        if (AuthGate::isEnabled() && !AuthGate::isLoggedIn()) {
+            return false;
+        }
         if (!isSatellite()) {
             return true;
         }
