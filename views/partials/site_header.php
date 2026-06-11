@@ -87,15 +87,11 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                         <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="<?= e($moduleLab) ?>"><?= e($moduleLab) ?></button>
                     </form>
                 <?php endif; ?>
-                <?php if (AuthGate::isEnabled()): ?>
-                    <?php if (AuthGate::isLoggedIn()): ?>
-                        <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" class="admin-inline-form top-bar-form-flush">
-                            <?= $csrfField ?>
-                            <button type="submit" class="top-bar-btn top-bar-btn--text" title="Sign out">Logout</button>
-                        </form>
-                    <?php else: ?>
-                        <a href="<?= e($basePath) ?>/index.php?action=login" class="top-bar-btn top-bar-btn--text" title="Sign in">Login</a>
-                    <?php endif; ?>
+                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
+                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" class="admin-inline-form top-bar-form-flush">
+                        <?= $csrfField ?>
+                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="Sign out">Logout</button>
+                    </form>
                 <?php endif; ?>
             </div>
         </div>
