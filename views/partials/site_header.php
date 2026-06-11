@@ -87,11 +87,15 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
                         <button type="submit" class="top-bar-btn top-bar-btn--text top-bar-btn--timeline-refresh" data-refresh-label="<?= e($moduleLab) ?>"><?= e($moduleLab) ?></button>
                     </form>
                 <?php endif; ?>
-                <?php if (AuthGate::isEnabled() && AuthGate::isLoggedIn()): ?>
-                    <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" class="admin-inline-form top-bar-form-flush">
-                        <?= $csrfField ?>
-                        <button type="submit" class="top-bar-btn top-bar-btn--text" title="Sign out">Logout</button>
-                    </form>
+                <?php if (AuthGate::isEnabled()): ?>
+                    <?php if (AuthGate::isLoggedIn()): ?>
+                        <form method="post" action="<?= e($basePath) ?>/index.php?action=logout" class="admin-inline-form top-bar-form-flush">
+                            <?= $csrfField ?>
+                            <button type="submit" class="top-bar-btn top-bar-btn--text" title="Sign out">Logout</button>
+                        </form>
+                    <?php else: ?>
+                        <a href="<?= e($basePath) ?>/index.php?action=login" class="top-bar-btn top-bar-btn--text" title="Sign in">Login</a>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -172,23 +176,27 @@ $filterNavQs = $filterNavQs ?? 'action=filter';
             <a href="<?= e($basePath) ?>/index.php?action=magnitu" class="nav-link<?= $activeNav === 'magnitu' ? ' active' : '' ?>">Highlights</a>
             <a href="<?= e($basePath) ?>/index.php?action=seismogramm" class="nav-link<?= $activeNav === 'seismogramm' ? ' active' : '' ?>">Seismogramm</a>
             <a href="<?= e($basePath) ?>/index.php?action=label" class="nav-link<?= $activeNav === 'label' ? ' active' : '' ?>">Label</a>
-            <?php if (!isSatellite()): ?>
-            <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
-            <a href="<?= e($basePath) ?>/index.php?action=media" class="nav-link<?= $activeNav === 'media' ? ' active' : '' ?>">Media</a>
-            <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
-            <a href="<?= e($basePath) ?>/index.php?action=newsletter" class="nav-link<?= $activeNav === 'newsletter' ? ' active' : '' ?>">Newsletter</a>
-            <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
-            <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
-            <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
-            <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
-            <a href="<?= e($basePath) ?>/index.php?action=logbook" class="nav-link<?= $activeNav === 'logbook' ? ' active' : '' ?>">Logbook</a>
-            <?php endif; ?>
-            <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
-            <?php if (!isSatellite() && !isConfigured()): ?>
-            <a href="<?= e($basePath) ?>/index.php?action=configuration" class="nav-link<?= $activeNav === 'configuration' ? ' active' : '' ?>">Configuration</a>
-            <?php endif; ?>
-            <?php if (!isSatellite()): ?>
-            <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
+            <?php if (!AuthGate::isEnabled() || AuthGate::isLoggedIn()): ?>
+                <?php if (!isSatellite()): ?>
+                <a href="<?= e($basePath) ?>/index.php?action=feeds" class="nav-link<?= $activeNav === 'feeds' ? ' active' : '' ?>">Feeds</a>
+                <a href="<?= e($basePath) ?>/index.php?action=media" class="nav-link<?= $activeNav === 'media' ? ' active' : '' ?>">Media</a>
+                <a href="<?= e($basePath) ?>/index.php?action=mail" class="nav-link<?= $activeNav === 'mail' ? ' active' : '' ?>">Mail</a>
+                <a href="<?= e($basePath) ?>/index.php?action=newsletter" class="nav-link<?= $activeNav === 'newsletter' ? ' active' : '' ?>">Newsletter</a>
+                <a href="<?= e($basePath) ?>/index.php?action=scraper" class="nav-link<?= $activeNav === 'scraper' ? ' active' : '' ?>">Scraper</a>
+                <a href="<?= e($basePath) ?>/index.php?action=lex" class="nav-link<?= $activeNav === 'lex' ? ' active' : '' ?>">Lex</a>
+                <a href="<?= e($basePath) ?>/index.php?action=leg" class="nav-link<?= $activeNav === 'leg' ? ' active' : '' ?>">Leg</a>
+                <a href="<?= e($basePath) ?>/index.php?action=styleguide" class="nav-link<?= $activeNav === 'styleguide' ? ' active' : '' ?>">Styleguide</a>
+                <a href="<?= e($basePath) ?>/index.php?action=logbook" class="nav-link<?= $activeNav === 'logbook' ? ' active' : '' ?>">Logbook</a>
+                <?php endif; ?>
+                <a href="<?= e($basePath) ?>/index.php?action=settings" class="nav-link<?= $activeNav === 'settings' ? ' active' : '' ?>">Settings</a>
+                <?php if (!isSatellite() && !isConfigured()): ?>
+                <a href="<?= e($basePath) ?>/index.php?action=configuration" class="nav-link<?= $activeNav === 'configuration' ? ' active' : '' ?>">Configuration</a>
+                <?php endif; ?>
+                <?php if (!isSatellite()): ?>
+                <a href="<?= e($basePath) ?>/index.php?action=about" class="nav-link<?= $activeNav === 'about' ? ' active' : '' ?>">About</a>
+                <?php endif; ?>
+            <?php else: ?>
+                <a href="<?= e($basePath) ?>/index.php?action=login" class="nav-link<?= $activeNav === 'login' ? ' active' : '' ?>">Login</a>
             <?php endif; ?>
         </nav>
         <script>

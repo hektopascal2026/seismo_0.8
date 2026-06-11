@@ -624,6 +624,22 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                             <span class="era-badge era-badge-ai">Era IX: Seismogramm &mdash; Gemini Pipeline Refactor</span>
                             <span class="era-date">June 2026 (Current)</span>
                         </div>
+                        <h3>v0.9.4 &mdash; Satellite-like Unauthenticated Access &amp; Auth UI Upgrades</h3>
+
+                        <div class="era-narrative">
+                            <p><strong>Rationale:</strong> Locking the entire application behind a login screen when a password is configured is overly restrictive. Unauthenticated users should be allowed to view the timeline, filter, highlights, and run the Seismogramm generator (acting like a read-only satellite desk) while keeping admin/write controls behind login.</p>
+                        </div>
+
+                        <div class="era-changes">
+                            <h4>Key Milestones & Inventions</h4>
+                            <ul>
+                                <li><strong>v0.9.4 &mdash; Publicly Whitelisted Core Actions:</strong> Whitelisted index, filter, magnitu, seismogramm, label, refresh, toggle_favourite, and hide_entry in the AuthGate.</li>
+                                <li><strong>v0.9.4 &mdash; Contextual Header and Navigation:</strong> Display a Login button in the top bar when unauthenticated, and hide admin-only links (Feeds, Scraper, Settings, etc.) in the navigation drawer.</li>
+                            </ul>
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px dashed var(--seismo-border); margin: 1.5rem 0;">
+
                         <h3>v0.9.3 &mdash; Monitor Preset &amp; Watchlist Cross-Reference</h3>
 
                         <div class="era-narrative">
@@ -734,7 +750,7 @@ $fmt = static fn (int $n): string => number_format($n, 0, '.', ',');
                         <div class="proposal-block">
                             <h3>4. Roadmap to v1.0.0 Stable</h3>
                             <p>
-                                Currently, Seismo is on version <strong>0.9.3</strong>, signifying it is in active pre-1.0.0 bootstrapping. The Seismogramm Gemini pipeline (four presets including Monitor, decomposed orchestrator, resilience telemetry) is the latest milestone alongside v0.9.0 ingestion modernization; we recommend freezing the 0.x line once Seismogramm and relational mail routing complete a 30-day production trial alongside path satellites.
+                                Currently, Seismo is on version <strong>0.9.4</strong>, signifying it is in active pre-1.0.0 bootstrapping. The Seismogramm Gemini pipeline (four presets including Monitor, decomposed orchestrator, resilience telemetry) is the latest milestone alongside v0.9.0 ingestion modernization; we recommend freezing the 0.x line once Seismogramm and relational mail routing complete a 30-day production trial alongside path satellites.
                             </p>
                             <p>
                                 The transition to <strong>v1.0.0</strong> will signal a frozen, production-grade core API. From that point forward, all changes will strictly follow the SemVer blueprint, safeguarding integrations and ensuring reliable multi-desk satellite deployments.

@@ -44,6 +44,20 @@ final class AuthGate
         'export_researcher'      => true,
         /** Session-less JSON; gated by {@see seismoRemoteRefreshKey()} (satellite → mothership refresh). */
         'refresh_all_remote'   => true,
+        // Publicly accessible views (satellite-like behavior when unauthenticated)
+        'index'                => true,
+        'filter'               => true,
+        'magnitu'              => true,
+        'seismogramm'          => true,
+        'seismogramm_prepare'  => true,
+        'seismogramm_generate' => true,
+        'seismogramm_prompt_helper' => true,
+        'label'                => true,
+        'label_save'           => true,
+        'refresh_all'          => true,
+        'refresh_remote'       => true,
+        'toggle_favourite'     => true,
+        'hide_entry'           => true,
     ];
 
     public static function isEnabled(): bool

@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 use Seismo\Util\TimelineEntryDatetime;
 
-define('SEISMO_VERSION', '0.9.3');
+define('SEISMO_VERSION', '0.9.4');
 define('SEISMO_ROOT', __DIR__);
 
 // ---------------------------------------------------------------------------

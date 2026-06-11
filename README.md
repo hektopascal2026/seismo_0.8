@@ -1,4 +1,4 @@
-# Seismo 0.9.3
+# Seismo 0.9.4
 
 **Seismo** is a self-hosted monitoring dashboard: RSS and Substack feeds, Gmail/IMAP mail, web scrapers, legal gazettes (Lex), and Swiss parliamentary business (Leg) in one searchable timeline — with recipe scoring and optional **Magnitu v3** ML scores over HTTP.
 
@@ -10,6 +10,7 @@ Built on **PHP 8.2+**, **MariaDB/MySQL**, and vanilla PHP (no Redis or worker da
 
 | Version | Notes |
 |---------|--------|
+| **0.9.4** | **Satellite-like Unauthenticated Access & Auth UI Upgrades** — Allows unauthenticated users to view the timeline, filter, highlights, and run the Seismogramm generator (acting like a read-only satellite desk) instead of locking the entire app behind a login screen. Adds a Login button to the top bar and filters out admin links from the navigation drawer when not logged in. |
 | **0.9.3** | **Seismogramm Monitor preset** — Fourth default preset for watchlist cross-reference: paste a person/organisation list (Swissmem directory ships as default), regex pre-filter on the entry pool, two-pass Gemini verification, and an explicit empty report when nothing matches. Removes the legacy **Mem** source checkbox from Seismogramm and Researcher; custom monitor desks can be drafted in the Preset Workbench (Monitor base mode). |
 | **0.9.2** | **Deprecate Researcher, Seismogramm Preset Workbench Knobs** — Full deprecation of legacy Researcher and removal from navigation menu. Exposes full array of knobs (Context cache toggle, relevance filtering, Magnitu snippets, max items sent) inside the Seismogramm Preset Workbench. Dynamic modes support (Briefing / Research / Blindspot) for prompt generation with custom preset save/delete management. |
 | **0.9.1** | **Seismogramm Rebuild & Redesigned Preset GUI** — Greenfield AI briefing pipeline under `?action=seismogramm`, featuring a clean preset-driven GUI (Briefing, Blindspot, Research presets), default/custom toggle switch, dynamic query inputs, and referenced validation cards. |
